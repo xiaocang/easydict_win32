@@ -51,6 +51,9 @@ msgstr "Language help"
 msgid "main.translate"
 msgstr "번역"
 
+msgid "main.long_document.subtitle"
+msgstr "긴 문서"
+
 msgid "main.settings"
 msgstr "설정"
 

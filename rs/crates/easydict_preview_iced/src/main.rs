@@ -530,13 +530,22 @@ impl PreviewApp {
             }
         };
         let generation = request.generation;
-        let environment = match control::request_environment(&runtime.startup_environment, &request)
-        {
-            Ok(environment) => environment,
-            Err(error) => {
-                return write_error_ack_task(runtime.launch.clone(), generation, error);
-            }
-        };
+        let mut environment =
+            match control::request_environment(&runtime.startup_environment, &request) {
+                Ok(environment) => environment,
+                Err(error) => {
+                    return write_error_ack_task(runtime.launch.clone(), generation, error);
+                }
+            };
+        if let Some(width) = request.width_dips {
+            environment.insert("EASYDICT_PREVIEW_WIDTH_DIPS".to_string(), width.to_string());
+        }
+        if let Some(height) = request.height_dips {
+            environment.insert(
+                "EASYDICT_PREVIEW_HEIGHT_DIPS".to_string(),
+                height.to_string(),
+            );
+        }
         if let Err(error) = runtime
             .state
             .validate_and_accept(&request, &runtime.launch.output_root)
@@ -777,6 +786,8 @@ impl Application for PreviewApp {
             }
         };
 
+        let startup_tasks = Task::batch([initial_task, auto_toggle_task, preview_scroll_task]);
+
         (
             Self {
                 inner,
@@ -785,7 +796,7 @@ impl Application for PreviewApp {
                 #[cfg(feature = "parity-diagnostics")]
                 control,
             },
-            Task::batch([initial_task, auto_toggle_task, preview_scroll_task]),
+            startup_tasks,
         )
     }
 
@@ -1244,6 +1255,7 @@ mod tests {
 
     #[test]
     fn preview_window_options_still_use_preview_contract_when_requested() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
         let state = production_initial_state_with_settings(None);
         let options = initial_window_options(true, &state);
 

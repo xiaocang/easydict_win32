@@ -224,6 +224,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .property("label", quoted(&token.label))
                 .property("kind", format!("{:?}", token.kind))
                 .property("icon", optional_icon(token.icon.as_ref()))
+                .property("trailing_icon", optional_icon(token.trailing_icon.as_ref()))
                 .property("tooltip", optional_string(token.tooltip.as_deref()))
                 .property("width", optional_length(token.width))
                 .property("height", optional_length(token.height))
@@ -257,6 +258,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("tooltip", optional_string(token.tooltip.as_deref()))
             .property("selected", optional_string(token.selected.as_deref()))
             .property("items", flyout_items(&token.items))
+            .property("placement", format!("{:?}", token.placement))
             .property("min_width", optional_u16(token.min_width))
             .property("min_height", optional_u16(token.min_height))
             .property("padding", optional_edges(token.padding))
@@ -406,6 +408,8 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::CheckBox(token) => SchemaNode::new("CheckBox", token.id.clone())
             .property("label", quoted(&token.label))
             .property("checked", token.checked.to_string())
+            .property("width", format!("{:?}", token.width))
+            .property("wrapping", format!("{:?}", token.wrapping))
             .property("indeterminate", token.indeterminate.to_string())
             .property("label_italic", token.label_italic.to_string())
             .property("state", token.state.to_string())
@@ -488,6 +492,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 combo_box_labeled_evidence_width(token.label.as_deref(), token.width),
             )
             .property("height", format!("{:?}", token.height))
+            .property("wrapping", format!("{:?}", token.wrapping))
             .property(
                 "labeled_height",
                 combo_box_labeled_evidence_height(token.label.as_deref(), token.height),
@@ -1302,7 +1307,10 @@ fn quoted(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::view::{button, checkbox, column, page, settings_row, text, text_editor, IntoView};
+    use crate::view::{
+        button, checkbox, column, page, settings_row, text, text_editor, IntoView, Length,
+        TextWrapping,
+    };
 
     #[allow(dead_code)]
     #[derive(Clone)]
@@ -1324,6 +1332,32 @@ mod tests {
 
         assert!(snapshot.contains("CheckBox label=\"Mixed\""));
         assert!(snapshot.contains("indeterminate=true"));
+    }
+
+    #[test]
+    fn checkbox_layout_contract_defaults_and_explicit_values_are_schema_visible() {
+        let defaults = checkbox::<Msg>("Default", false).into_view();
+        let ViewToken::CheckBox(default_token) = defaults.token() else {
+            panic!("expected CheckBox");
+        };
+        assert_eq!(default_token.width, Length::Shrink);
+        assert_eq!(default_token.wrapping, TextWrapping::Word);
+        let default_snapshot = view_schema(&defaults).snapshot();
+        assert!(default_snapshot.contains("width=Shrink"));
+        assert!(default_snapshot.contains("wrapping=Word"));
+
+        let explicit = checkbox::<Msg>("Wrapped", false)
+            .width(Length::Fill)
+            .wrapping(TextWrapping::Word)
+            .on_toggle(Msg::Toggle);
+        let ViewToken::CheckBox(explicit_token) = explicit.token() else {
+            panic!("expected CheckBox");
+        };
+        assert_eq!(explicit_token.width, Length::Fill);
+        assert_eq!(explicit_token.wrapping, TextWrapping::Word);
+        let explicit_snapshot = view_schema(&explicit).snapshot();
+        assert!(explicit_snapshot.contains("width=Fill"));
+        assert!(explicit_snapshot.contains("wrapping=Word"));
     }
 
     #[test]
@@ -1542,13 +1576,14 @@ mod tests {
 
     #[test]
     fn flyout_button_emits_title_trigger_styling() {
-        use crate::view::{flyout_button, FlyoutMenuItem, TextStyle};
+        use crate::view::{flyout_button, FlyoutMenuItem, FlyoutPlacement, TextStyle};
         let view = page::<Msg>("Demo")
             .content(column((flyout_button("DemoApp")
                 .text_style(TextStyle::Subtitle)
                 .font_size(22)
                 .min_width(0)
                 .min_height(0)
+                .placement(FlyoutPlacement::Right)
                 .items([FlyoutMenuItem::radio("quick", "Quick Translation", true)])
                 .on_select(Msg::Input),)))
             .into_view();
@@ -1559,6 +1594,7 @@ mod tests {
         assert!(snapshot.contains("label=\"DemoApp\""));
         assert!(snapshot.contains("text_style=Subtitle"));
         assert!(snapshot.contains("font_size=22"));
+        assert!(snapshot.contains("placement=Right"));
         assert!(snapshot.contains("action=selection_input"));
     }
 
@@ -1666,10 +1702,7 @@ mod tests {
 }
 
 #[cfg(feature = "parity-diagnostics")]
-fn diagnostic_node<Message>(
-    view: &View<Message>,
-    path: crate::diff::ViewPath,
-) -> DiagnosticNode {
+fn diagnostic_node<Message>(view: &View<Message>, path: crate::diff::ViewPath) -> DiagnosticNode {
     let declarative = schema_node(view);
     let children = diagnostic_children(view.token())
         .into_iter()
@@ -1737,8 +1770,7 @@ fn diagnostic_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message
         ViewToken::Lazy(token) => vec![token.content.as_ref()],
         ViewToken::ScrollView(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Card(token) => {
-            let mut children: Vec<&View<Message>> =
-                token.content.iter().map(Box::as_ref).collect();
+            let mut children: Vec<&View<Message>> = token.content.iter().map(Box::as_ref).collect();
             children.extend(token.trailing.iter());
             children
         }
@@ -1752,8 +1784,7 @@ fn diagnostic_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message
             children
         }
         ViewToken::SettingsRow(token) => {
-            let mut children: Vec<&View<Message>> =
-                token.content.iter().map(Box::as_ref).collect();
+            let mut children: Vec<&View<Message>> = token.content.iter().map(Box::as_ref).collect();
             children.extend(token.trailing.iter());
             children
         }
@@ -1794,10 +1825,7 @@ fn collect_duplicate_id_warnings(node: &DiagnosticNode, warnings: &mut Vec<Strin
     for child in &node.children {
         if let Some(id) = child.id.as_deref() {
             if let Some((_, first_path)) = seen.iter().find(|(seen_id, _)| *seen_id == id) {
-                warnings.push(format!(
-                    "duplicate-id:{id}:{}:{}",
-                    first_path, child.path
-                ));
+                warnings.push(format!("duplicate-id:{id}:{}:{}", first_path, child.path));
             } else {
                 seen.push((id, &child.path));
             }
@@ -1807,7 +1835,6 @@ fn collect_duplicate_id_warnings(node: &DiagnosticNode, warnings: &mut Vec<Strin
         collect_duplicate_id_warnings(child, warnings);
     }
 }
-
 
 #[cfg(feature = "parity-diagnostics")]
 fn diff_diagnostic_nodes(
@@ -1830,7 +1857,12 @@ fn diff_diagnostic_nodes(
         .properties
         .iter()
         .filter_map(|property| Some(property.name.as_str()))
-        .chain(after.properties.iter().map(|property| property.name.as_str()))
+        .chain(
+            after
+                .properties
+                .iter()
+                .map(|property| property.name.as_str()),
+        )
     {
         if changes.iter().any(|change: &DiagnosticChange| {
             change.path == after.path && change.property.as_deref() == Some(property)
@@ -1883,9 +1915,7 @@ mod diagnostic_tests {
     #[test]
     fn explicit_width_records_setter_source_and_default_constructor() {
         let default_view = text::<()>("default");
-        let explicit_view = button::<()>("run")
-            .width(Length::Fixed(120))
-            .into_view();
+        let explicit_view = button::<()>("run").width(Length::Fixed(120)).into_view();
         let diagnostic = diagnostic_view_schema(&explicit_view);
         let width = diagnostic
             .root

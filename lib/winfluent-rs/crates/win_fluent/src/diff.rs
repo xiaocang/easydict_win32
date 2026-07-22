@@ -398,10 +398,11 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.toggle_action.kind()
         ),
         ViewToken::Button(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}|{:?}|padding={:?}|text_style={:?}|font_size={:?}|margin={:?}|{}|{:?}",
+            "{:?}|{:?}|{:?}|trailing={:?}|{:?}|{:?}|padding={:?}|text_style={:?}|font_size={:?}|margin={:?}|{}|{:?}",
             token.label,
             token.kind,
             token.icon.as_ref().map(|icon| icon.name),
+            token.trailing_icon.as_ref().map(|icon| icon.name),
             token.width,
             token.height,
             token.padding,
@@ -488,9 +489,11 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.action.kind()
         ),
         ViewToken::CheckBox(token) => format!(
-            "{:?}|{}|indeterminate={}|italic={}|{}|{:?}",
+            "{:?}|{}|width={:?}|wrapping={:?}|indeterminate={}|italic={}|{}|{:?}",
             token.label,
             token.checked,
+            token.width,
+            token.wrapping,
             token.indeterminate,
             token.label_italic,
             token.state,
@@ -546,13 +549,14 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.submit_action.kind()
         ),
         ViewToken::ComboBox(token) => format!(
-            "{:?}|{:?}|{:?}|items={}|{:?}|{:?}|{}|{:?}",
+            "{:?}|{:?}|{:?}|items={}|{:?}|{:?}|wrapping={:?}|{}|{:?}",
             token.label,
             token.placeholder,
             token.selected,
             token.items.len(),
             token.width,
             token.height,
+            token.wrapping,
             token.state,
             token.action.kind()
         ),
@@ -801,7 +805,10 @@ fn result_item_summary(item: &ResultItem) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::view::{button, column, page, text, IntoView};
+    use crate::view::{
+        button, checkbox, column, combo_box, page, text, ComboBoxItem, IntoView, Length,
+        TextWrapping,
+    };
 
     #[derive(Clone)]
     enum Msg {
@@ -821,5 +828,33 @@ mod tests {
 
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0].kind, ViewChangeKind::Updated { kind: "Text" });
+    }
+
+    #[test]
+    fn detects_checkbox_and_combo_layout_updates() {
+        let items = [ComboBoxItem::new("one", "One")];
+        let before: View<Msg> = column((
+            checkbox("Context", false).id("check"),
+            combo_box(items.clone()).id("combo"),
+        ))
+        .into_view();
+        let after: View<Msg> = column((
+            checkbox("Context", false)
+                .id("check")
+                .width(Length::Fill)
+                .wrapping(TextWrapping::Word),
+            combo_box(items).id("combo").wrapping(TextWrapping::Word),
+        ))
+        .into_view();
+
+        let changes = diff_views(&before, &after);
+
+        assert_eq!(changes.len(), 2);
+        assert!(changes
+            .iter()
+            .any(|change| change.kind == ViewChangeKind::Updated { kind: "CheckBox" }));
+        assert!(changes
+            .iter()
+            .any(|change| change.kind == ViewChangeKind::Updated { kind: "ComboBox" }));
     }
 }

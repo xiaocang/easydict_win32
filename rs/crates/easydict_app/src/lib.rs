@@ -456,7 +456,7 @@ pub use text_layout::{
     LayoutLine, LayoutLineRange, LayoutLinesResult, LayoutResult, PreparedParagraph, SegmentKind,
     SegmentedText, TextMeasurer, TextPrepareOptions,
 };
-pub use theme::easydict_theme_tokens;
+pub use theme::{current_system_theme_mode, easydict_theme_tokens};
 pub use traditional_http::{
     apply_deepl_dynamic_spacing, bing_credentials_expired, bing_host, bing_language_code,
     build_bing_translate_request_plan, build_caiyun_translation_request_plan,
@@ -595,13 +595,15 @@ impl Application for EasydictApp {
 
     fn new(mut flags: Self::Flags) -> (Self, Task<Self::Message>) {
         debug_log::log_startup();
+        flags.system_theme = current_system_theme_mode();
         flags.browser_support = match load_browser_support_status() {
             Ok(status) => BrowserSupportState::from_status(&status),
             Err(error) => BrowserSupportState::failed(error),
         };
         let built_in_ai_registration_task = built_in_ai_device_registration_task(&flags.settings);
-        let clipboard_monitor_task = clipboard_monitor_task_for_settings(&flags.settings);
-        let mouse_selection_hook_task = mouse_selection_hook_task_for_settings(&flags.settings);
+        let clipboard_monitor_task = clipboard_monitor_task_for_settings(&flags.settings, false);
+        let mouse_selection_hook_task =
+            mouse_selection_hook_task_for_settings(&flags.settings, false);
         let named_event_task = named_event_listener_task();
         let protocol_registration_task = protocol_registration_task();
         (
@@ -664,6 +666,13 @@ impl Application for EasydictApp {
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         debug_log::log_message(&message);
+
+        // Re-read the Windows preference when the user actively selects
+        // "System" so a settings change made while Easydict was idle is
+        // reflected before the next view is rebuilt.
+        if matches!(&message, Message::ThemeChanged(id) if id == "system") {
+            self.state.system_theme = current_system_theme_mode();
+        }
 
         if let Message::HotkeyTriggered(id) = &message {
             return self.hotkey_task(id);
@@ -1058,9 +1067,15 @@ impl Application for EasydictApp {
             // Opening settings kicks off a real async check of the on-disk
             // layout-model / CJK-font availability; the entry loading overlay is
             // shown until it resolves.
-            Message::OpenSettings => {
-                settings_runtime_status_task(crate::state::settings_snapshot(&self.state.settings))
-            }
+            // `apply` below increments the round id; both completion messages
+            // must carry the post-apply generation to stay pairable.
+            Message::OpenSettings => settings_runtime_status_task(
+                crate::state::settings_snapshot(&self.state.settings),
+                self.state
+                    .settings
+                    .settings_runtime_generation
+                    .wrapping_add(1),
+            ),
             // Switching settings tabs resets the shared scroll view to the top,
             // matching WinUI `MainScrollViewer.ChangeView(null, 0, null)`.
             Message::SettingsSectionChanged(_) => Task::scroll_to_top("MainScrollViewer"),
@@ -1095,10 +1110,15 @@ impl Application for EasydictApp {
             _ => Task::none(),
         };
 
-        let should_sync_background_hooks = matches!(
+        let saves_or_discards_settings = matches!(
             message,
             Message::SaveSettingsChanges | Message::DiscardSettingsChanges
         );
+        let should_sync_clipboard_monitor = saves_or_discards_settings
+            && self.state.settings.monitor_clipboard != self.state.saved_settings.monitor_clipboard;
+        let should_sync_mouse_selection = saves_or_discards_settings
+            && self.state.settings.mouse_selection_translate
+                != self.state.saved_settings.mouse_selection_translate;
         let should_sync_startup_registration = message == Message::SaveSettingsChanges;
 
         if !matches!(
@@ -1111,7 +1131,20 @@ impl Application for EasydictApp {
             self.state.settings.translation_cache_status = format!("Clear failed: {error}");
         }
 
-        if should_sync_background_hooks {
+        if should_sync_clipboard_monitor
+            || should_sync_mouse_selection
+            || should_sync_startup_registration
+        {
+            let clipboard_monitor_task = if should_sync_clipboard_monitor {
+                clipboard_monitor_task_for_settings(&self.state.settings, true)
+            } else {
+                Task::none()
+            };
+            let mouse_selection_hook_task = if should_sync_mouse_selection {
+                mouse_selection_hook_task_for_settings(&self.state.settings, true)
+            } else {
+                Task::none()
+            };
             let startup_registration = if should_sync_startup_registration {
                 startup_registration_task(self.state.settings.launch_at_startup)
             } else {
@@ -1119,8 +1152,8 @@ impl Application for EasydictApp {
             };
             Task::batch([
                 task,
-                clipboard_monitor_task_for_settings(&self.state.settings),
-                mouse_selection_hook_task_for_settings(&self.state.settings),
+                clipboard_monitor_task,
+                mouse_selection_hook_task,
                 startup_registration,
             ])
         } else {
@@ -1129,11 +1162,11 @@ impl Application for EasydictApp {
     }
 
     fn theme(&self) -> ThemeMode {
-        self.state.settings.theme
+        self.state.effective_theme_mode()
     }
 
     fn theme_tokens(&self) -> ThemeTokens {
-        easydict_theme_tokens(self.state.settings.theme)
+        easydict_theme_tokens(self.state.effective_theme_mode())
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -1145,6 +1178,9 @@ impl Application for EasydictApp {
                 .into_iter()
                 .map(|hotkey| Subscription::hotkey(hotkey, Message::HotkeyTriggered))
                 .chain(std::iter::once(Subscription::tray(Message::TrayCommand)))
+                .chain(std::iter::once(Subscription::theme(
+                    Message::SystemThemeChanged,
+                )))
                 .chain(
                     APP_WINDOW_SUBSCRIPTION_IDS
                         .into_iter()
@@ -1645,9 +1681,10 @@ impl EasydictApp {
                 self.state.apply(Message::OpenSettings);
                 Task::batch([
                     show_and_focus_main_window_task(),
-                    settings_runtime_status_task(crate::state::settings_snapshot(
-                        &self.state.settings,
-                    )),
+                    settings_runtime_status_task(
+                        crate::state::settings_snapshot(&self.state.settings),
+                        self.state.settings.settings_runtime_generation,
+                    ),
                 ])
             }
             TRAY_EXIT => Task::batch(
@@ -2348,14 +2385,24 @@ fn browser_registry_error(
     std::io::Error::other(error.to_string())
 }
 
-/// Async task that checks on-disk availability of downloadable settings assets
-/// under the conventional Easydict data directory, replacing static
-/// placeholder statuses with real values once it resolves.
-fn settings_runtime_status_task(settings: protocol::SettingsSnapshot) -> Task<Message> {
-    Task::perform(
-        async move { settings_status::load_runtime_status_for_settings(settings) },
-        Message::SettingsRuntimeStatusLoaded,
-    )
+/// Checks on-disk availability of downloadable settings assets and delays the
+/// loading overlay long enough to suppress one-frame flashes on fast paths.
+fn settings_runtime_status_task(
+    settings: protocol::SettingsSnapshot,
+    generation: u64,
+) -> Task<Message> {
+    Task::batch([
+        Task::perform(
+            async move { settings_status::load_runtime_status_for_settings(settings) },
+            move |status| Message::SettingsRuntimeStatusLoaded(generation, status),
+        ),
+        Task::perform(
+            async {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            },
+            move |_| Message::SettingsRuntimeLoadingDelayElapsed(generation),
+        ),
+    ])
 }
 
 fn settings_save_task(settings: SettingsState) -> Task<Message> {
@@ -2421,9 +2468,14 @@ fn tray_clipboard_read_task() -> Task<Message> {
     )
 }
 
-fn clipboard_monitor_task_for_settings(settings: &SettingsState) -> Task<Message> {
+fn clipboard_monitor_task_for_settings(
+    settings: &SettingsState,
+    stop_when_disabled: bool,
+) -> Task<Message> {
     if !settings.monitor_clipboard {
-        clipboard::stop_clipboard_monitor();
+        if stop_when_disabled {
+            clipboard::stop_clipboard_monitor();
+        }
         return Task::none();
     }
 
@@ -2437,9 +2489,14 @@ fn clipboard_monitor_task_for_settings(settings: &SettingsState) -> Task<Message
     .unwrap_or_else(Task::none)
 }
 
-fn mouse_selection_hook_task_for_settings(settings: &SettingsState) -> Task<Message> {
+fn mouse_selection_hook_task_for_settings(
+    settings: &SettingsState,
+    stop_when_disabled: bool,
+) -> Task<Message> {
     if !settings.mouse_selection_translate {
-        mouse_selection::stop_mouse_selection_hook();
+        if stop_when_disabled {
+            mouse_selection::stop_mouse_selection_hook();
+        }
         return Task::none();
     }
 

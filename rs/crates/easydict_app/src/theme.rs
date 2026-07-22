@@ -1,5 +1,18 @@
 use win_fluent::prelude::*;
 
+pub fn current_system_theme_mode() -> ThemeMode {
+    #[cfg(debug_assertions)]
+    if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SYSTEM_THEME") {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "dark" => return ThemeMode::Dark,
+            "light" => return ThemeMode::Light,
+            _ => {}
+        }
+    }
+
+    win_fluent_platform_win::WindowsPlatformAdapter::system_theme_mode().unwrap_or(ThemeMode::Light)
+}
+
 pub fn easydict_theme_tokens(mode: ThemeMode) -> ThemeTokens {
     match mode {
         ThemeMode::System | ThemeMode::Light => easydict_light(),

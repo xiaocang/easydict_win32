@@ -259,6 +259,9 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .clone()
                 .or_else(|| Some(token.label.clone()));
             node.focusable = token.state.is_focusable();
+            if token.state.selected {
+                node.help_text = node.help_text.or_else(|| Some("selected".to_string()));
+            }
             node
         }
         ViewToken::ToggleButton(token) => {

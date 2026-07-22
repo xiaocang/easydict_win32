@@ -766,6 +766,7 @@ pub struct LongDocumentState {
     pub progress_detail: Option<String>,
     pub last_translated_block: Option<String>,
     pub history: Vec<TranslationResultPreview>,
+    pub history_expanded: bool,
 }
 
 impl Default for LongDocumentState {
@@ -793,6 +794,7 @@ impl Default for LongDocumentState {
             progress_detail: None,
             last_translated_block: None,
             history: Vec::new(),
+            history_expanded: false,
         }
     }
 }
@@ -1084,9 +1086,14 @@ pub struct SettingsState {
     pub layout_model_status: String,
     pub cjk_font_status: String,
     /// Async lifecycle of the settings runtime-status check (model/font on-disk
-    /// availability). `is_loading()` drives the entry loading overlay; the
-    /// settled value carries the resolved availability.
+    /// availability). The overlay is separately delayed so fast checks do not
+    /// flash a transient loading surface during navigation.
     pub settings_runtime: Loadable<crate::settings_status::SettingsRuntimeStatus>,
+    pub settings_runtime_overlay_visible: bool,
+    /// Monotonic id for the current status-check round. Stale delayed
+    /// overlay-reveal messages from an earlier round are ignored so a quick
+    /// back-and-reopen cannot reveal the overlay before this round's debounce.
+    pub settings_runtime_generation: u64,
     pub formula_font_pattern: String,
     pub formula_char_pattern: String,
     pub translation_cache_enabled: bool,
@@ -1211,6 +1218,8 @@ impl Default for SettingsState {
             layout_model_status: "Not downloaded".to_string(),
             cjk_font_status: "Not downloaded".to_string(),
             settings_runtime: Loadable::Idle,
+            settings_runtime_overlay_visible: false,
+            settings_runtime_generation: 0,
             formula_font_pattern: String::new(),
             formula_char_pattern: String::new(),
             translation_cache_enabled: true,
@@ -1353,6 +1362,9 @@ pub struct EasydictUiState {
     pub results: Vec<TranslationResultPreview>,
     pub long_document: LongDocumentState,
     pub browser_support: BrowserSupportState,
+    /// Concrete Windows app theme used when the persisted selection is
+    /// `ThemeMode::System`. This is runtime state and is never persisted.
+    pub system_theme: ThemeMode,
     pub settings: SettingsState,
     pub saved_settings: SettingsState,
     pub window_runtime: HashMap<WindowId, WindowRuntimeState>,
@@ -1432,6 +1444,7 @@ impl Default for EasydictUiState {
             ],
             long_document: LongDocumentState::default(),
             browser_support: BrowserSupportState::default(),
+            system_theme: ThemeMode::Light,
             settings: SettingsState::default(),
             saved_settings: SettingsState::default(),
             window_runtime: HashMap::new(),
@@ -1444,6 +1457,16 @@ impl Default for EasydictUiState {
 }
 
 impl EasydictUiState {
+    pub fn effective_theme_mode(&self) -> ThemeMode {
+        match self.settings.theme {
+            ThemeMode::System => match self.system_theme {
+                ThemeMode::Dark => ThemeMode::Dark,
+                _ => ThemeMode::Light,
+            },
+            selected => selected,
+        }
+    }
+
     pub fn preview(scenario: PreviewScenario, theme: ThemeMode) -> Self {
         let mut state = Self::default();
         state.settings.theme = theme;
@@ -1595,7 +1618,7 @@ impl EasydictUiState {
                 state.long_document.active_query_id = Some(42);
                 state.long_document.progress_percentage = Some(42.0);
                 state.long_document.progress_detail =
-                    Some("Translating page 8 of 18 with OpenAI".to_string());
+                    Some("Translating page 8 of 18 with OpenAI while preserving layout and terminology across the remaining document".to_string());
                 state.long_document.last_translated_block =
                     Some("Abstract and introduction completed".to_string());
             }
@@ -1683,8 +1706,7 @@ impl EasydictUiState {
             state.settings.hide_empty_service_results = env_truthy(&value);
             settings_seed_changed = true;
         }
-        if lookup("EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX")
-            .is_some_and(|value| env_truthy(&value))
+        if lookup("EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX").is_some_and(|value| env_truthy(&value))
         {
             apply_preview_imported_mdx_dictionary(&mut state.settings);
             settings_seed_changed = true;
@@ -1795,6 +1817,11 @@ impl EasydictUiState {
                 state.long_document.service_combo_state = ControlState::default().hovered(true);
             }
         }
+        if lookup("EASYDICT_PREVIEW_LONG_DOC_HISTORY_EXPANDED")
+            .is_some_and(|value| env_truthy(&value))
+        {
+            state.long_document.history_expanded = true;
+        }
         if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE") {
             state.settings.tts_speed_slider_state = preview_control_state_from_id(&value);
         }
@@ -1837,9 +1864,7 @@ impl EasydictUiState {
                 );
             }
         }
-        if let Some(value) =
-            lookup("EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS")
-        {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS") {
             for service_id in value
                 .split(',')
                 .map(str::trim)
@@ -1898,15 +1923,12 @@ impl EasydictUiState {
         {
             state.settings.scrollbars_visible = true;
         }
-        if lookup("EASYDICT_PREVIEW_SETTINGS_TAB_SWITCHING")
-            .is_some_and(|value| env_truthy(&value))
+        if lookup("EASYDICT_PREVIEW_SETTINGS_TAB_SWITCHING").is_some_and(|value| env_truthy(&value))
         {
             state.settings.tab_switching = true;
         }
 
-        if lookup("EASYDICT_PREVIEW_SETTINGS_OPEN")
-            .is_some_and(|value| env_truthy(&value))
-        {
+        if lookup("EASYDICT_PREVIEW_SETTINGS_OPEN").is_some_and(|value| env_truthy(&value)) {
             state.settings_open = true;
         }
 
@@ -2139,28 +2161,40 @@ impl EasydictUiState {
                 self.settings_open = true;
                 self.settings.show_unsaved_changes_dialog = false;
                 self.settings.save_error_message = None;
-                // Kick off the async runtime-status check (see lib.rs); the entry
-                // loading overlay is shown until SettingsRuntimeStatusLoaded.
-                self.settings.settings_runtime.begin();
                 if !self.settings.unsaved_changes {
                     self.saved_settings = sanitized_settings_snapshot(&self.settings);
                 }
+                // Start the status check without painting a one-frame overlay.
+                // A delayed message reveals it only when the check is genuinely slow.
+                self.settings.settings_runtime.begin();
+                self.settings.settings_runtime_overlay_visible = false;
+                self.settings.settings_runtime_generation =
+                    self.settings.settings_runtime_generation.wrapping_add(1);
             }
-            Message::SettingsRuntimeStatusLoaded(status) => {
-                self.settings.layout_model_status = status.layout_model.clone();
-                self.settings.cjk_font_status = status.cjk_font.clone();
-                if should_apply_windows_ai_runtime_status(&self.settings) {
-                    self.settings.local_ai_status = status.windows_ai_status.clone();
+            Message::SettingsRuntimeLoadingDelayElapsed(generation) => {
+                if generation == self.settings.settings_runtime_generation {
+                    self.settings.settings_runtime_overlay_visible =
+                        self.settings.settings_runtime.is_loading();
                 }
-                if should_apply_foundry_runtime_status(&self.settings.foundry_local_status) {
-                    self.settings.foundry_local_status = status.foundry_local_status.clone();
+            }
+            Message::SettingsRuntimeStatusLoaded(generation, status) => {
+                if generation == self.settings.settings_runtime_generation {
+                    self.settings.layout_model_status = status.layout_model.clone();
+                    self.settings.cjk_font_status = status.cjk_font.clone();
+                    if should_apply_windows_ai_runtime_status(&self.settings) {
+                        self.settings.local_ai_status = status.windows_ai_status.clone();
+                    }
+                    if should_apply_foundry_runtime_status(&self.settings.foundry_local_status) {
+                        self.settings.foundry_local_status = status.foundry_local_status.clone();
+                    }
+                    if self.settings.open_vino_download_progress == "Idle" {
+                        self.settings.open_vino_status = status.open_vino_status.clone();
+                        self.settings.open_vino_download_progress =
+                            status.open_vino_download_progress.clone();
+                    }
+                    self.settings.settings_runtime.resolve(Ok(status));
+                    self.settings.settings_runtime_overlay_visible = false;
                 }
-                if self.settings.open_vino_download_progress == "Idle" {
-                    self.settings.open_vino_status = status.open_vino_status.clone();
-                    self.settings.open_vino_download_progress =
-                        status.open_vino_download_progress.clone();
-                }
-                self.settings.settings_runtime.resolve(Ok(status));
             }
             Message::SettingsSaveFinished(result) => match result {
                 Ok(()) => {
@@ -2345,6 +2379,12 @@ impl EasydictUiState {
                     self.settings.show_unsaved_changes_dialog = false;
                     self.settings.save_error_message = None;
                 }
+            }
+            Message::SystemThemeChanged(mode) => {
+                self.system_theme = match mode {
+                    ThemeMode::Dark => ThemeMode::Dark,
+                    _ => ThemeMode::Light,
+                };
             }
             Message::ToggleMinimizeToTray(value) => {
                 self.settings.minimize_to_tray = value;
@@ -2974,6 +3014,9 @@ impl EasydictUiState {
                     self.long_document.two_pass_context = value;
                 }
             }
+            Message::ToggleLongDocumentHistoryExpanded(value) => {
+                self.long_document.history_expanded = value;
+            }
             Message::TogglePin(value) => self.mini.pinned = value,
             Message::SwapLanguages => {
                 std::mem::swap(&mut self.source_language, &mut self.target_language);
@@ -3293,16 +3336,6 @@ fn apply_preview_result_query_modes(
     }
 }
 
-fn preview_detected_language_label(language_id: &str, locale: &str) -> String {
-    let language = crate::translation_language::TranslationLanguage::from_code(language_id);
-    let display_name = if language == crate::translation_language::TranslationLanguage::Auto {
-        language_id.trim().to_string()
-    } else {
-        language.display_name().to_string()
-    };
-    tr_locale(locale, "DetectedLanguage", "Detected: {0}").replace("{0}", &display_name)
-}
-
 fn preview_language_id(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "auto" | "automatic" | "auto-detect" | "autodetect" => "auto".to_string(),
@@ -3353,6 +3386,10 @@ fn apply_window_runtime_event(state: &mut EasydictUiState, event: &WindowEvent) 
             let window = state.window_runtime.entry(id).or_default();
             window.is_open = true;
             window.is_focused = true;
+        }
+        WindowEvent::Unfocused(_) => {
+            let window = state.window_runtime.entry(id).or_default();
+            window.is_focused = false;
         }
         WindowEvent::DpiChanged(_) => {
             let window = state.window_runtime.entry(id).or_default();
@@ -4185,6 +4222,7 @@ fn sanitized_settings_snapshot(settings: &SettingsState) -> SettingsState {
     snapshot.show_unsaved_changes_dialog = false;
     snapshot.save_error_message = None;
     snapshot.pending_mdx_delete_service_id = None;
+    snapshot.settings_runtime_overlay_visible = false;
     snapshot.expanded_service_configurations.clear();
     reset_settings_reorder_modes(&mut snapshot);
     snapshot
@@ -5203,6 +5241,7 @@ pub enum Message {
     DesktopShellActionFinished(Result<(), String>),
     DesktopIntegrationActionFinished(Result<(), String>),
     ThemeChanged(String),
+    SystemThemeChanged(ThemeMode),
     ToggleMinimizeToTray(bool),
     ToggleStartMinimized(bool),
     ToggleMonitorClipboard(bool),
@@ -5292,6 +5331,7 @@ pub enum Message {
     ToggleWindowServiceQuery(QuickTranslateSurface, String, bool),
     MoveWindowService(QuickTranslateSurface, String, isize),
     ToggleTwoPassContext(bool),
+    ToggleLongDocumentHistoryExpanded(bool),
     TogglePin(bool),
     ToggleResultExpanded(String),
     ToggleResultExpandedIn(QuickTranslateSurface, String),
@@ -5356,10 +5396,13 @@ pub enum Message {
     SpeakResultFinished(Result<(), String>),
     ClipboardOperationFinished(Result<(), String>),
     OpenSettings,
-    /// Result of the async settings runtime-status check (model/font on-disk
-    /// availability), used to settle the `settings_runtime` [`Loadable`] and
-    /// populate the displayed statuses.
-    SettingsRuntimeStatusLoaded(crate::settings_status::SettingsRuntimeStatus),
+    /// Reveals the settings loading overlay only if the status check round it
+    /// belongs to is still the active one and still loading.
+    SettingsRuntimeLoadingDelayElapsed(u64),
+    /// Result of an async settings runtime-status check, paired with the
+    /// settings-open generation that started it so stale rounds cannot settle
+    /// a newer round's [`Loadable`] or overwrite its displayed statuses.
+    SettingsRuntimeStatusLoaded(u64, crate::settings_status::SettingsRuntimeStatus),
     SettingsSaveFinished(Result<(), String>),
     BuiltInAiDeviceRegistrationFinished(Result<Option<String>, String>),
     Back,
@@ -5418,10 +5461,12 @@ mod tests {
             "EASYDICT_PREVIEW_SCENARIO" => Some("initial".to_string()),
             "EASYDICT_PREVIEW_THEME" => Some("dark".to_string()),
             "EASYDICT_PREVIEW_UI_LANGUAGE" => Some("zh-CN".to_string()),
+            "EASYDICT_PREVIEW_LONG_DOC_HISTORY_EXPANDED" => Some("1".to_string()),
             _ => None,
         });
 
         assert_eq!(state.settings.ui_language, "zh-CN");
+        assert!(state.long_document.history_expanded);
     }
     use std::sync::Mutex;
 
@@ -5511,7 +5556,7 @@ mod tests {
     }
 
     #[test]
-    fn floating_preview_language_env_applies_dotnet_status_rows() {
+    fn floating_preview_language_env_applies_dotnet_status_semantics() {
         let _guard = ENV_LOCK.lock().expect("env lock");
         let saved = [
             (
@@ -5540,7 +5585,11 @@ mod tests {
         let fallback = EasydictUiState::preview_from_env();
         assert!(fallback.mini.grammar_correction_fallback);
         assert_eq!(
-            fallback.mini.detected_language.as_deref(),
+            crate::ui::floating_quick_query_status_text(
+                &fallback.mini,
+                &fallback.settings.ui_language,
+            )
+            .as_deref(),
             Some("未启用支持纠错的 AI 服务，已回退为普通翻译。配置一个支持纠错的 AI 服务后，源语言和目标语言相同时会显示纠错信息。")
         );
 
@@ -5549,9 +5598,14 @@ mod tests {
 
         let detected = EasydictUiState::preview_from_env();
         assert!(!detected.mini.grammar_correction_fallback);
+        assert_eq!(detected.mini.source_language, "ja");
+        assert_eq!(detected.mini.target_language, "zh-Hant");
         assert_eq!(
-            detected.mini.detected_language.as_deref(),
-            Some("检测到：Japanese")
+            crate::ui::floating_quick_query_status_text(
+                &detected.mini,
+                &detected.settings.ui_language,
+            ),
+            None
         );
 
         for (name, value) in saved {

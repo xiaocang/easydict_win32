@@ -12,6 +12,7 @@ use win_fluent::platform::{
 };
 use win_fluent::runtime::DesktopIntegrationPlan;
 use win_fluent::subscription::{Subscription, SubscriptionKind};
+use win_fluent::theme::ThemeMode;
 use win_fluent::window::{
     WindowFrame, WindowLevel, WindowOptions, WindowPlacement, WindowResizeMode,
     WindowScreenConstraint,
@@ -337,6 +338,18 @@ impl WindowsPlatformAdapter {
         hotkeys.iter().map(plan_hotkey).collect()
     }
 
+    /// Returns the Windows application color preference. Missing or malformed
+    /// personalization data follows the Windows default and resolves to light.
+    pub fn system_theme_mode() -> Result<ThemeMode, WindowsPlatformError> {
+        native::system_uses_dark_theme().map(|uses_dark_theme| {
+            if uses_dark_theme {
+                ThemeMode::Dark
+            } else {
+                ThemeMode::Light
+            }
+        })
+    }
+
     pub fn plan_window(options: &WindowOptions) -> WindowsWindowPlan {
         WindowsWindowPlan {
             id: options.id.as_str().to_string(),
@@ -358,7 +371,60 @@ impl WindowsPlatformAdapter {
         hwnd: isize,
         options: &WindowOptions,
     ) -> Result<(), WindowsPlatformError> {
-        native::apply_window_ex_style(hwnd, window_ex_style(options))
+        native::apply_window_style(hwnd, window_style(options))?;
+        native::configure_resize_hit_test(
+            hwnd,
+            options.resize_mode == WindowResizeMode::CanResize
+                && matches!(
+                    options.frame,
+                    WindowFrame::Borderless | WindowFrame::Acrylic
+                ),
+        )?;
+        native::apply_window_ex_style(hwnd, window_ex_style(options))?;
+        native::apply_window_corner_preference(
+            hwnd,
+            options.level == WindowLevel::ToolWindow
+                && options.resize_mode == WindowResizeMode::Fixed,
+        );
+        Ok(())
+    }
+    pub fn show_window(hwnd: isize, activate: bool) -> Result<(), WindowsPlatformError> {
+        native::show_window(hwnd, activate)
+    }
+
+    /// Pre-fills the window's client surface with a solid color so the first
+    /// `show_window` composites the theme background instead of the default
+    /// white surface while the renderer's first frame is still pending.
+    pub fn paint_window_background(
+        hwnd: isize,
+        red: u8,
+        green: u8,
+        blue: u8,
+    ) -> Result<(), WindowsPlatformError> {
+        native::paint_window_background(hwnd, red, green, blue)
+    }
+
+    /// Pins the native non-client frame to the application's effective
+    /// light/dark palette. This prevents Windows from repainting a transient
+    /// system-colored caption while owned popup windows close.
+    pub fn set_window_dark_mode(hwnd: isize, enabled: bool) -> Result<(), WindowsPlatformError> {
+        native::set_window_dark_mode(hwnd, enabled)
+    }
+
+    /// Cloaks/uncloaks a window at the DWM level. A cloaked window is fully
+    /// managed (shown, focusable, presents frames) but composites nothing, so
+    /// the OS pre-rendered legacy frame never reaches the screen before the
+    /// renderer's first present.
+    pub fn set_window_cloaked(hwnd: isize, cloaked: bool) -> Result<(), WindowsPlatformError> {
+        native::set_window_cloaked(hwnd, cloaked)
+    }
+
+    pub fn set_window_maximized(hwnd: isize, maximized: bool) -> Result<(), WindowsPlatformError> {
+        native::set_window_maximized(hwnd, maximized)
+    }
+
+    pub fn toggle_window_maximized(hwnd: isize) -> Result<(), WindowsPlatformError> {
+        native::toggle_window_maximized(hwnd)
     }
 
     pub fn resolve_window_placement(
@@ -370,6 +436,16 @@ impl WindowsPlatformAdapter {
         Ok(Self::resolve_window_placement_for_monitor(
             options, cursor, monitor,
         ))
+    }
+    pub fn apply_window_placement_to_hwnd(
+        hwnd: isize,
+        options: &WindowOptions,
+    ) -> Result<(), WindowsPlatformError> {
+        let cursor = native::cursor_position()?;
+        let monitor = native::monitor_metrics_for_point(cursor)?;
+        let placement = Self::resolve_window_placement_for_monitor(options, cursor, monitor);
+        let (x, y, width, height) = physical_window_geometry(options, placement, monitor);
+        native::set_window_geometry(hwnd, x, y, width, height)
     }
 
     pub fn resolve_window_placement_for(
@@ -1230,18 +1306,33 @@ fn window_style(options: &WindowOptions) -> u32 {
     };
 
     match options.resize_mode {
-        WindowResizeMode::CanResize => {}
+        WindowResizeMode::CanResize => {
+            if matches!(
+                options.frame,
+                WindowFrame::Borderless | WindowFrame::Acrylic
+            ) {
+                style |= native::ws_thickframe();
+                style |= native::ws_maximize_box() | native::ws_minimize_box();
+            }
+        }
         WindowResizeMode::CanMinimize => {
             style &= !native::ws_thickframe();
+            style &= !native::ws_maximize_box();
             style |= native::ws_minimize_box();
         }
         WindowResizeMode::Fixed => {
             style &= !native::ws_thickframe();
+            style &= !native::ws_maximize_box();
             style &= !native::ws_minimize_box();
         }
     }
 
     style
+}
+
+fn merge_window_style(current: u32, desired: u32) -> u32 {
+    let managed_bits = native::ws_popup() | native::ws_overlapped_window();
+    (current & !managed_bits) | (desired & managed_bits)
 }
 
 fn window_ex_style(options: &WindowOptions) -> u32 {
@@ -1347,6 +1438,15 @@ fn resolve_window_placement_with(
             inset_x.round() as i32,
             inset_y.round() as i32,
         ),
+        WindowPlacement::ContextMenuAtCursor { inset_x, inset_y } => context_menu_position_signed(
+            cursor.x,
+            cursor.y,
+            width,
+            height,
+            constraint_area,
+            inset_x.round() as i32,
+            inset_y.round() as i32,
+        ),
         WindowPlacement::TopRight { margin_x, margin_y } => (
             work_area.right - width - margin_x.round() as i32,
             work_area.top + margin_y.round() as i32,
@@ -1372,6 +1472,23 @@ fn resolve_window_placement_with(
         work_area,
         physical_work_area: monitor.physical_work_area,
     }
+}
+fn physical_window_geometry(
+    options: &WindowOptions,
+    placement: ResolvedWindowPlacement,
+    monitor: WindowsMonitorMetrics,
+) -> (i32, i32, i32, i32) {
+    let scale = monitor.scale_factor();
+    let (logical_area, physical_area) = if options.placement == WindowPlacement::Monitor {
+        (monitor.monitor_area_dips(), monitor.physical_monitor_area)
+    } else {
+        (monitor.work_area_dips(), monitor.physical_work_area)
+    };
+    let x = physical_area.left + ((placement.x - logical_area.left) as f32 * scale).round() as i32;
+    let y = physical_area.top + ((placement.y - logical_area.top) as f32 * scale).round() as i32;
+    let width = (placement.width as f32 * scale).round().max(1.0) as i32;
+    let height = (placement.height as f32 * scale).round().max(1.0) as i32;
+    (x, y, width, height)
 }
 
 fn physical_rect_to_dips(rect: WindowsRect, scale_factor: f32) -> WindowsRect {
@@ -1461,6 +1578,38 @@ fn context_menu_position(
     (x, y)
 }
 
+fn context_menu_position_signed(
+    anchor_x: i32,
+    anchor_y: i32,
+    width: i32,
+    height: i32,
+    area: WindowsRect,
+    inset_x: i32,
+    inset_y: i32,
+) -> (i32, i32) {
+    let right_x = anchor_x - inset_x;
+    let left_x = anchor_x - width + inset_x;
+    let x = if right_x + width <= area.right {
+        right_x
+    } else if left_x >= area.left {
+        left_x
+    } else {
+        clamp_axis(right_x, width, area.left, area.right)
+    };
+
+    let upper_y = anchor_y - height + inset_y;
+    let lower_y = anchor_y - inset_y;
+    let y = if upper_y >= area.top {
+        upper_y
+    } else if lower_y + height <= area.bottom {
+        lower_y
+    } else {
+        clamp_axis(upper_y, height, area.top, area.bottom)
+    };
+
+    (x, y)
+}
+
 fn select_work_area_for_point(
     point: WindowsPoint,
     work_areas: &[WindowsRect],
@@ -1527,14 +1676,14 @@ mod native {
         HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WAIT_OBJECT_0, WAIT_TIMEOUT, WPARAM,
     };
     use windows_sys::Win32::Graphics::Dwm::{
-        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND,
-        DWMWCP_ROUNDSMALL,
+        DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_USE_IMMERSIVE_DARK_MODE,
+        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL,
     };
     use windows_sys::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
-        GetDIBits, GetMonitorInfoW, MonitorFromPoint, ReleaseDC, SelectObject, BITMAPINFO,
-        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ, MONITORINFO,
-        MONITOR_DEFAULTTONEAREST, SRCCOPY,
+        GetDIBits, GetMonitorInfoW, GetWindowDC, MonitorFromPoint, MonitorFromWindow, ReleaseDC,
+        SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ,
+        MONITORINFO, MONITOR_DEFAULTTONEAREST, SRCCOPY,
     };
     // Owner-drawn tray menu (fluent WinUI-style item rendering).
     use windows_sys::Win32::Graphics::Gdi::{
@@ -1562,14 +1711,14 @@ mod native {
     use windows_sys::Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegOpenKeyExW,
         RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ,
-        KEY_SET_VALUE, REG_SZ,
+        KEY_SET_VALUE, REG_DWORD, REG_SZ,
     };
     use windows_sys::Win32::System::Threading::{
         AttachThreadInput, CreateEventExW, GetCurrentProcess, GetCurrentThreadId, OpenEventW,
         SetEvent, WaitForSingleObject, CREATE_EVENT_MANUAL_RESET, EVENT_MODIFY_STATE,
         SYNCHRONIZATION_SYNCHRONIZE,
     };
-    use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+    use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         RegisterHotKey, SendInput, UnregisterHotKey, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
         KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, VK_BACK,
@@ -1577,8 +1726,9 @@ mod native {
         VK_MENU, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
     };
     use windows_sys::Win32::UI::Shell::{
-        ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
-        NIM_SETVERSION, NIN_SELECT, NOTIFYICONDATAW, NOTIFYICON_VERSION_4,
+        DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass, ShellExecuteW, Shell_NotifyIconW,
+        NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_SETVERSION, NIN_SELECT,
+        NOTIFYICONDATAW, NOTIFYICON_VERSION_4,
     };
     #[cfg(test)]
     use windows_sys::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
@@ -1587,18 +1737,20 @@ mod native {
         DispatchMessageW, EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos,
         GetForegroundWindow, GetParent, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect,
         GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
-        LoadIconW, LoadImageW, PeekMessageW, PostMessageW, RegisterClassW, SetCursorPos,
+        IsZoomed, LoadIconW, LoadImageW, PeekMessageW, PostMessageW, RegisterClassW, SetCursorPos,
         SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow,
         TrackPopupMenuEx, TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE,
-        HICON, HWND_NOTOPMOST, HWND_TOPMOST, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE,
-        LR_LOADFROMFILE, MF_POPUP, MF_SEPARATOR, MF_SYSMENU, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN,
-        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNORMAL,
-        TPM_LEFTALIGN, TPM_NOANIMATION, TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_VERNEGANIMATION,
-        TPM_VERPOSANIMATION, WM_CONTEXTMENU, WM_HOTKEY, WM_LBUTTONDBLCLK, WM_LBUTTONUP,
-        WM_MENUSELECT, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_BORDER, WS_EX_NOACTIVATE,
-        WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW, WS_POPUP,
-        WS_THICKFRAME,
+        GWL_STYLE, HICON, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCLIENT, HTLEFT, HTRIGHT, HTTOP,
+        HTTOPLEFT, HTTOPRIGHT, HWND_NOTOPMOST, HWND_TOPMOST, IDI_APPLICATION, IMAGE_ICON,
+        LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_POPUP, MF_SEPARATOR, MF_SYSMENU, MINMAXINFO, MSG,
+        PM_REMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
+        SW_HIDE, SW_MAXIMIZE, SW_RESTORE, SW_SHOWNORMAL, TPM_LEFTALIGN, TPM_NOANIMATION,
+        TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_VERNEGANIMATION, TPM_VERPOSANIMATION, WM_CONTEXTMENU,
+        WM_GETMINMAXINFO, WM_HOTKEY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_MENUSELECT, WM_NCDESTROY,
+        WM_NCHITTEST, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_BORDER, WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW,
+        WS_POPUP, WS_THICKFRAME,
     };
     // Owner-drawn tray menu support.
     use windows_sys::Win32::Foundation::SIZE;
@@ -2191,6 +2343,444 @@ mod native {
         Ok(())
     }
 
+    const RESIZE_HIT_TEST_SUBCLASS_ID: usize = 0x5746_5253;
+
+    unsafe extern "system" fn resize_hit_test_subclass_proc(
+        hwnd: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+        _subclass_id: usize,
+        _reference_data: usize,
+    ) -> LRESULT {
+        if message == WM_GETMINMAXINFO && lparam != 0 {
+            // Let winit populate constraints such as ptMinTrackSize before overriding only
+            // the monitor work-area maximize geometry.
+            let default_result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+            let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+            let mut monitor_info = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if !monitor.is_null() && unsafe { GetMonitorInfoW(monitor, &mut monitor_info) } != 0 {
+                let maximize = unsafe { &mut *(lparam as *mut MINMAXINFO) };
+                maximize.ptMaxPosition.x = monitor_info.rcWork.left - monitor_info.rcMonitor.left;
+                maximize.ptMaxPosition.y = monitor_info.rcWork.top - monitor_info.rcMonitor.top;
+                maximize.ptMaxSize.x = monitor_info.rcWork.right - monitor_info.rcWork.left;
+                maximize.ptMaxSize.y = monitor_info.rcWork.bottom - monitor_info.rcWork.top;
+            }
+            return default_result;
+        }
+
+        if message == WM_NCHITTEST {
+            // Safety: the subclass contract permits forwarding to the next procedure.
+            let default_result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+            if default_result != HTCLIENT as LRESULT {
+                return default_result;
+            }
+
+            let mut rect = RECT::default();
+            // Safety: hwnd is the live window invoking this subclass callback.
+            if unsafe { GetWindowRect(hwnd, &mut rect) } != 0 {
+                // Safety: hwnd is live for the duration of this callback.
+                let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
+                let border = ((8 * dpi + 95) / 96).max(1) as i32;
+                let raw = lparam as u32;
+                let x = (raw as u16 as i16) as i32;
+                let y = ((raw >> 16) as u16 as i16) as i32;
+                let left = x < rect.left + border;
+                let right = x >= rect.right - border;
+                let top = y < rect.top + border;
+                let bottom = y >= rect.bottom - border;
+
+                return match (left, right, top, bottom) {
+                    (true, _, true, _) => HTTOPLEFT as LRESULT,
+                    (_, true, true, _) => HTTOPRIGHT as LRESULT,
+                    (true, _, _, true) => HTBOTTOMLEFT as LRESULT,
+                    (_, true, _, true) => HTBOTTOMRIGHT as LRESULT,
+                    (true, _, _, _) => HTLEFT as LRESULT,
+                    (_, true, _, _) => HTRIGHT as LRESULT,
+                    (_, _, true, _) => HTTOP as LRESULT,
+                    (_, _, _, true) => HTBOTTOM as LRESULT,
+                    _ => default_result,
+                };
+            }
+
+            return default_result;
+        }
+
+        if message == WM_NCDESTROY {
+            // Safety: hwnd is live during WM_NCDESTROY and this removes only our subclass id.
+            let _ = unsafe {
+                RemoveWindowSubclass(
+                    hwnd,
+                    Some(resize_hit_test_subclass_proc),
+                    RESIZE_HIT_TEST_SUBCLASS_ID,
+                )
+            };
+        }
+
+        // Safety: all messages not handled above continue through the subclass chain.
+        unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
+    }
+
+    pub fn apply_window_corner_preference(hwnd: isize, rounded: bool) {
+        if !rounded {
+            return;
+        }
+
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return;
+        }
+
+        // Best effort: this Windows 11 attribute is unavailable on older systems.
+        let preference = DWMWCP_ROUND;
+        let _ = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                (&preference as *const i32).cast(),
+                std::mem::size_of_val(&preference) as u32,
+            )
+        };
+    }
+
+    pub fn configure_resize_hit_test(
+        hwnd: isize,
+        enabled: bool,
+    ) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        if enabled {
+            // Safety: hwnd is valid; the callback stores no borrowed state and removes itself on destroy.
+            if unsafe {
+                SetWindowSubclass(
+                    hwnd,
+                    Some(resize_hit_test_subclass_proc),
+                    RESIZE_HIT_TEST_SUBCLASS_ID,
+                    0,
+                )
+            } == 0
+            {
+                return Err(last_error("SetWindowSubclass"));
+            }
+        } else {
+            // Safety: removing an absent subclass is harmless; hwnd was validated above.
+            let _ = unsafe {
+                RemoveWindowSubclass(
+                    hwnd,
+                    Some(resize_hit_test_subclass_proc),
+                    RESIZE_HIT_TEST_SUBCLASS_ID,
+                )
+            };
+        }
+
+        Ok(())
+    }
+
+    pub fn system_uses_dark_theme() -> Result<bool, WindowsPlatformError> {
+        const PERSONALIZE_KEY: &str =
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        const APPS_USE_LIGHT_THEME: &str = "AppsUseLightTheme";
+
+        let Some(key) = open_registry_key(HKEY_CURRENT_USER, PERSONALIZE_KEY)? else {
+            return Ok(false);
+        };
+        let value_name = wide_null(APPS_USE_LIGHT_THEME);
+        let mut value_type = 0_u32;
+        let mut byte_count = 0_u32;
+        // Query metadata first so malformed or wrong-type values are handled
+        // as the Windows default instead of surfacing ERROR_MORE_DATA.
+        let result = unsafe {
+            RegQueryValueExW(
+                key.0,
+                value_name.as_ptr(),
+                null(),
+                &mut value_type,
+                null_mut(),
+                &mut byte_count,
+            )
+        };
+        if result == ERROR_FILE_NOT_FOUND {
+            return Ok(false);
+        }
+        if result != ERROR_SUCCESS {
+            return Err(win32_error("RegQueryValueExW", result));
+        }
+        if value_type != REG_DWORD || byte_count != std::mem::size_of::<u32>() as u32 {
+            return Ok(false);
+        }
+
+        let mut value = 1_u32;
+        let result = unsafe {
+            RegQueryValueExW(
+                key.0,
+                value_name.as_ptr(),
+                null(),
+                &mut value_type,
+                (&mut value as *mut u32).cast(),
+                &mut byte_count,
+            )
+        };
+        if result != ERROR_SUCCESS {
+            return Err(win32_error("RegQueryValueExW", result));
+        }
+
+        Ok(value == 0)
+    }
+
+    pub fn set_window_dark_mode(hwnd: isize, enabled: bool) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        let value: i32 = i32::from(enabled);
+        // Safety: hwnd was validated and DWM reads one BOOL-sized value.
+        let result = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                (&value as *const i32).cast(),
+                std::mem::size_of::<i32>() as u32,
+            )
+        };
+        if result != 0 {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)",
+                code: result as u32,
+            });
+        }
+        Ok(())
+    }
+
+    pub fn set_window_cloaked(hwnd: isize, cloaked: bool) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        let value: i32 = if cloaked { 1 } else { 0 };
+        // Safety: hwnd was validated; DWMWA_CLOAK reads the BOOL-sized value.
+        let result = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAK as u32,
+                (&value as *const i32).cast(),
+                std::mem::size_of::<i32>() as u32,
+            )
+        };
+        if result != 0 {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "DwmSetWindowAttribute",
+                code: result as u32,
+            });
+        }
+        Ok(())
+    }
+
+    pub fn show_window(hwnd: isize, activate: bool) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        if activate {
+            // Safety: hwnd was validated; preserve a hidden maximized window's show state.
+            let show_command = if unsafe { IsZoomed(hwnd) } != 0 {
+                SW_MAXIMIZE
+            } else {
+                SW_SHOWNORMAL
+            };
+            // Safety: hwnd was validated and ShowWindow owns no borrowed state.
+            unsafe { ShowWindow(hwnd, show_command) };
+        } else {
+            let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW;
+            // Safety: hwnd was validated; flags expose it without activation or geometry changes.
+            if unsafe { SetWindowPos(hwnd, null_mut(), 0, 0, 0, 0, flags) } == 0 {
+                return Err(last_error("SetWindowPos"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Fills the whole window band (including any legacy non-client strip) on
+    /// the GDI redirection surface. Used right after the FIRST `ShowWindow` so
+    /// DWM composites the theme background instead of the default white
+    /// surface during the gap until the renderer presents its first frame.
+    pub fn paint_window_background(
+        hwnd: isize,
+        red: u8,
+        green: u8,
+        blue: u8,
+    ) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        let mut window_rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        // Safety: hwnd was validated and GetWindowRect writes only into window_rect.
+        if unsafe { GetWindowRect(hwnd, &mut window_rect) } == 0 {
+            return Err(last_error("GetWindowRect"));
+        }
+        let rect = RECT {
+            left: 0,
+            top: 0,
+            right: window_rect.right - window_rect.left,
+            bottom: window_rect.bottom - window_rect.top,
+        };
+
+        // Safety: hwnd was validated; GetWindowDC covers the full window band.
+        let hdc = unsafe { GetWindowDC(hwnd) };
+        if hdc.is_null() {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "GetWindowDC",
+                code: 0,
+            });
+        }
+
+        let color = u32::from(red) | (u32::from(green) << 8) | (u32::from(blue) << 16);
+        // Safety: CreateSolidBrush allocates a GDI brush released below.
+        let brush = unsafe { CreateSolidBrush(color) };
+        let result = if brush.is_null() {
+            Err(WindowsPlatformError::NativeCallFailed {
+                operation: "CreateSolidBrush",
+                code: 0,
+            })
+        } else {
+            // Safety: hdc, rect, and brush are valid for the duration of the call.
+            let filled = unsafe { FillRect(hdc, &rect, brush) };
+            // Safety: brush was created above and is no longer used.
+            unsafe { DeleteObject(brush as HGDIOBJ) };
+            if filled == 0 {
+                Err(WindowsPlatformError::NativeCallFailed {
+                    operation: "FillRect",
+                    code: 0,
+                })
+            } else {
+                Ok(())
+            }
+        };
+        // Safety: hdc was acquired from GetDC for this hwnd.
+        unsafe { ReleaseDC(hwnd, hdc) };
+        result
+    }
+
+    pub fn set_window_maximized(hwnd: isize, maximized: bool) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        // Safety: hwnd was validated and ShowWindow is the native Windows maximize/restore path.
+        unsafe { ShowWindow(hwnd, if maximized { SW_MAXIMIZE } else { SW_RESTORE }) };
+        Ok(())
+    }
+
+    pub fn toggle_window_maximized(hwnd: isize) -> Result<(), WindowsPlatformError> {
+        let native_hwnd = hwnd as HWND;
+        if !is_valid_window(native_hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        // Safety: native_hwnd was validated and IsZoomed only reads its show state.
+        set_window_maximized(hwnd, unsafe { IsZoomed(native_hwnd) } == 0)
+    }
+    pub fn set_window_geometry(
+        hwnd: isize,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        let flags = SWP_NOACTIVATE | SWP_NOZORDER;
+        // Safety: hwnd was validated and the geometry is expressed in Win32 physical pixels.
+        if unsafe { SetWindowPos(hwnd, null_mut(), x, y, width.max(1), height.max(1), flags) } == 0
+        {
+            return Err(last_error("SetWindowPos"));
+        }
+        Ok(())
+    }
+
+    pub fn apply_window_style(hwnd: isize, desired_style: u32) -> Result<(), WindowsPlatformError> {
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        // Safety: hwnd was validated with IsWindow and GWL_STYLE targets the window's normal style.
+        let current = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) } as u32;
+        let next = super::merge_window_style(current, desired_style);
+        if next == current {
+            return Ok(());
+        }
+
+        // Safety: SetLastError resets the current thread's Win32 error code before SetWindowLongPtrW.
+        unsafe { SetLastError(ERROR_SUCCESS) };
+        // Safety: hwnd was validated and next preserves every style bit not managed by win_fluent.
+        let previous = unsafe { SetWindowLongPtrW(hwnd, GWL_STYLE, next as isize) };
+        // Safety: GetLastError reads the current thread's Win32 error code.
+        let error = unsafe { GetLastError() };
+        if previous == 0 && error != ERROR_SUCCESS {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "SetWindowLongPtrW",
+                code: error,
+            });
+        }
+
+        // Notify Windows only when the managed style actually changed. Reapplying
+        // SWP_FRAMECHANGED after the window is visible briefly repaints legacy
+        // non-client chrome on undecorated windows.
+        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOZORDER;
+        if unsafe { SetWindowPos(hwnd, null_mut(), 0, 0, 0, 0, flags) } == 0 {
+            return Err(last_error("SetWindowPos"));
+        }
+
+        Ok(())
+    }
+
     pub fn apply_window_ex_style(hwnd: isize, ex_style: u32) -> Result<(), WindowsPlatformError> {
         let hwnd = hwnd as HWND;
         if !is_valid_window(hwnd) {
@@ -2204,7 +2794,11 @@ mod native {
         let current = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } as u32;
         let managed_bits = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
         let next = (current & !managed_bits) | ex_style;
-        if next != current {
+        if next == current {
+            return Ok(());
+        }
+
+        {
             // Safety: SetLastError resets the current thread's Win32 error code before SetWindowLongPtrW.
             unsafe { SetLastError(ERROR_SUCCESS) };
             // Safety: hwnd was validated and next preserves unmanaged style bits while applying requested win_fluent bits.
@@ -4579,6 +5173,10 @@ try {
         WS_MINIMIZEBOX
     }
 
+    pub const fn ws_maximize_box() -> u32 {
+        WS_MAXIMIZEBOX
+    }
+
     pub const fn ws_ex_toolwindow() -> u32 {
         WS_EX_TOOLWINDOW
     }
@@ -4669,6 +5267,48 @@ mod native {
     }
 
     pub fn capture_text_insertion_target() -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn apply_window_corner_preference(_hwnd: isize, _rounded: bool) {}
+    pub fn set_window_dark_mode(_hwnd: isize, _enabled: bool) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+    pub fn system_uses_dark_theme() -> Result<bool, WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+    pub fn show_window(_hwnd: isize, _activate: bool) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn set_window_maximized(
+        _hwnd: isize,
+        _maximized: bool,
+    ) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn toggle_window_maximized(_hwnd: isize) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+    pub fn set_window_geometry(
+        _hwnd: isize,
+        _x: i32,
+        _y: i32,
+        _width: i32,
+        _height: i32,
+    ) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn configure_resize_hit_test(
+        _hwnd: isize,
+        _enabled: bool,
+    ) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn apply_window_style(_hwnd: isize, _style: u32) -> Result<(), WindowsPlatformError> {
         Err(WindowsPlatformError::UnsupportedPlatform)
     }
 
@@ -4886,6 +5526,10 @@ mod native {
         0x00020000
     }
 
+    pub const fn ws_maximize_box() -> u32 {
+        0x00010000
+    }
+
     pub const fn ws_ex_toolwindow() -> u32 {
         0x00000080
     }
@@ -4919,6 +5563,15 @@ mod tests {
         Changed(String),
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn system_theme_mode_resolves_to_a_concrete_palette() {
+        assert!(matches!(
+            WindowsPlatformAdapter::system_theme_mode(),
+            Ok(ThemeMode::Light | ThemeMode::Dark)
+        ));
+    }
+
     #[test]
     fn maps_hotkey_token_to_native_values() {
         let hotkey = Hotkey::new("mini", HotkeyKey::Character('m'))
@@ -4931,6 +5584,30 @@ mod tests {
         assert_eq!(plan[0].id, "mini");
         assert_eq!(plan[0].virtual_key, b'M' as u32);
         assert_ne!(plan[0].native_id, 0);
+    }
+
+    #[test]
+    fn mode_menu_cursor_geometry_clears_centered_trigger_above_and_below() {
+        let area = WindowsRect {
+            left: 0,
+            top: 0,
+            right: 1000,
+            bottom: 800,
+        };
+
+        let above = context_menu_position_signed(500, 500, 220, 80, area, 0, -34);
+        assert_eq!(above, (500, 386));
+        assert!(
+            above.1 + 80 <= 500 - 16,
+            "the popup must clear a 32-DIP trigger centered on the cursor"
+        );
+
+        let below = context_menu_position_signed(500, 20, 220, 80, area, 0, -34);
+        assert_eq!(below, (500, 54));
+        assert!(
+            below.1 >= 20 + 16,
+            "the top-edge fallback must clear the trigger below"
+        );
     }
 
     #[test]
@@ -5032,11 +5709,61 @@ mod tests {
         let plan = WindowsPlatformAdapter::plan_window(&options);
 
         assert_eq!(plan.id, "mini");
-        assert_eq!(plan.style, native::ws_popup());
+        assert_eq!(
+            plan.style,
+            native::ws_popup()
+                | native::ws_thickframe()
+                | native::ws_maximize_box()
+                | native::ws_minimize_box()
+        );
         assert!(plan.ex_style & native::ws_ex_topmost() != 0);
         assert!(plan.ex_style & native::ws_ex_toolwindow() != 0);
         assert!(plan.ex_style & native::ws_ex_noactivate() != 0);
         assert!(plan.uses_acrylic);
+    }
+
+    #[test]
+    fn resize_mode_controls_thickframe_for_each_window_frame() {
+        for frame in [WindowFrame::Borderless, WindowFrame::Acrylic] {
+            let resizable = WindowOptions::new("resizable", "Resizable")
+                .frame(frame)
+                .resize_mode(WindowResizeMode::CanResize);
+            assert!(window_style(&resizable) & native::ws_thickframe() != 0);
+            assert!(window_style(&resizable) & native::ws_maximize_box() != 0);
+            assert!(window_style(&resizable) & native::ws_minimize_box() != 0);
+
+            let fixed = WindowOptions::new("fixed", "Fixed")
+                .frame(frame)
+                .resize_mode(WindowResizeMode::Fixed);
+            assert_eq!(window_style(&fixed) & native::ws_thickframe(), 0);
+            assert_eq!(window_style(&fixed) & native::ws_maximize_box(), 0);
+
+            let minimizable = WindowOptions::new("min", "Min")
+                .frame(frame)
+                .resize_mode(WindowResizeMode::CanMinimize);
+            assert_eq!(window_style(&minimizable) & native::ws_thickframe(), 0);
+            assert_eq!(window_style(&minimizable) & native::ws_maximize_box(), 0);
+        }
+
+        let standard = WindowOptions::new("standard", "Standard")
+            .frame(WindowFrame::Standard)
+            .resize_mode(WindowResizeMode::CanResize);
+        assert_eq!(window_style(&standard), native::ws_overlapped_window());
+    }
+
+    #[test]
+    fn native_style_merge_preserves_unmanaged_runtime_bits() {
+        const WS_VISIBLE_FOR_TEST: u32 = 0x1000_0000;
+        let current = WS_VISIBLE_FOR_TEST | native::ws_popup();
+        let desired = native::ws_overlapped_window();
+
+        let merged = merge_window_style(current, desired);
+
+        assert!(merged & WS_VISIBLE_FOR_TEST != 0);
+        assert_eq!(
+            merged & (native::ws_popup() | native::ws_overlapped_window()),
+            desired
+        );
     }
 
     #[test]
@@ -5387,6 +6114,31 @@ mod tests {
         assert_eq!(placement.y, 0);
         assert_eq!(placement.width, 940);
         assert_eq!(placement.height, 600);
+    }
+    #[test]
+    fn converts_cursor_placement_back_to_target_monitor_physical_pixels() {
+        let options = WindowOptions::new("mini", "Mini")
+            .size(320.0, 200.0)
+            .placement(WindowPlacement::CursorOffset { x: 12.0, y: 12.0 });
+        let monitor = WindowsMonitorMetrics::new(
+            WindowsRect {
+                left: 1920,
+                top: 0,
+                right: 3200,
+                bottom: 960,
+            },
+            144,
+        );
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for_monitor(
+            &options,
+            WindowsPoint { x: 2100, y: 300 },
+            monitor,
+        );
+
+        assert_eq!(
+            physical_window_geometry(&options, placement, monitor),
+            (2118, 318, 480, 300)
+        );
     }
 
     #[test]

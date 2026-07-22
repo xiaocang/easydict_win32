@@ -77,7 +77,8 @@ impl ViewProvenance {
         {
             existing.source = source;
         } else {
-            self.properties.push(PropertyProvenance { property, source });
+            self.properties
+                .push(PropertyProvenance { property, source });
         }
     }
 

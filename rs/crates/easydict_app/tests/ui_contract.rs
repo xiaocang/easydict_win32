@@ -21,20 +21,18 @@ fn main_quick_translate_matches_current_xaml_surface() {
     assert!(snapshot.contains("Page title=\"Easydict\""));
     assert!(snapshot.contains("id=\"main.header\""));
     assert!(snapshot.contains("id=\"ModeMenuButton\""));
-    assert_control_contains(&snapshot, "ModeMenuButton", "min_width=104");
-    assert_control_contains(&snapshot, "ModeMenuButton", "min_height=0");
+    assert_control_contains(&snapshot, "ModeMenuButton", "placement=Bottom");
+    assert_control_contains(&snapshot, "ModeMenuButton", "min_height=32");
     assert_control_contains(
         &snapshot,
         "ModeMenuButton",
         "padding=Edges { top: 2, right: 4, bottom: 2, left: 4 }",
     );
-    assert_control_contains(&snapshot, "ModeMenuButton", "border_width=0");
-    assert_control_contains(&snapshot, "ModeMenuButton", "radius=10");
-    assert_control_contains(&snapshot, "ModeMenuButton", "align_y=Center");
+    assert_control_contains(&snapshot, "ModeMenuButton", "selected=\"quick\"");
     assert_control_contains(&snapshot, "ModeMenuButton", "label=\"Easydict\"");
     assert_control_contains(&snapshot, "ModeMenuButton", "text_style=Subtitle");
     assert_control_contains(&snapshot, "ModeMenuButton", "font_size=22");
-    assert!(snapshot.contains("quick:\"🌐  Translate\":Radio:checked=true"));
+    assert_control_contains(&snapshot, "ModeMenuButton", "action=selection_input");
     assert!(snapshot.contains("id=\"PinButton\""));
     assert_control_contains(&snapshot, "PinButton", "width=Fixed(32)");
     assert_control_contains(&snapshot, "PinButton", "height=Fixed(32)");
@@ -48,7 +46,7 @@ fn main_quick_translate_matches_current_xaml_surface() {
     assert_control_contains(
         &snapshot,
         "QuickInputCard",
-        "padding=Edges { top: 5, right: 2, bottom: 3, left: 12 }",
+        "padding=Edges { top: 4, right: 4, bottom: 4, left: 4 }",
     );
     assert_control_contains(&snapshot, "QuickInputCard", "content_spacing=0");
     assert_control_contains(&snapshot, "QuickInputCard", "top: 0");
@@ -125,7 +123,7 @@ fn main_quick_translate_matches_current_xaml_surface() {
     assert_control_contains(
         &snapshot,
         "QuickOutputCard",
-        "padding=Edges { top: 0, right: 0, bottom: 0, left: 0 }",
+        "padding=Edges { top: 4, right: 4, bottom: 4, left: 4 }",
     );
     assert_control_contains(&snapshot, "QuickOutputCard", "content_spacing=3");
     assert_control_contains(&snapshot, "QuickOutputCard", "top: 0");
@@ -144,6 +142,72 @@ fn main_quick_translate_matches_current_xaml_surface() {
         assert!(
             snapshot.contains(language),
             "missing language picker item {language}"
+        );
+    }
+}
+
+#[test]
+fn mode_selector_uses_an_inline_flyout_with_the_current_selection() {
+    let mut state = EasydictUiState::default();
+    let main = win_fluent_testkit::view_snapshot(&main_window_view(&state));
+    assert_control_contains(&main, "ModeMenuButton", "selected=\"quick\"");
+    assert_control_contains(&main, "ModeMenuButton", "min_height=32");
+    assert_control_contains(
+        &main,
+        "ModeMenuButton",
+        "quick:\"🌐  Translate\":Radio:checked=true",
+    );
+    assert_control_contains(
+        &main,
+        "ModeMenuButton",
+        "long-document:\"📄  Long Document\":Radio:checked=false",
+    );
+    assert_control_contains(&main, "ModeEmojiIcon", "size=26");
+
+    state.settings.theme = ThemeMode::Minimal;
+    let minimal = win_fluent_testkit::view_snapshot(&main_window_view(&state));
+    assert_control_contains(&minimal, "ModeMenuButton", "quick:\"Translate\":Radio");
+    assert_control_contains(
+        &minimal,
+        "ModeMenuButton",
+        "long-document:\"Long Document\":Radio",
+    );
+    assert_control_contains(&minimal, "ModeMenuButton", "items=quick:\"Translate\"");
+    let mode_button = minimal
+        .lines()
+        .find(|line| line.contains("id=\"ModeMenuButton\""))
+        .expect("inline mode selector");
+    assert!(!mode_button.contains('🌐'));
+    assert!(!mode_button.contains('📄'));
+}
+
+#[test]
+fn mode_menu_long_document_label_is_localized_for_every_supported_locale() {
+    for (locale, expected) in [
+        ("ar-SA", "مستند طويل"),
+        ("da-DK", "Langt dokument"),
+        ("de-DE", "Langes Dokument"),
+        ("en-US", "Long Document"),
+        ("fr-FR", "Document long"),
+        ("hi-IN", "लंबा दस्तावेज़"),
+        ("id-ID", "Dokumen Panjang"),
+        ("it-IT", "Documento lungo"),
+        ("ja-JP", "長文翻訳"),
+        ("ko-KR", "긴 문서"),
+        ("ms-MY", "Dokumen Panjang"),
+        ("th-TH", "เอกสารยาว"),
+        ("vi-VN", "Tài liệu dài"),
+        ("zh-CN", "长文档翻译"),
+        ("zh-TW", "長文檔翻譯"),
+    ] {
+        assert_eq!(
+            easydict_app::tr_locale(
+                locale,
+                "main.long_document.subtitle",
+                "missing long-document label",
+            ),
+            expected,
+            "missing mode-menu localization for {locale}",
         );
     }
 }
@@ -232,16 +296,7 @@ fn main_and_long_document_operation_controls_have_action_contracts() {
     let main = win_fluent_testkit::view_snapshot(&main_window_view(&state));
 
     assert_control_contains(&main, "ModeMenuButton", "action=selection_input");
-    assert_control_contains(
-        &main,
-        "ModeMenuButton",
-        "quick:\"🌐  Translate\":Radio:checked=true:enabled=true",
-    );
-    assert_control_contains(
-        &main,
-        "ModeMenuButton",
-        "long-document:\"📄  Long Document\":Radio:checked=false:enabled=true",
-    );
+    assert_control_contains(&main, "ModeMenuButton", "placement=Bottom");
     assert_control_contains(&main, "PinButton", "icon=pin");
     assert_control_contains(&main, "PinButton", "action=message");
     assert_control_contains(&main, "SettingsButton", "action=message");
@@ -758,7 +813,6 @@ fn operation_messages_update_reference_state_contract() {
         easydict_app::AppMode::LongDocument.id().to_string(),
     ));
     assert_eq!(state.mode, easydict_app::AppMode::LongDocument);
-
     state.apply(easydict_app::Message::SourceLanguageChanged(
         "en".to_string(),
     ));
@@ -818,6 +872,14 @@ fn operation_messages_update_reference_state_contract() {
     assert_eq!(state.long_document.concurrency, "6");
     assert_eq!(state.long_document.page_range, "1-3,5");
     assert!(state.long_document.two_pass_context);
+    state.apply(easydict_app::Message::ToggleLongDocumentHistoryExpanded(
+        true,
+    ));
+    assert!(state.long_document.history_expanded);
+    state.apply(easydict_app::Message::ToggleLongDocumentHistoryExpanded(
+        false,
+    ));
+    assert!(!state.long_document.history_expanded);
 
     state.long_document.is_translating = true;
     state.apply(easydict_app::Message::LongDocumentServiceChanged(
@@ -1775,6 +1837,12 @@ fn settings_view_shows_loading_overlay_while_runtime_status_loads() {
     );
 
     state.settings.settings_runtime = win_fluent::Loadable::Loading;
+    assert!(
+        !win_fluent_testkit::view_snapshot(&settings_view(&state.settings))
+            .contains("id=\"LoadingOverlayRing\""),
+        "the debounce interval must not paint a transient loading frame"
+    );
+    state.settings.settings_runtime_overlay_visible = true;
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
     // Centered 32px ring hosted as an input-blocking, scrimmed overlay layer.
@@ -3954,15 +4022,22 @@ fn long_document_mode_keeps_file_controls_and_output() {
 
     let snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
 
-    assert!(snapshot.contains("Text value=\"📄\""));
+    assert_control_contains(&snapshot, "ModeEmojiIcon", "value=\"📄\"");
+    assert_control_contains(&snapshot, "ModeEmojiIcon", "size=26");
     assert_control_contains(&snapshot, "ModeMenuButton", "label=\"Easydict\"");
     assert_control_contains(&snapshot, "ModeMenuButton", "text_style=Subtitle");
     assert_control_contains(&snapshot, "ModeMenuButton", "font_size=22");
+    assert_control_contains(&snapshot, "ModeSubtitle", "size=11");
     assert!(
         snapshot.contains("Text value=\"Long Document\" style=Caption")
             || snapshot.contains("Text value=\"长文档翻译\" style=Caption")
     );
-    assert!(snapshot.contains("long-document:\"📄  Long Document\":Radio:checked=true"));
+    assert_control_contains(&snapshot, "ModeMenuButton", "selected=\"long-document\"");
+    assert_control_contains(
+        &snapshot,
+        "ModeMenuButton",
+        "long-document:\"📄  Long Document\":Radio:checked=true",
+    );
     assert!(snapshot.contains("id=\"main.long-doc.input_card\""));
     assert_control_contains(&snapshot, "main.long-doc.input_card", "bottom: 2");
     assert_control_contains(&snapshot, "main.long-doc.content", "spacing=7");
@@ -3998,13 +4073,16 @@ fn long_document_mode_keeps_file_controls_and_output() {
     assert_control_contains(
         &snapshot,
         "LongDocControlGrid",
-        "rows=[Fixed(60),Fixed(58),Fixed(61)]",
+        "rows=[Fixed(60),Fixed(58),Shrink]",
     );
     assert_control_contains(
         &snapshot,
         "LongDocControlGrid",
-        "columns=[Fill,Fill,Fill,Fixed(110)]",
+        "columns=[Fill,Fill,Fill,Fill]",
     );
+    assert!(snapshot.contains("GridCell row=0 column=2 row_span=1 column_span=2"));
+    assert!(snapshot.contains("GridCell row=2 column=0 row_span=1 column_span=3"));
+    assert!(snapshot.contains("GridCell row=2 column=3 row_span=1 column_span=1"));
     assert_control_contains(&snapshot, "LongDocControlGrid", "row_spacing=4");
     assert_control_contains(&snapshot, "LongDocControlGrid", "column_spacing=8");
     assert_control_contains(
@@ -4018,9 +4096,22 @@ fn long_document_mode_keeps_file_controls_and_output() {
         "width=Fill",
     );
     assert_control_contains(&snapshot, "main.long-doc.service_cell", "width=Fill");
+    assert_control_contains(&snapshot, "main.long-doc.service", "width=Fill");
+    assert_control_contains(&snapshot, "main.long-doc.service", "height=Shrink");
+    assert_control_contains(&snapshot, "main.long-doc.service", "wrapping=Word");
     assert_control_contains(&snapshot, "main.long-doc.page_range_cell", "width=Fill");
     assert_control_contains(&snapshot, "main.long-doc.two_pass", "width=Fill");
     assert_control_contains(&snapshot, "main.long-doc.translate_cell", "width=Fill");
+    assert_control_contains(
+        &snapshot,
+        "LongDocDocumentContextPassCheckBox",
+        "width=Fill",
+    );
+    assert_control_contains(
+        &snapshot,
+        "LongDocDocumentContextPassCheckBox",
+        "wrapping=Word",
+    );
     assert_control_contains(&snapshot, "main.long-doc.translate", "kind=PrimaryRound");
     assert_control_contains(&snapshot, "main.long-doc.translate", "font_size=16");
     assert_control_contains(&snapshot, "main.long-doc.translate", "width=Fixed(40)");
@@ -4040,6 +4131,9 @@ fn long_document_mode_keeps_file_controls_and_output() {
         "LongDocOutputTitle",
         "value=\"Translation Output\"",
     );
+    assert_control_contains(&snapshot, "LongDocOutputTitle", "width=Fill");
+    assert_control_contains(&snapshot, "LongDocOutputTitle", "height=Shrink");
+    assert_control_contains(&snapshot, "LongDocOutputTitle", "wrapping=None");
     assert_control_contains(&snapshot, "LongDocOutputTitle", "font_size=13");
     assert!(snapshot.contains("id=\"main.long-doc.output_status_history\""));
     assert_control_contains(
@@ -4061,8 +4155,21 @@ fn long_document_mode_keeps_file_controls_and_output() {
     );
     assert!(!snapshot.contains("value=\"...\\\\Easydict\\\\LongDocOutputs\""));
     assert!(!snapshot.contains("value=\".../Easydict/LongDocOutputs\""));
-    assert!(!snapshot.contains("id=\"main.long-doc.history\""));
-    assert!(!snapshot.contains("id=\"LongDocHistoryTitle\""));
+    assert!(snapshot.contains("id=\"main.long-doc.history\""));
+    assert!(snapshot.contains("id=\"LongDocHistoryTitle\""));
+    assert_control_contains(&snapshot, "main.long-doc.history", "expanded=false");
+    assert!(snapshot.contains("id=\"main.long-doc.clear_history\""));
+    assert!(!snapshot.contains("id=\"main.long-doc.history_list\""));
+    let mut history_expanded = state.clone();
+    history_expanded.long_document.history_expanded = true;
+    let history_expanded_snapshot =
+        win_fluent_testkit::view_snapshot(&main_window_view(&history_expanded));
+    assert_control_contains(
+        &history_expanded_snapshot,
+        "main.long-doc.history",
+        "expanded=true",
+    );
+    assert!(history_expanded_snapshot.contains("id=\"main.long-doc.history_list\""));
     for hint_id in [
         "LongDocServiceHint",
         "LongDocInputModeHint",
@@ -4331,6 +4438,12 @@ fn main_window_preview_scenarios_cover_translation_states() {
     assert!(long_doc_running.contains("Translating page 8 of 18 with OpenAI"));
     assert!(long_doc_running.contains("Latest block: Abstract and introduction completed"));
     assert!(long_doc_running.contains("Translating document"));
+    assert!(long_doc_running.contains(
+        "value=\"Translating page 8 of 18 with OpenAI while preserving layout and terminology"
+    ));
+    assert_control_contains(&long_doc_running, "LongDocOutputTitle", "width=Fill");
+    assert_control_contains(&long_doc_running, "LongDocOutputTitle", "height=Shrink");
+    assert_control_contains(&long_doc_running, "LongDocOutputTitle", "wrapping=None");
     assert_control_enabled(&long_doc_running, "main.long-doc.translate", false);
     assert_control_enabled(&long_doc_running, "main.long-doc.service", false);
     assert_control_enabled(&long_doc_running, "main.long-doc.retry", false);
@@ -4341,11 +4454,10 @@ fn main_window_preview_scenarios_cover_translation_states() {
     assert!(long_doc_error.contains("Progress: 67%"));
     assert!(long_doc_error.contains("Failed: page 12 layout detection timed out"));
     assert!(long_doc_error.contains("Retry failed blocks after checking OCR/Layout settings."));
-    assert!(long_doc_error.contains("status=Error"));
+    assert_control_contains(&long_doc_error, "StatusIndicator", "severity=Error");
     assert!(long_doc_error.contains("id=\"main.long-doc.history\""));
     assert!(long_doc_error.contains("Text value=\"History\""));
-    assert!(long_doc_error.contains("id=\"LongDocHistoryChevron\""));
-    assert_control_contains(&long_doc_error, "main.long-doc.history", "top: 8");
+    assert_control_contains(&long_doc_error, "main.long-doc.history", "expanded=false");
     assert_control_contains(
         &long_doc_error,
         "main.long-doc.clear_history",
@@ -4494,12 +4606,34 @@ fn easydict_theme_tokens_match_light_dark_minimal_contract() {
 }
 
 #[test]
+fn system_theme_uses_the_concrete_windows_preference_without_changing_selection() {
+    let mut state = EasydictUiState::default();
+    state.settings.theme = ThemeMode::System;
+    state.system_theme = ThemeMode::Dark;
+
+    assert_eq!(state.effective_theme_mode(), ThemeMode::Dark);
+    assert_eq!(
+        easydict_theme_tokens(state.effective_theme_mode()).mode,
+        ThemeMode::Dark
+    );
+    assert_eq!(state.settings.theme, ThemeMode::System);
+
+    state.apply(easydict_app::Message::SystemThemeChanged(ThemeMode::Light));
+    assert_eq!(state.effective_theme_mode(), ThemeMode::Light);
+    assert_eq!(state.settings.theme, ThemeMode::System);
+
+    state.settings.theme = ThemeMode::Dark;
+    state.apply(easydict_app::Message::SystemThemeChanged(ThemeMode::Light));
+    assert_eq!(state.effective_theme_mode(), ThemeMode::Dark);
+}
+
+#[test]
 fn minimal_theme_reduces_decorative_chrome_without_losing_controls() {
     let state = EasydictUiState::preview(PreviewScenario::Initial, ThemeMode::Minimal);
     let snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
 
     assert!(!snapshot.contains("Text value=\"🌐\""));
-    assert!(!snapshot.contains("🌐  Translate"));
+    assert_control_contains(&snapshot, "ModeMenuButton", "quick:\"Translate\":Radio");
     assert!(!snapshot.contains("id=\"main.quick.play_source\""));
     assert!(!snapshot.contains("id=\"LanguageHelpButton\""));
     assert!(!snapshot.contains("service(s) completed"));

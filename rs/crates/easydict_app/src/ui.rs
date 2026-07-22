@@ -237,9 +237,9 @@ fn settings_view_with_close_message(
             &state.ui_language,
         )));
     }
-    if state.settings_runtime.is_loading() {
-        // Entry loading overlay (centered 32px ring) shown while the async
-        // runtime-status check is in flight.
+    if state.settings_runtime.is_loading() && state.settings_runtime_overlay_visible {
+        // Reveal the blocking overlay only after the debounce expires; fast
+        // status checks transition directly without a one-frame theme flash.
         surface = surface.layer(
             OverlayLayer::new(settings_loading_indicator())
                 .scrim(0.3)
@@ -620,50 +620,61 @@ fn main_header(state: &EasydictUiState) -> View<Message> {
         AppMode::QuickTranslate => "Translate",
         AppMode::LongDocument => "Long Document",
     };
+    let mode_items = [AppMode::QuickTranslate, AppMode::LongDocument]
+        .into_iter()
+        .map(|mode| {
+            FlyoutMenuItem::radio(
+                mode.id(),
+                mode_menu_visual_label(mode, state.settings.ui_language.as_str(), minimal),
+                state.mode == mode,
+            )
+        });
     let mut title_stack_children = vec![row((flyout_button("Easydict")
         .id("ModeMenuButton")
         .selected(state.mode.id())
-        .min_width(104)
-        .min_height(0)
+        .items(mode_items)
         .padding(Edges {
             top: 2,
             right: 4,
             bottom: 2,
             left: 4,
         })
+        .min_height(32)
         .border_width(0)
-        .radius(10)
-        .align_y(Alignment::Center)
         .text_style(TextStyle::Subtitle)
         .font_size(22)
-        .items([
-            FlyoutMenuItem::radio(
-                AppMode::QuickTranslate.id(),
-                mode_menu_label(AppMode::QuickTranslate, minimal),
-                state.mode == AppMode::QuickTranslate,
-            ),
-            FlyoutMenuItem::radio(
-                AppMode::LongDocument.id(),
-                mode_menu_label(AppMode::LongDocument, minimal),
-                state.mode == AppMode::LongDocument,
-            ),
-        ])
         .a11y(A11yHint::named(format!("Mode: {mode_name}")))
         .on_select(Message::ModeChanged),))
     .id("main.mode_title")
     .spacing(4)
     .align(Alignment::Center)
     .into_view()];
+
     if state.mode == AppMode::LongDocument {
-        title_stack_children.push(styled_text(
-            tr("main.long_document.subtitle", "Long Document"),
-            TextStyle::Caption,
-        ));
+        title_stack_children.push(
+            styled_text_id_with_font_size(
+                "ModeSubtitle",
+                tr("main.long_document.subtitle", "Long Document"),
+                TextStyle::Caption,
+                11,
+            )
+            .text_margin(Edges {
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 4,
+            }),
+        );
     }
 
     let mut title_cluster_children = Vec::new();
     if !minimal {
-        title_cluster_children.push(styled_text(mode_icon, TextStyle::Title));
+        title_cluster_children.push(styled_text_id_with_font_size(
+            "ModeEmojiIcon",
+            mode_icon,
+            TextStyle::Title,
+            26,
+        ));
     }
     title_cluster_children.push(
         column(title_stack_children)
@@ -824,7 +835,7 @@ fn main_results_card(state: &EasydictUiState) -> View<Message> {
     card(title)
         .id("QuickOutputCard")
         .kind(CardKind::Elevated)
-        .padding(0)
+        .padding(4)
         .content_spacing(3)
         .margin(Edges {
             top: 0,
@@ -858,7 +869,10 @@ fn main_quick_query_status_text(state: &EasydictUiState) -> Option<String> {
         .cloned()
 }
 
-fn floating_quick_query_status_text(state: &FloatingWindowState, locale: &str) -> Option<String> {
+pub(crate) fn floating_quick_query_status_text(
+    state: &FloatingWindowState,
+    locale: &str,
+) -> Option<String> {
     if state.grammar_correction_fallback {
         return Some(tr_locale(
             locale,
@@ -1039,12 +1053,7 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
     let card = card("")
         .id("QuickInputCard")
         .kind(CardKind::Elevated)
-        .padding_edges(Edges {
-            top: 5,
-            right: 2,
-            bottom: 3,
-            left: 12,
-        })
+        .padding(4)
         .content_spacing(0)
         .max_height(480)
         .margin(Edges {
@@ -1163,9 +1172,7 @@ fn long_document_content(state: &LongDocumentState, settings: &SettingsState) ->
             .into_view(),
         );
     }
-    if !state.history.is_empty() {
-        output_status_history_children.push(long_document_history_row(state));
-    }
+    output_status_history_children.push(long_document_history_row(state));
 
     scroll_view(
         column((
@@ -1190,10 +1197,13 @@ fn long_document_content(state: &LongDocumentState, settings: &SettingsState) ->
 }
 
 fn long_document_history_row(state: &LongDocumentState) -> View<Message> {
-    let header = row((
-        styled_text_id_with_font_size("LongDocHistoryTitle", "History", TextStyle::BodyStrong, 13),
-        spacer().width(Length::Fill).into_view(),
-        button("Clear")
+    column((expander("History")
+        .id("main.long-doc.history")
+        .title_id("LongDocHistoryTitle")
+        .expanded(state.history_expanded)
+        .header_style("surface-card border rounded-lg w-full")
+        .content_style("surface-card border rounded-lg w-full")
+        .trailing((button("Clear")
             .id("main.long-doc.clear_history")
             .font_size(12)
             .padding(Edges {
@@ -1206,42 +1216,32 @@ fn long_document_history_row(state: &LongDocumentState) -> View<Message> {
                 left: 8,
                 ..Edges::ZERO
             })
-            .on_press(Message::ClearHistory),
-        styled_text_id_with_font_size("LongDocHistoryChevron", "\u{E70D}", TextStyle::Caption, 12),
-    ))
-    .id("main.long-doc.history")
-    .padding(8)
-    .height(Length::Fixed(47))
+            .on_press(Message::ClearHistory),))
+        .content(
+            result_list(
+                state
+                    .history
+                    .iter()
+                    .map(TranslationResultPreview::to_result_item),
+            )
+            .id("main.long-doc.history_list")
+            .max_height(200)
+            .padding(Edges::ZERO)
+            .border_width(0)
+            .on_toggle(Message::ToggleResultExpanded)
+            .on_copy_item(|_| Message::Noop)
+            .on_speak_item(|_| Message::Noop)
+            .on_replace_item(|_| Message::Noop)
+            .on_retry_item(|_| Message::Noop),
+        )
+        .on_toggle(Message::ToggleLongDocumentHistoryExpanded)
+        .into_view(),))
+    .spacing(0)
     .width(Length::Fill)
-    .align(Alignment::Center)
     .margin(Edges {
         top: 8,
         ..Edges::ZERO
     })
-    .tw("surface-card border rounded-lg w-full")
-    .into_view();
-
-    column((
-        header,
-        result_list(
-            state
-                .history
-                .iter()
-                .map(TranslationResultPreview::to_result_item),
-        )
-        .id("main.long-doc.history_list")
-        .max_height(200)
-        .padding(Edges::ZERO)
-        .border_width(0)
-        .on_toggle(Message::ToggleResultExpanded)
-        .on_copy_item(|_| Message::Noop)
-        .on_speak_item(|_| Message::Noop)
-        .on_replace_item(|_| Message::Noop)
-        .on_retry_item(|_| Message::Noop),
-    ))
-    .id("main.long-doc.history.expanded")
-    .spacing(8)
-    .width(Length::Fill)
     .into_view()
 }
 
@@ -1369,14 +1369,24 @@ fn long_document_input_title(input_mode: &str) -> &'static str {
 }
 
 fn long_document_output_card(state: &LongDocumentState, output_text: String) -> View<Message> {
+    let title = if state.is_translating {
+        state
+            .progress_detail
+            .clone()
+            .unwrap_or_else(|| "Translating document".to_string())
+    } else {
+        "Translation Output".to_string()
+    };
     let header = row((
-        styled_text_id_with_font_size(
+        sized_styled_text_id_with_font_size_and_wrapping(
             "LongDocOutputTitle",
-            "Translation Output",
+            title,
             TextStyle::BodyStrong,
             13,
+            Length::Fill,
+            Length::Shrink,
+            TextWrapping::None,
         ),
-        spacer().width(Length::Fill).into_view(),
         button("Retry Failed")
             .id("main.long-doc.retry")
             .font_size(12)
@@ -1486,9 +1496,14 @@ fn long_document_output_content(state: &LongDocumentState, output_text: String) 
         && state.progress_detail.is_none()
         && state.last_translated_block.is_none()
     {
+        let spacer_height = if main_window_resolved_width_dips() < 500.0 {
+            32
+        } else {
+            160
+        };
         children.push(
             spacer()
-                .height(Length::Fixed(160))
+                .height(Length::Fixed(spacer_height))
                 .width(Length::Fill)
                 .into_view(),
         );
@@ -1529,13 +1544,13 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
         .rows([
             Length::Fixed(60),
             Length::Fixed(58),
-            Length::Fixed(61),
+            Length::Shrink,
         ])
         .columns([
             Length::Fill,
             Length::Fill,
             Length::Fill,
-            Length::Fixed(110),
+            Length::Fill,
         ])
         .row_spacing(4)
         .column_spacing(8)
@@ -1587,6 +1602,8 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
                     .selected(state.service.clone())
                     .state(state.service_combo_state.clone())
                     .width(Length::Fill)
+                    .height(Length::Shrink)
+                    .wrapping(TextWrapping::Word)
                     .enabled(can_edit)
                     .on_change(Message::LongDocumentServiceChanged),
             ),
@@ -1685,6 +1702,8 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
                 state.two_pass_context,
             )
             .id("LongDocDocumentContextPassCheckBox")
+            .width(Length::Fill)
+            .wrapping(TextWrapping::Word)
             .enabled(can_edit)
             .on_toggle(Message::ToggleTwoPassContext),))
             .id("main.long-doc.two_pass")
@@ -2435,12 +2454,23 @@ fn language_help_button(id: &'static str) -> View<Message> {
     styled_text_id_with_font_size(id, "?", TextStyle::Body, 14)
 }
 
-fn mode_menu_label(mode: AppMode, minimal: bool) -> &'static str {
-    match (mode, minimal) {
-        (AppMode::QuickTranslate, true) => "Translate",
-        (AppMode::LongDocument, true) => "Long Document",
-        (AppMode::QuickTranslate, false) => "🌐  Translate",
-        (AppMode::LongDocument, false) => "📄  Long Document",
+fn mode_menu_label(mode: AppMode, locale: &str) -> String {
+    match mode {
+        AppMode::QuickTranslate => tr_locale(locale, "main.translate", "Translate"),
+        AppMode::LongDocument => tr_locale(locale, "main.long_document.subtitle", "Long Document"),
+    }
+}
+
+fn mode_menu_visual_label(mode: AppMode, locale: &str, minimal: bool) -> String {
+    let label = mode_menu_label(mode, locale);
+    if minimal {
+        label
+    } else {
+        let glyph = match mode {
+            AppMode::QuickTranslate => "🌐",
+            AppMode::LongDocument => "📄",
+        };
+        format!("{glyph}  {label}")
     }
 }
 
@@ -2659,6 +2689,7 @@ fn styled_text_id_with_font_size(
     }))
 }
 
+#[track_caller]
 fn sized_styled_text_id_with_font_size_and_wrapping(
     id: impl Into<String>,
     value: impl Into<String>,
@@ -2668,22 +2699,15 @@ fn sized_styled_text_id_with_font_size_and_wrapping(
     height: Length,
     wrapping: TextWrapping,
 ) -> View<Message> {
-    View::new(ViewToken::Text(TextToken {
-        id: Some(id.into()),
-        value: value.into(),
-        style,
-        font_size: Some(font_size),
-        width: Some(width),
-        height: Some(height),
-        margin: Edges::ZERO,
-        align_x: Alignment::Start,
-        align_y: Alignment::Start,
-        wrapping,
-        selectable: false,
-        a11y: A11yHint::default(),
-    }))
+    text(value)
+        .text_id(id)
+        .text_style(style)
+        .text_font_size(font_size)
+        .text_size(width, height)
+        .text_wrapping(wrapping)
 }
 
+#[track_caller]
 fn sized_styled_text_id(
     id: impl Into<String>,
     value: impl Into<String>,
@@ -2694,6 +2718,7 @@ fn sized_styled_text_id(
     sized_styled_text_id_with_wrapping(id, value, style, width, height, TextWrapping::Word)
 }
 
+#[track_caller]
 fn sized_styled_text_id_with_wrapping(
     id: impl Into<String>,
     value: impl Into<String>,
@@ -2702,20 +2727,11 @@ fn sized_styled_text_id_with_wrapping(
     height: Length,
     wrapping: TextWrapping,
 ) -> View<Message> {
-    View::new(ViewToken::Text(TextToken {
-        id: Some(id.into()),
-        value: value.into(),
-        style,
-        font_size: None,
-        width: Some(width),
-        height: Some(height),
-        margin: Edges::ZERO,
-        align_x: Alignment::Start,
-        align_y: Alignment::Start,
-        wrapping,
-        selectable: false,
-        a11y: A11yHint::default(),
-    }))
+    text(value)
+        .text_id(id)
+        .text_style(style)
+        .text_size(width, height)
+        .text_wrapping(wrapping)
 }
 
 fn results_list(
@@ -6815,8 +6831,9 @@ fn open_ai_api_format_items() -> [ComboBoxItem; 3] {
     ]
 }
 
-fn open_ai_model_items() -> [ComboBoxItem; 7] {
+fn open_ai_model_items() -> [ComboBoxItem; 8] {
     [
+        ComboBoxItem::new("gpt-5.4-mini", "gpt-5.4-mini"),
         ComboBoxItem::new("gpt-5-mini", "gpt-5-mini"),
         ComboBoxItem::new("gpt-5-nano", "gpt-5-nano"),
         ComboBoxItem::new("gpt-5", "gpt-5"),

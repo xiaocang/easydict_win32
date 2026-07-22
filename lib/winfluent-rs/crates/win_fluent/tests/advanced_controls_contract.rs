@@ -1,6 +1,8 @@
 use win_fluent::a11y::A11yRole;
 use win_fluent::prelude::*;
 use win_fluent::resolve_accessibility_tree;
+use win_fluent::view::TextWrapping;
+use win_fluent::IconToken;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Msg {
@@ -99,6 +101,13 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
         panic!("expected ComboBox");
     };
     assert_eq!(invalid_combo_token.selected, None);
+    assert_eq!(invalid_combo_token.wrapping, TextWrapping::None);
+
+    let default_flyout = flyout_button::<Msg>("Default").into_view();
+    let ViewToken::FlyoutButton(default_flyout_token) = default_flyout.token() else {
+        panic!("expected FlyoutButton");
+    };
+    assert_eq!(default_flyout_token.placement, FlyoutPlacement::Bottom);
 
     let title_flyout = flyout_button("DemoApp")
         .id("mode-title")
@@ -106,6 +115,7 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
         .font_size(22)
         .min_width(0)
         .min_height(0)
+        .placement(FlyoutPlacement::Right)
         .items([FlyoutMenuItem::radio("quick", "Quick Translation", true)])
         .on_select(Msg::Selected);
     let ViewToken::FlyoutButton(title_flyout_token) = title_flyout.token() else {
@@ -114,6 +124,7 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
     assert_eq!(title_flyout_token.label, "DemoApp");
     assert_eq!(title_flyout_token.text_style, Some(TextStyle::Subtitle));
     assert_eq!(title_flyout_token.font_size, Some(22));
+    assert_eq!(title_flyout_token.placement, FlyoutPlacement::Right);
 
     let view = column(vec![
         progress_bar::<Msg>()
@@ -156,6 +167,7 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
         .id("theme")
         .label("Theme")
         .selected("dark")
+        .wrapping(TextWrapping::Word)
         .on_change(Msg::Selected),
         invalid_combo,
         expander("Advanced")
@@ -182,6 +194,7 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
     assert!(schema.contains("ComboBox"));
     assert!(schema.contains("selected=\"dark\""));
     assert!(schema.contains("selected_label=\"Dark\""));
+    assert!(schema.contains("wrapping=Word"));
     assert!(schema.contains("selected=none"));
     assert!(schema.contains("Expander"));
     assert!(schema.contains("motion=expand-collapse-reveal"));
@@ -231,6 +244,55 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
             && node.name.as_deref() == Some("Advanced")
             && node.help_text.as_deref() == Some("collapsed")
     }));
+}
+
+#[test]
+fn checkbox_layout_defaults_and_explicit_values_are_public() {
+    let defaults = checkbox::<Msg>("Context", false).into_view();
+    let ViewToken::CheckBox(default_token) = defaults.token() else {
+        panic!("expected CheckBox");
+    };
+    assert_eq!(default_token.width, Length::Shrink);
+    assert_eq!(default_token.wrapping, TextWrapping::Word);
+
+    let explicit = checkbox::<Msg>("Context", false)
+        .width(Length::Fill)
+        .wrapping(TextWrapping::Word)
+        .on_toggle(Msg::Bool);
+    let ViewToken::CheckBox(explicit_token) = explicit.token() else {
+        panic!("expected CheckBox");
+    };
+    assert_eq!(explicit_token.width, Length::Fill);
+    assert_eq!(explicit_token.wrapping, TextWrapping::Word);
+    let snapshot = view_schema(&explicit).snapshot();
+    assert!(snapshot.contains("CheckBox"));
+    assert!(snapshot.contains("width=Fill"));
+    assert!(snapshot.contains("wrapping=Word"));
+}
+
+#[test]
+fn button_exposes_trailing_icon_and_selected_accessibility_state() {
+    let view = button("Application")
+        .id("mode-menu")
+        .trailing_icon(IconToken::with_glyph("chevron-down", '\u{E70D}'))
+        .selected(true)
+        .on_press(Msg::Pressed("mode-menu"));
+
+    let ViewToken::Button(token) = view.token() else {
+        panic!("expected Button");
+    };
+    assert_eq!(
+        token.trailing_icon.as_ref().map(|icon| icon.name),
+        Some("chevron-down")
+    );
+    assert!(token.state.selected);
+
+    let schema = view_schema(&view).snapshot();
+    assert!(schema.contains("trailing_icon=chevron-down"));
+
+    let a11y = resolve_accessibility_tree(&view);
+    assert_eq!(a11y.name.as_deref(), Some("Application"));
+    assert_eq!(a11y.help_text.as_deref(), Some("selected"));
 }
 
 fn collect_a11y_nodes(root: &win_fluent::A11yNode) -> Vec<&win_fluent::A11yNode> {

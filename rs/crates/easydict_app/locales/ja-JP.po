@@ -51,6 +51,9 @@ msgstr "Language help"
 msgid "main.translate"
 msgstr "翻訳"
 
+msgid "main.long_document.subtitle"
+msgstr "長文翻訳"
+
 msgid "main.settings"
 msgstr "設定"
 

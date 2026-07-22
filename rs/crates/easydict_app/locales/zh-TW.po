@@ -66,6 +66,9 @@ msgstr "Language help"
 msgid "main.translate"
 msgstr "翻譯"
 
+msgid "main.long_document.subtitle"
+msgstr "長文檔翻譯"
+
 msgid "main.translate.grammar"
 msgstr "檢查語法"
 

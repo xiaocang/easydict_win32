@@ -541,6 +541,1725 @@ public sealed class DotnetRustParityTests : IDisposable
     }
 
     [Fact]
+    public void RustComboBoxes_ShouldExpandAndCommitMouseSelection()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+        EnsureParityDpiAwareness();
+
+        var cases = new[]
+        {
+            new RustComboBoxMouseSelectionCase("main", 419, 820, "SourceLangCombo", "Chinese (Simplified)", 1, 0, 9, "message=SourceLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE"] = "auto", ["EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE"] = "auto" }),
+            new RustComboBoxMouseSelectionCase("main", 419, 820, "TargetLangCombo", "Chinese (Simplified)", 1, 0, 9, "message=TargetLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE"] = "auto", ["EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE"] = "auto" }),
+            new RustComboBoxMouseSelectionCase("main", 320, 820, "SourceLangComboNarrow", "Chinese (Simplified)", 1, 0, 9, "message=SourceLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE"] = "auto", ["EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE"] = "auto" }),
+            new RustComboBoxMouseSelectionCase("main", 320, 820, "TargetLangComboNarrow", "Chinese (Simplified)", 1, 0, 9, "message=TargetLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE"] = "auto", ["EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE"] = "auto" }),
+            new RustComboBoxMouseSelectionCase("fixed", 419, 820, "fixed.source_language", "Chinese (Simplified)", 1, 0, 9, "message=FloatingSourceLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE"] = "auto", ["EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE"] = "auto" }, PreviewWindow: "fixed"),
+            new RustComboBoxMouseSelectionCase("fixed", 419, 820, "fixed.target_language", "Chinese (Simplified)", 1, 0, 9, "message=FloatingTargetLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE"] = "auto", ["EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE"] = "auto" }, PreviewWindow: "fixed"),
+            new RustComboBoxMouseSelectionCase("long_document", 1200, 820, "main.long-doc.source_language", "Chinese (Simplified)", 1, 0, 9, "message=LongDocumentSourceLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_SCROLL_TARGET"] = "main.long-doc.scroll", ["EASYDICT_PREVIEW_SCROLL_PERCENT"] = "1" }),
+            new RustComboBoxMouseSelectionCase("long_document", 1200, 820, "main.long-doc.target_language", "Chinese (Simplified)", 0, 1, 8, "message=LongDocumentTargetLanguageChanged value=zh-Hans", new Dictionary<string, string> { ["EASYDICT_PREVIEW_SCROLL_TARGET"] = "main.long-doc.scroll", ["EASYDICT_PREVIEW_SCROLL_PERCENT"] = "1" }),
+            new RustComboBoxMouseSelectionCase("long_document", 1200, 820, "main.long-doc.service", "Volcano", 15, 16, 17, "message=LongDocumentServiceChanged value=volcano", new Dictionary<string, string> { ["EASYDICT_PREVIEW_SCROLL_TARGET"] = "main.long-doc.scroll", ["EASYDICT_PREVIEW_SCROLL_PERCENT"] = "1" }, ScrollAwayBeforeSelection: true),
+            new RustComboBoxMouseSelectionCase("long_document", 1200, 820, "main.long-doc.input_mode", "Text", 0, 2, 3, "message=LongDocumentInputModeChanged value=plaintext", new Dictionary<string, string> { ["EASYDICT_PREVIEW_SCROLL_TARGET"] = "main.long-doc.scroll", ["EASYDICT_PREVIEW_SCROLL_PERCENT"] = "1" }),
+            new RustComboBoxMouseSelectionCase("long_document", 1200, 820, "main.long-doc.output_mode", "Bilingual", 1, 0, 3, "message=LongDocumentOutputModeChanged value=bilingual", new Dictionary<string, string> { ["EASYDICT_PREVIEW_SCROLL_TARGET"] = "main.long-doc.scroll", ["EASYDICT_PREVIEW_SCROLL_PERCENT"] = "1" })
+        };
+
+        foreach (var testCase in cases)
+        {
+            AssertRustComboBoxMouseSelection(testCase);
+        }
+    }
+
+    private void AssertRustComboBoxMouseSelection(RustComboBoxMouseSelectionCase testCase)
+    {
+        using var session = RustPreviewSession.Launch(
+            testCase.PreviewWindow,
+            "light",
+            "en-US",
+            ResolvePreviewDpi(),
+            testCase.WidthDips,
+            testCase.HeightDips,
+            ScreenshotHelper.OutputDir,
+            _output,
+            new Dictionary<string, string>(testCase.EnvironmentOverrides)
+            {
+                ["EASYDICT_RS_DEBUG"] = "1"
+            });
+        session.WaitForDebugLine(0, "subscriptions", TimeSpan.FromSeconds(5));
+        var rendered = session.Render(
+            testCase.Scenario,
+            testCase.EnvironmentOverrides,
+            $"combo-{testCase.ControlId}",
+            [testCase.ControlId],
+            testCase.WidthDips,
+            testCase.HeightDips);
+        var dimensions = TryReadRustBoundsControlDimensions(rendered.BoundsPath);
+        CaptureRustArtifacts(rendered, $"combo-open-{testCase.ControlId}");
+        dimensions.Should().ContainKey(testCase.ControlId);
+        var window = rendered.Window;
+        EnsureWindowForegroundForMouseInput(
+            window,
+            $"mouse-select {testCase.ControlId}");
+        ScreenshotHelper.EnsureWindowReadyForCapture(
+            window,
+            $"mouse-select {testCase.ControlId}");
+        var comboBounds = dimensions[testCase.ControlId].BoundsDips
+            ?? throw new InvalidOperationException(
+                $"Missing bounds for {testCase.ControlId}.");
+        comboBounds = AdjustRustBoundsForPreviewScroll(
+            testCase,
+            dimensions,
+            comboBounds);
+        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+        var comboPoint = new Point(
+            windowBounds.Left + (int)Math.Round(
+                (comboBounds.Left + comboBounds.Width / 2) * dpiScale),
+            windowBounds.Top + (int)Math.Round(
+                (comboBounds.Top + comboBounds.Height / 2) * dpiScale));
+        _output.WriteLine(
+            $"{testCase.ControlId}: window={windowBounds}, dpi={dpiScale:0.###}, comboDips={comboBounds}, comboPoint={comboPoint}.");
+        if (testCase.ScrollAwayBeforeSelection)
+        {
+            ScrollAwayAndDismiss(testCase.SelectedRow);
+        }
+        ClickSelection(
+            testCase.OptionText,
+            testCase.OptionRow,
+            testCase.SelectedRow,
+            testCase.ExpectedDebugLine);
+
+        void ClickSelection(
+            string optionText,
+            int optionRow,
+            int selectedRow,
+            string expectedDebugLine)
+        {
+            var marker = session.CaptureDebugLineMarker();
+            Mouse.MoveTo(comboPoint);
+            Thread.Sleep(150);
+            Mouse.Down(MouseButton.Left);
+            Thread.Sleep(100);
+            Mouse.Up(MouseButton.Left);
+            var geometry = ParseRustComboOverlayGeometry(
+                session.WaitForDebugLineValue(
+                    marker,
+                    $"[parity] combo_overlay_geometry control_id={testCase.ControlId}",
+                    TimeSpan.FromSeconds(5)),
+                testCase.ControlId);
+            AssertOverlayWithinWindow(geometry, testCase.ItemCount, testCase.WidthDips, testCase.HeightDips);
+            Thread.Sleep(200);
+            var optionPoint = RustComboBoxOptionClickPoint(
+                window,
+                geometry,
+                testCase,
+                optionText,
+                optionRow,
+                selectedRow);
+            if (optionRow * geometry.RowHeight + geometry.RowHeight / 2 > geometry.MenuHeight)
+            {
+                Mouse.MoveTo(optionPoint);
+                Thread.Sleep(150);
+                Mouse.Scroll(-20);
+                session.WaitForDebugLine(
+                    marker,
+                    $"[parity] combo_scroll_offset control_id={testCase.ControlId}",
+                    TimeSpan.FromSeconds(5));
+                Thread.Sleep(150);
+            }
+            CaptureForegroundWindow(window, $"combo-open-{testCase.ControlId}");
+            _output.WriteLine(
+                $"{testCase.ControlId}: option={optionText}, optionPoint={optionPoint}.");
+            Mouse.MoveTo(optionPoint);
+            Thread.Sleep(150);
+            Mouse.Down(MouseButton.Left);
+            Thread.Sleep(100);
+            Mouse.Up(MouseButton.Left);
+            session.WaitForDebugLine(marker, expectedDebugLine, TimeSpan.FromSeconds(5));
+            Thread.Sleep(300);
+        }
+
+        void ScrollAwayAndDismiss(int selectedRow)
+        {
+            var marker = session.CaptureDebugLineMarker();
+            Mouse.MoveTo(comboPoint);
+            Thread.Sleep(150);
+            Mouse.Down(MouseButton.Left);
+            Thread.Sleep(100);
+            Mouse.Up(MouseButton.Left);
+            var geometry = ParseRustComboOverlayGeometry(
+                session.WaitForDebugLineValue(
+                    marker,
+                    $"[parity] combo_overlay_geometry control_id={testCase.ControlId}",
+                    TimeSpan.FromSeconds(5)),
+                testCase.ControlId);
+            AssertOverlayWithinWindow(geometry, testCase.ItemCount, testCase.WidthDips, testCase.HeightDips);
+            var selectedPoint = RustComboBoxOptionClickPoint(
+                window,
+                geometry,
+                testCase,
+                testCase.OptionText,
+                selectedRow,
+                selectedRow);
+            Mouse.MoveTo(selectedPoint);
+            Thread.Sleep(150);
+            Mouse.Scroll(20);
+            session.WaitForDebugLine(
+                marker,
+                $"[parity] combo_scroll_offset control_id={testCase.ControlId}",
+                TimeSpan.FromSeconds(5));
+            Thread.Sleep(300);
+            Mouse.Click(GetWindowRelativePoint(window, 0.50, 0.02));
+            Thread.Sleep(300);
+        }
+    }
+
+    [Fact]
+    public void RustLongDocumentLayout_ShouldHonorSpansAndWrapping()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        using var session = RustPreviewSession.Launch(
+            "main",
+            "light",
+            "en-US",
+            ResolvePreviewDpi(),
+            1200,
+            820,
+            ScreenshotHelper.OutputDir,
+            _output,
+            new Dictionary<string, string> { ["EASYDICT_RS_DEBUG"] = "1" });
+
+        var wide = session.Render(
+            "long_document",
+            new Dictionary<string, string>(),
+            "longdoc-layout-1200x820-rust-win-fluent-iced",
+            [
+                "main.long-doc.source_language",
+                "main.long-doc.target_language",
+                "main.long-doc.service",
+                "main.long-doc.input_mode",
+                "main.long-doc.two_pass",
+                "main.long-doc.translate"
+            ],
+            1200,
+            820);
+        AssertLongDocumentGridBounds(wide.BoundsPath);
+        CaptureRustArtifacts(wide, "longdoc-layout-1200x820-rust-win-fluent-iced");
+        CaptureForegroundWindow(wide.Window, "longdoc-layout-1200x820-rust-win-fluent-iced");
+
+        var narrow = session.Render(
+            "long_document",
+            new Dictionary<string, string>(),
+            "longdoc-layout-419x820-rust-win-fluent-iced",
+            ["LongDocDocumentContextPassCheckBox", "main.long-doc.two_pass", "main.long-doc.translate", "LongDocControlGrid"],
+            419,
+            820);
+        var narrowDimensions = TryReadRustBoundsControlDimensions(narrow.BoundsPath);
+        narrowDimensions.Should().ContainKeys("LongDocDocumentContextPassCheckBox", "main.long-doc.translate", "LongDocControlGrid");
+        var twoPass = narrowDimensions["LongDocDocumentContextPassCheckBox"].BoundsDips
+            ?? throw new InvalidOperationException("Two-pass bounds are missing.");
+        var translate = narrowDimensions["main.long-doc.translate"].BoundsDips
+            ?? throw new InvalidOperationException("Translate bounds are missing.");
+        twoPass.Height.Should().BeGreaterThan(16);
+        var grid = narrowDimensions["LongDocControlGrid"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document grid bounds are missing.");
+        twoPass.Top.Should().BeGreaterThanOrEqualTo(grid.Top + 60 + 58 + 8 - 2);
+        (twoPass.Top + twoPass.Height).Should().BeLessThanOrEqualTo(grid.Top + grid.Height + 2);
+        (twoPass.Left + twoPass.Width).Should().BeLessThanOrEqualTo(translate.Left + 2);
+        CaptureRustArtifacts(narrow, "longdoc-layout-419x820-rust-win-fluent-iced");
+        CaptureForegroundWindow(narrow.Window, "longdoc-layout-419x820-rust-win-fluent-iced");
+
+        var running = session.Render(
+            "long_document_running",
+            new Dictionary<string, string>(),
+            "longdoc-running-wrap-419x820-rust-win-fluent-iced",
+            ["LongDocOutputTitle", "main.long-doc.retry", "main.long-doc.output_card"],
+            419,
+            820);
+        var runningDimensions = TryReadRustBoundsControlDimensions(running.BoundsPath);
+        runningDimensions.Should().ContainKeys("LongDocOutputTitle", "main.long-doc.retry", "main.long-doc.output_card");
+        var title = runningDimensions["LongDocOutputTitle"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document output title bounds are missing.");
+        var retry = runningDimensions["main.long-doc.retry"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document retry bounds are missing.");
+        var outputCard = runningDimensions["main.long-doc.output_card"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document output card bounds are missing.");
+        title.Height.Should().BeGreaterThan(16);
+        retry.Left.Should().BeGreaterThanOrEqualTo(outputCard.Left - 2);
+        retry.Top.Should().BeGreaterThanOrEqualTo(outputCard.Top - 2);
+        (retry.Left + retry.Width).Should().BeLessThanOrEqualTo(outputCard.Left + outputCard.Width + 2);
+        (retry.Top + retry.Height).Should().BeLessThanOrEqualTo(outputCard.Top + outputCard.Height + 2);
+        (title.Left + title.Width).Should().BeLessThanOrEqualTo(retry.Left - 8 + 2);
+        CaptureRustArtifacts(running, "longdoc-running-wrap-419x820-rust-win-fluent-iced");
+        CaptureForegroundWindow(running.Window, "longdoc-running-wrap-419x820-rust-win-fluent-iced");
+    }
+
+    [Fact]
+    public void RustLongDocumentService_ShouldMatchDotnetAcrossWidths()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        SeedDotnetParitySettings();
+        _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
+        PrepareDotnetLongDocument(dotnetWindow);
+
+        using var session = RustPreviewSession.Launch(
+            "main",
+            "light",
+            ResolveParityUiLanguage(),
+            ResolvePreviewDpi(),
+            1200,
+            820,
+            ScreenshotHelper.OutputDir,
+            _output,
+            new Dictionary<string, string> { ["EASYDICT_RS_DEBUG"] = "1" });
+
+        foreach (var widthDips in new[] { 1200, 419 })
+        {
+            var rendered = session.Render(
+                "long_document",
+                new Dictionary<string, string>(),
+                $"longdoc-service-{widthDips}x820-rust-win-fluent-iced",
+                [
+                    "LongDocControlGrid",
+                    "main.long-doc.source_language",
+                    "main.long-doc.service"
+                ],
+                widthDips,
+                820);
+            var rustWindow = rendered.Window;
+            var dotnetScale = ScreenshotHelper.GetWindowDpiScale(dotnetWindow);
+            var rustBounds = ScreenshotHelper.GetWindowPhysicalBounds(rustWindow);
+            var dotnetCurrent = ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow);
+            var target = new Rectangle(
+                dotnetCurrent.Left,
+                dotnetCurrent.Top,
+                rustBounds.Width,
+                rustBounds.Height);
+            TrySetWindowToPhysicalTargetWithFrameCompensation(dotnetWindow, target);
+            var dotnetBounds = ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow);
+            WindowSizeDistance(dotnetBounds, rustBounds)
+                .Should()
+                .BeLessThanOrEqualTo(8, "capture geometry must match the rendered Rust bounds");
+            PrepareDotnetLongDocument(dotnetWindow);
+            WaitForLongDocumentReady(rustWindow, "rust");
+            AssertWindowFullyVisible(dotnetWindow, $"longdoc-service-{widthDips}", "dotnet");
+            AssertWindowFullyVisible(rustWindow, $"longdoc-service-{widthDips}", "rust");
+            ScreenshotHelper.GetWindowDpiScale(rustWindow)
+                .Should()
+                .BeApproximately(dotnetScale, 0.01, "both windows must use the same monitor DPI");
+
+            var dotnetService = FindVisibleByAutomationId(dotnetWindow, "LongDocServiceCombo")
+                ?? throw new InvalidOperationException("LongDocServiceCombo is missing.");
+            var dotnetConcurrency = FindVisibleByAutomationId(dotnetWindow, "LongDocConcurrencyBox")
+                ?? throw new InvalidOperationException("LongDocConcurrencyBox is missing.");
+            var dotnetPageRange = FindVisibleByAutomationId(dotnetWindow, "LongDocPageRangeBox")
+                ?? throw new InvalidOperationException("LongDocPageRangeBox is missing.");
+            var serviceBounds = dotnetService.BoundingRectangle;
+            var concurrencyBounds = dotnetConcurrency.BoundingRectangle;
+            var pageRangeBounds = dotnetPageRange.BoundingRectangle;
+            ((double)serviceBounds.Left).Should().BeApproximately(
+                concurrencyBounds.Left,
+                5 * dotnetScale);
+            ((double)serviceBounds.Width).Should().BeApproximately(
+                pageRangeBounds.Right - concurrencyBounds.Left,
+                5 * dotnetScale);
+            ((double)serviceBounds.Right).Should().BeApproximately(
+                pageRangeBounds.Right,
+                5 * dotnetScale);
+
+            var rustDimensions = TryReadRustBoundsControlDimensions(rendered.BoundsPath);
+            rustDimensions.Should().ContainKeys(
+                "LongDocControlGrid",
+                "main.long-doc.source_language",
+                "main.long-doc.service");
+            var rustGrid = rustDimensions["LongDocControlGrid"].BoundsDips
+                ?? throw new InvalidOperationException("Rust LongDocControlGrid bounds are missing.");
+            var rustService = rustDimensions["main.long-doc.service"].BoundsDips
+                ?? throw new InvalidOperationException("Rust service bounds are missing.");
+            var singleColumn = (rustGrid.Width - 3 * 8) / 4;
+            rustService.Width.Should().BeApproximately(2 * singleColumn + 8, 2);
+            (rustService.Left + rustService.Width)
+                .Should()
+                .BeApproximately(rustGrid.Left + rustGrid.Width, 2);
+
+            CaptureFocusedParityComparison(
+                dotnetWindow,
+                rustWindow,
+                $"longdoc-service-{widthDips}x820");
+            CaptureRustArtifacts(
+                rendered,
+                $"longdoc-service-{widthDips}x820-rust-win-fluent-iced");
+        }
+    }
+
+    [Fact]
+    public void RustLongDocumentTwoPass_ShouldMatchDotnetAtNarrowWidth()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        SeedDotnetParitySettings();
+        _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
+        PrepareDotnetLongDocument(dotnetWindow);
+
+        using var session = RustPreviewSession.Launch(
+            "main",
+            "light",
+            ResolveParityUiLanguage(),
+            ResolvePreviewDpi(),
+            1200,
+            820,
+            ScreenshotHelper.OutputDir,
+            _output,
+            new Dictionary<string, string> { ["EASYDICT_RS_DEBUG"] = "1" });
+
+        var wide = session.Render(
+            "long_document",
+            new Dictionary<string, string>(),
+            "longdoc-two-pass-1200x820-rust-win-fluent-iced",
+            ["LongDocControlGrid", "LongDocDocumentContextPassCheckBox", "main.long-doc.translate"],
+            1200,
+            820);
+        MatchDotnetWindowToRust(dotnetWindow, wide.Window, "wide Two-pass");
+        PrepareDotnetLongDocument(dotnetWindow);
+        var dotnetWideTwoPass = FindVisibleByAutomationId(
+                dotnetWindow,
+                "LongDocDocumentContextPassCheckBox")
+            ?? throw new InvalidOperationException("Wide .NET Two-pass checkbox is missing.");
+        var dotnetWideHeight = dotnetWideTwoPass.BoundingRectangle.Height;
+        var wideDimensions = TryReadRustBoundsControlDimensions(wide.BoundsPath);
+        var rustWideTwoPass = wideDimensions["LongDocDocumentContextPassCheckBox"].BoundsDips
+            ?? throw new InvalidOperationException("Wide Rust Two-pass bounds are missing.");
+
+        var narrow = session.Render(
+            "long_document",
+            new Dictionary<string, string>(),
+            "longdoc-two-pass-419x820-rust-win-fluent-iced",
+            ["LongDocControlGrid", "LongDocDocumentContextPassCheckBox", "main.long-doc.translate"],
+            419,
+            820);
+        MatchDotnetWindowToRust(dotnetWindow, narrow.Window, "narrow Two-pass");
+        PrepareDotnetLongDocument(dotnetWindow);
+        AssertWindowFullyVisible(dotnetWindow, "longdoc-two-pass-419x820", "dotnet");
+        AssertWindowFullyVisible(narrow.Window, "longdoc-two-pass-419x820", "rust");
+
+        var dotnetTwoPass = FindVisibleByAutomationId(
+                dotnetWindow,
+                "LongDocDocumentContextPassCheckBox")
+            ?? throw new InvalidOperationException("Narrow .NET Two-pass checkbox is missing.");
+        var dotnetTranslate = FindVisibleByAutomationId(dotnetWindow, "LongDocTranslateButton")
+            ?? throw new InvalidOperationException("Narrow .NET Translate button is missing.");
+        var dotnetTwoPassBounds = dotnetTwoPass.BoundingRectangle;
+        var dotnetTranslateBounds = dotnetTranslate.BoundingRectangle;
+        dotnetTwoPass.Name.Should().Be(
+            "Two-pass translation (extract glossary + summary first for terminology consistency)");
+        dotnetTwoPassBounds.Height.Should().BeGreaterThan(dotnetWideHeight + 4);
+        dotnetTwoPassBounds.Right.Should().BeLessThanOrEqualTo(dotnetTranslateBounds.Left + 2);
+
+        var narrowDimensions = TryReadRustBoundsControlDimensions(narrow.BoundsPath);
+        narrowDimensions.Should().ContainKeys(
+            "LongDocControlGrid",
+            "LongDocDocumentContextPassCheckBox",
+            "main.long-doc.translate");
+        var rustGrid = narrowDimensions["LongDocControlGrid"].BoundsDips
+            ?? throw new InvalidOperationException("Narrow Rust Grid bounds are missing.");
+        var rustTwoPass = narrowDimensions["LongDocDocumentContextPassCheckBox"].BoundsDips
+            ?? throw new InvalidOperationException("Narrow Rust Two-pass bounds are missing.");
+        var rustTranslate = narrowDimensions["main.long-doc.translate"].BoundsDips
+            ?? throw new InvalidOperationException("Narrow Rust Translate bounds are missing.");
+        var singleColumn = (rustGrid.Width - 3 * 8) / 4;
+        rustTwoPass.Width.Should().BeApproximately(3 * singleColumn + 2 * 8, 2);
+        rustTwoPass.Height.Should().BeGreaterThan(rustWideTwoPass.Height + 8);
+        (rustTwoPass.Left + rustTwoPass.Width)
+            .Should()
+            .BeLessThanOrEqualTo(rustTranslate.Left + 2);
+
+        CaptureFocusedParityComparison(
+            dotnetWindow,
+            narrow.Window,
+            "longdoc-two-pass-419x820");
+        CaptureRustArtifacts(
+            narrow,
+            "longdoc-two-pass-419x820-rust-win-fluent-iced");
+
+    }
+
+    [Fact]
+    public void RustLongDocumentOutputTitle_ShouldMatchDotnetWithoutOverlap()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        SeedDotnetParitySettings();
+        _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
+        PrepareDotnetLongDocument(dotnetWindow);
+
+        using var session = RustPreviewSession.Launch(
+            "main",
+            "light",
+            ResolveParityUiLanguage(),
+            ResolvePreviewDpi(),
+            419,
+            820,
+            ScreenshotHelper.OutputDir,
+            _output,
+            new Dictionary<string, string> { ["EASYDICT_RS_DEBUG"] = "1" });
+        var running = session.Render(
+            "long_document_running",
+            new Dictionary<string, string>(),
+            "longdoc-output-title-419x820-rust-win-fluent-iced",
+            ["main.long-doc.retry", "main.long-doc.output_card"],
+            419,
+            820);
+        MatchDotnetWindowToRust(dotnetWindow, running.Window, "output-title");
+        PrepareDotnetLongDocument(dotnetWindow);
+        AssertWindowFullyVisible(dotnetWindow, "longdoc-output-title-419x820", "dotnet");
+        AssertWindowFullyVisible(running.Window, "longdoc-output-title-419x820", "rust");
+
+        var dotnetTitle = FindVisibleByAutomationId(dotnetWindow, "LongDocOutputTitle")
+            ?? throw new InvalidOperationException(".NET output title is missing.");
+        var dotnetRetry = FindVisibleByAutomationId(dotnetWindow, "LongDocRetryButton")
+            ?? throw new InvalidOperationException(".NET output retry button is missing.");
+        dotnetTitle.BoundingRectangle.Right
+            .Should()
+            .BeLessThanOrEqualTo(dotnetRetry.BoundingRectangle.Left + 1);
+
+        var dimensions = TryReadRustBoundsControlDimensions(running.BoundsPath);
+        dimensions.Should().ContainKeys(
+            "LongDocOutputTitle",
+            "main.long-doc.retry",
+            "main.long-doc.output_card");
+        var title = dimensions["LongDocOutputTitle"].BoundsDips
+            ?? throw new InvalidOperationException("Rust output title bounds are missing.");
+        var retry = dimensions["main.long-doc.retry"].BoundsDips
+            ?? throw new InvalidOperationException("Rust output retry bounds are missing.");
+        title.Height.Should().BeInRange(16, 24, "the output title must remain one line");
+        (title.Left + title.Width)
+            .Should()
+            .BeLessThanOrEqualTo(retry.Left - 8 + 2);
+
+        CaptureFocusedParityComparison(
+            dotnetWindow,
+            running.Window,
+            "longdoc-output-title-419x820");
+        CaptureRustArtifacts(
+            running,
+            "longdoc-output-title-419x820-rust-win-fluent-iced");
+    }
+
+    [Fact]
+    public void RustMainWindowBorder_ShouldExposeResizeCursorsAndResize()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        SeedDotnetParitySettings();
+        _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
+        DismissHotkeyRegistrationDialogIfPresent(dotnetWindow);
+        var rustMain = RenderMainPreview(
+            "initial",
+            ResolveRustPreviewTheme("light"),
+            _output,
+            new Dictionary<string, string>
+            {
+                ["EASYDICT_PREVIEW_WIDTH_DIPS"] = "900",
+                ["EASYDICT_PREVIEW_HEIGHT_DIPS"] = "700"
+            },
+            schemaSuffix: "-resize-border");
+        var rustWindow = rustMain.Window;
+        AssertNativeResizablePopupStyle(rustWindow, "Rust main");
+        ArrangeFloatingSideBySide(dotnetWindow, rustWindow, 900, 700);
+        WindowSizeDistance(
+                ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow),
+                ScreenshotHelper.GetWindowPhysicalBounds(rustWindow))
+            .Should()
+            .BeLessThanOrEqualTo(8, "resize parity screenshots require matching initial dimensions");
+
+
+        var dotnetBefore = CaptureForegroundWindow(
+            dotnetWindow,
+            "resize-main-before-dotnet-winui-reference");
+        var rustBefore = CaptureForegroundWindow(
+            rustWindow,
+            "resize-main-before-rust-win-fluent-iced");
+        var beforeSideBySide = SaveSideBySideComparison(
+            dotnetBefore,
+            rustBefore,
+            "resize-main-before-dotnet-vs-rust-side-by-side");
+
+        AssertResizeCursorsAndResize(dotnetWindow, ".NET main");
+        AssertResizeCursorsAndResize(rustWindow, "Rust main");
+        WindowSizeDistance(
+                ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow),
+                ScreenshotHelper.GetWindowPhysicalBounds(rustWindow))
+            .Should()
+            .BeLessThanOrEqualTo(8, "both windows must preserve matching dimensions after the same drag");
+
+
+        var dotnetAfter = CaptureForegroundWindow(
+            dotnetWindow,
+            "resize-main-after-dotnet-winui-reference");
+        var rustAfter = CaptureForegroundWindow(
+            rustWindow,
+            "resize-main-after-rust-win-fluent-iced");
+        var afterSideBySide = SaveSideBySideComparison(
+            dotnetAfter,
+            rustAfter,
+            "resize-main-after-dotnet-vs-rust-side-by-side");
+        AssertImageHasVisibleContent(beforeSideBySide);
+        AssertImageHasVisibleContent(afterSideBySide);
+
+        foreach (var windowKind in new[] { "mini", "fixed" })
+        {
+            MoveMouseToNeutralPoint();
+            var preview = RenderWindowPreview(
+                windowKind,
+                ResolveRustPreviewTheme("light"),
+                _output);
+            AssertNativeResizablePopupStyle(preview.Window, $"Rust {windowKind}");
+            AssertResizeCursorsAndResize(preview.Window, $"Rust {windowKind}");
+        }
+
+        var popButton = RenderWindowPreview(
+            "pop-button",
+            ResolveRustPreviewTheme("light"),
+            _output);
+        AssertNativeFixedPopupStyle(popButton.Window, "Rust pop-button");
+        AssertNoSizingCursorOrResize(popButton.Window, "Rust pop-button");
+
+        using var captureSession = RustPreviewSession.Launch(
+            "capture-overlay",
+            ResolveRustPreviewTheme("light"),
+            ResolveParityUiLanguage(),
+            ResolvePreviewDpi(),
+            800,
+            600,
+            ScreenshotHelper.OutputDir,
+            _output);
+        var captureWindow = captureSession.GetMainWindow(TimeSpan.FromSeconds(30));
+        AssertNativeFixedPopupStyle(captureWindow, "Rust capture-overlay");
+        AssertNoSizingCursorOrResize(captureWindow, "Rust capture-overlay");
+    }
+
+    [Fact]
+    public void RustLongDocumentHistory_ShouldRenderCollapsedAndExpandDownward()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        using var session = RustPreviewSession.Launch(
+            "main",
+            "light",
+            "en-US",
+            ResolvePreviewDpi(),
+            419,
+            820,
+            ScreenshotHelper.OutputDir,
+            _output,
+            new Dictionary<string, string> { ["EASYDICT_RS_DEBUG"] = "1" });
+        var empty = session.Render(
+            "long_document",
+            new Dictionary<string, string>(),
+            "longdoc-history-empty-collapsed-rust-win-fluent-iced",
+            ["main.long-doc.history", "LongDocHistoryTitle", "main.long-doc.clear_history"],
+            419,
+            820);
+        var emptyDimensions = TryReadRustBoundsControlDimensions(empty.BoundsPath);
+        emptyDimensions.Should().ContainKeys("main.long-doc.history", "main.long-doc.clear_history");
+        CaptureRustArtifacts(empty, "longdoc-history-empty-collapsed-rust-win-fluent-iced");
+        CaptureForegroundWindow(empty.Window, "longdoc-history-empty-collapsed-rust-win-fluent-iced");
+
+        var header = emptyDimensions["main.long-doc.history"].BoundsDips
+            ?? throw new InvalidOperationException("History header bounds are missing.");
+        var collapsedHistoryHeight = header.Height;
+        var marker = session.CaptureDebugLineMarker();
+        ClickRustBoundsCenter(empty.Window, header);
+        session.WaitForDebugLine(marker, "message=ToggleLongDocumentHistoryExpanded value=true", TimeSpan.FromSeconds(5));
+
+        var populated = session.Render(
+            "long_document_error",
+            new Dictionary<string, string>(),
+            "longdoc-history-expanded-rust-win-fluent-iced",
+            ["main.long-doc.history", "main.long-doc.history_list", "LongDocHistoryTitle"],
+            419,
+            820);
+        var populatedBounds = TryReadRustBoundsControlDimensions(populated.BoundsPath);
+        var populatedHeader = populatedBounds["main.long-doc.history"].BoundsDips
+            ?? throw new InvalidOperationException("Populated history header bounds are missing.");
+        var populatedMarker = session.CaptureDebugLineMarker();
+        ClickRustBoundsCenter(populated.Window, populatedHeader);
+        session.WaitForDebugLine(
+            populatedMarker,
+            "message=ToggleLongDocumentHistoryExpanded value=true",
+            TimeSpan.FromSeconds(5));
+
+        var expanded = session.Render(
+            "long_document_error",
+            new Dictionary<string, string> { ["EASYDICT_PREVIEW_LONG_DOC_HISTORY_EXPANDED"] = "1" },
+            "longdoc-history-expanded-rust-win-fluent-iced-final",
+            ["main.long-doc.history", "main.long-doc.history_list"],
+            419,
+            820);
+        var expandedBounds = TryReadRustBoundsControlDimensions(expanded.BoundsPath);
+        expandedBounds.Should().ContainKeys("main.long-doc.history", "main.long-doc.history_list");
+        var expandedHeader = expandedBounds["main.long-doc.history"].BoundsDips
+            ?? throw new InvalidOperationException("Expanded history header bounds are missing.");
+        var list = expandedBounds["main.long-doc.history_list"].BoundsDips
+            ?? throw new InvalidOperationException("Expanded history list bounds are missing.");
+        list.Top.Should().BeGreaterThanOrEqualTo(expandedHeader.Top + collapsedHistoryHeight - 2);
+        CaptureRustArtifacts(expanded, "longdoc-history-expanded-rust-win-fluent-iced");
+        CaptureForegroundWindow(expanded.Window, "longdoc-history-expanded-rust-win-fluent-iced");
+    }
+
+    [Fact]
+    public void RustModeMenu_ShouldOpenAboveAndCommitSelection()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        EnsureParityDpiAwareness();
+        var dotnetReferenceExecutable = ResolveDotnetReferenceExecutable();
+        using var dotnetReferenceScope = new EnvironmentVariableScope(
+            "EASYDICT_EXE_PATH",
+            dotnetReferenceExecutable);
+        using var popupThemeScope = new EnvironmentVariableScope(
+            ThemeEnvironmentVariable,
+            ResolveRustPreviewTheme("light"));
+        SeedDotnetParitySettings();
+        _dotnetLauncher.LaunchFromExe(
+            dotnetReferenceExecutable,
+            TimeSpan.FromSeconds(45));
+        var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
+        var dotnetOpenPath = OpenDotnetModeMenuAndSelect(
+            dotnetWindow,
+            "ModeLongDocItem",
+            "LongDocSourceLangCombo",
+            "main-mode-popup-open-dotnet-winui-reference");
+        OpenDotnetModeMenuAndSelect(
+            dotnetWindow,
+            "ModeTranslationItem",
+            "InputTextBox",
+            screenshotName: null);
+
+        var rustOpenPath = AssertRustModeMenuSelection(
+            "Long Document",
+            "message=ModeChanged value=long-document",
+            "long-document");
+        AssertRustModeMenuSelection("Translate", "message=ModeChanged value=quick", "quick");
+        var sideBySidePath = SaveSideBySideComparison(
+            dotnetOpenPath!,
+            rustOpenPath!,
+            "main-mode-popup-open-dotnet-vs-rust-side-by-side");
+        AssertImageHasVisibleContent(sideBySidePath);
+    }
+
+    [Fact]
+    public void RustMainSourceEditor_ShouldKeepTypedCharactersInEntryOrder()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        EnsureParityDpiAwareness();
+        using var session = RustPreviewSession.Launch(
+            "main",
+            "light",
+            "en-US",
+            ResolvePreviewDpi(),
+            1000,
+            700,
+            ScreenshotHelper.OutputDir,
+            _output,
+            new Dictionary<string, string>
+            {
+                ["EASYDICT_RS_DEBUG"] = "1",
+                ["EASYDICT_RS_DEBUG_VERBOSE"] = "1"
+            });
+        var rendered = session.Render(
+            "initial",
+            new Dictionary<string, string>(),
+            "main-source-editor-typing-rust-win-fluent-iced",
+            [],
+            1000,
+            700);
+        var dimensions = TryReadRustBoundsControlDimensions(rendered.BoundsPath);
+        var sourceEditor = dimensions["InputTextBox"].BoundsDips
+            ?? throw new InvalidOperationException("Rust source-editor bounds are missing.");
+
+        EnsureWindowForegroundForMouseInput(rendered.Window, "Rust source editor");
+        ClickRustBoundsCenter(rendered.Window, sourceEditor);
+        var marker = session.CaptureDebugLineMarker();
+        TypeUnicodeText("abc");
+        session.WaitForDebugLine(
+            marker,
+            "message=SourceTextChanged text_len=3 text_hash=e71fa2190541574b",
+            TimeSpan.FromSeconds(5));
+        CaptureForegroundWindow(
+            rendered.Window,
+            "main-source-editor-typing-rust-win-fluent-iced");
+    }
+
+    [Fact]
+    public void RustMainWindow_MaximizeButton_ShouldUseMonitorWorkArea()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine($"Skipped: set {EnableEnvironmentVariable}=1.");
+            return;
+        }
+
+        EnsureParityDpiAwareness();
+        using var session = RustPreviewSession.Launch(
+            "main",
+            "light",
+            "en-US",
+            ResolvePreviewDpi(),
+            1000,
+            700,
+            ScreenshotHelper.OutputDir,
+            _output);
+        var rendered = session.Render(
+            "initial",
+            new Dictionary<string, string>(),
+            "main-maximized-work-area-rust-win-fluent-iced",
+            [],
+            1000,
+            700);
+        var dimensions = TryReadRustBoundsControlDimensions(rendered.BoundsPath);
+        var maximize = dimensions["Maximize"].BoundsDips
+            ?? throw new InvalidOperationException("Rust maximize-button bounds are missing.");
+        var hwnd = SafeNativeWindowHandle(rendered.Window);
+
+        EnsureWindowForegroundForMouseInput(rendered.Window, "Rust maximize button");
+        ClickRustBoundsCenter(rendered.Window, maximize);
+        SpinWait.SpinUntil(() => IsZoomed(hwnd), TimeSpan.FromSeconds(5))
+            .Should()
+            .BeTrue("clicking the Rust maximize caption button must maximize the window");
+
+        var maximizedBounds = GetNativeWindowBounds(rendered.Window);
+        var workArea = GetMonitorWorkArea(hwnd);
+        maximizedBounds.Should().Be(
+            workArea,
+            "a maximized borderless window must stay inside the monitor work area");
+        Thread.Sleep(500);
+        EnsureWindowForegroundForMouseInput(rendered.Window, "Rust maximized preview");
+        var screenshotPath = ScreenshotHelper.CaptureWindowHandlePhysical(
+            hwnd,
+            "main-maximized-work-area-rust-win-fluent-iced");
+        MaskFloatingLanguageBarOcclusions(screenshotPath, rendered.Window);
+        using (var screenshot = new Bitmap(screenshotPath))
+        {
+            var sourceSurface = screenshot.GetPixel(screenshot.Width / 2, 100);
+            ColorDistance(sourceSurface, Color.White).Should().BeLessThan(
+                12,
+                "the maximized Rust window must keep rendering its light source-editor surface");
+        }
+        AssertImageHasVisibleContent(screenshotPath);
+
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(rendered.Window);
+        Mouse.MoveTo(new Point(
+            maximizedBounds.Right - (int)Math.Round(72 * dpiScale),
+            maximizedBounds.Top + (int)Math.Round(14 * dpiScale)));
+        Mouse.Click();
+        SpinWait.SpinUntil(() => !IsZoomed(hwnd), TimeSpan.FromSeconds(5))
+            .Should()
+            .BeTrue("clicking the maximized Rust caption button must restore the window");
+    }
+
+    private static Rectangle GetMonitorWorkArea(IntPtr hwnd)
+    {
+        var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+        monitor.Should().NotBe(IntPtr.Zero, "the window must resolve to a monitor");
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        GetMonitorInfo(monitor, ref info).Should().BeTrue("GetMonitorInfo must succeed");
+        return Rectangle.FromLTRB(
+            info.WorkArea.Left,
+            info.WorkArea.Top,
+            info.WorkArea.Right,
+            info.WorkArea.Bottom);
+    }
+
+    private static void AssertLongDocumentGridBounds(string boundsPath)
+    {
+        var dimensions = TryReadRustBoundsControlDimensions(boundsPath);
+        dimensions.Should().ContainKeys(
+            "main.long-doc.source_language",
+            "main.long-doc.target_language",
+            "main.long-doc.service",
+            "main.long-doc.input_mode",
+            "main.long-doc.output_mode",
+            "main.long-doc.page_range");
+        var source = dimensions["main.long-doc.source_language"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document source bounds are missing.");
+        var service = dimensions["main.long-doc.service"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document service bounds are missing.");
+        var input = dimensions["main.long-doc.input_mode"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document input mode bounds are missing.");
+        var page = dimensions["main.long-doc.page_range"].BoundsDips
+            ?? throw new InvalidOperationException("Long-document page range bounds are missing.");
+        service.Width.Should().BeApproximately(2 * input.Width + 8, 2);
+        (service.Left + service.Width).Should().BeApproximately(page.Left + page.Width, 2);
+        source.Width.Should().BeApproximately(input.Width, 2);
+    }
+
+    private static void CaptureRustArtifacts(RustPreviewRenderResult rendered, string artifactStem)
+    {
+        File.Copy(rendered.BoundsPath, Path.Combine(ScreenshotHelper.OutputDir, $"{artifactStem}.bounds"), true);
+        File.Copy(rendered.DiagnosticsPath, Path.Combine(ScreenshotHelper.OutputDir, $"{artifactStem}.diagnostics"), true);
+    }
+
+    private static void MatchDotnetWindowToRust(
+        Window dotnetWindow,
+        Window rustWindow,
+        string context)
+    {
+        var rustBounds = ScreenshotHelper.GetWindowPhysicalBounds(rustWindow);
+        var dotnetCurrent = ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow);
+        TrySetWindowToPhysicalTargetWithFrameCompensation(
+            dotnetWindow,
+            new Rectangle(
+                dotnetCurrent.Left,
+                dotnetCurrent.Top,
+                rustBounds.Width,
+                rustBounds.Height));
+        WindowSizeDistance(
+                ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow),
+                rustBounds)
+            .Should()
+            .BeLessThanOrEqualTo(8, $"{context} windows must use matching capture geometry");
+    }
+
+    private static void CaptureFocusedParityComparison(
+        Window dotnetWindow,
+        Window rustWindow,
+        string artifactStem)
+    {
+        MoveMouseToNeutralPoint();
+        var dotnetPath = CaptureForegroundWindow(
+            dotnetWindow,
+            $"{artifactStem}-dotnet-winui-reference");
+        var rustPath = CaptureForegroundWindow(
+            rustWindow,
+            $"{artifactStem}-rust-win-fluent-iced");
+        var sideBySidePath = SaveSideBySideComparison(
+            dotnetPath,
+            rustPath,
+            $"{artifactStem}-dotnet-vs-rust-side-by-side");
+        AssertImageHasVisibleContent(dotnetPath);
+        AssertImageHasVisibleContent(rustPath);
+        AssertImageHasVisibleContent(sideBySidePath);
+    }
+
+    private static void AssertNativeResizablePopupStyle(Window window, string label)
+    {
+        var style = GetNativeWindowStyle(window);
+        (style & WsPopup).Should().NotBe(0, $"{label} must remain a popup window");
+        (style & WsThickFrame).Should().NotBe(0, $"{label} must expose native resize hit testing");
+        (style & WsVisible).Should().NotBe(0, $"{label} must preserve the runtime WS_VISIBLE bit");
+    }
+
+    private static void AssertNativeFixedPopupStyle(Window window, string label)
+    {
+        var style = GetNativeWindowStyle(window);
+        (style & WsPopup).Should().NotBe(0, $"{label} must remain a popup window");
+        (style & WsThickFrame).Should().Be(0, $"{label} must not expose native resize hit testing");
+        (style & WsVisible).Should().NotBe(0, $"{label} must preserve the runtime WS_VISIBLE bit");
+    }
+
+    private static uint GetNativeWindowStyle(Window window)
+    {
+        var hwnd = SafeNativeWindowHandle(window);
+        hwnd.Should().NotBe(IntPtr.Zero, "a live HWND is required for native style validation");
+        return unchecked((uint)GetWindowLongPtrNative(hwnd, GwlStyle).ToInt64());
+    }
+
+    private static void AssertResizeCursorsAndResize(Window window, string label)
+    {
+        EnsureWindowForegroundForMouseInput(window, label);
+        var before = GetNativeWindowBounds(window);
+        before.Width.Should().BeGreaterThan(80);
+        before.Height.Should().BeGreaterThan(80);
+        var centerX = before.Left + before.Width / 2;
+        var centerY = before.Top + before.Height / 2;
+        var probes = new[]
+        {
+            (new Point(before.Left + 1, centerY), IdcSizeWe, "left"),
+            (new Point(before.Right - 2, centerY), IdcSizeWe, "right"),
+            (new Point(centerX, before.Top + 1), IdcSizeNs, "top"),
+            (new Point(centerX, before.Bottom - 2), IdcSizeNs, "bottom"),
+            (new Point(before.Left + 1, before.Top + 1), IdcSizeNwSe, "top-left"),
+            (new Point(before.Right - 2, before.Top + 1), IdcSizeNeSw, "top-right"),
+            (new Point(before.Left + 1, before.Bottom - 2), IdcSizeNeSw, "bottom-left"),
+            (new Point(before.Right - 2, before.Bottom - 2), IdcSizeNwSe, "bottom-right")
+        };
+        foreach (var (point, cursorId, edge) in probes)
+        {
+            Mouse.MoveTo(point);
+            Thread.Sleep(160);
+            GetCurrentCursorHandle()
+                .Should()
+                .Be(LoadCursor(IntPtr.Zero, new IntPtr(cursorId)), $"{label} {edge} edge");
+        }
+
+        var start = new Point(before.Right - 2, centerY);
+        Mouse.MoveTo(start);
+        Thread.Sleep(100);
+        Mouse.Down(MouseButton.Left);
+        try
+        {
+            for (var step = 1; step <= 8; step++)
+            {
+                Mouse.MoveTo(new Point(start.X + step * 5, start.Y));
+                Thread.Sleep(25);
+            }
+        }
+        finally
+        {
+            Mouse.Up(MouseButton.Left);
+        }
+
+        Retry.WhileFalse(
+                () => GetNativeWindowBounds(window).Width >= before.Width + 20,
+                TimeSpan.FromSeconds(3))
+            .Result
+            .Should()
+            .BeTrue($"{label} right-edge drag must increase window width");
+    }
+
+    private static void AssertNoSizingCursorOrResize(Window window, string label)
+    {
+        var before = GetNativeWindowBounds(window);
+        var centerY = before.Top + before.Height / 2;
+        var sizingCursors = new[]
+        {
+            LoadCursor(IntPtr.Zero, new IntPtr(IdcSizeWe)),
+            LoadCursor(IntPtr.Zero, new IntPtr(IdcSizeNs)),
+            LoadCursor(IntPtr.Zero, new IntPtr(IdcSizeNwSe)),
+            LoadCursor(IntPtr.Zero, new IntPtr(IdcSizeNeSw))
+        };
+        var start = new Point(before.Right - 2, centerY);
+        Mouse.MoveTo(start);
+        Thread.Sleep(160);
+        sizingCursors.Should().NotContain(GetCurrentCursorHandle(), $"{label} must not show a sizing cursor");
+
+        Mouse.Down(MouseButton.Left);
+        try
+        {
+            Mouse.MoveTo(new Point(start.X - 40, start.Y));
+            Thread.Sleep(200);
+        }
+        finally
+        {
+            Mouse.Up(MouseButton.Left);
+        }
+        Thread.Sleep(250);
+        GetNativeWindowBounds(window).Width
+            .Should()
+            .BeInRange(before.Width - 2, before.Width + 2, $"{label} must not resize from its border");
+    }
+
+    private static IntPtr GetCurrentCursorHandle()
+    {
+        var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
+        GetCursorInfo(ref info).Should().BeTrue("GetCursorInfo must succeed");
+        return info.Cursor;
+    }
+
+    private static Rectangle GetNativeWindowBounds(Window window)
+    {
+        var hwnd = SafeNativeWindowHandle(window);
+        hwnd.Should().NotBe(IntPtr.Zero, "a live HWND is required for native bounds validation");
+        GetWindowRect(hwnd, out var bounds).Should().BeTrue("GetWindowRect must succeed");
+        return Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+    }
+
+    private static void ClickRustBoundsCenter(Window window, UiParityControlBoundsDips bounds)
+    {
+        var hwnd = SafeNativeWindowHandle(window);
+        hwnd.Should().NotBe(IntPtr.Zero, "a live HWND is required for Rust bounds input");
+        var clientOrigin = new NativePoint();
+        ClientToScreen(hwnd, ref clientOrigin)
+            .Should()
+            .BeTrue("ClientToScreen must resolve Rust client-layout coordinates");
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+        var point = new Point(
+            clientOrigin.X + (int)Math.Round((bounds.Left + bounds.Width / 2) * dpiScale),
+            clientOrigin.Y + (int)Math.Round((bounds.Top + bounds.Height / 2) * dpiScale));
+        GetNativeWindowBounds(window)
+            .Contains(point)
+            .Should().BeTrue($"physical point {point} must lie inside Rust preview window");
+        Mouse.MoveTo(point);
+        Thread.Sleep(100);
+        Mouse.Click(point);
+        Thread.Sleep(300);
+    }
+    private static void TypeUnicodeText(string text)
+    {
+        var inputs = new NativeInput[text.Length * 2];
+        for (var index = 0; index < text.Length; index++)
+        {
+            inputs[index * 2] = NativeInput.UnicodeKey(text[index], keyUp: false);
+            inputs[index * 2 + 1] = NativeInput.UnicodeKey(text[index], keyUp: true);
+        }
+
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeInput>())
+            .Should().Be((uint)inputs.Length, "Unicode SendInput must type every UTF-16 code unit");
+    }
+
+
+    private static string? OpenDotnetModeMenuAndSelect(
+        Window window,
+        string optionId,
+        string expectedControlId,
+        string? screenshotName)
+    {
+        DismissHotkeyRegistrationDialogIfPresent(window);
+        var currentBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var screen = ScreenshotHelper.GetVirtualScreenBounds();
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+        var targetWidth = DipsToPhysicalPixels(1200, dpiScale);
+        var targetHeight = DipsToPhysicalPixels(820, dpiScale);
+        var target = new Rectangle(
+            Math.Clamp(
+                currentBounds.Left,
+                screen.Left,
+                Math.Max(screen.Left, screen.Right - targetWidth)),
+            Math.Min(
+                screen.Top + DipsToPhysicalPixels(180, dpiScale),
+                Math.Max(screen.Top, screen.Bottom - targetHeight)),
+            targetWidth,
+            targetHeight);
+        TrySetWindowToPhysicalTargetWithFrameCompensation(window, target);
+        AssertWindowFullyVisible(window, "mode-menu", "dotnet");
+        window.SetForeground();
+
+        var modeButton = Retry.WhileNull(
+                () => FindVisibleByAutomationId(window, "ModeMenuButton"),
+                TimeSpan.FromSeconds(8))
+            .Result;
+        modeButton.Should().NotBeNull("the .NET mode selector must be visible");
+        var triggerBounds = AutomationElementPhysicalBounds(modeButton!);
+        UITestHelper.ClickElement(modeButton!);
+        Thread.Sleep(250);
+
+        var translationItem = Retry.WhileNull(
+                () => FindVisibleByAutomationIdOrName(window, "ModeTranslationItem"),
+                TimeSpan.FromSeconds(5))
+            .Result;
+        var longDocumentItem = Retry.WhileNull(
+                () => FindVisibleByAutomationIdOrName(window, "ModeLongDocItem"),
+                TimeSpan.FromSeconds(5))
+            .Result;
+        translationItem.Should().NotBeNull("the .NET translation mode item must be visible");
+        longDocumentItem.Should().NotBeNull("the .NET long-document mode item must be visible");
+        var translationBounds = AutomationElementPhysicalBounds(translationItem!);
+        var longDocumentBounds = AutomationElementPhysicalBounds(longDocumentItem!);
+        translationBounds.Top.Should().BeLessThan(
+            longDocumentBounds.Top,
+            "the .NET flyout must keep Translation before Long Document");
+
+        var popup = FindAncestorByControlType(longDocumentItem!, ControlType.Menu);
+        popup.Should().NotBeNull("the .NET mode items must belong to a MenuFlyout");
+        var popupBounds = AutomationElementPhysicalBounds(popup!);
+        ScreenshotHelper.GetVirtualScreenBounds().Contains(popupBounds)
+            .Should().BeTrue("the .NET mode flyout must stay fully visible");
+        popupBounds.Bottom.Should().BeLessThanOrEqualTo(
+            triggerBounds.Top + 2,
+            "the complete .NET mode flyout should open above its trigger");
+
+        string? screenshotPath = null;
+        if (screenshotName != null)
+        {
+            screenshotPath = ScreenshotHelper.CaptureScreenRegion(
+                Rectangle.Union(ScreenshotHelper.GetWindowPhysicalBounds(window), popupBounds),
+                screenshotName);
+        }
+
+        var option = optionId == "ModeLongDocItem" ? longDocumentItem! : translationItem!;
+        UITestHelper.ClickElement(option);
+        Retry.WhileNull(
+                () => FindVisibleByAutomationId(window, expectedControlId),
+                TimeSpan.FromSeconds(8))
+            .Result
+            .Should().NotBeNull(
+                $"the .NET mode selection must expose '{expectedControlId}'");
+        return screenshotPath;
+    }
+
+    private static AutomationElement? FindAncestorByControlType(
+        AutomationElement element,
+        ControlType controlType)
+    {
+        AutomationElement? current = element;
+        for (var depth = 0; current != null && depth < 6; depth++)
+        {
+            if (current.ControlType == controlType)
+            {
+                return current;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private static Rectangle AutomationElementPhysicalBounds(AutomationElement element)
+    {
+        var bounds = element.BoundingRectangle;
+        return Rectangle.FromLTRB(
+            (int)Math.Floor((double)bounds.Left),
+            (int)Math.Floor((double)bounds.Top),
+            (int)Math.Ceiling((double)bounds.Right),
+            (int)Math.Ceiling((double)bounds.Bottom));
+    }
+
+    private string? AssertRustModeMenuSelection(
+        string optionText,
+        string expectedDebugLine,
+        string optionId)
+    {
+        string? openScreenshotPath = null;
+        EnsureParityDpiAwareness();
+        using var session = RustPreviewSession.Launch(
+            "main", ResolveRustPreviewTheme("light"), ResolveParityUiLanguage(), ResolvePreviewDpi(), 1200, 820,
+            ScreenshotHelper.OutputDir, _output,
+            new Dictionary<string, string> { ["EASYDICT_RS_DEBUG"] = "1" });
+        var rendered = session.Render(
+            optionId == "quick" ? "long_document" : "initial",
+            new Dictionary<string, string>(),
+            "mode-menu",
+            ["ModeMenuButton"],
+            1200,
+            820);
+        var initialMainBounds = ScreenshotHelper.GetWindowPhysicalBounds(rendered.Window);
+        var screenForPlacement = ScreenshotHelper.GetVirtualScreenBounds();
+        var mainTarget = new Rectangle(
+            Math.Clamp(
+                initialMainBounds.Left,
+                screenForPlacement.Left,
+                Math.Max(screenForPlacement.Left, screenForPlacement.Right - initialMainBounds.Width)),
+            Math.Min(
+                screenForPlacement.Top + 180,
+                Math.Max(screenForPlacement.Top, screenForPlacement.Bottom - initialMainBounds.Height)),
+            initialMainBounds.Width,
+            initialMainBounds.Height);
+        ScreenshotHelper.TrySetWindowPhysicalBounds(rendered.Window, mainTarget)
+            .Should()
+            .BeTrue("the main window must leave normal screen space above its mode title");
+        Thread.Sleep(250);
+        EnsureWindowForegroundForMouseInput(rendered.Window, "mode menu");
+        var dimensions = TryReadRustBoundsControlDimensions(rendered.BoundsPath);
+        var trigger = dimensions["ModeMenuButton"].BoundsDips
+            ?? throw new InvalidOperationException("Mode menu trigger bounds are missing.");
+        var mainBounds = ScreenshotHelper.GetWindowPhysicalBounds(rendered.Window);
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(rendered.Window);
+        var triggerPoint = new Point(
+            mainBounds.Left + (int)Math.Round((trigger.Left + trigger.Width / 2) * dpiScale),
+            mainBounds.Top + (int)Math.Round((trigger.Top + trigger.Height / 2) * dpiScale));
+        if (optionId == "long-document")
+        {
+            CaptureForegroundWindow(
+                rendered.Window,
+                "main-mode-title-rust-win-fluent-iced");
+        }
+
+        _output.WriteLine(
+            $"Mode trigger: bounds={trigger}, main={mainBounds}, dpi={dpiScale:F3}, point={triggerPoint}");
+        var visiblePopupStyles = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        using var styleProbeCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var styleProbe = Task.Run(() =>
+        {
+            while (!styleProbeCancellation.IsCancellationRequested)
+            {
+                var hwnd = FindProcessWindowByTitle(session.ProcessId, "Easydict Mode Menu");
+                if (hwnd != IntPtr.Zero && IsWindowVisible(hwnd))
+                {
+                    visiblePopupStyles.Enqueue(GetWindowLongPtr(hwnd, GwlStyle));
+                }
+
+                Thread.Yield();
+            }
+        });
+
+        var marker = session.CaptureDebugLineMarker();
+        Mouse.MoveTo(triggerPoint);
+        Thread.Sleep(100);
+        Mouse.Click(triggerPoint);
+        session.WaitForDebugLine(marker, "message=OpenModeMenu", TimeSpan.FromSeconds(5));
+
+        var popupHwnd = WaitForProcessWindowByTitle(
+            session.ProcessId,
+            "Easydict Mode Menu",
+            TimeSpan.FromSeconds(5));
+        CountVisibleProcessWindowsByTitle(session.ProcessId, "Easydict Mode Menu")
+            .Should()
+            .Be(1, "opening the mode menu must create exactly one visible popup");
+        var popupBounds = TryGetNativeWindowRectangle(popupHwnd)
+            ?? throw new InvalidOperationException("Mode menu popup bounds are unavailable.");
+        var virtualScreen = ScreenshotHelper.GetVirtualScreenBounds();
+        virtualScreen.Contains(popupBounds)
+            .Should()
+            .BeTrue("mode popup must stay fully visible on the active virtual screen");
+        ((double)popupBounds.Width).Should().BeApproximately(220 * dpiScale, 2);
+        ((double)popupBounds.Height).Should().BeApproximately(80 * dpiScale, 2);
+        var triggerTop = mainBounds.Top + (int)Math.Round(trigger.Top * dpiScale);
+        popupBounds.Bottom
+            .Should()
+            .BeLessThanOrEqualTo(
+                triggerTop - Math.Max(4, (int)Math.Round(6 * dpiScale)),
+                "the complete mode popup should open above the title trigger");
+        var styleStopwatch = Stopwatch.StartNew();
+        var extendedStyle = GetWindowLongPtr(popupHwnd, GWL_EXSTYLE);
+        while ((extendedStyle & WS_EX_TOOLWINDOW) == 0 &&
+               styleStopwatch.Elapsed < TimeSpan.FromSeconds(2))
+        {
+            Thread.Sleep(50);
+            extendedStyle = GetWindowLongPtr(popupHwnd, GWL_EXSTYLE);
+        }
+        var nativeStyle = GetWindowLongPtr(popupHwnd, GwlStyle);
+        while ((nativeStyle & unchecked((int)WsPopup)) == 0 &&
+               styleStopwatch.Elapsed < TimeSpan.FromSeconds(2))
+        {
+            Thread.Sleep(50);
+            nativeStyle = GetWindowLongPtr(popupHwnd, GwlStyle);
+        }
+        (extendedStyle & WS_EX_TOOLWINDOW).Should().NotBe(0);
+        (extendedStyle & WS_EX_NOACTIVATE).Should().Be(0);
+        (nativeStyle & unchecked((int)WsPopup)).Should().NotBe(0);
+        (nativeStyle & unchecked((int)WsCaption)).Should().Be(0);
+        Thread.Sleep(250);
+        styleProbeCancellation.Cancel();
+        styleProbe.Wait(TimeSpan.FromSeconds(2))
+            .Should().BeTrue("the temporal popup-style probe must stop promptly");
+        var sampledPopupStyles = visiblePopupStyles.ToArray();
+        sampledPopupStyles.Should().NotBeEmpty("the probe must observe the popup from its first visible frame");
+        var invalidPopupStyles = sampledPopupStyles
+            .Where(style =>
+                (style & unchecked((int)WsPopup)) == 0 ||
+                (style & unchecked((int)WsCaption)) != 0)
+            .Select(style => $"0x{unchecked((uint)style):X8}")
+            .Distinct()
+            .ToArray();
+        invalidPopupStyles.Should().BeEmpty(
+            "the popup must never expose native caption chrome while becoming visible; observed {0}",
+            string.Join(", ", invalidPopupStyles));
+
+
+        if (optionId == "long-document")
+        {
+            openScreenshotPath = ScreenshotHelper.CaptureScreenRegion(
+                Rectangle.Union(mainBounds, popupBounds),
+                "main-mode-popup-open-rust-win-fluent-iced");
+        }
+
+        var optionControlId = optionId == "long-document"
+            ? "ModeLongDocItem"
+            : "ModeTranslationItem";
+        var optionBounds = session.WaitForLiveControlBounds(
+            optionControlId,
+            TimeSpan.FromSeconds(5));
+        var optionPhysicalBounds = Rectangle.FromLTRB(
+            popupBounds.Left + (int)Math.Floor(optionBounds.Left * dpiScale),
+            popupBounds.Top + (int)Math.Floor(optionBounds.Top * dpiScale),
+            popupBounds.Left + (int)Math.Ceiling((optionBounds.Left + optionBounds.Width) * dpiScale),
+            popupBounds.Top + (int)Math.Ceiling((optionBounds.Top + optionBounds.Height) * dpiScale));
+        popupBounds.Contains(optionPhysicalBounds)
+            .Should()
+            .BeTrue(
+                $"Mode option '{optionText}' ({optionControlId}) must lie inside the popup window");
+        var optionPoint = new Point(
+            optionPhysicalBounds.Left + optionPhysicalBounds.Width / 2,
+            optionPhysicalBounds.Top + optionPhysicalBounds.Height / 2);
+        System.Collections.Concurrent.ConcurrentQueue<int>? transitionPixels = null;
+        CancellationTokenSource? transitionProbeCancellation = null;
+        Task? transitionProbe = null;
+        if (ResolveRustPreviewTheme("light") == "dark")
+        {
+            transitionPixels = new System.Collections.Concurrent.ConcurrentQueue<int>();
+            transitionProbeCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var samplePoint = new Point(
+                mainBounds.Left + mainBounds.Width / 2,
+                mainBounds.Bottom - Math.Max(16, (int)Math.Round(24 * dpiScale)));
+            var pixels = transitionPixels;
+            var cancellation = transitionProbeCancellation;
+            transitionProbe = Task.Run(() =>
+            {
+                using var pixel = new Bitmap(1, 1);
+                using var graphics = Graphics.FromImage(pixel);
+                while (!cancellation.IsCancellationRequested)
+                {
+                    graphics.CopyFromScreen(samplePoint, Point.Empty, pixel.Size);
+                    pixels.Enqueue(pixel.GetPixel(0, 0).ToArgb());
+                    Thread.Sleep(1);
+                }
+            });
+        }
+
+        Mouse.Click(optionPoint);
+        session.WaitForDebugLine(marker, expectedDebugLine, TimeSpan.FromSeconds(5));
+        var closeStopwatch = Stopwatch.StartNew();
+        while (IsWindowVisible(popupHwnd) && closeStopwatch.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            Thread.Sleep(80);
+        }
+        IsWindowVisible(popupHwnd)
+            .Should()
+            .BeFalse("selecting a mode must close the popup");
+        if (transitionProbe != null &&
+            transitionProbeCancellation != null &&
+            transitionPixels != null)
+        {
+            Thread.Sleep(250);
+            transitionProbeCancellation.Cancel();
+            transitionProbe.Wait(TimeSpan.FromSeconds(2))
+                .Should().BeTrue("the transition theme probe must stop promptly");
+            var sampledPixels = transitionPixels.ToArray();
+            sampledPixels.Should().NotBeEmpty(
+                "the probe must observe the first frames after the mode change");
+            var brightPixels = sampledPixels
+                .Where(argb =>
+                {
+                    var red = (argb >> 16) & 0xFF;
+                    var green = (argb >> 8) & 0xFF;
+                    var blue = argb & 0xFF;
+                    return 0.299 * red + 0.587 * green + 0.114 * blue > 180;
+                })
+                .ToArray();
+            _output.WriteLine(
+                $"Dark mode transition probe: samples={sampledPixels.Length}, bright={brightPixels.Length}");
+            brightPixels.Should().BeEmpty(
+                "a dark mode transition must not expose a light pre-themed frame");
+        }
+
+        if (optionId == "long-document")
+        {
+            EnsureWindowForegroundForMouseInput(rendered.Window, "mode menu focus dismissal");
+            var reopenedTrigger = session.WaitForLiveControlBounds(
+                "ModeMenuButton",
+                TimeSpan.FromSeconds(5));
+            var reopenedMainBounds = ScreenshotHelper.GetWindowPhysicalBounds(rendered.Window);
+            var reopenedTriggerPoint = new Point(
+                reopenedMainBounds.Left +
+                    (int)Math.Round((reopenedTrigger.Left + reopenedTrigger.Width / 2) * dpiScale),
+                reopenedMainBounds.Top +
+                    (int)Math.Round((reopenedTrigger.Top + reopenedTrigger.Height / 2) * dpiScale));
+            var reopenMarker = session.CaptureDebugLineMarker();
+            Mouse.MoveTo(reopenedTriggerPoint);
+            Thread.Sleep(100);
+            Mouse.Click(reopenedTriggerPoint);
+            session.WaitForDebugLine(reopenMarker, "message=OpenModeMenu", TimeSpan.FromSeconds(5));
+            var focusPopupHwnd = WaitForProcessWindowByTitle(
+                session.ProcessId,
+                "Easydict Mode Menu",
+                TimeSpan.FromSeconds(5));
+            var popupFocusStopwatch = Stopwatch.StartNew();
+            while (GetForegroundWindow() != focusPopupHwnd &&
+                   popupFocusStopwatch.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                Thread.Sleep(50);
+            }
+            GetForegroundWindow()
+                .Should()
+                .Be(focusPopupHwnd, "the opened mode popup must receive focus before focus-loss is tested");
+            EnsureWindowForegroundForMouseInput(rendered.Window, "mode menu focus dismissal");
+            var focusCloseStopwatch = Stopwatch.StartNew();
+            while (IsWindowVisible(focusPopupHwnd) &&
+                   focusCloseStopwatch.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                Thread.Sleep(80);
+            }
+            IsWindowVisible(focusPopupHwnd)
+                .Should()
+                .BeFalse("moving focus back to the main window must close the popup");
+        }
+        return openScreenshotPath;
+    }
+
+    private static IntPtr WaitForProcessWindowByTitle(
+        int processId,
+        string title,
+        TimeSpan timeout)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < timeout)
+        {
+            var hwnd = FindProcessWindowByTitle(processId, title);
+            if (hwnd != IntPtr.Zero)
+            {
+                return hwnd;
+            }
+
+            Thread.Sleep(80);
+        }
+
+        throw new TimeoutException(
+            $"Visible window '{title}' did not appear for process {processId} within {timeout}.");
+    }
+
+    private static IntPtr FindProcessWindowByTitle(int processId, string title)
+    {
+        var result = IntPtr.Zero;
+        EnumWindows((hwnd, _) =>
+        {
+            GetWindowThreadProcessId(hwnd, out var ownerProcessId);
+            if (ownerProcessId == processId &&
+                IsWindowVisible(hwnd) &&
+                string.Equals(GetWindowTitle(hwnd), title, StringComparison.Ordinal))
+            {
+                result = hwnd;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
+
+    private static int CountVisibleProcessWindowsByTitle(int processId, string title)
+    {
+        var count = 0;
+        EnumWindows((hwnd, _) =>
+        {
+            GetWindowThreadProcessId(hwnd, out var ownerProcessId);
+            if (ownerProcessId == processId &&
+                IsWindowVisible(hwnd) &&
+                string.Equals(GetWindowTitle(hwnd), title, StringComparison.Ordinal))
+            {
+                count++;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return count;
+    }
+
+    private static void EnsureWindowForegroundForMouseInput(
+        Window window,
+        string name)
+    {
+        var hwnd = SafeNativeWindowHandle(window);
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            window.SetForeground();
+            Thread.Sleep(150);
+            if (hwnd == IntPtr.Zero || GetForegroundWindow() == hwnd)
+            {
+                return;
+            }
+        }
+
+        Mouse.Click(GetWindowRelativePoint(window, 0.50, 0.02));
+        Thread.Sleep(200);
+        window.SetForeground();
+        Thread.Sleep(150);
+        if (GetForegroundWindow() == hwnd)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{name} window did not become foreground for mouse input.");
+    }
+
+    private static UiParityControlBoundsDips AdjustRustBoundsForPreviewScroll(
+        RustComboBoxMouseSelectionCase testCase,
+        IReadOnlyDictionary<string, UiParityControlDimension> dimensions,
+        UiParityControlBoundsDips bounds)
+    {
+        if (!testCase.EnvironmentOverrides.TryGetValue(
+                "EASYDICT_PREVIEW_SCROLL_TARGET",
+                out var scrollTargetId) ||
+            !testCase.EnvironmentOverrides.TryGetValue(
+                "EASYDICT_PREVIEW_SCROLL_PERCENT",
+                out var rawScrollPercent) ||
+            !double.TryParse(
+                rawScrollPercent,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var scrollPercent))
+        {
+            return bounds;
+        }
+
+        var scrollContentId = scrollTargetId switch
+        {
+            "main.long-doc.scroll" => "main.long-doc.content",
+            _ => throw new InvalidOperationException(
+                $"Missing scroll-content mapping for {scrollTargetId}.")
+        };
+        var scrollBounds = dimensions.TryGetValue(scrollTargetId, out var scroll) ?
+            scroll.BoundsDips : null;
+        var contentBounds = dimensions.TryGetValue(scrollContentId, out var content) ?
+            content.BoundsDips : null;
+        if (scrollBounds is null || contentBounds is null)
+        {
+            throw new InvalidOperationException(
+                $"Missing bounds for preview scroll '{scrollTargetId}' or '{scrollContentId}'.");
+        }
+
+        var normalizedPercent = Math.Clamp(
+            scrollPercent > 1 ? scrollPercent / 100 : scrollPercent,
+            0,
+            1);
+        var scrollOffset = Math.Max(
+            0,
+            contentBounds.Height - scrollBounds.Height) * normalizedPercent;
+        return bounds with { Top = bounds.Top - scrollOffset };
+    }
+
+    private static RustComboOverlayGeometry ParseRustComboOverlayGeometry(
+        string line,
+        string expectedControlId)
+    {
+        var values = line
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Skip(2)
+            .Select(token => token.Split('=', 2))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.Ordinal);
+        if (!values.TryGetValue("control_id", out var controlId) ||
+            !string.Equals(controlId, expectedControlId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Overlay diagnostic control id did not match '{expectedControlId}': {line}");
+        }
+
+        static double Required(IReadOnlyDictionary<string, string> source, string key)
+        {
+            if (!source.TryGetValue(key, out var raw) ||
+                !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                !double.IsFinite(value))
+            {
+                throw new InvalidOperationException($"Overlay diagnostic is missing numeric '{key}'.");
+            }
+
+            return value;
+        }
+
+        if (!values.TryGetValue("selected_index", out var selectedRaw) ||
+            !int.TryParse(selectedRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var selectedIndex) ||
+            !values.TryGetValue("viewport_clamped", out var clampedRaw) ||
+            !bool.TryParse(clampedRaw, out var viewportClamped))
+        {
+            throw new InvalidOperationException($"Overlay diagnostic has invalid selection fields: {line}");
+        }
+
+        return new RustComboOverlayGeometry(
+            controlId,
+            Required(values, "collapsed_x"),
+            Required(values, "collapsed_y"),
+            Required(values, "collapsed_width"),
+            Required(values, "collapsed_height"),
+            Required(values, "menu_x"),
+            Required(values, "menu_y"),
+            Required(values, "menu_width"),
+            Required(values, "menu_height"),
+            Required(values, "row_height"),
+            selectedIndex,
+            viewportClamped);
+    }
+
+    private static void AssertOverlayWithinWindow(
+        RustComboOverlayGeometry geometry,
+        int itemCount,
+        float widthDips,
+        float heightDips)
+    {
+        const double tolerance = 2;
+        geometry.MenuLeft.Should().BeGreaterThanOrEqualTo(-tolerance);
+        geometry.MenuTop.Should().BeGreaterThanOrEqualTo(-tolerance);
+        (geometry.MenuLeft + geometry.MenuWidth)
+            .Should().BeLessThanOrEqualTo(widthDips + tolerance);
+        (geometry.MenuTop + geometry.MenuHeight)
+            .Should().BeLessThanOrEqualTo(float.IsFinite(heightDips) ? heightDips + tolerance : double.MaxValue);
+        if (!geometry.ViewportClamped && geometry.SelectedIndex >= 0)
+        {
+            var rowHeight = Math.Max(1, geometry.RowHeight);
+            var maximumScrollOffset = Math.Max(0, itemCount * rowHeight - geometry.MenuHeight);
+            var scrollOffset = Math.Min(
+                geometry.SelectedIndex * rowHeight,
+                maximumScrollOffset);
+            var selectedCenter = geometry.MenuTop
+                + geometry.SelectedIndex * rowHeight
+                - scrollOffset
+                + rowHeight / 2;
+            (selectedCenter - (geometry.CollapsedTop + geometry.CollapsedHeight / 2))
+                .Should().BeInRange(-tolerance, tolerance);
+        }
+    }
+
+    private static Point RustComboBoxOptionClickPoint(
+        Window window,
+        RustComboOverlayGeometry geometry,
+        RustComboBoxMouseSelectionCase testCase,
+        string optionText,
+        int optionRow,
+        int selectedRow)
+    {
+        var rowHeight = Math.Max(1, geometry.RowHeight);
+        var contentHeight = testCase.ItemCount * rowHeight;
+        var maximumScrollOffset = Math.Max(0, contentHeight - geometry.MenuHeight);
+        var scrollOffset = Math.Min(selectedRow * rowHeight, maximumScrollOffset);
+        var optionX = geometry.MenuLeft + geometry.MenuWidth / 2;
+        var optionY = geometry.MenuTop + optionRow * rowHeight - scrollOffset + rowHeight / 2;
+        if (optionX < geometry.MenuLeft ||
+            optionX > geometry.MenuLeft + geometry.MenuWidth ||
+            optionY < geometry.MenuTop ||
+            optionY > geometry.MenuTop + geometry.MenuHeight)
+        {
+            throw new InvalidOperationException(
+                $"ComboBox option '{optionText}' resolved outside menu bounds at ({optionX:0.##}, {optionY:0.##}) DIP.");
+        }
+
+        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+        var point = new Point(
+            windowBounds.Left + (int)Math.Round(optionX * dpiScale),
+            windowBounds.Top + (int)Math.Round(optionY * dpiScale));
+        if (!new Rectangle(windowBounds.Left, windowBounds.Top, windowBounds.Width, windowBounds.Height)
+                .Contains(point))
+        {
+            throw new InvalidOperationException(
+                $"ComboBox option '{optionText}' resolved outside physical window at {point}.");
+        }
+
+        return point;
+    }
+
+    [Fact]
     public void RustPreviewMetrics_ShouldCountOneSessionProcessAndTwoSuccessfulGenerations()
     {
         ResetRustPreviewRunMetrics();
@@ -554,6 +2273,19 @@ public sealed class DotnetRustParityTests : IDisposable
         metrics.RustRenderDurationsMs.Should().Equal(11, 17);
         metrics.RustTimeouts.Should().Be(0);
         metrics.HarnessInvalid.Should().Be(0);
+    }
+
+    [Fact]
+    public void RustPreviewExecutableResolution_ShouldHonorExplicitBuildRequest()
+    {
+        SelectRustPreviewDefaultExecutable(buildRequested: true, defaultExecutableExists: true)
+            .Should().Be(RustPreviewDefaultExecutableResolution.Build);
+        SelectRustPreviewDefaultExecutable(buildRequested: true, defaultExecutableExists: false)
+            .Should().Be(RustPreviewDefaultExecutableResolution.Build);
+        SelectRustPreviewDefaultExecutable(buildRequested: false, defaultExecutableExists: true)
+            .Should().Be(RustPreviewDefaultExecutableResolution.Existing);
+        SelectRustPreviewDefaultExecutable(buildRequested: false, defaultExecutableExists: false)
+            .Should().Be(RustPreviewDefaultExecutableResolution.Missing);
     }
 
     [Fact]
@@ -795,7 +2527,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 schemaPath,
                 """
                 ViewSchema version=1
-                Grid rows=[Fixed(60),Fixed(58),Fixed(61)] columns=[Fill,Fill,Fill,Fixed(110)] row_spacing=4 column_spacing=8 padding=0 width=Fill height=Shrink align=Start children=9 id="LongDocControlGrid"
+                Grid rows=[Fixed(60),Fixed(58),Shrink] columns=[Fill,Fill,Fill,Fill] row_spacing=4 column_spacing=8 padding=0 width=Fill height=Shrink align=Start children=9 id="LongDocControlGrid"
                 """);
 
             var summary = TryReadRustSchemaUiSummary(schemaPath);
@@ -806,7 +2538,7 @@ public sealed class DotnetRustParityTests : IDisposable
             var dimension = summary.VisibleControlDimensions["LongDocControlGrid"];
             dimension.RowSpacing.Should().Be("4");
             dimension.ColumnSpacing.Should().Be("8");
-            dimension.Columns.Should().Be("[Fill,Fill,Fill,Fixed(110)]");
+            dimension.Columns.Should().Be("[Fill,Fill,Fill,Fill]");
         }
         finally
         {
@@ -5133,6 +6865,40 @@ public sealed class DotnetRustParityTests : IDisposable
         return ScreenshotHelper.CaptureWindow(window, screenshotName);
     }
 
+    private static void PrepareDotnetLongDocument(Window window)
+    {
+        DismissHotkeyRegistrationDialogIfPresent(window);
+        if (FindVisibleByAutomationId(window, "LongDocSourceLangCombo") == null)
+        {
+            SwitchDotnetToLongDocumentMode(window);
+        }
+        DismissHotkeyRegistrationDialogIfPresent(window);
+        WaitForLongDocumentReady(window, "dotnet");
+    }
+
+    private static void DismissHotkeyRegistrationDialogIfPresent(Window window)
+    {
+        var title = FindVisibleByAutomationIdOrName(window, "Hotkey Registration Failed")
+            ?? FindVisibleByAutomationIdOrName(window, "快捷键注册失败");
+        if (title == null)
+        {
+            return;
+        }
+
+        var dismiss = FindVisibleByAutomationIdOrName(window, "OK")
+            ?? FindVisibleByAutomationIdOrName(window, "确定");
+        if (dismiss != null)
+        {
+            UITestHelper.ClickElement(dismiss);
+        }
+        else
+        {
+            window.SetForeground();
+            Keyboard.Press(VirtualKeyShort.RETURN);
+        }
+        Thread.Sleep(300);
+    }
+
     private static void SwitchDotnetToLongDocumentMode(Window window)
     {
         window.SetForeground();
@@ -6084,8 +7850,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
     private static string CaptureForegroundWindow(Window window, string name)
     {
-        window.SetForeground();
-        Thread.Sleep(250);
+        EnsureWindowForegroundForMouseInput(window, name);
         return CaptureWindowPreferHwnd(window, name);
     }
 
@@ -9860,6 +11625,14 @@ public sealed class DotnetRustParityTests : IDisposable
         settings["SourceLanguage"] = "auto";
         settings["MouseSelectionTranslate"] = true;
         settings["MouseSelectionExcludedApps"] = new[] { "code" };
+        settings["MinimizeToTray"] = false;
+        settings["MinimizeToTrayOnStartup"] = false;
+        settings["EnableShowWindowHotkey"] = false;
+        settings["EnableTranslateSelectionHotkey"] = false;
+        settings["EnableShowMiniWindowHotkey"] = false;
+        settings["EnableShowFixedWindowHotkey"] = false;
+        settings["EnableOcrTranslateHotkey"] = false;
+        settings["EnableSilentOcrHotkey"] = false;
         settings["EnableInternationalServices"] = true;
         settings["OllamaEndpoint"] = "http://localhost:11434/v1/chat/completions";
         settings["OllamaModel"] = "llama3.2";
@@ -9942,6 +11715,33 @@ public sealed class DotnetRustParityTests : IDisposable
             "dark" => "Dark",
             _ => "System"
         };
+    }
+
+    private static string ResolveDotnetReferenceExecutable()
+    {
+        var configured = Environment.GetEnvironmentVariable("EASYDICT_EXE_PATH");
+        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
+        {
+            return Path.GetFullPath(configured);
+        }
+
+        var binDirectory = Path.Combine(
+            FindRepositoryRootForParity(),
+            "dotnet",
+            "src",
+            "Easydict.WinUI",
+            "bin");
+        var candidate = Directory.Exists(binDirectory)
+            ? Directory
+                .EnumerateFiles(binDirectory, "Easydict.WinUI.exe", SearchOption.AllDirectories)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault()
+            : null;
+        return candidate
+            ?? AppLauncher.TryGetInstalledExecutablePath()
+            ?? throw new FileNotFoundException(
+                "Build dotnet/src/Easydict.WinUI or install Easydict before running the mode-popup parity test.",
+                binDirectory);
     }
 
     private static string ResolveDotnetWinUiVersion()
@@ -10028,6 +11828,55 @@ public sealed class DotnetRustParityTests : IDisposable
         }
         _rustPreviewSessions.Clear();
         _dotnetLauncher.Dispose();
+    }
+
+    private sealed record RustComboBoxMouseSelectionCase(
+        string Scenario,
+        float WidthDips,
+        float HeightDips,
+        string ControlId,
+        string OptionText,
+        int OptionRow,
+        int SelectedRow,
+        int ItemCount,
+        string ExpectedDebugLine,
+        IReadOnlyDictionary<string, string> EnvironmentOverrides,
+        string PreviewWindow = "main",
+        bool ScrollAwayBeforeSelection = false);
+
+    private sealed record RustComboOverlayGeometry(
+        string ControlId,
+        double CollapsedLeft,
+        double CollapsedTop,
+        double CollapsedWidth,
+        double CollapsedHeight,
+        double MenuLeft,
+        double MenuTop,
+        double MenuWidth,
+        double MenuHeight,
+        double RowHeight,
+        int SelectedIndex,
+        bool ViewportClamped);
+
+    private enum RustPreviewDefaultExecutableResolution
+    {
+        Build,
+        Existing,
+        Missing
+    }
+
+    private static RustPreviewDefaultExecutableResolution SelectRustPreviewDefaultExecutable(
+        bool buildRequested,
+        bool defaultExecutableExists)
+    {
+        if (buildRequested)
+        {
+            return RustPreviewDefaultExecutableResolution.Build;
+        }
+
+        return defaultExecutableExists
+            ? RustPreviewDefaultExecutableResolution.Existing
+            : RustPreviewDefaultExecutableResolution.Missing;
     }
 
     private sealed record SettingsParitySection(string Id, string Label, string DotnetReadyElement)
@@ -10998,10 +12847,14 @@ public sealed class DotnetRustParityTests : IDisposable
     {
         private readonly Application _application;
         private readonly UIA3Automation _automation;
+        private readonly Process _debugProcess;
+        private readonly object _debugLinesLock;
+        private readonly List<string> _debugLines;
         private readonly EventWaitHandle _requestEvent;
         private readonly string _sessionId;
         private readonly string _requestPath;
         private readonly string _ackPath;
+        private readonly string _liveBoundsPath;
         private readonly string _outputRoot;
         private readonly string _window;
         private readonly string _theme;
@@ -11015,9 +12868,13 @@ public sealed class DotnetRustParityTests : IDisposable
             Application application,
             UIA3Automation automation,
             EventWaitHandle requestEvent,
+            Process debugProcess,
+            List<string> debugLines,
+            object debugLinesLock,
             string sessionId,
             string requestPath,
             string ackPath,
+            string liveBoundsPath,
             string outputRoot,
             string window,
             string theme,
@@ -11028,9 +12885,13 @@ public sealed class DotnetRustParityTests : IDisposable
             _application = application;
             _automation = automation;
             _requestEvent = requestEvent;
+            _debugProcess = debugProcess;
+            _debugLines = debugLines;
+            _debugLinesLock = debugLinesLock;
             _sessionId = sessionId;
             _requestPath = requestPath;
             _ackPath = ackPath;
+            _liveBoundsPath = liveBoundsPath;
             _outputRoot = outputRoot;
             _window = window;
             _theme = theme;
@@ -11041,6 +12902,50 @@ public sealed class DotnetRustParityTests : IDisposable
 
         public int ProcessId => _application.ProcessId;
         private bool HasExited => _application.HasExited;
+        public int CaptureDebugLineMarker()
+        {
+            lock (_debugLinesLock)
+            {
+                return _debugLines.Count;
+            }
+        }
+
+        public void WaitForDebugLine(int marker, string expectedPayload, TimeSpan timeout)
+        {
+            _ = WaitForDebugLineValue(marker, expectedPayload, timeout);
+        }
+
+        public string WaitForDebugLineValue(int marker, string expectedPayload, TimeSpan timeout)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            while (stopwatch.Elapsed < timeout)
+            {
+                string[] lines;
+                lock (_debugLinesLock)
+                {
+                    lines = _debugLines
+                        .Skip(Math.Min(marker, _debugLines.Count))
+                        .ToArray();
+                }
+                var match = lines.FirstOrDefault(line =>
+                    line.Contains(expectedPayload, StringComparison.Ordinal));
+                if (match is not null)
+                {
+                    return match;
+                }
+                Thread.Sleep(50);
+            }
+
+            string[] observed;
+            lock (_debugLinesLock)
+            {
+                observed = _debugLines
+                    .Skip(Math.Min(marker, _debugLines.Count))
+                    .ToArray();
+            }
+            throw new TimeoutException(
+                $"Missing debug payload '{expectedPayload}'. Later stderr lines: {string.Join(Environment.NewLine, observed)}");
+        }
 
         public static RustPreviewSession Launch(
             string window,
@@ -11077,12 +12982,15 @@ public sealed class DotnetRustParityTests : IDisposable
             var eventName = $@"Local\Easydict-PreviewControl-{sessionId}";
             var requestPath = Path.Combine(fullOutputRoot, $"preview-control-{sessionId}.request.json");
             var ackPath = Path.Combine(fullOutputRoot, $"preview-control-{sessionId}.ack.json");
+            var liveBoundsPath = Path.Combine(fullOutputRoot, $"preview-live-bounds-{sessionId}.txt");
             var exePath = ResolveRustPreviewExecutable(output);
             var startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 WorkingDirectory = Path.Combine(FindRepositoryRoot(), "rs"),
-                UseShellExecute = false
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                CreateNoWindow = true
             };
             UiaSettingsIsolation.ApplyTo(startInfo);
             if (startupEnvironment != null)
@@ -11092,7 +13000,6 @@ public sealed class DotnetRustParityTests : IDisposable
                     startInfo.Environment[key] = value;
                 }
             }
-
             startInfo.Environment["EASYDICT_PREVIEW_WINDOW"] = window;
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_OPEN"] =
                 string.Equals(window, "settings", StringComparison.OrdinalIgnoreCase) ? "1" : "0";
@@ -11110,12 +13017,30 @@ public sealed class DotnetRustParityTests : IDisposable
             startInfo.Environment["EASYDICT_PREVIEW_CONTROL_ACK_PATH"] = ackPath;
             startInfo.Environment["EASYDICT_PREVIEW_CONTROL_OUTPUT_ROOT"] = fullOutputRoot;
             startInfo.Environment["EASYDICT_PREVIEW_CONTROL_SESSION_ID"] = sessionId;
+            startInfo.Environment["EASYDICT_PREVIEW_BOUNDS_PATH"] = liveBoundsPath;
 
             var automation = new UIA3Automation();
             Application? application = null;
+            Process? debugProcess = null;
             try
             {
-                application = Application.Launch(startInfo);
+                var debugLines = new List<string>();
+                var debugLinesLock = new object();
+                debugProcess = Process.Start(startInfo)
+                    ?? throw new InvalidOperationException("Failed to start Rust preview.");
+                application = new Application(debugProcess);
+                debugProcess.ErrorDataReceived += (_, args) =>
+                {
+                    if (args.Data is null)
+                    {
+                        return;
+                    }
+                    lock (debugLinesLock)
+                    {
+                        debugLines.Add(args.Data);
+                    }
+                };
+                debugProcess.BeginErrorReadLine();
                 RecordRustPreviewProcessStart();
 
                 var readyStopwatch = Stopwatch.StartNew();
@@ -11141,9 +13066,13 @@ public sealed class DotnetRustParityTests : IDisposable
                             application,
                             automation,
                             requestEvent,
+                            debugProcess,
+                            debugLines,
+                            debugLinesLock,
                             sessionId,
                             requestPath,
                             ackPath,
+                            liveBoundsPath,
                             fullOutputRoot,
                             window,
                             theme,
@@ -11163,10 +13092,8 @@ public sealed class DotnetRustParityTests : IDisposable
             }
             catch
             {
-                if (application != null)
-                {
-                    DisposeApplication(application);
-                }
+                DisposeDebugProcess(debugProcess);
+                DisposePreviewApplication(application);
                 automation.Dispose();
                 throw;
             }
@@ -11392,7 +13319,29 @@ public sealed class DotnetRustParityTests : IDisposable
             }
         }
 
-        private Window GetMainWindow(TimeSpan timeout)
+
+        public UiParityControlBoundsDips WaitForLiveControlBounds(
+            string controlId,
+            TimeSpan timeout)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            while (stopwatch.Elapsed < timeout)
+            {
+                var dimensions = TryReadRustBoundsControlDimensions(_liveBoundsPath);
+                if (dimensions.TryGetValue(controlId, out var dimension) &&
+                    dimension.BoundsDips is { } bounds)
+                {
+                    return bounds;
+                }
+
+                Thread.Sleep(50);
+            }
+
+            throw new TimeoutException(
+                $"Live Rust bounds did not expose control ID '{controlId}' within {timeout}.");
+        }
+
+        public Window GetMainWindow(TimeSpan timeout)
         {
             var stopwatch = Stopwatch.StartNew();
             Exception? lastException = null;
@@ -11510,12 +13459,15 @@ public sealed class DotnetRustParityTests : IDisposable
 
             var repoRoot = FindRepositoryRoot();
             var defaultPath = Path.Combine(repoRoot, "rs", "target", "debug", "easydict_preview_iced.exe");
-            if (File.Exists(defaultPath))
+            var resolution = SelectRustPreviewDefaultExecutable(
+                IsTruthy(Environment.GetEnvironmentVariable(RustPreviewBuildEnvironmentVariable)),
+                File.Exists(defaultPath));
+            if (resolution == RustPreviewDefaultExecutableResolution.Existing)
             {
                 return defaultPath;
             }
 
-            if (IsTruthy(Environment.GetEnvironmentVariable(RustPreviewBuildEnvironmentVariable)))
+            if (resolution == RustPreviewDefaultExecutableResolution.Build)
             {
                 output.WriteLine("Building Rust preview executable: cargo build -p easydict_preview_iced");
                 var build = Process.Start(new ProcessStartInfo
@@ -11623,26 +13575,65 @@ public sealed class DotnetRustParityTests : IDisposable
             finally
             {
                 _requestEvent.Dispose();
-                DisposeApplication(_application);
+                DisposeDebugProcess(_debugProcess);
+                DisposePreviewApplication(_application);
                 _automation.Dispose();
             }
         }
 
-        private static void DisposeApplication(Application application)
+        private static void DisposePreviewApplication(Application? application)
         {
+            if (application is null)
+            {
+                return;
+            }
+
             try
             {
-                if (!application.HasExited)
-                {
-                    application.Kill();
-                }
+                application.Dispose();
             }
             catch (InvalidOperationException)
             {
             }
         }
-    }
 
+        private static void DisposeDebugProcess(Process? process)
+
+        {
+            if (process is null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                if (process.WaitForExit(3000) && process.HasExited)
+                {
+                    process.WaitForExit();
+                }
+            }
+            catch (Exception error) when (
+                error is InvalidOperationException or ObjectDisposedException or
+                System.ComponentModel.Win32Exception)
+            {
+            }
+            finally
+            {
+                try
+                {
+                    process.CancelErrorRead();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                process.Dispose();
+            }
+        }
+    }
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -11650,12 +13641,22 @@ public sealed class DotnetRustParityTests : IDisposable
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+    [DllImport("user32.dll")]
+    private static extern bool IsZoomed(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
+
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
     [DllImport("user32.dll")]
+
     private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
     [DllImport("user32.dll")]
@@ -11663,6 +13664,16 @@ public sealed class DotnetRustParityTests : IDisposable
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int processId);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int Size;
+        public NativeWindowRect Monitor;
+        public NativeWindowRect WorkArea;
+        public uint Flags;
+    }
+
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
@@ -11686,6 +13697,18 @@ public sealed class DotnetRustParityTests : IDisposable
         uint timeout,
         out IntPtr result);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetCursorInfo(ref CursorInfo cursorInfo);
+
+    [DllImport("user32.dll", EntryPoint = "LoadCursorW", SetLastError = true)]
+    private static extern IntPtr LoadCursor(IntPtr instance, IntPtr cursorName);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtrNative(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ClientToScreen(IntPtr hWnd, ref NativePoint lpPoint);
+
     [DllImport("user32.dll")]
     private static extern bool SetCursorPos(int x, int y);
 
@@ -11698,15 +13721,106 @@ public sealed class DotnetRustParityTests : IDisposable
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(
+        uint inputCount,
+        NativeInput[] inputs,
+        int inputSize);
+
+    private const int GwlStyle = -16;
+    private const uint WsPopup = 0x80000000;
+    private const uint WsCaption = 0x00C00000;
+    private const uint WsThickFrame = 0x00040000;
+    private const uint WsVisible = 0x10000000;
+    private const int IdcArrow = 32512;
+    private const int IdcSizeNwSe = 32642;
+    private const int IdcSizeNeSw = 32643;
+    private const int IdcSizeWe = 32644;
+    private const int IdcSizeNs = 32645;
     private const int GWL_EXSTYLE = -20;
     private const int ShowWindowHide = 0;
     private const int ShowWindowRestore = 9;
+    private const uint MonitorDefaultToNearest = 2;
     private const int WM_CONTEXTMENU = 0x007B;
     private const int WM_USER = 0x0400;
     private static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_TOPMOST = 0x00000008;
     private const int WS_EX_NOACTIVATE = 0x08000000;
+
+    private const uint InputKeyboard = 1;
+    private const uint KeyEventKeyUp = 0x0002;
+    private const uint KeyEventUnicode = 0x0004;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeInput
+    {
+        public uint Type;
+        public NativeInputUnion Data;
+
+        public static NativeInput UnicodeKey(char character, bool keyUp)
+        {
+            return new NativeInput
+            {
+                Type = InputKeyboard,
+                Data = new NativeInputUnion
+                {
+                    Keyboard = new NativeKeyboardInput
+                    {
+                        ScanCode = character,
+                        Flags = KeyEventUnicode | (keyUp ? KeyEventKeyUp : 0),
+                    },
+                },
+            };
+        }
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct NativeInputUnion
+    {
+        [FieldOffset(0)]
+        public NativeMouseInput Mouse;
+
+        [FieldOffset(0)]
+        public NativeKeyboardInput Keyboard;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeMouseInput
+    {
+        public int X;
+        public int Y;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeKeyboardInput
+    {
+        public ushort VirtualKey;
+        public ushort ScanCode;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CursorInfo
+    {
+        public int Size;
+        public int Flags;
+        public IntPtr Cursor;
+        public NativePoint ScreenPosition;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct NativeWindowRect

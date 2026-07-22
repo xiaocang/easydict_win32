@@ -17,9 +17,7 @@ pub fn view_snapshot<Message>(view: &View<Message>) -> String {
 }
 
 #[cfg(feature = "parity-diagnostics")]
-pub fn diagnostic_snapshot<Message>(
-    view: &View<Message>,
-) -> win_fluent::DiagnosticViewSchema {
+pub fn diagnostic_snapshot<Message>(view: &View<Message>) -> win_fluent::DiagnosticViewSchema {
     win_fluent::diagnostic_view_schema(view)
 }
 
@@ -939,13 +937,14 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::ComboBox(token) => {
             let _ = writeln!(
                 output,
-                "{pad}ComboBox id={:?} items={} selected={:?} selected_label={:?} width={:?} height={:?} enabled={}",
+                "{pad}ComboBox id={:?} items={} selected={:?} selected_label={:?} width={:?} height={:?} wrapping={:?} enabled={}",
                 token.id,
                 token.items.len(),
                 token.selected,
                 token.selected_label(),
                 token.width,
                 token.height,
+                token.wrapping,
                 token.state.enabled
             );
         }
@@ -1304,7 +1303,10 @@ mod tests {
 
         let diagnostic = crate::diagnostic_snapshot(&view);
 
-        assert_eq!(diagnostic.root.provenance.constructor.line, constructor_line);
+        assert_eq!(
+            diagnostic.root.provenance.constructor.line,
+            constructor_line
+        );
         assert_eq!(
             diagnostic_source_line(&diagnostic.root, "height"),
             constructor_line
@@ -1389,9 +1391,7 @@ mod tests {
         let flyout_constructor_line = line!() + 1;
         let flyout_builder = flyout::<Msg, _, _>(text("anchor"), text("content"));
         let flyout_placement_line = line!() + 2;
-        let flyout = flyout_builder
-            .placement(FlyoutPlacement::Top)
-            .into_view();
+        let flyout = flyout_builder.placement(FlyoutPlacement::Top).into_view();
         let flyout_diagnostic = crate::diagnostic_snapshot(&flyout);
         assert_eq!(
             flyout_diagnostic.root.provenance.constructor.line,
@@ -1437,8 +1437,7 @@ mod tests {
         );
 
         let result_card_constructor_line = line!() + 2;
-        let result_card_builder =
-            result_card::<Msg>(ResultItem::new("card", "Card", "Body"));
+        let result_card_builder = result_card::<Msg>(ResultItem::new("card", "Card", "Body"));
         let result_card_transition_line = line!() + 1;
         let result_card = result_card_builder.collapse_transition_ms(180).into_view();
         let result_card_diagnostic = crate::diagnostic_snapshot(&result_card);
@@ -1447,10 +1446,7 @@ mod tests {
             result_card_constructor_line
         );
         assert_eq!(
-            diagnostic_source_line(
-                &result_card_diagnostic.root,
-                "collapse_transition_ms"
-            ),
+            diagnostic_source_line(&result_card_diagnostic.root, "collapse_transition_ms"),
             result_card_transition_line
         );
     }
@@ -1465,14 +1461,8 @@ mod tests {
         let diagnostic = crate::diagnostic_snapshot(&view);
 
         assert_eq!(diagnostic.root.children.len(), 2);
-        assert_eq!(
-            diagnostic.root.children[0].id.as_deref(),
-            Some("duplicate")
-        );
-        assert_eq!(
-            diagnostic.root.children[1].id.as_deref(),
-            Some("duplicate")
-        );
+        assert_eq!(diagnostic.root.children[0].id.as_deref(), Some("duplicate"));
+        assert_eq!(diagnostic.root.children[1].id.as_deref(), Some("duplicate"));
         assert_ne!(
             diagnostic.root.children[0].path,
             diagnostic.root.children[1].path

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fmt;
@@ -53,15 +54,15 @@ use win_fluent::view::{
     AdaptiveSwitchToken, Alignment, AutoSuggestBoxToken, BusyOverlayToken, ButtonKind,
     CaptureOverlayToken, CardKind, CardToken, CheckBoxToken, CollapseTransition, ComboBoxItem,
     Edges, ExpanderToken, FlyoutButtonToken, FlyoutMenuItem, FlyoutPlacement, FlyoutToken,
-    GridChild, GridToken, InfoBarToken, IntoView, LayoutDistribution, LayoutKind, LayoutToken,
-    Length, ListViewToken, NavigationViewToken, NumberBoxToken, Orientation, OverlayToken,
-    PaneDisplayMode, PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel,
-    ProgressBarToken, ProgressRingToken, RadioGroupToken, ResultCardToken, ResultItem,
-    ResultListToken, ResultStatus, RichTextToken, ScrollPolicy, SettingsRowToken, SliderToken,
-    SplitButtonToken, StatusBadgeKind, StatusBadgeToken, TabViewToken, TextEditorChrome,
-    TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken, TextRunKind,
-    TextStyle, TextToken, TextWrapping, TitleBarToken, TooltipPlacement, TrayMenuToken, TreeNode,
-    TreeViewToken, View, ViewToken, WrapToken,
+    GridToken, InfoBarToken, IntoView, LayoutDistribution, LayoutKind, LayoutToken, Length,
+    ListViewToken, NavigationViewToken, NumberBoxToken, Orientation, OverlayToken, PaneDisplayMode,
+    PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken,
+    ProgressRingToken, RadioGroupToken, ResultCardToken, ResultItem, ResultListToken, ResultStatus,
+    RichTextToken, ScrollPolicy, SettingsRowToken, SliderToken, SplitButtonToken, StatusBadgeKind,
+    StatusBadgeToken, TabViewToken, TextEditorChrome, TextEditorKey, TextEditorKeyBinding,
+    TextEditorKeyModifiers, TextEditorToken, TextRunKind, TextStyle, TextToken, TextWrapping,
+    TitleBarToken, TooltipPlacement, TrayMenuToken, TreeNode, TreeViewToken, View, ViewToken,
+    WrapToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -69,6 +70,7 @@ use win_fluent::window::{
 };
 
 pub type IcedElement<'a, Message> = Element<'a, Message>;
+
 pub type IcedTextEditorContent = iced_text_editor_state::Content<iced::Renderer>;
 
 const FLUENT_TRAY_MENU_WINDOW_ID: &str = "__win_fluent_tray_menu";
@@ -147,7 +149,7 @@ impl IcedAdapter {
         runtime_diagnostics::prepare_view(view);
         compile_view_with_text_editors_and_visual(
             view,
-            |_| None::<&IcedTextEditorContent>,
+            EmptyTextEditorProvider,
             IcedVisualTheme::from_tokens(theme),
         )
     }
@@ -194,6 +196,10 @@ impl IcedAdapter {
 
     pub fn hotkey_subscription(hotkey: Hotkey) -> Subscription<IcedHotkeyEvent> {
         iced_hotkey_subscription(hotkey)
+    }
+
+    pub fn theme_subscription() -> Subscription<ThemeMode> {
+        iced_theme_subscription()
     }
 
     pub fn named_event_subscription(
@@ -757,12 +763,42 @@ where
     )
     .title(|state: &IcedSingleWindowRuntime<App>, window| state.title_for_native_window(window))
     .subscription(IcedSingleWindowRuntime::<App>::subscription)
-    .style(transparent_daemon_style::<App>)
+    .theme(|state: &IcedSingleWindowRuntime<App>, window| {
+        state.renderer_theme_for_native_window(window)
+    })
+    .style(daemon_style::<App>)
     .run()
     .map_err(|error| error.to_string())
 }
 
-fn transparent_daemon_style<App>(
+fn iced_theme_from_tokens(tokens: &ThemeTokens) -> iced::Theme {
+    iced_theme_from_tokens_with_background(tokens, iced_color(tokens.background))
+}
+
+fn iced_transparent_theme_from_tokens(tokens: &ThemeTokens) -> iced::Theme {
+    iced_theme_from_tokens_with_background(tokens, Color::TRANSPARENT)
+}
+
+fn iced_theme_from_tokens_with_background(tokens: &ThemeTokens, background: Color) -> iced::Theme {
+    iced::Theme::custom(
+        "win-fluent",
+        iced::theme::Palette {
+            background,
+            text: iced_color(tokens.text_primary),
+            primary: iced_color(tokens.accent.base),
+            success: iced_color(tokens.status_connected),
+            warning: iced_color(tokens.warning),
+            danger: iced_color(tokens.status_error),
+        },
+    )
+}
+
+fn theme_uses_dark_native_frame(tokens: &ThemeTokens) -> bool {
+    let background = tokens.background;
+    (5 * u16::from(background.g) + 2 * u16::from(background.r) + u16::from(background.b)) <= 8 * 128
+}
+
+fn daemon_style<App>(
     _state: &IcedSingleWindowRuntime<App>,
     theme: &iced::Theme,
 ) -> iced::theme::Style
@@ -771,7 +807,7 @@ where
 {
     let base = theme.base();
     iced::theme::Style {
-        background_color: Color::TRANSPARENT,
+        background_color: base.background_color,
         text_color: base.text_color,
     }
 }
@@ -800,6 +836,9 @@ struct RuntimeWindow {
 
 struct IcedSingleWindowRuntime<App: FluentApplication> {
     app: App,
+    renderer_theme_tokens: ThemeTokens,
+    renderer_theme: iced::Theme,
+    transparent_renderer_theme: iced::Theme,
     boot_window_id: WindowId,
     boot_window_options: WindowOptions,
     window_title_overrides: HashMap<WindowId, String>,
@@ -854,9 +893,15 @@ where
         desktop_integration: DesktopIntegrationPlan<App::Message>,
     ) -> Self {
         let boot_window_id = window_options.id.clone();
+        let renderer_theme_tokens = app.theme_tokens();
+        let renderer_theme = iced_theme_from_tokens(&renderer_theme_tokens);
+        let transparent_renderer_theme = iced_transparent_theme_from_tokens(&renderer_theme_tokens);
 
         let mut runtime = Self {
             app,
+            renderer_theme_tokens,
+            renderer_theme,
+            transparent_renderer_theme,
             boot_window_id,
             boot_window_options: window_options,
             window_title_overrides: HashMap::new(),
@@ -879,7 +924,15 @@ where
         runtime
     }
 
-    fn rebuild_views(&mut self) {
+    fn rebuild_views(&mut self) -> bool {
+        let theme_tokens = self.app.theme_tokens();
+        let theme_changed = theme_tokens != self.renderer_theme_tokens;
+        if theme_changed {
+            self.renderer_theme = iced_theme_from_tokens(&theme_tokens);
+            self.transparent_renderer_theme = iced_transparent_theme_from_tokens(&theme_tokens);
+            self.renderer_theme_tokens = theme_tokens;
+        }
+
         let mut windows = vec![self.boot_window_id.clone()];
         windows.extend(self.logical_windows.keys().cloned());
         windows.extend(
@@ -894,6 +947,23 @@ where
             if !self.has_custom_window_view(&window) {
                 self.sync_window_view(&window, None);
             }
+        }
+
+        theme_changed
+    }
+    fn renderer_theme_for_native_window(&self, window: window::Id) -> iced::Theme {
+        let options = self
+            .native_windows
+            .get(&window)
+            .or_else(|| self.pending_windows.get(&window))
+            .map(|runtime_window| &runtime_window.options);
+        let uses_transparent_surface =
+            options.is_some_and(|options| options.frame == WindowFrame::Acrylic);
+
+        if uses_transparent_surface {
+            self.transparent_renderer_theme.clone()
+        } else {
+            self.renderer_theme.clone()
         }
     }
 
@@ -954,6 +1024,27 @@ where
         })
     }
 
+    fn apply_native_frame_theme_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        #[cfg(windows)]
+        {
+            let enabled = theme_uses_dark_native_frame(&self.renderer_theme_tokens);
+            return iced::Task::batch(self.native_windows.keys().copied().map(move |window_id| {
+                window::run(window_id, move |handle| {
+                    if let Some(hwnd) = native_window_handle(handle) {
+                        let _ =
+                            win_fluent_platform_win::WindowsPlatformAdapter::set_window_dark_mode(
+                                hwnd, enabled,
+                            );
+                    }
+                })
+                .discard()
+            }));
+        }
+
+        #[cfg(not(windows))]
+        iced::Task::none()
+    }
+
     fn update(
         state: &mut Self,
         message: IcedRuntimeMessage<App::Message>,
@@ -961,12 +1052,21 @@ where
         match message {
             IcedRuntimeMessage::App(message) => {
                 let task = state.app.update(message);
-                state.rebuild_views();
-                iced::Task::batch([
+                let closes_window = fluent_task_closes_window(&task);
+                let theme_changed = state.rebuild_views();
+                let effects = iced::Task::batch([
                     state.fluent_task(task),
                     state.focused_text_editor_task(),
                     state.hide_fluent_tray_menu_task(),
-                ])
+                ]);
+                if closes_window || theme_changed {
+                    state
+                        .apply_native_frame_theme_task()
+                        .chain(effects)
+                        .chain(state.apply_native_frame_theme_task())
+                } else {
+                    effects
+                }
             }
             IcedRuntimeMessage::PlatformEvent(event) => state
                 .platform_event_task(event)
@@ -1009,19 +1109,26 @@ where
                         logical_id.clone(),
                     )))
                     .unwrap_or_else(iced::Task::none);
-                // Give freshly opened activatable windows OS keyboard focus so
-                // their inputs are typeable immediately (mirrors the show path).
-                let focus_task = if runtime_window.options.no_activate {
-                    iced::Task::none()
+                let ready_task = if runtime_window.options.visible_on_start {
+                    // First show of this native window: pre-fill the surface
+                    // with the theme background so DWM never composites the
+                    // default white surface before the renderer's first frame.
+                    let first_present_background =
+                        (runtime_window.options.frame != WindowFrame::Acrylic).then(|| {
+                            let background = state.renderer_theme_tokens.background;
+                            (background.r, background.g, background.b)
+                        });
+                    show_window_task_with_background(
+                        window_id,
+                        runtime_window.options,
+                        first_present_background,
+                    )
                 } else {
-                    window::gain_focus(window_id)
+                    apply_native_window_options_task(window_id, runtime_window.options, true)
                 };
-                iced::Task::batch([
-                    apply_native_window_options_task(window_id, runtime_window.options, true),
-                    state.delayed_focused_text_editor_task(),
-                    focus_task,
-                    opened_task,
-                ])
+                ready_task
+                    .chain(opened_task)
+                    .chain(state.delayed_focused_text_editor_task())
             }
             IcedRuntimeMessage::WindowClosed(window_id) => {
                 if state.focused_native_window == Some(window_id) {
@@ -1068,6 +1175,7 @@ where
                 }
                 let event = match event {
                     window::Event::Focused => WindowEvent::Focused(logical_id),
+                    window::Event::Unfocused => WindowEvent::Unfocused(logical_id),
                     window::Event::Rescaled(_) => WindowEvent::DpiChanged(logical_id),
                     _ => return iced::Task::none(),
                 };
@@ -1087,11 +1195,16 @@ where
                 registered_named_event_message(&self.desktop_integration.named_events, &event)
             })?;
         let task = self.app.update(message);
-        self.rebuild_views();
-        Some(iced::Task::batch([
-            self.fluent_task(task),
-            self.focused_text_editor_task(),
-        ]))
+        let closes_window = fluent_task_closes_window(&task);
+        let theme_changed = self.rebuild_views();
+        let effects = iced::Task::batch([self.fluent_task(task), self.focused_text_editor_task()]);
+        Some(if closes_window || theme_changed {
+            self.apply_native_frame_theme_task()
+                .chain(effects)
+                .chain(self.apply_native_frame_theme_task())
+        } else {
+            effects
+        })
     }
 
     fn view(state: &Self, window: window::Id) -> IcedElement<'_, IcedRuntimeMessage<App::Message>> {
@@ -1120,11 +1233,12 @@ where
             .get(&logical)
             .or_else(|| state.views.get(&state.boot_window_id))
             .expect("runtime must keep a view for the boot window");
-        let text_editors = state.text_editors.get(&logical);
-        IcedAdapter::compile_view_with_text_editors_and_theme(
+        compile_view_with_text_editors_and_visual(
             view,
-            move |id| text_editors.and_then(|cache| cache.get(id)),
-            &theme,
+            RuntimeTextEditorProvider {
+                cache: state.text_editors.get(&logical),
+            },
+            IcedVisualTheme::from_tokens(&theme),
         )
         .map(IcedRuntimeMessage::App)
     }
@@ -1481,7 +1595,7 @@ where
                 self.with_current_window(move |window_id| window::minimize(window_id, minimized))
             }
             WindowCommand::ToggleMaximizeCurrent => {
-                self.with_current_window(window::toggle_maximize)
+                self.with_current_window(toggle_window_maximized_task)
             }
             WindowCommand::DragCurrent => self.with_current_window(window::drag),
             WindowCommand::Close(id) => self
@@ -1525,11 +1639,11 @@ where
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::Maximize { id, maximized } => self
                 .with_logical_window(&id, move |window_id| {
-                    window::maximize::<IcedRuntimeMessage<App::Message>>(window_id, maximized)
+                    set_window_maximized_task(window_id, maximized)
                 })
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::ToggleMaximize(id) => self
-                .with_logical_window(&id, window::toggle_maximize)
+                .with_logical_window(&id, toggle_window_maximized_task)
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::SetAlwaysOnTop { id, enabled } => self
                 .with_logical_window(&id, move |window_id| {
@@ -1597,7 +1711,27 @@ where
         let logical_id = options.id.clone();
         let custom_view = view.is_some();
         self.sync_window_view(&logical_id, view);
-        let settings = window_settings(&options);
+
+        if let Some(native_id) = self.logical_windows.get(&logical_id).copied() {
+            if let Some(runtime_window) = self.native_windows.get_mut(&native_id) {
+                runtime_window.options = options.clone();
+                runtime_window.custom_view = custom_view;
+            }
+            return show_window_task::<App::Message>(native_id, options);
+        }
+
+        if let Some(runtime_window) = self
+            .pending_windows
+            .values_mut()
+            .find(|runtime_window| runtime_window.logical_id == logical_id)
+        {
+            runtime_window.options = options;
+            runtime_window.custom_view = custom_view;
+            return iced::Task::none();
+        }
+
+        let mut settings = window_settings(&options);
+        settings.visible = false;
         let (native_id, task) = window::open(settings);
         self.pending_windows.insert(
             native_id,
@@ -1998,6 +2132,14 @@ fn tray_menu_item_inner_width_estimate<Message>(
         })
 }
 
+fn fluent_task_closes_window<Message>(task: &FluentTask<Message>) -> bool {
+    match task {
+        FluentTask::Window(WindowCommand::Close(_) | WindowCommand::CloseCurrent) => true,
+        FluentTask::Batch(tasks) => tasks.iter().any(fluent_task_closes_window),
+        _ => false,
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ShowWindowStep {
     ApplyNativeOptions { delayed_check: bool },
@@ -2032,6 +2174,19 @@ fn show_window_task<Message>(
 where
     Message: Send + 'static,
 {
+    show_window_task_with_background(window_id, options, None)
+}
+
+fn show_window_task_with_background<Message>(
+    window_id: window::Id,
+    options: WindowOptions,
+    first_present_background: Option<(u8, u8, u8)>,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    #[cfg(not(windows))]
+    let _ = first_present_background;
     let mut tasks = Vec::new();
 
     for step in show_window_steps(&options) {
@@ -2041,20 +2196,24 @@ where
             ),
             ShowWindowStep::ResolvePlacement => {
                 #[cfg(windows)]
-                if let Some((position, size)) = resolved_window_position_and_size(&options) {
-                    tasks.push(window::resize::<IcedRuntimeMessage<Message>>(
-                        window_id, size,
-                    ));
-                    tasks.push(window::move_to::<IcedRuntimeMessage<Message>>(
-                        window_id, position,
-                    ));
-                }
+                tasks.push(apply_native_window_placement_task(
+                    window_id,
+                    options.clone(),
+                ));
             }
-            ShowWindowStep::ShowWindowed => tasks.push(window::set_mode::<
-                IcedRuntimeMessage<Message>,
-            >(
-                window_id, window::Mode::Windowed
-            )),
+            ShowWindowStep::ShowWindowed => {
+                #[cfg(windows)]
+                tasks.push(show_native_window_task(
+                    window_id,
+                    options.clone(),
+                    first_present_background,
+                ));
+                #[cfg(not(windows))]
+                tasks.push(window::set_mode::<IcedRuntimeMessage<Message>>(
+                    window_id,
+                    window::Mode::Windowed,
+                ));
+            }
         }
     }
 
@@ -2066,7 +2225,37 @@ where
         tasks.push(window::gain_focus::<IcedRuntimeMessage<Message>>(window_id));
     }
 
-    iced::Task::batch(tasks)
+    // First show only: the window is cloaked while shown so the OS-cached
+    // pre-render (legacy caption frame + white surface) never reaches the
+    // screen; it is uncloaked after the renderer had time to present the
+    // first themed frame. The pre-show fill remains as a backstop for
+    // presents that take longer than the uncloak delay.
+    #[cfg(windows)]
+    if first_present_background.is_some() {
+        tasks.push(
+            iced::Task::perform(
+                async {
+                    std::thread::sleep(Duration::from_millis(120));
+                },
+                |_| (),
+            )
+            .discard()
+            .chain(
+                window::run(window_id, move |handle| {
+                    if let Some(hwnd) = native_window_handle(handle) {
+                        let _ = win_fluent_platform_win::WindowsPlatformAdapter::set_window_cloaked(
+                            hwnd, false,
+                        );
+                    }
+                })
+                .discard(),
+            ),
+        );
+    }
+
+    tasks
+        .into_iter()
+        .fold(iced::Task::none(), |sequence, task| sequence.chain(task))
 }
 
 fn update_window_geometry_task<Message>(
@@ -2079,14 +2268,10 @@ where
     let mut tasks = Vec::new();
 
     #[cfg(windows)]
-    if let Some((position, size)) = resolved_window_position_and_size(&options) {
-        tasks.push(window::resize::<IcedRuntimeMessage<Message>>(
-            window_id, size,
-        ));
-        tasks.push(window::move_to::<IcedRuntimeMessage<Message>>(
-            window_id, position,
-        ));
-    }
+    tasks.push(apply_native_window_placement_task(
+        window_id,
+        options.clone(),
+    ));
 
     #[cfg(not(windows))]
     {
@@ -2106,13 +2291,71 @@ where
 }
 
 #[cfg(windows)]
-fn resolved_window_position_and_size(options: &WindowOptions) -> Option<(Point, Size)> {
-    let placement =
-        win_fluent_platform_win::WindowsPlatformAdapter::resolve_window_placement(options).ok()?;
-    Some((
-        Point::new(placement.x as f32, placement.y as f32),
-        Size::new(placement.width as f32, placement.height as f32),
-    ))
+fn show_native_window_task<Message>(
+    window_id: window::Id,
+    options: WindowOptions,
+    first_present_background: Option<(u8, u8, u8)>,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    let activate = !options.no_activate;
+    let cloak_first_show = first_present_background.is_some();
+    window::run(window_id, move |handle| {
+        if let Some(hwnd) = native_window_handle(handle) {
+            // Apply the managed styles synchronously in the same closure so the
+            // window can never be shown while it still carries the legacy
+            // caption/frame styles (task-chain ordering alone does not
+            // guarantee the earlier style task ran before this one).
+            let _ = win_fluent_platform_win::WindowsPlatformAdapter::apply_window_options_to_hwnd(
+                hwnd, &options,
+            );
+            if let Some((red, green, blue)) = first_present_background {
+                let uses_dark_frame =
+                    (5 * u16::from(green) + 2 * u16::from(red) + u16::from(blue)) <= 8 * 128;
+                let _ = win_fluent_platform_win::WindowsPlatformAdapter::set_window_dark_mode(
+                    hwnd,
+                    uses_dark_frame,
+                );
+            }
+            // Cloak before the first show: DWM composites nothing for the
+            // window until the uncloak task runs, hiding both the OS-cached
+            // legacy frame and the not-yet-presented surface.
+            if cloak_first_show {
+                let _ =
+                    win_fluent_platform_win::WindowsPlatformAdapter::set_window_cloaked(hwnd, true);
+            }
+            let _ = win_fluent_platform_win::WindowsPlatformAdapter::show_window(hwnd, activate);
+            // Fill AFTER the show: the hidden window's redirection surface is
+            // allocated lazily, so painting before ShowWindow is discarded.
+            // This is the uncloak backstop when the renderer's first present
+            // is slower than the uncloak delay: theme background, not white.
+            if let Some((red, green, blue)) = first_present_background {
+                let _ = win_fluent_platform_win::WindowsPlatformAdapter::paint_window_background(
+                    hwnd, red, green, blue,
+                );
+            }
+        }
+    })
+    .discard()
+}
+
+#[cfg(windows)]
+fn apply_native_window_placement_task<Message>(
+    window_id: window::Id,
+    options: WindowOptions,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    window::run(window_id, move |handle| {
+        if let Some(hwnd) = native_window_handle(handle) {
+            let _ = win_fluent_platform_win::WindowsPlatformAdapter::apply_window_placement_to_hwnd(
+                hwnd, &options,
+            );
+        }
+    })
+    .discard()
 }
 
 fn apply_native_window_options_task<Message>(
@@ -2159,20 +2402,66 @@ where
 }
 
 #[cfg(windows)]
-fn apply_native_window_options(handle: &dyn window::Window, options: &WindowOptions) {
+fn native_window_handle(handle: &dyn window::Window) -> Option<isize> {
     use iced::window::raw_window_handle::RawWindowHandle;
 
-    let Ok(window_handle) = handle.window_handle() else {
-        return;
-    };
-
+    let window_handle = handle.window_handle().ok()?;
     let RawWindowHandle::Win32(raw_handle) = window_handle.as_raw() else {
+        return None;
+    };
+    Some(raw_handle.hwnd.get())
+}
+fn set_window_maximized_task<Message>(
+    window_id: window::Id,
+    maximized: bool,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    #[cfg(windows)]
+    {
+        return window::run(window_id, move |handle| {
+            if let Some(hwnd) = native_window_handle(handle) {
+                let _ = win_fluent_platform_win::WindowsPlatformAdapter::set_window_maximized(
+                    hwnd, maximized,
+                );
+            }
+        })
+        .discard();
+    }
+
+    #[cfg(not(windows))]
+    window::maximize(window_id, maximized)
+}
+
+fn toggle_window_maximized_task<Message>(
+    window_id: window::Id,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    #[cfg(windows)]
+    {
+        return window::run(window_id, move |handle| {
+            if let Some(hwnd) = native_window_handle(handle) {
+                let _ =
+                    win_fluent_platform_win::WindowsPlatformAdapter::toggle_window_maximized(hwnd);
+            }
+        })
+        .discard();
+    }
+
+    #[cfg(not(windows))]
+    window::toggle_maximize(window_id)
+}
+
+#[cfg(windows)]
+fn apply_native_window_options(handle: &dyn window::Window, options: &WindowOptions) {
+    let Some(hwnd) = native_window_handle(handle) else {
         return;
     };
-
     let _ = win_fluent_platform_win::WindowsPlatformAdapter::apply_window_options_to_hwnd(
-        raw_handle.hwnd.get(),
-        options,
+        hwnd, options,
     );
 }
 
@@ -2272,8 +2561,9 @@ where
                         })
                     }
                 }),
+            FluentSubscriptionKind::Theme => IcedAdapter::theme_subscription()
+                .map(|mode| IcedRuntimeMessage::PlatformEvent(PlatformEvent::ThemeChanged(mode))),
             FluentSubscriptionKind::Clipboard
-            | FluentSubscriptionKind::Theme
             | FluentSubscriptionKind::Window(_)
             | FluentSubscriptionKind::Custom(_) => Subscription::none(),
         },
@@ -2602,6 +2892,7 @@ fn run_platform_speak_text(text: String, language: Option<String>) -> Result<(),
 #[derive(Default)]
 struct TextEditorCache {
     contents: HashMap<String, IcedTextEditorContent>,
+    pending: RefCell<HashMap<String, IcedTextEditorContent>>,
 }
 
 impl TextEditorCache {
@@ -2610,22 +2901,97 @@ impl TextEditorCache {
         collect_text_editor_values(view, &mut values);
 
         self.contents.retain(|id, _| values.contains_key(id));
+        let pending = self.pending.get_mut();
+        pending.retain(|id, _| values.contains_key(id));
 
         for (id, text) in values {
+            if let Some(next) = pending.remove(&id) {
+                if next.text() == text {
+                    self.contents.insert(id, next);
+                    continue;
+                }
+            }
+
             let matches_view = self
                 .contents
                 .get(&id)
                 .is_some_and(|content| content.text() == text);
 
             if !matches_view {
-                self.contents
-                    .insert(id, IcedTextEditorContent::with_text(&text));
+                let cursor = self.contents.get(&id).map(IcedTextEditorContent::cursor);
+                let mut content = IcedTextEditorContent::with_text(&text);
+                if let Some(cursor) = cursor {
+                    content.move_to(cursor);
+                }
+                self.contents.insert(id, content);
             }
         }
     }
 
     fn get(&self, id: &str) -> Option<&IcedTextEditorContent> {
         self.contents.get(id)
+    }
+
+    fn perform(&self, id: &str, action: iced_text_editor_state::Action) -> Option<String> {
+        let mut pending = self.pending.borrow_mut();
+        let mut next = if let Some(content) = pending.get(id) {
+            clone_text_editor_content(content)
+        } else {
+            clone_text_editor_content(self.contents.get(id)?)
+        };
+        next.perform(action);
+        let text = next.text();
+        pending.insert(id.to_string(), next);
+        Some(text)
+    }
+}
+
+fn clone_text_editor_content(content: &IcedTextEditorContent) -> IcedTextEditorContent {
+    let mut clone = IcedTextEditorContent::with_text(&content.text());
+    clone.move_to(content.cursor());
+    clone
+}
+
+trait TextEditorContentProvider<'a>: Copy {
+    fn get(self, id: &str) -> Option<&'a IcedTextEditorContent>;
+
+    fn perform(self, id: &str, action: iced_text_editor_state::Action) -> Option<String> {
+        let mut next = clone_text_editor_content(self.get(id)?);
+        next.perform(action);
+        Some(next.text())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct EmptyTextEditorProvider;
+
+impl<'a> TextEditorContentProvider<'a> for EmptyTextEditorProvider {
+    fn get(self, _id: &str) -> Option<&'a IcedTextEditorContent> {
+        None
+    }
+}
+
+impl<'a, Provider> TextEditorContentProvider<'a> for Provider
+where
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+{
+    fn get(self, id: &str) -> Option<&'a IcedTextEditorContent> {
+        self(id)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct RuntimeTextEditorProvider<'a> {
+    cache: Option<&'a TextEditorCache>,
+}
+
+impl<'a> TextEditorContentProvider<'a> for RuntimeTextEditorProvider<'a> {
+    fn get(self, id: &str) -> Option<&'a IcedTextEditorContent> {
+        self.cache.and_then(|cache| cache.get(id))
+    }
+
+    fn perform(self, id: &str, action: iced_text_editor_state::Action) -> Option<String> {
+        self.cache.and_then(|cache| cache.perform(id, action))
     }
 }
 
@@ -2785,7 +3151,7 @@ fn window_settings(options: &WindowOptions) -> iced::window::Settings {
             (Some(width), Some(height)) => Some(Size::new(width, height)),
             _ => None,
         },
-        visible: options.visible_on_start,
+        visible: options.visible_on_start && !cfg!(windows),
         resizable: options.resize_mode == WindowResizeMode::CanResize,
         minimizable: options.resize_mode != WindowResizeMode::Fixed,
         decorations: options.frame == WindowFrame::Standard,
@@ -2808,6 +3174,7 @@ fn window_settings(options: &WindowOptions) -> iced::window::Settings {
                 inset_x,
                 inset_y,
             } => iced::window::Position::Specific(Point::new(x - inset_x, y + inset_y)),
+            WindowPlacement::ContextMenuAtCursor { .. } => iced::window::Position::Default,
             WindowPlacement::Monitor
             | WindowPlacement::WorkArea
             | WindowPlacement::CursorOffset { .. }
@@ -2941,7 +3308,7 @@ fn compile_view_with_text_editors_and_visual<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let element = compile_view_body(view, provider, visual);
     // Generic `View::tooltip()` (WinUI ToolTipService.ToolTip) — wrap any element
@@ -3056,7 +3423,7 @@ fn compile_view_body<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     match view.token() {
         ViewToken::Page(token) => {
@@ -3087,6 +3454,7 @@ where
                 &token.label,
                 kind,
                 token.icon.as_ref(),
+                token.trailing_icon.as_ref(),
                 token.text_style,
                 token.font_size,
                 visual,
@@ -3295,6 +3663,7 @@ where
             token.placeholder.as_deref(),
             token.width,
             token.height,
+            token.wrapping,
             &token.action,
             &token.state,
             visual,
@@ -3573,7 +3942,7 @@ fn compile_pointer_region<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let content = compile_view_with_text_editors_and_visual(&token.content, provider, visual);
     PointerRegionWidget::new(token, content).into()
@@ -4042,7 +4411,7 @@ fn compile_text_token<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    let text = iced_text(token.value.clone())
+    let mut text = iced_text(token.value.clone())
         .font(text_font_for_value(token.style, &token.value))
         .size(
             token
@@ -4052,6 +4421,9 @@ where
         )
         .color(text_color(token.style, visual))
         .wrapping(iced_text_wrapping(token.wrapping));
+    if let Some(width) = token.width {
+        text = text.width(iced_length(width));
+    }
 
     let has_custom_alignment = token.align_x != win_fluent::view::Alignment::Start
         || token.align_y != win_fluent::view::Alignment::Start;
@@ -4064,7 +4436,7 @@ where
         return text.into();
     }
 
-    let mut container = iced_container(text);
+    let mut container = iced_container(text).clip(token.width.is_some() || token.height.is_some());
     if let Some(width) = token.width {
         container = container.width(iced_length(width));
     }
@@ -4554,7 +4926,6 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for BoundsProbe<'_, M
                 self.facts.clone(),
             );
         }
-        #[cfg(not(feature = "parity-diagnostics"))]
         record_preview_bounds(&self.id, self.kind, layout.bounds());
     }
 
@@ -4602,27 +4973,95 @@ where
     }
 }
 
+#[derive(Default)]
+struct SelectedAlignedComboOverlayState {
+    scroll_initialized: bool,
+    initial_scroll_offset: f32,
+    current_scroll_offset: f32,
+    selected_visuals_valid: bool,
+    keyboard_modifiers: keyboard::Modifiers,
+}
+
+impl SelectedAlignedComboOverlayState {
+    fn reset_scroll(&mut self) {
+        self.scroll_initialized = false;
+        self.initial_scroll_offset = 0.0;
+        self.current_scroll_offset = 0.0;
+        self.selected_visuals_valid = false;
+    }
+
+    fn initialize_scroll(&mut self, scroll_offset: f32) {
+        self.scroll_initialized = true;
+        self.initial_scroll_offset = scroll_offset;
+        self.current_scroll_offset = scroll_offset;
+        self.selected_visuals_valid = true;
+    }
+
+    fn visual_scroll_offset(&self) -> Option<f32> {
+        self.selected_visuals_valid
+            .then_some(self.current_scroll_offset)
+    }
+
+    fn track_keyboard_event(&mut self, event: &Event) {
+        if let Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
+            self.keyboard_modifiers = *modifiers;
+        }
+    }
+
+    fn track_scroll_event(
+        &mut self,
+        event: &Event,
+        cursor: mouse::Cursor,
+        menu_bounds: Rectangle,
+        maximum_scroll_offset: f32,
+    ) {
+        if !self.scroll_initialized {
+            return;
+        }
+
+        match event {
+            Event::Mouse(mouse::Event::WheelScrolled { delta }) if cursor.is_over(menu_bounds) => {
+                let delta_y = selected_combo_vertical_scroll_delta(*delta, self.keyboard_modifiers);
+                self.current_scroll_offset =
+                    (self.current_scroll_offset + delta_y).clamp(0.0, maximum_scroll_offset);
+            }
+            Event::Mouse(mouse::Event::ButtonPressed(
+                mouse::Button::Left | mouse::Button::Middle,
+            )) if cursor.is_over(menu_bounds) => {
+                self.selected_visuals_valid = false;
+            }
+            Event::Touch(_) => {
+                self.selected_visuals_valid = false;
+            }
+            _ => {}
+        }
+    }
+}
+
 struct SelectedAlignedComboOverlay<'a, Message> {
     content: IcedElement<'a, Message>,
+    control_id: Option<String>,
     selected_index: Option<usize>,
+    item_count: usize,
     row_height: f32,
-    row_alignment_bias: usize,
     visual: IcedVisualTheme,
 }
 
 impl<'a, Message> SelectedAlignedComboOverlay<'a, Message> {
     fn new(
         content: IcedElement<'a, Message>,
+        control_id: Option<String>,
         selected_index: Option<usize>,
+        item_count: usize,
         row_height: f32,
-        row_alignment_bias: usize,
         visual: IcedVisualTheme,
     ) -> Self {
         Self {
             content,
+            control_id,
             selected_index,
+            item_count,
             row_height,
-            row_alignment_bias,
             visual,
         }
     }
@@ -4631,6 +5070,14 @@ impl<'a, Message> SelectedAlignedComboOverlay<'a, Message> {
 impl<Message> Widget<Message, iced::Theme, iced::Renderer>
     for SelectedAlignedComboOverlay<'_, Message>
 {
+    fn tag(&self) -> widget::tree::Tag {
+        widget::tree::Tag::of::<SelectedAlignedComboOverlayState>()
+    }
+
+    fn state(&self) -> widget::tree::State {
+        widget::tree::State::new(SelectedAlignedComboOverlayState::default())
+    }
+
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.content)]
     }
@@ -4654,6 +5101,703 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer>
             .as_widget_mut()
             .layout(&mut tree.children[0], renderer, limits);
         layout::Node::with_children(child.size(), vec![child])
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        tree.state
+            .downcast_mut::<SelectedAlignedComboOverlayState>()
+            .track_keyboard_event(event);
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.children().next().unwrap(),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content.as_widget_mut().operate(
+            &mut tree.children[0],
+            layout.children().next().unwrap(),
+            renderer,
+            operation,
+        );
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, iced::Theme, iced::Renderer>> {
+        let combo_state = tree
+            .state
+            .downcast_mut::<SelectedAlignedComboOverlayState>();
+        let child_layout = layout.children().next().unwrap();
+        let child_overlay = self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            child_layout,
+            renderer,
+            viewport,
+            translation,
+        );
+        let Some(child_overlay) = child_overlay else {
+            combo_state.reset_scroll();
+            return None;
+        };
+        let mut control_bounds = child_layout.bounds();
+        control_bounds.x += translation.x;
+        control_bounds.y += translation.y;
+
+        Some(overlay::Element::new(Box::new(ShiftedOverlay::new_combo(
+            child_overlay,
+            control_bounds,
+            self.selected_index,
+            self.item_count,
+            self.row_height,
+            self.visual,
+            self.control_id.clone(),
+            combo_state,
+        ))))
+    }
+}
+
+impl<'a, Message> From<SelectedAlignedComboOverlay<'a, Message>> for IcedElement<'a, Message>
+where
+    Message: 'a,
+{
+    fn from(overlay: SelectedAlignedComboOverlay<'a, Message>) -> Self {
+        Self::new(overlay)
+    }
+}
+
+struct ShiftedOverlay<'a, Message> {
+    content: overlay::Element<'a, Message, iced::Theme, iced::Renderer>,
+    control_bounds: Rectangle,
+    placement: Option<FlyoutPlacement>,
+    selected_index: Option<usize>,
+    item_count: usize,
+    row_height: f32,
+    visual: IcedVisualTheme,
+    _control_id: Option<String>,
+    state: Option<&'a mut SelectedAlignedComboOverlayState>,
+}
+
+impl<'a, Message> ShiftedOverlay<'a, Message> {
+    fn new_combo(
+        content: overlay::Element<'a, Message, iced::Theme, iced::Renderer>,
+        control_bounds: Rectangle,
+        selected_index: Option<usize>,
+        item_count: usize,
+        row_height: f32,
+        visual: IcedVisualTheme,
+        control_id: Option<String>,
+        state: &'a mut SelectedAlignedComboOverlayState,
+    ) -> Self {
+        Self {
+            content,
+            control_bounds,
+            placement: None,
+            selected_index,
+            item_count,
+            row_height,
+            visual,
+            _control_id: control_id,
+            state: Some(state),
+        }
+    }
+
+    fn new_placed(
+        content: overlay::Element<'a, Message, iced::Theme, iced::Renderer>,
+        control_bounds: Rectangle,
+        placement: FlyoutPlacement,
+        visual: IcedVisualTheme,
+    ) -> Self {
+        Self {
+            content,
+            control_bounds,
+            placement: Some(placement),
+            selected_index: None,
+            item_count: 0,
+            row_height: 0.0,
+            visual,
+            _control_id: None,
+            state: None,
+        }
+    }
+}
+
+impl<Message> overlay::Overlay<Message, iced::Theme, iced::Renderer>
+    for ShiftedOverlay<'_, Message>
+{
+    fn layout(&mut self, renderer: &iced::Renderer, bounds: Size) -> layout::Node {
+        let mut node = self.content.as_overlay_mut().layout(renderer, bounds);
+        let native_bounds = node.bounds();
+        let initial_scroll_offset = selected_combo_menu_scroll_offset(
+            self.selected_index,
+            self.item_count,
+            native_bounds.height,
+            self.row_height,
+        );
+
+        if let Some(state) = self.state.as_deref_mut() {
+            if !state.scroll_initialized {
+                let cursor = mouse::Cursor::Available(native_bounds.center());
+                initialize_selected_combo_scroll(
+                    self.item_count,
+                    self.row_height,
+                    initial_scroll_offset,
+                    |delta_y| {
+                        let mut messages = Vec::new();
+                        let mut shell = Shell::new(&mut messages);
+                        let mut clipboard = iced::advanced::clipboard::Null;
+                        self.content.as_overlay_mut().update(
+                            &Event::Mouse(mouse::Event::WheelScrolled {
+                                delta: mouse::ScrollDelta::Pixels { x: 0.0, y: delta_y },
+                            }),
+                            Layout::new(&node),
+                            cursor,
+                            renderer,
+                            &mut clipboard,
+                            &mut shell,
+                        );
+                    },
+                );
+                state.initialize_scroll(initial_scroll_offset);
+            }
+        }
+        let (translation, _clamped) = if let Some(placement) = self.placement {
+            placed_overlay_translation(native_bounds, bounds, self.control_bounds, placement)
+        } else {
+            let scroll_offset = self
+                .state
+                .as_ref()
+                .map(|state| state.initial_scroll_offset)
+                .unwrap_or(0.0);
+            let selected_row_top = self.selected_index.unwrap_or_default() as f32
+                * self.row_height.max(1.0)
+                - scroll_offset;
+            let desired_top = self.control_bounds.y - selected_row_top;
+            let maximum_top = (bounds.height - native_bounds.height).max(0.0);
+            let aligned_top = desired_top.clamp(0.0, maximum_top);
+            (
+                Vector::new(
+                    self.control_bounds.x - native_bounds.x,
+                    aligned_top - native_bounds.y,
+                ),
+                (aligned_top - desired_top).abs() > f32::EPSILON,
+            )
+        };
+
+        node.translate_mut(translation);
+        #[cfg(feature = "parity-diagnostics")]
+        if let Some(control_id) = &self._control_id {
+            let menu_bounds = Rectangle {
+                x: native_bounds.x + translation.x,
+                y: native_bounds.y + translation.y,
+                width: native_bounds.width,
+                height: native_bounds.height,
+            };
+            eprintln!(
+                "[parity] combo_overlay_geometry control_id={} collapsed_x={:.2} collapsed_y={:.2} collapsed_width={:.2} collapsed_height={:.2} menu_x={:.2} menu_y={:.2} menu_width={:.2} menu_height={:.2} row_height={:.2} selected_index={} viewport_clamped={}",
+                control_id,
+                self.control_bounds.x,
+                self.control_bounds.y,
+                self.control_bounds.width,
+                self.control_bounds.height,
+                menu_bounds.x,
+                menu_bounds.y,
+                menu_bounds.width,
+                menu_bounds.height,
+                self.row_height,
+                self.selected_index.map_or(-1, |index| index as isize),
+                _clamped,
+            );
+        }
+        node
+    }
+
+    fn draw(
+        &self,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+    ) {
+        self.content
+            .as_overlay()
+            .draw(renderer, theme, style, layout, cursor);
+
+        let Some(state) = self.state.as_deref() else {
+            return;
+        };
+        let Some(scroll_offset) = state.visual_scroll_offset() else {
+            return;
+        };
+        if let Some(bounds) = selected_combo_indicator_bounds(
+            layout.bounds(),
+            self.selected_index,
+            scroll_offset,
+            self.row_height,
+        ) {
+            renderer.fill_quad(
+                renderer::Quad {
+                    bounds,
+                    border: Border::default().rounded(1.5),
+                    ..renderer::Quad::default()
+                },
+                Background::Color(self.visual.accent),
+            );
+        }
+
+        if let Some(bounds) = selected_combo_focus_bounds(
+            layout.bounds(),
+            self.selected_index,
+            scroll_offset,
+            self.row_height,
+        ) {
+            let stroke = self.visual.stroke_focus.max(1.0).min(bounds.height / 2.0);
+            let color = Background::Color(self.visual.text_primary);
+            for segment in selected_combo_focus_segments(bounds, stroke) {
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: segment,
+                        ..renderer::Quad::default()
+                    },
+                    color,
+                );
+            }
+        }
+    }
+
+    fn operate(
+        &mut self,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content
+            .as_overlay_mut()
+            .operate(layout, renderer, operation);
+    }
+
+    fn update(
+        &mut self,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+    ) {
+        self.content
+            .as_overlay_mut()
+            .update(event, layout, cursor, renderer, clipboard, shell);
+        // ponytail: Iced 0.14 keeps the hovered option stale after wheel scrolling.
+        // Refresh it before the next click instead of forking the dependency's menu widget.
+        if self.state.is_some() {
+            if let Some(refresh_event) =
+                selected_combo_hover_refresh_event(event, cursor, layout.bounds())
+            {
+                self.content.as_overlay_mut().update(
+                    &refresh_event,
+                    layout,
+                    cursor,
+                    renderer,
+                    clipboard,
+                    shell,
+                );
+            }
+        }
+        if let Some(state) = self.state.as_deref_mut() {
+            #[cfg(feature = "parity-diagnostics")]
+            let previous_scroll_offset = state.current_scroll_offset;
+            state.track_scroll_event(
+                event,
+                cursor,
+                layout.bounds(),
+                selected_combo_menu_max_scroll_offset(
+                    self.item_count,
+                    layout.bounds().height,
+                    self.row_height,
+                ),
+            );
+            #[cfg(feature = "parity-diagnostics")]
+            if (state.current_scroll_offset - previous_scroll_offset).abs() > f32::EPSILON {
+                if let Some(control_id) = &self._control_id {
+                    eprintln!(
+                        "[parity] combo_scroll_offset control_id={} before={:.2} after={:.2}",
+                        control_id, previous_scroll_offset, state.current_scroll_offset,
+                    );
+                }
+            }
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content
+            .as_overlay()
+            .mouse_interaction(layout, cursor, renderer)
+    }
+
+    fn overlay<'a>(
+        &'a mut self,
+        layout: Layout<'a>,
+        renderer: &iced::Renderer,
+    ) -> Option<overlay::Element<'a, Message, iced::Theme, iced::Renderer>> {
+        self.content.as_overlay_mut().overlay(layout, renderer)
+    }
+
+    fn index(&self) -> f32 {
+        self.content.as_overlay().index()
+    }
+}
+
+fn selected_combo_hover_refresh_event(
+    event: &Event,
+    cursor: mouse::Cursor,
+    menu_bounds: Rectangle,
+) -> Option<Event> {
+    match event {
+        Event::Mouse(mouse::Event::WheelScrolled { .. }) if cursor.is_over(menu_bounds) => cursor
+            .position()
+            .map(|position| Event::Mouse(mouse::Event::CursorMoved { position })),
+        _ => None,
+    }
+}
+
+fn selected_combo_menu_scroll_offset(
+    selected_index: Option<usize>,
+    item_count: usize,
+    menu_height: f32,
+    row_height: f32,
+) -> f32 {
+    let maximum_offset = selected_combo_menu_max_scroll_offset(item_count, menu_height, row_height);
+    (selected_index.unwrap_or_default() as f32 * row_height.max(1.0)).min(maximum_offset)
+}
+
+fn selected_combo_menu_max_scroll_offset(
+    item_count: usize,
+    menu_height: f32,
+    row_height: f32,
+) -> f32 {
+    let content_height = item_count as f32 * row_height.max(1.0);
+    (content_height - menu_height.max(0.0)).max(0.0)
+}
+
+fn initialize_selected_combo_scroll(
+    item_count: usize,
+    row_height: f32,
+    initial_scroll_offset: f32,
+    mut apply_delta: impl FnMut(f32),
+) {
+    let content_height = item_count as f32 * row_height.max(1.0);
+    for delta_y in [content_height, -initial_scroll_offset] {
+        if delta_y.abs() > f32::EPSILON {
+            apply_delta(delta_y);
+        }
+    }
+}
+
+fn selected_combo_vertical_scroll_delta(
+    delta: mouse::ScrollDelta,
+    modifiers: keyboard::Modifiers,
+) -> f32 {
+    match delta {
+        mouse::ScrollDelta::Lines { x, y } => {
+            let movement_y = if modifiers.shift() {
+                if cfg!(target_os = "macos") {
+                    y
+                } else {
+                    x
+                }
+            } else {
+                y
+            };
+            -movement_y * 60.0
+        }
+        mouse::ScrollDelta::Pixels { y, .. } => -y,
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn selected_aligned_combo_overlay_translation(
+    native_bounds: Rectangle,
+    viewport: Size,
+    control_top: f32,
+    selected_index: Option<usize>,
+    scroll_offset: f32,
+    row_height: f32,
+) -> Vector {
+    let selected_row_top =
+        selected_index.unwrap_or_default() as f32 * row_height.max(1.0) - scroll_offset;
+    let desired_top = control_top - selected_row_top;
+    let maximum_top = (viewport.height - native_bounds.height).max(0.0);
+    let aligned_top = desired_top.clamp(0.0, maximum_top);
+    Vector::new(0.0, aligned_top - native_bounds.y)
+}
+fn placed_overlay_translation(
+    native_bounds: Rectangle,
+    viewport: Size,
+    control_bounds: Rectangle,
+    placement: FlyoutPlacement,
+) -> (Vector, bool) {
+    let desired = match placement {
+        FlyoutPlacement::Right => Point::new(
+            control_bounds.x + control_bounds.width + 4.0,
+            control_bounds.y,
+        ),
+        FlyoutPlacement::Left => Point::new(
+            control_bounds.x - native_bounds.width - 4.0,
+            control_bounds.y,
+        ),
+        FlyoutPlacement::Top => Point::new(
+            control_bounds.x,
+            control_bounds.y - native_bounds.height - 4.0,
+        ),
+        FlyoutPlacement::Bottom => Point::new(
+            control_bounds.x,
+            control_bounds.y + control_bounds.height + 4.0,
+        ),
+    };
+    let mut desired_x = desired.x;
+    let mut fallback = false;
+    if placement == FlyoutPlacement::Right && desired_x + native_bounds.width > viewport.width {
+        desired_x = control_bounds.x - native_bounds.width - 4.0;
+        fallback = true;
+    }
+    let maximum_x = (viewport.width - native_bounds.width).max(0.0);
+    let maximum_y = (viewport.height - native_bounds.height).max(0.0);
+    let x = desired_x.clamp(0.0, maximum_x);
+    let y = desired.y.clamp(0.0, maximum_y);
+    (
+        Vector::new(x - native_bounds.x, y - native_bounds.y),
+        fallback || (x - desired_x).abs() > f32::EPSILON || (y - desired.y).abs() > f32::EPSILON,
+    )
+}
+
+fn selected_combo_row_is_fully_visible(
+    menu_bounds: Rectangle,
+    row_top: f32,
+    row_bottom: f32,
+) -> bool {
+    let menu_bottom = menu_bounds.y + menu_bounds.height;
+    let magnitude = row_top
+        .abs()
+        .max(row_bottom.abs())
+        .max(menu_bounds.y.abs())
+        .max(menu_bottom.abs())
+        .max(1.0);
+    let tolerance = f32::EPSILON * magnitude * 4.0;
+
+    row_top >= menu_bounds.y - tolerance && row_bottom <= menu_bottom + tolerance
+}
+
+fn selected_combo_indicator_bounds(
+    menu_bounds: Rectangle,
+    selected_index: Option<usize>,
+    scroll_offset: f32,
+    row_height: f32,
+) -> Option<Rectangle> {
+    let selected_index = selected_index?;
+    let row_height = row_height.max(1.0);
+    let row_y = menu_bounds.y + selected_index as f32 * row_height - scroll_offset;
+    let row_bottom = row_y + row_height;
+    if !selected_combo_row_is_fully_visible(menu_bounds, row_y, row_bottom) {
+        return None;
+    }
+
+    let height = 18.0_f32.min(row_height - 8.0).max(8.0);
+    Some(Rectangle {
+        x: menu_bounds.x + 6.0,
+        y: row_y + (row_height - height) / 2.0,
+        width: 3.0,
+        height,
+    })
+}
+
+fn selected_combo_focus_bounds(
+    menu_bounds: Rectangle,
+    selected_index: Option<usize>,
+    scroll_offset: f32,
+    row_height: f32,
+) -> Option<Rectangle> {
+    let selected_index = selected_index?;
+    let row_height = row_height.max(1.0);
+    let row_y = menu_bounds.y + selected_index as f32 * row_height - scroll_offset;
+    let row_bottom = row_y + row_height;
+    if !selected_combo_row_is_fully_visible(menu_bounds, row_y, row_bottom) {
+        return None;
+    }
+
+    let inset_x = 4.0_f32.min(menu_bounds.width / 4.0);
+    let inset_y = 2.0_f32.min(row_height / 4.0);
+    Some(Rectangle {
+        x: menu_bounds.x + inset_x,
+        y: row_y + inset_y,
+        width: (menu_bounds.width - inset_x * 2.0).max(0.0),
+        height: (row_height - inset_y * 2.0).max(0.0),
+    })
+}
+
+fn selected_combo_focus_segments(bounds: Rectangle, stroke: f32) -> [Rectangle; 4] {
+    let stroke = stroke
+        .max(1.0)
+        .min(bounds.height / 2.0)
+        .min(bounds.width / 2.0);
+    let inner_height = (bounds.height - stroke * 2.0).max(0.0);
+    [
+        Rectangle {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: stroke,
+        },
+        Rectangle {
+            x: bounds.x,
+            y: bounds.y + bounds.height - stroke,
+            width: bounds.width,
+            height: stroke,
+        },
+        Rectangle {
+            x: bounds.x,
+            y: bounds.y + stroke,
+            width: stroke,
+            height: inner_height,
+        },
+        Rectangle {
+            x: bounds.x + bounds.width - stroke,
+            y: bounds.y + stroke,
+            width: stroke,
+            height: inner_height,
+        },
+    ]
+}
+struct IntrinsicPickListOverlay<'a, Message> {
+    content: IcedElement<'a, Message>,
+    menu: IcedElement<'a, Message>,
+    placement: FlyoutPlacement,
+    visual: IcedVisualTheme,
+    menu_width: f32,
+    overlay_node: layout::Node,
+}
+
+impl<'a, Message> IntrinsicPickListOverlay<'a, Message> {
+    fn new(
+        content: IcedElement<'a, Message>,
+        menu: IcedElement<'a, Message>,
+        placement: FlyoutPlacement,
+        visual: IcedVisualTheme,
+    ) -> Self {
+        Self {
+            content,
+            menu,
+            placement,
+            visual,
+            menu_width: 0.0,
+            overlay_node: layout::Node::new(Size::ZERO),
+        }
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer>
+    for IntrinsicPickListOverlay<'_, Message>
+{
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content), Tree::new(&self.menu)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        let children = [&self.content, &self.menu];
+        tree.diff_children(&children);
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let menu = self
+            .menu
+            .as_widget_mut()
+            .layout(&mut tree.children[1], renderer, limits);
+        let trigger = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
+        self.menu_width = menu.size().width.max(trigger.size().width);
+        layout::Node::with_children(trigger.size(), vec![trigger])
     }
 
     fn update(
@@ -4741,269 +5885,47 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer>
         translation: Vector,
     ) -> Option<overlay::Element<'b, Message, iced::Theme, iced::Renderer>> {
         let child_layout = layout.children().next().unwrap();
-        let child_overlay = self.content.as_widget_mut().overlay(
+        let child_bounds = child_layout.bounds();
+        self.overlay_node = layout::Node::new(Size::new(
+            self.menu_width.max(child_bounds.width),
+            child_bounds.height,
+        ))
+        .move_to(Point::new(child_bounds.x, child_bounds.y));
+
+        // The full-size trigger owns child 0 and toggles its PickList `is_open` state.
+        // The compact menu is the same widget type and intentionally borrows that state
+        // here; child 1 exists only to measure the menu's intrinsic width.
+        let child_overlay = self.menu.as_widget_mut().overlay(
             &mut tree.children[0],
-            child_layout,
+            Layout::new(&self.overlay_node),
             renderer,
             viewport,
             translation,
         )?;
-        let child_bounds = child_layout.bounds();
-        let offset_y = selected_aligned_combo_overlay_offset(
-            self.selected_index,
-            child_bounds.height,
-            self.row_height,
-            self.row_alignment_bias,
-        );
-        let desired_top = child_bounds.y + child_bounds.height + offset_y;
 
-        Some(overlay::Element::new(Box::new(ShiftedOverlay::new(
+        if self.placement == FlyoutPlacement::Bottom {
+            return Some(child_overlay);
+        }
+
+        let mut control_bounds = child_bounds;
+        control_bounds.x += translation.x;
+        control_bounds.y += translation.y;
+        Some(overlay::Element::new(Box::new(ShiftedOverlay::new_placed(
             child_overlay,
-            desired_top,
-            self.selected_index,
-            self.row_height,
+            control_bounds,
+            self.placement,
             self.visual,
         ))))
     }
 }
 
-impl<'a, Message> From<SelectedAlignedComboOverlay<'a, Message>> for IcedElement<'a, Message>
+impl<'a, Message> From<IntrinsicPickListOverlay<'a, Message>> for IcedElement<'a, Message>
 where
     Message: 'a,
 {
-    fn from(overlay: SelectedAlignedComboOverlay<'a, Message>) -> Self {
+    fn from(overlay: IntrinsicPickListOverlay<'a, Message>) -> Self {
         Self::new(overlay)
     }
-}
-
-struct ShiftedOverlay<'a, Message> {
-    content: overlay::Element<'a, Message, iced::Theme, iced::Renderer>,
-    desired_top: f32,
-    selected_index: Option<usize>,
-    row_height: f32,
-    visual: IcedVisualTheme,
-}
-
-impl<'a, Message> ShiftedOverlay<'a, Message> {
-    fn new(
-        content: overlay::Element<'a, Message, iced::Theme, iced::Renderer>,
-        desired_top: f32,
-        selected_index: Option<usize>,
-        row_height: f32,
-        visual: IcedVisualTheme,
-    ) -> Self {
-        Self {
-            content,
-            desired_top,
-            selected_index,
-            row_height,
-            visual,
-        }
-    }
-}
-
-impl<Message> overlay::Overlay<Message, iced::Theme, iced::Renderer>
-    for ShiftedOverlay<'_, Message>
-{
-    fn layout(&mut self, renderer: &iced::Renderer, bounds: Size) -> layout::Node {
-        let mut node = self.content.as_overlay_mut().layout(renderer, bounds);
-        let node_bounds = node.bounds();
-        let translation = Vector::new(0.0, self.desired_top - node_bounds.y);
-        node.translate_mut(translation);
-        node
-    }
-
-    fn draw(
-        &self,
-        renderer: &mut iced::Renderer,
-        theme: &iced::Theme,
-        style: &renderer::Style,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-    ) {
-        self.content
-            .as_overlay()
-            .draw(renderer, theme, style, layout, cursor);
-
-        if let Some(bounds) =
-            selected_combo_indicator_bounds(layout.bounds(), self.selected_index, self.row_height)
-        {
-            renderer.fill_quad(
-                renderer::Quad {
-                    bounds,
-                    border: Border::default().rounded(1.5),
-                    ..renderer::Quad::default()
-                },
-                Background::Color(self.visual.accent),
-            );
-        }
-
-        if let Some(bounds) =
-            selected_combo_focus_bounds(layout.bounds(), self.selected_index, self.row_height)
-        {
-            let stroke = self.visual.stroke_focus.max(1.0).min(bounds.height / 2.0);
-            let color = Background::Color(self.visual.text_primary);
-            for segment in selected_combo_focus_segments(bounds, stroke) {
-                renderer.fill_quad(
-                    renderer::Quad {
-                        bounds: segment,
-                        ..renderer::Quad::default()
-                    },
-                    color,
-                );
-            }
-        }
-    }
-
-    fn operate(
-        &mut self,
-        layout: Layout<'_>,
-        renderer: &iced::Renderer,
-        operation: &mut dyn Operation,
-    ) {
-        self.content
-            .as_overlay_mut()
-            .operate(layout, renderer, operation);
-    }
-
-    fn update(
-        &mut self,
-        event: &Event,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        renderer: &iced::Renderer,
-        clipboard: &mut dyn Clipboard,
-        shell: &mut Shell<'_, Message>,
-    ) {
-        self.content
-            .as_overlay_mut()
-            .update(event, layout, cursor, renderer, clipboard, shell);
-    }
-
-    fn mouse_interaction(
-        &self,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        renderer: &iced::Renderer,
-    ) -> mouse::Interaction {
-        self.content
-            .as_overlay()
-            .mouse_interaction(layout, cursor, renderer)
-    }
-
-    fn overlay<'a>(
-        &'a mut self,
-        layout: Layout<'a>,
-        renderer: &iced::Renderer,
-    ) -> Option<overlay::Element<'a, Message, iced::Theme, iced::Renderer>> {
-        self.content.as_overlay_mut().overlay(layout, renderer)
-    }
-
-    fn index(&self) -> f32 {
-        self.content.as_overlay().index()
-    }
-}
-
-fn selected_aligned_combo_overlay_offset(
-    selected_index: Option<usize>,
-    control_height: f32,
-    row_height: f32,
-    row_alignment_bias: usize,
-) -> f32 {
-    let selected_index = (selected_index.unwrap_or_default() + row_alignment_bias) as f32;
-    -(control_height.max(0.0) + selected_index * row_height.max(1.0))
-}
-
-fn combo_box_selected_row_alignment_bias(
-    _id: Option<&str>,
-    _selected_index: Option<usize>,
-) -> usize {
-    0
-}
-
-fn selected_combo_indicator_bounds(
-    menu_bounds: Rectangle,
-    selected_index: Option<usize>,
-    row_height: f32,
-) -> Option<Rectangle> {
-    let selected_index = selected_index?;
-    let row_height = row_height.max(1.0);
-    let row_y = menu_bounds.y + selected_index as f32 * row_height;
-    let row_bottom = row_y + row_height;
-    let menu_bottom = menu_bounds.y + menu_bounds.height;
-    if row_y < menu_bounds.y || row_bottom > menu_bottom {
-        return None;
-    }
-
-    let height = 18.0_f32.min(row_height - 8.0).max(8.0);
-    Some(Rectangle {
-        x: menu_bounds.x + 6.0,
-        y: row_y + (row_height - height) / 2.0,
-        width: 3.0,
-        height,
-    })
-}
-
-fn selected_combo_focus_bounds(
-    menu_bounds: Rectangle,
-    selected_index: Option<usize>,
-    row_height: f32,
-) -> Option<Rectangle> {
-    let selected_index = selected_index?;
-    if selected_index != 0 {
-        return None;
-    }
-
-    let row_height = row_height.max(1.0);
-    let row_y = menu_bounds.y + selected_index as f32 * row_height;
-    let row_bottom = row_y + row_height;
-    let menu_bottom = menu_bounds.y + menu_bounds.height;
-    if row_y < menu_bounds.y || row_bottom > menu_bottom {
-        return None;
-    }
-
-    let inset_x = 4.0_f32.min(menu_bounds.width / 4.0);
-    let inset_y = 2.0_f32.min(row_height / 4.0);
-    Some(Rectangle {
-        x: menu_bounds.x + inset_x,
-        y: row_y + inset_y,
-        width: (menu_bounds.width - inset_x * 2.0).max(0.0),
-        height: (row_height - inset_y * 2.0).max(0.0),
-    })
-}
-
-fn selected_combo_focus_segments(bounds: Rectangle, stroke: f32) -> [Rectangle; 4] {
-    let stroke = stroke
-        .max(1.0)
-        .min(bounds.height / 2.0)
-        .min(bounds.width / 2.0);
-    let inner_height = (bounds.height - stroke * 2.0).max(0.0);
-    [
-        Rectangle {
-            x: bounds.x,
-            y: bounds.y,
-            width: bounds.width,
-            height: stroke,
-        },
-        Rectangle {
-            x: bounds.x,
-            y: bounds.y + bounds.height - stroke,
-            width: bounds.width,
-            height: stroke,
-        },
-        Rectangle {
-            x: bounds.x,
-            y: bounds.y + stroke,
-            width: stroke,
-            height: inner_height,
-        },
-        Rectangle {
-            x: bounds.x + bounds.width - stroke,
-            y: bounds.y + stroke,
-            width: stroke,
-            height: inner_height,
-        },
-    ]
 }
 
 #[derive(Clone, Debug)]
@@ -5156,7 +6078,7 @@ fn compile_title_bar<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let mut title_bits: Vec<IcedElement<'a, Message>> = Vec::new();
 
@@ -5366,7 +6288,8 @@ where
                 },
             })
             .collect::<Vec<_>>();
-        let action = token.action.clone();
+        let trigger_action = token.action.clone();
+        let menu_action = token.action.clone();
 
         let trigger_width = match (token.min_width, token.label.is_empty()) {
             (Some(0), true) | (None, true) => IcedLength::Fixed(24.0),
@@ -5381,33 +6304,77 @@ where
         let border_width = token.border_width.map(f32::from).unwrap_or(0.0);
         let radius = token.radius.map(f32::from).unwrap_or(visual.radius_control);
         let text_style = token.text_style.unwrap_or(TextStyle::Body);
-        let text_size = token
+        let trigger_text_size = token
             .font_size
             .map(f32::from)
             .unwrap_or_else(|| text_size(text_style, visual));
+        let menu_text_size = text_size(TextStyle::Body, visual);
 
-        let pick_list = iced_pick_list(choices, Option::<ComboChoice>::None, move |choice| {
-            action
-                .input_text(choice.id)
-                .expect("flyout selection action must produce a message")
-        })
+        let handle = || {
+            iced::widget::pick_list::Handle::Static(iced::widget::pick_list::Icon {
+                font: caption_icon_font(),
+                code_point: match token.placement {
+                    FlyoutPlacement::Bottom => '\u{E70D}',
+                    FlyoutPlacement::Top => '\u{E70E}',
+                    FlyoutPlacement::Right => '\u{E76C}',
+                    FlyoutPlacement::Left => '\u{E76B}',
+                },
+                size: Some(Pixels(12.0)),
+                line_height: iced_text_core::LineHeight::default(),
+                shaping: iced_text_core::Shaping::Basic,
+            })
+        };
+        let trigger_pick_list = iced_pick_list(
+            Vec::<ComboChoice>::new(),
+            Option::<ComboChoice>::None,
+            move |choice| {
+                trigger_action
+                    .input_text(choice.id)
+                    .expect("flyout selection action must produce a message")
+            },
+        )
         .placeholder(token.label.clone())
         .width(trigger_width)
         .padding(padding)
         .font(text_font_for_value(text_style, &token.label))
-        .text_size(text_size)
+        .text_size(trigger_text_size)
+        .handle(handle())
         .style(move |_, status| flyout_pick_list_style(visual, status, border_width, radius))
         .menu_style(move |_| menu_style(visual));
 
-        return if token.align_y != Alignment::Start || token.min_height.is_some_and(|h| h > 0) {
+        let menu_pick_list = iced_pick_list(choices, Option::<ComboChoice>::None, move |choice| {
+            menu_action
+                .input_text(choice.id)
+                .expect("flyout selection action must produce a message")
+        })
+        .placeholder(token.label.clone())
+        .width(IcedLength::Shrink)
+        .padding(padding)
+        .font(text_font_for_value(TextStyle::Body, &token.label))
+        .text_size(menu_text_size)
+        .handle(handle())
+        .style(move |_, status| flyout_pick_list_style(visual, status, border_width, radius))
+        .menu_style(move |_| menu_style(visual));
+
+        let pick_list: IcedElement<'a, Message> = IntrinsicPickListOverlay::new(
+            trigger_pick_list.into(),
+            menu_pick_list.into(),
+            token.placement,
+            visual,
+        )
+        .into();
+        let trigger: IcedElement<'a, Message> = if token.align_y != Alignment::Start
+            || token.min_height.is_some_and(|h| h > 0)
+        {
             let mut trigger = iced_container(pick_list).align_y(vertical_alignment(token.align_y));
             if let Some(height) = token.min_height.filter(|height| *height > 0) {
                 trigger = trigger.height(IcedLength::Fixed(f32::from(height)));
             }
             trigger.into()
         } else {
-            pick_list.into()
+            pick_list
         };
+        return trigger;
     }
 
     let kind = ButtonKind::Subtle;
@@ -5419,6 +6386,7 @@ where
         &token.label,
         kind,
         token.icon.as_ref(),
+        None,
         token.text_style,
         token.font_size,
         visual,
@@ -5829,7 +6797,7 @@ fn compile_busy_overlay<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let content = compile_view_with_text_editors_and_visual(&token.content, provider, visual);
     let indicator: IcedElement<'a, Message> = iced_column(vec![
@@ -6189,6 +7157,28 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for AnimatedBusyOverl
             renderer,
         )
     }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, iced::Theme, iced::Renderer>> {
+        let state = tree.state.downcast_ref::<AnimatedBusyOverlayState>();
+        if self.blocks_input && state.is_visible_or_targeting_visible() {
+            return None;
+        }
+
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.child(0),
+            renderer,
+            viewport,
+            translation,
+        )
+    }
 }
 
 fn busy_overlay_fade_progress(from: f32, target: f32, elapsed_ms: f32, duration_ms: u16) -> f32 {
@@ -6236,7 +7226,7 @@ fn compile_overlay<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let base = compile_view_with_text_editors_and_visual(&token.base, provider, visual);
     if token.layers.is_empty() {
@@ -6267,7 +7257,7 @@ fn compile_adaptive_switch<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let breakpoint_width = f32::from(token.breakpoint_width);
     let wide = &token.wide;
@@ -6290,7 +7280,7 @@ fn compile_flyout<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let anchor = compile_view_with_text_editors_and_visual(&token.anchor, provider, visual);
     if !token.open {
@@ -6323,7 +7313,7 @@ fn compile_wrap<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     // A true flow layout (WinUI `ItemsWrapGrid`): the widget measures each child
     // at layout time and packs as many as fit the available width onto each row
@@ -6345,6 +7335,569 @@ where
     ))
 }
 
+struct SpannedGridChild<'a, Message> {
+    element: IcedElement<'a, Message>,
+    row: usize,
+    column: usize,
+    row_span: usize,
+    column_span: usize,
+}
+
+#[derive(Clone, Copy)]
+struct SpannedGridPlacement {
+    row: usize,
+    column: usize,
+    row_span: usize,
+    column_span: usize,
+}
+
+struct SpannedGrid<'a, Message> {
+    children: Vec<IcedElement<'a, Message>>,
+    placements: Vec<SpannedGridPlacement>,
+    rows: Vec<Length>,
+    columns: Vec<Length>,
+    row_spacing: f32,
+    column_spacing: f32,
+    width: Length,
+    height: Length,
+}
+
+impl<'a, Message> SpannedGrid<'a, Message> {
+    fn new(children: Vec<SpannedGridChild<'a, Message>>, token: &GridToken<Message>) -> Self {
+        let (children, placements): (Vec<_>, Vec<_>) = children
+            .into_iter()
+            .map(|child| {
+                let placement = SpannedGridPlacement {
+                    row: child.row,
+                    column: child.column,
+                    row_span: child.row_span.max(1),
+                    column_span: child.column_span.max(1),
+                };
+                (child.element, placement)
+            })
+            .unzip();
+
+        Self {
+            children,
+            placements,
+            rows: token.rows.clone(),
+            columns: token.columns.clone(),
+            row_spacing: f32::from(token.row_spacing),
+            column_spacing: f32::from(token.column_spacing),
+            width: token.width,
+            height: token.height,
+        }
+    }
+}
+
+fn spanned_track_extent(track_sizes: &[f32], start: usize, span: usize, spacing: f32) -> f32 {
+    if start >= track_sizes.len() {
+        return 0.0;
+    }
+    let count = span.max(1).min(track_sizes.len() - start);
+    track_sizes[start..start + count].iter().sum::<f32>()
+        + spacing.max(0.0) * count.saturating_sub(1) as f32
+}
+fn apply_spanned_intrinsic_constraint(
+    definitions: &[Length],
+    intrinsic: &mut [f32],
+    start: usize,
+    span: usize,
+    desired_extent: f32,
+    spacing: f32,
+) {
+    if start >= definitions.len() || start >= intrinsic.len() {
+        return;
+    }
+
+    let count = span
+        .max(1)
+        .min(definitions.len() - start)
+        .min(intrinsic.len() - start);
+    let desired_tracks =
+        (desired_extent - spacing.max(0.0) * count.saturating_sub(1) as f32).max(0.0);
+    let range = start..start + count;
+    let current = range
+        .clone()
+        .map(|index| match definitions[index] {
+            Length::Fixed(value) => f32::from(value),
+            _ => intrinsic[index],
+        })
+        .sum::<f32>();
+    let eligible = range
+        .clone()
+        .filter(|index| !matches!(definitions[*index], Length::Fixed(_)))
+        .count();
+    if eligible == 0 || desired_tracks <= current {
+        return;
+    }
+
+    let share = (desired_tracks - current) / eligible as f32;
+    for index in range {
+        if !matches!(definitions[index], Length::Fixed(_)) {
+            intrinsic[index] += share;
+        }
+    }
+}
+
+fn resolve_weighted_tracks(
+    definitions: &[Length],
+    available: f32,
+    spacing: f32,
+    intrinsic: &[f32],
+) -> Vec<f32> {
+    let count = definitions.len();
+    if count == 0 {
+        return Vec::new();
+    }
+
+    let mut tracks = vec![0.0; count];
+    for (index, definition) in definitions.iter().enumerate() {
+        tracks[index] = match definition {
+            Length::Fixed(value) => f32::from(*value),
+            Length::Shrink => intrinsic.get(index).copied().unwrap_or(0.0).max(0.0),
+            Length::Fill | Length::FillPortion(_) => 0.0,
+        };
+    }
+
+    let finite_available = available.is_finite();
+    if !finite_available {
+        for (index, definition) in definitions.iter().enumerate() {
+            if matches!(definition, Length::Fill | Length::FillPortion(_)) {
+                tracks[index] = intrinsic.get(index).copied().unwrap_or(0.0).max(0.0);
+            }
+        }
+        return tracks;
+    }
+
+    let spacing_total = spacing.max(0.0) * count.saturating_sub(1) as f32;
+    let remaining = (available - spacing_total - tracks.iter().sum::<f32>()).max(0.0);
+    let total_weight = definitions
+        .iter()
+        .map(|definition| match definition {
+            Length::Fill => 1.0,
+            Length::FillPortion(value) => f32::from((*value).max(1)),
+            _ => 0.0,
+        })
+        .sum::<f32>();
+    if total_weight > 0.0 {
+        for (index, definition) in definitions.iter().enumerate() {
+            let weight = match definition {
+                Length::Fill => 1.0,
+                Length::FillPortion(value) => f32::from((*value).max(1)),
+                _ => 0.0,
+            };
+            tracks[index] += remaining * weight / total_weight;
+        }
+    }
+    tracks
+}
+
+fn resolve_spanned_grid_dimension(
+    length: Length,
+    available: f32,
+    minimum: f32,
+    intrinsic: f32,
+) -> f32 {
+    let value = match length {
+        Length::Fixed(value) => f32::from(value),
+        Length::Shrink => intrinsic,
+        Length::Fill | Length::FillPortion(_) => {
+            if available.is_finite() {
+                available
+            } else {
+                intrinsic
+            }
+        }
+    };
+    value.max(minimum).min(if available.is_finite() {
+        available.max(minimum)
+    } else {
+        f32::INFINITY
+    })
+}
+fn spanned_grid_child_rects(
+    column_sizes: &[f32],
+    row_sizes: &[f32],
+    placements: &[SpannedGridPlacement],
+    column_spacing: f32,
+    row_spacing: f32,
+) -> Vec<Rectangle> {
+    let mut columns = vec![0.0; column_sizes.len()];
+    for index in 1..column_sizes.len() {
+        columns[index] = columns[index - 1] + column_sizes[index - 1] + column_spacing;
+    }
+    let mut rows = vec![0.0; row_sizes.len()];
+    for index in 1..row_sizes.len() {
+        rows[index] = rows[index - 1] + row_sizes[index - 1] + row_spacing;
+    }
+    placements
+        .iter()
+        .map(|placement| Rectangle {
+            x: columns.get(placement.column).copied().unwrap_or_default(),
+            y: rows.get(placement.row).copied().unwrap_or_default(),
+            width: spanned_track_extent(
+                column_sizes,
+                placement.column,
+                placement.column_span,
+                column_spacing,
+            ),
+            height: spanned_track_extent(row_sizes, placement.row, placement.row_span, row_spacing),
+        })
+        .collect()
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for SpannedGrid<'_, Message> {
+    fn children(&self) -> Vec<Tree> {
+        self.children.iter().map(Tree::new).collect()
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(&self.children);
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        Size::new(iced_length(self.width), iced_length(self.height))
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let n_columns = self
+            .columns
+            .len()
+            .max(
+                self.placements
+                    .iter()
+                    .map(|child| child.column + child.column_span.max(1))
+                    .max()
+                    .unwrap_or(0),
+            )
+            .max(1);
+        let n_rows = self
+            .rows
+            .len()
+            .max(
+                self.placements
+                    .iter()
+                    .map(|child| child.row + child.row_span.max(1))
+                    .max()
+                    .unwrap_or(0),
+            )
+            .max(1);
+
+        let columns = (0..n_columns)
+            .map(|index| self.columns.get(index).copied().unwrap_or(Length::Fill))
+            .collect::<Vec<_>>();
+        let rows = (0..n_rows)
+            .map(|index| self.rows.get(index).copied().unwrap_or(Length::Shrink))
+            .collect::<Vec<_>>();
+
+        let intrinsic_limits =
+            layout::Limits::with_compression(Size::ZERO, Size::INFINITE, Size::new(true, true));
+        let mut column_intrinsic = vec![0.0_f32; n_columns];
+        let mut row_intrinsic = vec![0.0_f32; n_rows];
+        let mut intrinsic_sizes = Vec::with_capacity(self.children.len());
+        for (index, child) in self.children.iter_mut().enumerate() {
+            let node = child.as_widget_mut().layout(
+                &mut tree.children[index],
+                renderer,
+                &intrinsic_limits,
+            );
+            intrinsic_sizes.push(node.size());
+        }
+
+        for span in 1..=n_columns {
+            for (index, placement) in self.placements.iter().enumerate() {
+                let effective_span = if placement.column < n_columns {
+                    placement
+                        .column_span
+                        .max(1)
+                        .min(n_columns - placement.column)
+                } else {
+                    0
+                };
+                if effective_span == span {
+                    apply_spanned_intrinsic_constraint(
+                        &columns,
+                        &mut column_intrinsic,
+                        placement.column,
+                        effective_span,
+                        intrinsic_sizes[index].width,
+                        self.column_spacing,
+                    );
+                }
+            }
+        }
+        for span in 1..=n_rows {
+            for (index, placement) in self.placements.iter().enumerate() {
+                let effective_span = if placement.row < n_rows {
+                    placement.row_span.max(1).min(n_rows - placement.row)
+                } else {
+                    0
+                };
+                if effective_span == span {
+                    apply_spanned_intrinsic_constraint(
+                        &rows,
+                        &mut row_intrinsic,
+                        placement.row,
+                        effective_span,
+                        intrinsic_sizes[index].height,
+                        self.row_spacing,
+                    );
+                }
+            }
+        }
+
+        let limits_max = limits.max();
+        let limits_min = limits.min();
+        let intrinsic_width = column_intrinsic.iter().sum::<f32>()
+            + self.column_spacing * n_columns.saturating_sub(1) as f32;
+        let width_available = match self.width {
+            Length::Shrink => intrinsic_width,
+            Length::Fixed(value) => f32::from(value),
+            Length::Fill | Length::FillPortion(_) => limits_max.width,
+        };
+        let columns_sizes = resolve_weighted_tracks(
+            &columns,
+            width_available,
+            self.column_spacing,
+            &column_intrinsic,
+        );
+        let resolved_width = resolve_spanned_grid_dimension(
+            self.width,
+            limits_max.width,
+            limits_min.width,
+            columns_sizes.iter().sum::<f32>()
+                + self.column_spacing * n_columns.saturating_sub(1) as f32,
+        );
+
+        let intrinsic_height =
+            row_intrinsic.iter().sum::<f32>() + self.row_spacing * n_rows.saturating_sub(1) as f32;
+        let height_available = match self.height {
+            Length::Shrink => intrinsic_height,
+            Length::Fixed(value) => f32::from(value),
+            Length::Fill | Length::FillPortion(_) => limits_max.height,
+        };
+        let provisional_rows =
+            resolve_weighted_tracks(&rows, height_available, self.row_spacing, &row_intrinsic);
+
+        for (index, child) in self.children.iter_mut().enumerate() {
+            let placement = self.placements[index];
+            let child_width = spanned_track_extent(
+                &columns_sizes,
+                placement.column,
+                placement.column_span,
+                self.column_spacing,
+            );
+            let node = child.as_widget_mut().layout(
+                &mut tree.children[index],
+                renderer,
+                &layout::Limits::new(
+                    Size::new(child_width, 0.0),
+                    Size::new(child_width, f32::INFINITY),
+                ),
+            );
+            let spanned_height = spanned_track_extent(
+                &provisional_rows,
+                placement.row,
+                placement.row_span,
+                self.row_spacing,
+            );
+            let measured_height = node.size().height.max(0.0);
+            if placement.row_span == 1 {
+                row_intrinsic[placement.row] = row_intrinsic[placement.row].max(measured_height);
+            } else if measured_height > spanned_height {
+                let deficit = measured_height - spanned_height;
+                let covered_rows = (placement.row
+                    ..(placement.row + placement.row_span).min(n_rows))
+                    .collect::<Vec<_>>();
+                let shrink_rows = covered_rows
+                    .iter()
+                    .copied()
+                    .filter(|row| rows[*row] == Length::Shrink)
+                    .collect::<Vec<_>>();
+                if !shrink_rows.is_empty() {
+                    let share = deficit / shrink_rows.len() as f32;
+                    for row in shrink_rows {
+                        row_intrinsic[row] += share;
+                    }
+                } else {
+                    let total_weight = covered_rows
+                        .iter()
+                        .map(|row| match rows[*row] {
+                            Length::Fill => 1.0,
+                            Length::FillPortion(value) => f32::from(value.max(1)),
+                            _ => 0.0,
+                        })
+                        .sum::<f32>();
+                    if total_weight > 0.0 {
+                        for row in covered_rows {
+                            let weight = match rows[row] {
+                                Length::Fill => 1.0,
+                                Length::FillPortion(value) => f32::from(value.max(1)),
+                                _ => 0.0,
+                            };
+                            row_intrinsic[row] += deficit * weight / total_weight;
+                        }
+                    }
+                }
+            }
+        }
+
+        let row_sizes =
+            resolve_weighted_tracks(&rows, height_available, self.row_spacing, &row_intrinsic);
+        let resolved_height = resolve_spanned_grid_dimension(
+            self.height,
+            limits_max.height,
+            limits_min.height,
+            row_sizes.iter().sum::<f32>() + self.row_spacing * n_rows.saturating_sub(1) as f32,
+        );
+        let child_rects = spanned_grid_child_rects(
+            &columns_sizes,
+            &row_sizes,
+            &self.placements,
+            self.column_spacing,
+            self.row_spacing,
+        );
+        let mut nodes = Vec::with_capacity(self.children.len());
+        for (index, child) in self.children.iter_mut().enumerate() {
+            let child_bounds = child_rects[index];
+            let child_limits = layout::Limits::new(child_bounds.size(), child_bounds.size());
+            let mut node =
+                child
+                    .as_widget_mut()
+                    .layout(&mut tree.children[index], renderer, &child_limits);
+            node.move_to_mut(Point::new(child_bounds.x, child_bounds.y));
+            nodes.push(node);
+        }
+
+        layout::Node::with_children(Size::new(resolved_width, resolved_height), nodes)
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        for (index, child) in self.children.iter_mut().enumerate() {
+            child.as_widget_mut().update(
+                &mut tree.children[index],
+                event,
+                layout.child(index),
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+        }
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            for (index, child) in self.children.iter_mut().enumerate() {
+                child.as_widget_mut().operate(
+                    &mut tree.children[index],
+                    layout.child(index),
+                    renderer,
+                    operation,
+                );
+            }
+        });
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        for (index, child) in self.children.iter().enumerate() {
+            child.as_widget().draw(
+                &tree.children[index],
+                renderer,
+                theme,
+                style,
+                layout.child(index),
+                cursor,
+                viewport,
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        let mut interaction = mouse::Interaction::None;
+        for (index, child) in self.children.iter().enumerate() {
+            let child_interaction = child.as_widget().mouse_interaction(
+                &tree.children[index],
+                layout.child(index),
+                cursor,
+                viewport,
+                renderer,
+            );
+            if child_interaction != mouse::Interaction::None {
+                interaction = child_interaction;
+            }
+        }
+        interaction
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, iced::Theme, iced::Renderer>> {
+        overlay::from_children(
+            &mut self.children,
+            tree,
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
+    }
+}
+
+impl<'a, Message> From<SpannedGrid<'a, Message>> for IcedElement<'a, Message>
+where
+    Message: 'a,
+{
+    fn from(grid: SpannedGrid<'a, Message>) -> Self {
+        Self::new(grid)
+    }
+}
+
 fn compile_grid<'a, Message, Provider>(
     token: &'a GridToken<Message>,
     provider: Provider,
@@ -6352,65 +7905,22 @@ fn compile_grid<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
-    use std::collections::HashMap;
+    let children = token
+        .children
+        .iter()
+        .map(|child| SpannedGridChild {
+            element: compile_view_with_text_editors_and_visual(&child.view, provider, visual),
+            row: usize::from(child.row),
+            column: usize::from(child.column),
+            row_span: usize::from(child.row_span.max(1)),
+            column_span: usize::from(child.column_span.max(1)),
+        })
+        .collect();
+    let grid: IcedElement<'a, Message> = SpannedGrid::new(children, token).into();
 
-    // Grid extent is the larger of the declared track count and the furthest
-    // cell any child reaches (so children can over-run an under-declared grid,
-    // matching WinUI's implicit-track behavior).
-    let n_cols = token
-        .columns
-        .len()
-        .max(
-            token
-                .children
-                .iter()
-                .map(|c| usize::from(c.column) + usize::from(c.column_span.max(1)))
-                .max()
-                .unwrap_or(0),
-        )
-        .max(1);
-    let n_rows = token
-        .rows
-        .len()
-        .max(
-            token
-                .children
-                .iter()
-                .map(|c| usize::from(c.row) + usize::from(c.row_span.max(1)))
-                .max()
-                .unwrap_or(0),
-        )
-        .max(1);
-
-    // Map each origin cell to its child. Spanned cells are visually approximated
-    // (iced has no cell-merging flex), but the schema records the true span.
-    let mut origin: HashMap<(usize, usize), &GridChild<Message>> = HashMap::new();
-    for child in &token.children {
-        origin.insert((usize::from(child.row), usize::from(child.column)), child);
-    }
-
-    let col_len = |c: usize| token.columns.get(c).copied().unwrap_or(Length::Fill);
-    let row_len = |r: usize| token.rows.get(r).copied().unwrap_or(Length::Shrink);
-
-    let mut rows_col = iced_column(Vec::new()).spacing(f32::from(token.row_spacing));
-    for r in 0..n_rows {
-        let mut cells: Vec<IcedElement<Message>> = Vec::with_capacity(n_cols);
-        for c in 0..n_cols {
-            let cell: IcedElement<Message> = if let Some(child) = origin.get(&(r, c)) {
-                let el = compile_view_with_text_editors_and_visual(&child.view, provider, visual);
-                iced_container(el).width(iced_length(col_len(c))).into()
-            } else {
-                iced_space().width(iced_length(col_len(c))).into()
-            };
-            cells.push(cell);
-        }
-        let row_el = iced_row(cells).spacing(f32::from(token.column_spacing));
-        rows_col = rows_col.push(iced_container(row_el).height(iced_length(row_len(r))));
-    }
-
-    iced_container(rows_col)
+    iced_container(grid)
         .padding(layout_padding(token.padding, token.padding_edges))
         .width(iced_length(token.width))
         .height(iced_length(token.height))
@@ -6516,7 +8026,7 @@ fn compile_card<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let is_headerless_card = token.title.trim().is_empty()
         && token.description.is_none()
@@ -6603,7 +8113,7 @@ fn compile_text_editor<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let placeholder = token.placeholder.as_deref().unwrap_or_default();
     let use_single_line_input = token.secure
@@ -6612,7 +8122,11 @@ where
             && token.key_bindings.is_empty();
 
     if !use_single_line_input {
-        if let Some(content) = token.id.as_deref().and_then(provider) {
+        if let Some((id, content)) = token
+            .id
+            .as_deref()
+            .and_then(|id| provider.get(id).map(|content| (id, content)))
+        {
             let mut control = iced_text_editor(content)
                 .placeholder(placeholder.to_string())
                 .font(text_font(token.text_style))
@@ -6663,12 +8177,14 @@ where
                     ActionKind::TextInput | ActionKind::SelectionInput
                 ) {
                     let action = token.action.clone();
-                    let current = content.clone();
+                    let id = id.to_string();
                     control = control.on_action(move |edit| {
-                        let mut next = current.clone();
-                        next.perform(edit);
                         action
-                            .input_text(next.text())
+                            .input_text(
+                                provider
+                                    .perform(&id, edit)
+                                    .expect("text editor content must remain available"),
+                            )
                             .expect("text editor action must produce a message")
                     });
                 }
@@ -6729,15 +8245,199 @@ where
 
     control.into()
 }
+struct WrappingComboBox<'a, Message> {
+    children: [IcedElement<'a, Message>; 2],
+    width: Length,
+    minimum_height: f32,
+    interactive: bool,
+}
+
+impl<'a, Message> WrappingComboBox<'a, Message> {
+    fn new(
+        pick_list: IcedElement<'a, Message>,
+        visual: IcedElement<'a, Message>,
+        width: Length,
+        minimum_height: f32,
+        interactive: bool,
+    ) -> Self {
+        Self {
+            children: [pick_list, visual],
+            width,
+            minimum_height,
+            interactive,
+        }
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for WrappingComboBox<'_, Message> {
+    fn children(&self) -> Vec<Tree> {
+        self.children.iter().map(Tree::new).collect()
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(&self.children);
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        Size::new(iced_length(self.width), IcedLength::Shrink)
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let probe_limits =
+            layout::Limits::new(Size::ZERO, Size::new(limits.max().width, f32::INFINITY))
+                .width(iced_length(self.width));
+        let probe =
+            self.children[1]
+                .as_widget_mut()
+                .layout(&mut tree.children[1], renderer, &probe_limits);
+        let intrinsic = Size::new(
+            probe.size().width,
+            probe.size().height.max(self.minimum_height),
+        );
+        let size = limits.resolve(iced_length(self.width), IcedLength::Shrink, intrinsic);
+        let child_limits = layout::Limits::new(size, size);
+        let pick_list =
+            self.children[0]
+                .as_widget_mut()
+                .layout(&mut tree.children[0], renderer, &child_limits);
+        let visual =
+            self.children[1]
+                .as_widget_mut()
+                .layout(&mut tree.children[1], renderer, &child_limits);
+
+        layout::Node::with_children(size, vec![pick_list, visual])
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        if self.interactive {
+            self.children[0].as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                layout.child(0),
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+        }
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            self.children[0].as_widget_mut().operate(
+                &mut tree.children[0],
+                layout.child(0),
+                renderer,
+                operation,
+            );
+        });
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        for index in 0..2 {
+            self.children[index].as_widget().draw(
+                &tree.children[index],
+                renderer,
+                theme,
+                style,
+                layout.child(index),
+                cursor,
+                viewport,
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        if self.interactive {
+            self.children[0].as_widget().mouse_interaction(
+                &tree.children[0],
+                layout.child(0),
+                cursor,
+                viewport,
+                renderer,
+            )
+        } else {
+            mouse::Interaction::None
+        }
+    }
+
+    fn overlay<'a>(
+        &'a mut self,
+        tree: &'a mut Tree,
+        layout: Layout<'a>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'a, Message, iced::Theme, iced::Renderer>> {
+        self.interactive.then(|| {
+            self.children[0].as_widget_mut().overlay(
+                &mut tree.children[0],
+                layout.child(0),
+                renderer,
+                viewport,
+                translation,
+            )
+        })?
+    }
+}
+
+impl<'a, Message> From<WrappingComboBox<'a, Message>> for IcedElement<'a, Message>
+where
+    Message: 'a,
+{
+    fn from(combo_box: WrappingComboBox<'a, Message>) -> Self {
+        Self::new(combo_box)
+    }
+}
 
 fn compile_combo_box<'a, Message>(
-    id: Option<&str>,
+    control_id: Option<&str>,
     items: &[ComboBoxItem],
     selected: Option<&str>,
     label: Option<&str>,
     placeholder: Option<&str>,
     width: Length,
     height: Length,
+    wrapping: TextWrapping,
     action: &Action<Message>,
     state: &'a ControlState,
     visual: IcedVisualTheme,
@@ -6756,7 +8456,8 @@ where
         selected.and_then(|id| choices.iter().find(|item| item.id == id).cloned());
     let selected_fallback_label = selected.filter(|_| selected_choice.is_none());
 
-    if !state.enabled || !matches!(action.kind(), ActionKind::SelectionInput) {
+    let interactive = state.enabled && matches!(action.kind(), ActionKind::SelectionInput);
+    if wrapping == TextWrapping::None && !interactive {
         let placeholder = placeholder.or(label).unwrap_or("Select");
         return compile_read_only_combo_box(
             selected_choice
@@ -6773,6 +8474,16 @@ where
         );
     }
 
+    let display_label = selected_choice
+        .as_ref()
+        .map(|item| item.label.as_str())
+        .or(selected_fallback_label)
+        .or(placeholder)
+        .or(label)
+        .unwrap_or("Select")
+        .to_owned();
+    let display_is_placeholder = selected_choice.is_none() && selected_fallback_label.is_none();
+
     let action = action.clone();
     let padding = combo_box_padding_for_height(height);
     let placeholder = if selected_choice.is_none() {
@@ -6783,16 +8494,15 @@ where
     } else {
         placeholder.or(label).unwrap_or("Select")
     };
-
     let selected_index = selected_choice
         .as_ref()
         .and_then(|selected| choices.iter().position(|choice| choice == selected));
-    let row_alignment_bias = combo_box_selected_row_alignment_bias(id, selected_index);
     let row_height = f32::from(
         iced_text_core::LineHeight::default()
             .to_absolute(text_size(TextStyle::Body, visual).into()),
     ) + padding.top
         + padding.bottom;
+    let item_count = choices.len();
 
     let pick_list: IcedElement<'a, Message> =
         iced_pick_list(choices, selected_choice, move |choice| {
@@ -6815,16 +8525,77 @@ where
         ))
         .style({
             let state = state.clone();
-            move |_, status| pick_list_style_with_state(visual, status, &state)
+            move |_, status| {
+                let mut style = pick_list_style_with_state(visual, status, &state);
+                if wrapping == TextWrapping::Word {
+                    style.text_color = Color::TRANSPARENT;
+                    style.placeholder_color = Color::TRANSPARENT;
+                    style.handle_color = Color::TRANSPARENT;
+                }
+                style
+            }
         })
         .menu_style(move |_| menu_style(visual))
         .into();
-
+    let pick_list = if wrapping == TextWrapping::Word {
+        let text_color = if !state.enabled {
+            visual.text_secondary.scale_alpha(visual.disabled_opacity)
+        } else if display_is_placeholder {
+            visual.text_secondary
+        } else {
+            visual.text_primary
+        };
+        let display_label = if display_label.is_empty() {
+            " ".to_owned()
+        } else {
+            display_label
+        };
+        let visual_content = iced_row(vec![
+            iced_text(display_label)
+                .size(text_size(TextStyle::Body, visual))
+                .color(text_color)
+                .width(IcedLength::Fill)
+                .wrapping(iced::widget::text::Wrapping::Word)
+                .into(),
+            iced_text("\u{E70D}")
+                .font(caption_icon_font())
+                .size(12.0)
+                .color(if state.enabled {
+                    visual.text_secondary
+                } else {
+                    visual.text_secondary.scale_alpha(visual.disabled_opacity)
+                })
+                .into(),
+        ])
+        .spacing(8)
+        .align_y(alignment::Vertical::Center);
+        let visual_control = iced_container(visual_content)
+            .width(iced_length(width))
+            .height(IcedLength::Shrink)
+            .padding(padding)
+            .align_y(alignment::Vertical::Center)
+            .into();
+        let minimum_height = match height {
+            Length::Fixed(value) => f32::from(value),
+            _ => row_height,
+        };
+        WrappingComboBox::new(
+            pick_list,
+            visual_control,
+            width,
+            minimum_height,
+            interactive,
+        )
+        .into()
+    } else {
+        pick_list
+    };
     SelectedAlignedComboOverlay::new(
         pick_list,
+        control_id.map(str::to_owned),
         selected_index,
+        item_count,
         row_height,
-        row_alignment_bias,
         visual,
     )
     .into()
@@ -6909,7 +8680,7 @@ fn compile_expander<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let mut text_column = iced_column(vec![expander_title_content(
         &token.title,
@@ -7087,7 +8858,7 @@ fn compile_settings_row<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
     let mut layout = iced_column(vec![compile_text(&title, TextStyle::Subtitle, visual)])
@@ -7760,7 +9531,7 @@ fn compile_list_view<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let mut list = iced_column(Vec::new())
         .spacing(f32::from(token.spacing))
@@ -7812,7 +9583,14 @@ fn compile_result_list<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    let mut list = iced_column(Vec::new()).spacing(u32::from(token.spacing.unwrap_or(8)));
+    let mut list = iced_column(Vec::new())
+        .spacing(u32::from(token.spacing.unwrap_or(8)))
+        .padding(IcedPadding {
+            top: 0.0,
+            right: 4.0,
+            bottom: 0.0,
+            left: 4.0,
+        });
 
     for item in &token.items {
         list = list.push(
@@ -8737,6 +10515,7 @@ fn push_result_action<'a, Message>(
         Some(&icon),
         None,
         None,
+        None,
         visual,
         false,
     ))
@@ -9243,6 +11022,7 @@ where
         command.icon.as_ref(),
         None,
         None,
+        None,
         visual,
         false,
     ))
@@ -9524,6 +11304,7 @@ fn button_content<'a, Message>(
     label: &str,
     kind: ButtonKind,
     icon: Option<&win_fluent::IconToken>,
+    trailing_icon: Option<&win_fluent::IconToken>,
     text_style: Option<TextStyle>,
     font_size: Option<u16>,
     visual: IcedVisualTheme,
@@ -9545,7 +11326,7 @@ where
         .map(f32::from)
         .unwrap_or_else(|| button_icon_size(kind));
 
-    match (kind, icon, label.trim().is_empty()) {
+    let content = match (kind, icon, label.trim().is_empty()) {
         (ButtonKind::Tile, Some(icon), false) => {
             let content = iced_column(vec![
                 icon_element(icon, icon_size, icon_color),
@@ -9591,6 +11372,15 @@ where
             .size(text_size)
             .color(icon_color)
             .into(),
+    };
+
+    if let Some(trailing_icon) = trailing_icon {
+        iced_row(vec![content, icon_element(trailing_icon, 10.0, icon_color)])
+            .spacing(4)
+            .align_y(alignment::Vertical::Center)
+            .into()
+    } else {
+        content
     }
 }
 
@@ -10816,12 +12606,16 @@ fn text_editor_style(
         visual.text_primary
     };
 
+    let background = if chrome == TextEditorChrome::Frameless {
+        Color::TRANSPARENT
+    } else if status == iced::widget::text_editor::Status::Disabled {
+        visual.surface_alt
+    } else {
+        visual.input_surface
+    };
+
     iced::widget::text_editor::Style {
-        background: Background::Color(if status == iced::widget::text_editor::Status::Disabled {
-            visual.surface_alt
-        } else {
-            visual.input_surface
-        }),
+        background: Background::Color(background),
         border,
         placeholder: visual.text_secondary,
         value,
@@ -10860,6 +12654,8 @@ where
         .spacing(8)
         .text_size(visual.body_size)
         .font(checkbox_label_font(&token.label, token.label_italic))
+        .width(iced_length(token.width))
+        .text_wrapping(iced_text_wrapping(token.wrapping))
         .style({
             let state = token.state.clone();
             move |_, status| checkbox_style_with_state(visual, status, &state)
@@ -11076,7 +12872,7 @@ fn compile_tab_view<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+    Provider: TextEditorContentProvider<'a> + 'a,
 {
     let selected_id = token
         .selected
@@ -11924,6 +13720,10 @@ fn iced_hotkey_subscription(hotkey: Hotkey) -> Subscription<IcedHotkeyEvent> {
     platform_hotkey_subscription(hotkey)
 }
 
+fn iced_theme_subscription() -> Subscription<ThemeMode> {
+    platform_theme_subscription()
+}
+
 fn iced_named_event_subscription(name: String, auto_reset: bool) -> Subscription<IcedNamedEvent> {
     platform_named_event_subscription(name, auto_reset)
 }
@@ -11941,6 +13741,16 @@ fn platform_hotkey_subscription(hotkey: Hotkey) -> Subscription<IcedHotkeyEvent>
 
 #[cfg(not(windows))]
 fn platform_hotkey_subscription(_hotkey: Hotkey) -> Subscription<IcedHotkeyEvent> {
+    Subscription::none()
+}
+
+#[cfg(windows)]
+fn platform_theme_subscription() -> Subscription<ThemeMode> {
+    Subscription::run_with((), theme_stream)
+}
+
+#[cfg(not(windows))]
+fn platform_theme_subscription() -> Subscription<ThemeMode> {
     Subscription::none()
 }
 
@@ -11975,6 +13785,44 @@ fn platform_tray_subscription(
     _plan: win_fluent_platform_win::WindowsTrayPlan,
 ) -> Subscription<IcedTrayEvent> {
     Subscription::none()
+}
+
+#[cfg(windows)]
+fn theme_stream(_: &()) -> impl iced::futures::Stream<Item = ThemeMode> {
+    iced::stream::channel(
+        4,
+        move |mut output: iced::futures::channel::mpsc::Sender<ThemeMode>| async move {
+            use std::sync::{
+                atomic::{AtomicBool, Ordering},
+                Arc,
+            };
+
+            let running = Arc::new(AtomicBool::new(true));
+            let thread_running = Arc::clone(&running);
+            let _guard = ThemeBridgeGuard {
+                running: Arc::clone(&running),
+            };
+
+            std::thread::spawn(move || {
+                let mut previous = None;
+                while thread_running.load(Ordering::Relaxed) {
+                    if let Ok(current) =
+                        win_fluent_platform_win::WindowsPlatformAdapter::system_theme_mode()
+                    {
+                        if previous != Some(current) {
+                            if output.try_send(current).is_err() {
+                                return;
+                            }
+                            previous = Some(current);
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+            });
+
+            std::future::pending::<()>().await;
+        },
+    )
 }
 
 #[cfg(windows)]
@@ -12157,6 +14005,19 @@ fn tray_stream(data: &TraySubscriptionData) -> impl iced::futures::Stream<Item =
             std::future::pending::<()>().await;
         },
     )
+}
+
+#[cfg(windows)]
+struct ThemeBridgeGuard {
+    running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(windows)]
+impl Drop for ThemeBridgeGuard {
+    fn drop(&mut self) {
+        self.running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 #[cfg(windows)]
@@ -12441,7 +14302,6 @@ mod tests {
 
     #[cfg(feature = "parity-diagnostics")]
     static DIAGNOSTICS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     #[cfg(feature = "parity-diagnostics")]
     fn target_combo_diagnostic_view() -> View<Msg> {
         column((combo_box([
@@ -12455,6 +14315,623 @@ mod tests {
         .on_change(Msg::Pick),))
         .id("ActionBarWide")
         .into_view()
+    }
+
+    #[test]
+    fn runtime_iced_theme_uses_current_fluent_theme_palette() {
+        let mut tokens = ThemeTokens::fluent_dark();
+        tokens.background = FluentColor::rgb(12, 34, 56);
+        tokens.text_primary = FluentColor::rgb(210, 211, 212);
+        tokens.accent.base = FluentColor::rgb(20, 120, 220);
+        tokens.status_connected = FluentColor::rgb(10, 130, 40);
+        tokens.warning = FluentColor::rgb(230, 180, 20);
+        tokens.status_error = FluentColor::rgb(190, 30, 40);
+
+        let palette = iced_theme_from_tokens(&tokens).palette();
+
+        assert_eq!(palette.background, iced_color(tokens.background));
+        assert_eq!(palette.text, iced_color(tokens.text_primary));
+        assert_eq!(palette.primary, iced_color(tokens.accent.base));
+        assert_eq!(palette.success, iced_color(tokens.status_connected));
+        assert_eq!(palette.warning, iced_color(tokens.warning));
+        assert_eq!(palette.danger, iced_color(tokens.status_error));
+    }
+
+    #[test]
+    fn finite_fill_tracks_ignore_intrinsic_sizes_and_share_remaining_width() {
+        let tracks =
+            resolve_weighted_tracks(&[Length::Fill; 4], 400.0, 8.0, &[40.0, 120.0, 240.0, 80.0]);
+
+        for track in &tracks[1..] {
+            assert!((track - tracks[0]).abs() <= f32::EPSILON);
+        }
+        assert!((tracks.iter().sum::<f32>() + 24.0 - 400.0).abs() <= f32::EPSILON);
+    }
+
+    #[test]
+    fn unbounded_fill_tracks_use_intrinsic_sizes() {
+        let tracks = resolve_weighted_tracks(
+            &[Length::Fill, Length::FillPortion(2)],
+            f32::INFINITY,
+            8.0,
+            &[80.0, 120.0],
+        );
+
+        assert_eq!(tracks, vec![80.0, 120.0]);
+        assert!(tracks.iter().all(|track| track.is_finite()));
+    }
+    #[test]
+    fn spanned_intrinsic_allocates_only_the_deficit_beyond_fixed_tracks() {
+        let definitions = [Length::Fixed(100), Length::Shrink];
+        let mut intrinsic = [0.0, 0.0];
+
+        apply_spanned_intrinsic_constraint(&definitions, &mut intrinsic, 0, 2, 120.0, 0.0);
+
+        assert_eq!(intrinsic, [0.0, 20.0]);
+    }
+
+    #[test]
+    fn spanned_grid_layout_keeps_two_column_child_inside_four_finite_fill_tracks() {
+        use iced::advanced::{layout::Limits, renderer::Headless, widget::Tree};
+        use iced::widget::Space;
+
+        let widths = [40.0, 120.0, 240.0, 80.0];
+        let mut children = widths
+            .into_iter()
+            .enumerate()
+            .map(|(column, width)| {
+                (
+                    Space::new()
+                        .width(IcedLength::Fixed(width))
+                        .height(IcedLength::Fixed(20.0))
+                        .into(),
+                    SpannedGridPlacement {
+                        row: 0,
+                        column,
+                        row_span: 1,
+                        column_span: 1,
+                    },
+                )
+            })
+            .collect::<Vec<(IcedElement<'_, Msg>, SpannedGridPlacement)>>();
+        children.push((
+            Space::new()
+                .width(IcedLength::Fixed(360.0))
+                .height(IcedLength::Fixed(20.0))
+                .into(),
+            SpannedGridPlacement {
+                row: 0,
+                column: 2,
+                row_span: 1,
+                column_span: 2,
+            },
+        ));
+        let (children, placements) = children.into_iter().unzip();
+        let grid = SpannedGrid {
+            children,
+            placements,
+            rows: vec![Length::Shrink],
+            columns: vec![Length::Fill; 4],
+            row_spacing: 0.0,
+            column_spacing: 8.0,
+            width: Length::Fill,
+            height: Length::Shrink,
+        };
+        let mut element: IcedElement<'_, Msg> = grid.into();
+        let mut tree = Tree::new(element.as_widget());
+        let mut renderer = iced::futures::executor::block_on(<iced::Renderer as Headless>::new(
+            iced::Font::default(),
+            iced::Pixels(16.0),
+            Some("tiny-skia"),
+        ))
+        .expect("headless renderer");
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &mut renderer,
+            &Limits::new(Size::ZERO, Size::new(400.0, 100.0)),
+        );
+
+        let service = node.children()[4].bounds();
+        let single_column = (400.0 - 3.0 * 8.0) / 4.0;
+        assert!((service.width - (2.0 * single_column + 8.0)).abs() <= 1.0);
+        assert!((service.x + service.width - 400.0).abs() <= 1.0);
+    }
+
+    #[test]
+    fn spanned_grid_column_span_covers_tracks_and_internal_spacing() {
+        let columns = resolve_weighted_tracks(&[Length::Fill; 4], 400.0, 8.0, &[0.0; 4]);
+        let placement = SpannedGridPlacement {
+            row: 0,
+            column: 2,
+            row_span: 1,
+            column_span: 2,
+        };
+        let rect = spanned_grid_child_rects(&columns, &[20.0], &[placement], 8.0, 0.0)[0];
+        assert!((rect.width - (2.0 * columns[0] + 8.0)).abs() <= 1.0);
+        assert!((rect.x + rect.width - 400.0).abs() <= 1.0);
+    }
+
+    #[test]
+    fn spanned_grid_row_span_covers_tracks_and_internal_spacing() {
+        let rows = resolve_weighted_tracks(&[Length::Fill, Length::Fill], 100.0, 6.0, &[0.0, 0.0]);
+        let placement = SpannedGridPlacement {
+            row: 0,
+            column: 0,
+            row_span: 2,
+            column_span: 1,
+        };
+        let rect = spanned_grid_child_rects(&[100.0], &rows, &[placement], 0.0, 6.0)[0];
+        assert!((rect.height - 100.0).abs() <= 1.0);
+        assert!((rect.y + rect.height - 100.0).abs() <= 1.0);
+    }
+    #[test]
+    fn text_token_fill_none_stays_before_following_fixed_button() {
+        use iced::advanced::{layout::Limits, renderer::Headless, widget::Tree};
+
+        let text_view: View<Msg> = View::new(ViewToken::Text(TextToken {
+            id: None,
+            value: "Translating page 8 of 18 with Windows Local AI while preserving layout and terminology"
+                .to_owned(),
+            style: TextStyle::BodyStrong,
+            font_size: None,
+            width: Some(Length::Fill),
+            height: Some(Length::Shrink),
+            margin: Edges::ZERO,
+            align_x: Alignment::Start,
+            align_y: Alignment::Start,
+            wrapping: TextWrapping::None,
+            selectable: false,
+            a11y: Default::default(),
+        }));
+        let ViewToken::Text(text_token) = text_view.token() else {
+            panic!("expected TextToken");
+        };
+        let visual = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_light());
+        let compiled_text = compile_text_token::<Msg>(text_token, visual);
+        assert_eq!(compiled_text.as_widget().size().width, IcedLength::Fill);
+        assert_eq!(text_token.wrapping, TextWrapping::None);
+
+        let button_view: View<Msg> = button("Retry Failed").width(Length::Fixed(72)).into_view();
+        let compiled_button = compile_view_with_text_editors_and_visual(
+            &button_view,
+            EmptyTextEditorProvider,
+            visual,
+        );
+        let row: IcedElement<'_, Msg> = iced_row(vec![compiled_text, compiled_button])
+            .spacing(8)
+            .width(IcedLength::Fill)
+            .into();
+        let mut element = row;
+        let mut tree = Tree::new(element.as_widget());
+        let mut renderer = iced::futures::executor::block_on(<iced::Renderer as Headless>::new(
+            iced::Font::default(),
+            iced::Pixels(16.0),
+            Some("tiny-skia"),
+        ))
+        .expect("headless renderer");
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &mut renderer,
+            &Limits::new(Size::ZERO, Size::new(260.0, 100.0)),
+        );
+        let title = node.children()[0].bounds();
+        let button = node.children()[1].bounds();
+        assert!(
+            title.x + title.width <= button.x - 8.0 + f32::EPSILON,
+            "Fill title must stop before the fixed trailing button"
+        );
+        assert!(
+            title.height < 30.0,
+            "None title must stay single-line instead of growing vertically"
+        );
+        let viewport = Rectangle::new(Point::ORIGIN, Size::new(260.0, 100.0));
+        element.as_widget().draw(
+            &tree,
+            &mut renderer,
+            &iced::Theme::Light,
+            &renderer::Style {
+                text_color: iced::Color::BLACK,
+            },
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            &viewport,
+        );
+        let pixels =
+            renderer.screenshot(iced::Size::new(260_u32, 100_u32), 1.0, iced::Color::WHITE);
+        let gap_start = (title.x + title.width).ceil() as usize;
+        let gap_end = button.x.floor() as usize;
+        assert!(gap_end > gap_start, "the Row must retain an 8 DIP gap");
+        for y in 0..100_usize {
+            for x in gap_start..gap_end {
+                let pixel = (y * 260 + x) * 4;
+                assert!(
+                    pixels[pixel..pixel + 3]
+                        .iter()
+                        .all(|channel| *channel >= 250),
+                    "clipped title painted into the trailing gap at ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn button_trailing_icon_lays_out_after_title() {
+        use iced::advanced::{layout::Limits, renderer::Headless, widget::Tree};
+
+        let trailing_icon = win_fluent::IconToken::with_glyph("chevron-down", '\u{E70D}');
+        let visual = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_light());
+        let mut element = button_content::<Msg>(
+            "Easydict",
+            ButtonKind::Subtle,
+            None,
+            Some(&trailing_icon),
+            Some(TextStyle::Subtitle),
+            Some(22),
+            visual,
+            false,
+        );
+        let mut tree = Tree::new(element.as_widget());
+        let mut renderer = iced::futures::executor::block_on(<iced::Renderer as Headless>::new(
+            iced::Font::default(),
+            iced::Pixels(16.0),
+            Some("tiny-skia"),
+        ))
+        .expect("headless renderer");
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &mut renderer,
+            &Limits::new(Size::ZERO, Size::new(200.0, 40.0)),
+        );
+
+        assert_eq!(node.children().len(), 2);
+        let title = node.children()[0].bounds();
+        let chevron = node.children()[1].bounds();
+        assert!(title.width > 0.0);
+        assert!(chevron.width > 0.0);
+        assert!(title.x + title.width <= chevron.x - 4.0 + f32::EPSILON);
+    }
+
+    #[test]
+    fn wrapping_combo_box_selected_label_grows_at_120_dip() {
+        use iced::advanced::{layout::Limits, renderer::Headless, widget::Tree};
+
+        let make_view = |wrapping| {
+            combo_box([ComboBoxItem::new(
+                "service",
+                "Windows Local AI translation service with document context",
+            )])
+            .selected("service")
+            .width(Length::Fixed(120))
+            .height(Length::Shrink)
+            .wrapping(wrapping)
+            .on_change(Msg::Pick)
+        };
+        let single_line_view = make_view(TextWrapping::None);
+        let wrapped_view = make_view(TextWrapping::Word);
+        let visual = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_light());
+        let mut single_line = compile_view_with_text_editors_and_visual(
+            &single_line_view,
+            EmptyTextEditorProvider,
+            visual,
+        );
+        let mut wrapped = compile_view_with_text_editors_and_visual(
+            &wrapped_view,
+            EmptyTextEditorProvider,
+            visual,
+        );
+        let mut renderer = iced::futures::executor::block_on(<iced::Renderer as Headless>::new(
+            iced::Font::default(),
+            iced::Pixels(16.0),
+            Some("tiny-skia"),
+        ))
+        .expect("headless renderer");
+        let limits = Limits::new(Size::ZERO, Size::new(120.0, 500.0));
+        let mut single_line_tree = Tree::new(single_line.as_widget());
+        let single_line_node =
+            single_line
+                .as_widget_mut()
+                .layout(&mut single_line_tree, &mut renderer, &limits);
+        let mut wrapped_tree = Tree::new(wrapped.as_widget());
+        let wrapped_node =
+            wrapped
+                .as_widget_mut()
+                .layout(&mut wrapped_tree, &mut renderer, &limits);
+
+        assert_eq!(wrapped_node.size().width, 120.0);
+        assert!(
+            wrapped_node.size().height > single_line_node.size().height * 2.0,
+            "wrapped selected label should grow beyond one row: wrapped={} single={}",
+            wrapped_node.size().height,
+            single_line_node.size().height
+        );
+    }
+
+    #[test]
+    fn spanned_grid_remeasures_three_column_checkbox_at_final_width() {
+        use iced::advanced::{layout::Limits, renderer::Headless, widget::Tree};
+        use iced::widget::Space;
+
+        fn layout_two_pass(width: f32) -> (Rectangle, Rectangle) {
+            let checkbox_view: View<Msg> = checkbox(
+                "Two-pass translation (extract glossary + summary first for terminology consistency)",
+                false,
+            )
+            .width(Length::Fill)
+            .wrapping(TextWrapping::Word)
+            .on_toggle(Msg::Toggle)
+            .into_view();
+            let visual = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_light());
+            let checkbox = compile_view_with_text_editors_and_visual(
+                &checkbox_view,
+                EmptyTextEditorProvider,
+                visual,
+            );
+            let translate: IcedElement<'_, Msg> = Space::new()
+                .width(IcedLength::Fill)
+                .height(IcedLength::Fixed(40.0))
+                .into();
+            let grid = SpannedGrid {
+                children: vec![checkbox, translate],
+                placements: vec![
+                    SpannedGridPlacement {
+                        row: 0,
+                        column: 0,
+                        row_span: 1,
+                        column_span: 3,
+                    },
+                    SpannedGridPlacement {
+                        row: 0,
+                        column: 3,
+                        row_span: 1,
+                        column_span: 1,
+                    },
+                ],
+                rows: vec![Length::Shrink],
+                columns: vec![Length::Fill; 4],
+                row_spacing: 0.0,
+                column_spacing: 8.0,
+                width: Length::Fill,
+                height: Length::Shrink,
+            };
+            let grid: IcedElement<'_, Msg> = grid.into();
+            let mut element: IcedElement<'_, Msg> = iced_container(grid)
+                .padding([0, 24])
+                .width(IcedLength::Fill)
+                .into();
+            let mut tree = Tree::new(element.as_widget());
+            let mut renderer =
+                iced::futures::executor::block_on(<iced::Renderer as Headless>::new(
+                    iced::Font::default(),
+                    iced::Pixels(16.0),
+                    Some("tiny-skia"),
+                ))
+                .expect("headless renderer");
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &mut renderer,
+                &Limits::new(Size::ZERO, Size::new(width, 500.0)),
+            );
+            let grid_node = &node.children()[0];
+            (
+                grid_node.children()[0].bounds(),
+                grid_node.children()[1].bounds(),
+            )
+        }
+
+        let (wide_checkbox, _) = layout_two_pass(1200.0);
+        let (narrow_checkbox, narrow_translate) = layout_two_pass(419.0);
+        assert!(
+            narrow_checkbox.height > wide_checkbox.height + 8.0,
+            "narrow checkbox must absorb wrapped label height: narrow={} wide={}",
+            narrow_checkbox.height,
+            wide_checkbox.height
+        );
+        assert!(
+            narrow_checkbox.x + narrow_checkbox.width <= narrow_translate.x - 8.0 + f32::EPSILON,
+            "three-column checkbox must not enter the Translate track"
+        );
+    }
+
+    #[test]
+    fn checkbox_fill_word_survives_backend_compilation() {
+        let view: View<Msg> = checkbox("Long checkbox label", false)
+            .width(Length::Fill)
+            .wrapping(TextWrapping::Word)
+            .on_toggle(Msg::Toggle)
+            .into_view();
+        let ViewToken::CheckBox(token) = view.token() else {
+            panic!("expected CheckBoxToken");
+        };
+        let visual = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_light());
+        let compiled = compile_check_box(token, visual);
+        assert_eq!(token.width, Length::Fill);
+        assert_eq!(token.wrapping, TextWrapping::Word);
+        assert_eq!(compiled.as_widget().size().width, IcedLength::Fill);
+    }
+
+    #[test]
+    fn spanned_grid_shrink_row_grows_for_wrapped_child() {
+        let one_line: f32 = 18.0;
+        let wrapped_height: f32 = 54.0;
+        let intrinsic = [one_line.max(wrapped_height)];
+        let rows = resolve_weighted_tracks(&[Length::Shrink], 200.0, 0.0, &intrinsic);
+        assert!(
+            rows[0] > one_line,
+            "a constrained wrapped child must increase its Shrink row"
+        );
+    }
+
+    #[test]
+    fn spanned_grid_forwards_child_overlay() {
+        let native = Rectangle::new(Point::new(24.0, 120.0), Size::new(160.0, 120.0));
+        let control = Rectangle::new(Point::new(24.0, 100.0), Size::new(120.0, 36.0));
+        let (translation, clamped) = placed_overlay_translation(
+            native,
+            Size::new(419.0, 820.0),
+            control,
+            FlyoutPlacement::Right,
+        );
+        assert_eq!(translation, Vector::new(124.0, -20.0));
+        assert!(
+            !clamped,
+            "an in-viewport child overlay should not be clamped"
+        );
+        let (_, clamped) = placed_overlay_translation(
+            Rectangle::new(Point::new(24.0, 120.0), Size::new(160.0, 120.0)),
+            Size::new(419.0, 820.0),
+            Rectangle::new(Point::new(360.0, 100.0), Size::new(50.0, 36.0)),
+            FlyoutPlacement::Right,
+        );
+        assert!(clamped, "right placement must report viewport fallback");
+    }
+
+    #[test]
+    fn intrinsic_flyout_trigger_preserves_hover_and_open_visual_states() {
+        use iced::advanced::{layout::Limits, renderer::Headless, widget::Tree};
+
+        let visual = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_dark());
+        let choices = vec![
+            ComboChoice {
+                id: "quick".to_string(),
+                label: "Translate".to_string(),
+            },
+            ComboChoice {
+                id: "long-document".to_string(),
+                label: "Long Document".to_string(),
+            },
+        ];
+        let statuses = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured_statuses = statuses.clone();
+        let trigger = iced_pick_list(
+            Vec::<ComboChoice>::new(),
+            Option::<ComboChoice>::None,
+            |choice| Msg::Pick(choice.id),
+        )
+        .placeholder("Easydict")
+        .width(IcedLength::Shrink)
+        .text_size(22)
+        .style(move |_, status| {
+            captured_statuses
+                .lock()
+                .expect("status capture lock")
+                .push(status);
+            flyout_pick_list_style(visual, status, 0.0, visual.radius_control)
+        });
+        let menu = iced_pick_list(choices, Option::<ComboChoice>::None, |choice| {
+            Msg::Pick(choice.id)
+        })
+        .placeholder("Easydict")
+        .width(IcedLength::Shrink)
+        .text_size(14);
+        let mut element: IcedElement<'_, Msg> = IntrinsicPickListOverlay::new(
+            trigger.into(),
+            menu.into(),
+            FlyoutPlacement::Bottom,
+            visual,
+        )
+        .into();
+        let mut tree = Tree::new(element.as_widget());
+        let mut renderer = iced::futures::executor::block_on(<iced::Renderer as Headless>::new(
+            iced::Font::default(),
+            iced::Pixels(16.0),
+            Some("tiny-skia"),
+        ))
+        .expect("headless renderer");
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &Limits::new(Size::ZERO, Size::new(400.0, 100.0)),
+        );
+        let viewport = Rectangle::new(Point::ORIGIN, Size::new(400.0, 100.0));
+        let inside = mouse::Cursor::Available(node.bounds().center());
+        let outside = mouse::Cursor::Available(Point::new(399.0, 99.0));
+        let mut clipboard = iced::advanced::clipboard::Null;
+        let mut messages = Vec::new();
+
+        {
+            let mut shell = Shell::new(&mut messages);
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Window(iced::window::Event::RedrawRequested(Instant::now())),
+                Layout::new(&node),
+                inside,
+                &renderer,
+                &mut clipboard,
+                &mut shell,
+                &viewport,
+            );
+        }
+        element.as_widget().draw(
+            &tree,
+            &mut renderer,
+            &iced::Theme::Dark,
+            &renderer::Style {
+                text_color: iced::Color::WHITE,
+            },
+            Layout::new(&node),
+            inside,
+            &viewport,
+        );
+        assert_eq!(
+            statuses.lock().expect("status capture lock").last(),
+            Some(&iced::widget::pick_list::Status::Hovered)
+        );
+
+        statuses.lock().expect("status capture lock").clear();
+        {
+            let mut shell = Shell::new(&mut messages);
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                Layout::new(&node),
+                inside,
+                &renderer,
+                &mut clipboard,
+                &mut shell,
+                &viewport,
+            );
+        }
+        assert!(
+            element
+                .as_widget_mut()
+                .overlay(
+                    &mut tree,
+                    Layout::new(&node),
+                    &renderer,
+                    &viewport,
+                    Vector::ZERO,
+                )
+                .is_some(),
+            "the compact menu must reuse the trigger's open state"
+        );
+        {
+            let mut shell = Shell::new(&mut messages);
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Window(iced::window::Event::RedrawRequested(Instant::now())),
+                Layout::new(&node),
+                outside,
+                &renderer,
+                &mut clipboard,
+                &mut shell,
+                &viewport,
+            );
+        }
+        element.as_widget().draw(
+            &tree,
+            &mut renderer,
+            &iced::Theme::Dark,
+            &renderer::Style {
+                text_color: iced::Color::WHITE,
+            },
+            Layout::new(&node),
+            outside,
+            &viewport,
+        );
+        assert_eq!(
+            statuses.lock().expect("status capture lock").last(),
+            Some(&iced::widget::pick_list::Status::Opened { is_hovered: false })
+        );
     }
 
     #[cfg(feature = "parity-diagnostics")]
@@ -12670,6 +15147,54 @@ mod tests {
         }
     }
 
+    struct ThemeSwitchApp {
+        mode: ThemeMode,
+    }
+
+    impl FluentApplication for ThemeSwitchApp {
+        type Message = Msg;
+        type Flags = ();
+
+        fn new(_flags: Self::Flags) -> (Self, FluentTask<Self::Message>) {
+            (
+                Self {
+                    mode: ThemeMode::Light,
+                },
+                FluentTask::none(),
+            )
+        }
+
+        fn title(&self, _window: &WindowId) -> String {
+            "Theme switch".to_string()
+        }
+
+        fn view(&self, _window: &WindowId) -> View<Self::Message> {
+            page("Theme switch").content(text("Ready")).into_view()
+        }
+
+        fn update(&mut self, message: Self::Message) -> FluentTask<Self::Message> {
+            if let Msg::Toggle(dark) = message {
+                self.mode = if dark {
+                    ThemeMode::Dark
+                } else {
+                    ThemeMode::Light
+                };
+            }
+            FluentTask::none()
+        }
+
+        fn theme(&self) -> ThemeMode {
+            self.mode
+        }
+
+        fn theme_tokens(&self) -> ThemeTokens {
+            match self.mode {
+                ThemeMode::Dark => ThemeTokens::fluent_dark(),
+                _ => ThemeTokens::fluent_light(),
+            }
+        }
+    }
+
     #[derive(Debug)]
     struct WindowEventRecorderApp {
         events: Vec<WindowEvent>,
@@ -12716,6 +15241,76 @@ mod tests {
             std::process::id(),
             trace_wall_ms()
         ))
+    }
+
+    #[test]
+    fn app_update_switches_renderer_theme_before_rebuilding_transition_view() {
+        let mut runtime = IcedSingleWindowRuntime::new(
+            ThemeSwitchApp {
+                mode: ThemeMode::Light,
+            },
+            WindowOptions::new("main", "Theme switch"),
+            empty_desktop_integration_plan(),
+        );
+        assert_eq!(
+            runtime.renderer_theme.palette().background,
+            iced_color(ThemeTokens::fluent_light().background)
+        );
+
+        let _task = IcedSingleWindowRuntime::update(
+            &mut runtime,
+            IcedRuntimeMessage::App(Msg::Toggle(true)),
+        );
+
+        assert_eq!(runtime.renderer_theme_tokens, ThemeTokens::fluent_dark());
+        assert_eq!(
+            runtime.renderer_theme.palette().background,
+            iced_color(ThemeTokens::fluent_dark().background)
+        );
+    }
+
+    #[test]
+    fn daemon_clear_uses_active_theme_for_opaque_windows_and_stays_transparent_for_acrylic() {
+        let mut runtime = IcedSingleWindowRuntime::new(
+            ThemeSwitchApp {
+                mode: ThemeMode::Dark,
+            },
+            WindowOptions::new("main", "Theme switch").frame(WindowFrame::Borderless),
+            empty_desktop_integration_plan(),
+        );
+        let opaque_native_id = window::Id::unique();
+        runtime.pending_windows.insert(
+            opaque_native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new("main"),
+                options: WindowOptions::new("main", "Theme switch").frame(WindowFrame::Borderless),
+                custom_view: false,
+            },
+        );
+        let opaque_theme = runtime.renderer_theme_for_native_window(opaque_native_id);
+        let opaque_style = daemon_style(&runtime, &opaque_theme);
+        assert_eq!(
+            opaque_style.background_color,
+            iced_color(ThemeTokens::fluent_dark().background),
+            "an opaque window must clear directly to the active theme during a view rebuild"
+        );
+
+        let acrylic_native_id = window::Id::unique();
+        runtime.pending_windows.insert(
+            acrylic_native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new("mini"),
+                options: WindowOptions::new("mini", "Mini").frame(WindowFrame::Acrylic),
+                custom_view: false,
+            },
+        );
+        let acrylic_theme = runtime.renderer_theme_for_native_window(acrylic_native_id);
+        let acrylic_style = daemon_style(&runtime, &acrylic_theme);
+        assert_eq!(
+            acrylic_style.background_color,
+            iced::Color::TRANSPARENT,
+            "acrylic windows must preserve compositor transparency"
+        );
     }
 
     #[test]
@@ -13055,6 +15650,40 @@ mod tests {
         );
         assert!(runtime.views.contains_key(&WindowId::new("mini")));
     }
+    #[test]
+    fn repeated_open_for_pending_logical_window_reuses_single_native_window() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+
+        let _first = runtime.open_window_task(
+            WindowOptions::new("mode-menu", "First").size(180.0, 72.0),
+            Some(text("First").into_view()),
+        );
+        let first_native_id = *runtime
+            .pending_windows
+            .keys()
+            .next()
+            .expect("first open must create one pending native window");
+
+        let _second = runtime.open_window_task(
+            WindowOptions::new("mode-menu", "Second").size(196.0, 76.0),
+            Some(text("Second").into_view()),
+        );
+
+        assert_eq!(runtime.pending_windows.len(), 1);
+        let pending = runtime
+            .pending_windows
+            .get(&first_native_id)
+            .expect("repeated open must retain the original pending native id");
+        assert_eq!(pending.logical_id, WindowId::new("mode-menu"));
+        assert_eq!(pending.options.title, "Second");
+        assert_eq!(pending.options.width, 196.0);
+        assert!(pending.custom_view);
+    }
 
     #[test]
     fn closed_native_window_removes_logical_mapping() {
@@ -13116,6 +15745,36 @@ mod tests {
             Some(&native_id)
         );
         assert!(runtime.native_windows.contains_key(&native_id));
+    }
+
+    #[test]
+    fn unfocused_native_window_dispatches_logical_unfocused_event() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let native_id = window::Id::unique();
+        let runtime_window = RuntimeWindow {
+            logical_id: WindowId::new("mini"),
+            options: WindowOptions::new("mini", "Mini"),
+            custom_view: false,
+        };
+        runtime
+            .logical_windows
+            .insert(WindowId::new("mini"), native_id);
+        runtime.native_windows.insert(native_id, runtime_window);
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowNativeEvent(native_id, window::Event::Unfocused),
+        );
+
+        assert_eq!(
+            runtime.app.events,
+            vec![WindowEvent::Unfocused(WindowId::new("mini"))]
+        );
     }
 
     #[test]
@@ -13530,6 +16189,45 @@ mod tests {
     }
 
     #[test]
+    fn text_editor_cache_preserves_cursor_across_controlled_updates() {
+        let mut cache = TextEditorCache::default();
+        let initial = text_editor("a")
+            .id("editor")
+            .on_input(Msg::Input)
+            .into_view();
+        cache.sync(&initial);
+
+        cache
+            .perform(
+                "editor",
+                iced_text_editor_state::Action::Move(iced_text_editor_state::Motion::DocumentEnd),
+            )
+            .expect("editor content");
+
+        let after_b = cache
+            .perform(
+                "editor",
+                iced_text_editor_state::Action::Edit(iced_text_editor_state::Edit::Insert('b')),
+            )
+            .expect("editor content");
+        assert_eq!(after_b, "ab");
+
+        let updated = text_editor(after_b)
+            .id("editor")
+            .on_input(Msg::Input)
+            .into_view();
+        cache.sync(&updated);
+
+        let after_c = cache
+            .perform(
+                "editor",
+                iced_text_editor_state::Action::Edit(iced_text_editor_state::Edit::Insert('c')),
+            )
+            .expect("editor content");
+        assert_eq!(after_c, "abc");
+    }
+
+    #[test]
     fn finds_focused_text_editor_inside_view_tree() {
         let view = page("Editor")
             .content(
@@ -13762,7 +16460,7 @@ mod tests {
         );
         assert_eq!(
             frameless_editor_active.background,
-            Background::Color(iced_color(theme.input_surface))
+            Background::Color(iced::Color::TRANSPARENT)
         );
         assert_eq!(
             frameless_editor_active.border.color,
@@ -13777,7 +16475,7 @@ mod tests {
         );
         assert_eq!(
             frameless_editor.background,
-            Background::Color(iced_color(theme.input_surface))
+            Background::Color(iced::Color::TRANSPARENT)
         );
         assert_eq!(frameless_editor.border.color, iced_color(theme.border));
         assert_eq!(frameless_editor.border.width, 0.0);
@@ -13995,6 +16693,8 @@ mod tests {
         );
         // Result rows are flat outlined strips like the WinUI reference.
         assert_eq!(result_card.shadow, Shadow::default());
+        assert_eq!(result_card.border.radius.top_left, theme.radius.control);
+        assert_eq!(result_card.border.radius.top_right, theme.radius.control);
 
         let elevated_card = card_container_style(visual, CardKind::Elevated);
         assert_eq!(elevated_card.shadow, Shadow::default());
@@ -14501,41 +17201,6 @@ mod tests {
         assert_eq!(combo_opened.border.color, visual.border);
         assert_eq!(combo_opened.border.width, visual.stroke_control);
         assert_eq!(
-            selected_aligned_combo_overlay_offset(None, 34.0, 34.0, 0),
-            -34.0
-        );
-        assert_eq!(
-            selected_aligned_combo_overlay_offset(Some(2), 34.0, 34.0, 0),
-            -102.0,
-            "WinUI ComboBox flyouts keep the selected row visually near the collapsed ComboBox"
-        );
-        assert_eq!(
-            combo_box_selected_row_alignment_bias(Some("fixed.source_language"), Some(0)),
-            0
-        );
-        assert_eq!(
-            combo_box_selected_row_alignment_bias(Some("mini.source_language"), Some(0)),
-            0
-        );
-        assert_eq!(
-            combo_box_selected_row_alignment_bias(Some("fixed.target_language"), Some(2)),
-            0
-        );
-        assert_eq!(
-            combo_box_selected_row_alignment_bias(Some("main.long-doc.source_language"), Some(0)),
-            0
-        );
-        assert_eq!(
-            selected_aligned_combo_overlay_offset(Some(0), 34.0, 34.0, 1),
-            -68.0,
-            "nonzero alignment bias moves the selected row up by additional item rows"
-        );
-        assert_eq!(
-            selected_aligned_combo_overlay_offset(Some(0), 34.0, 34.0, 0),
-            -34.0,
-            "floating source-language flyouts keep the first selected row aligned with the collapsed control"
-        );
-        assert_eq!(
             selected_combo_indicator_bounds(
                 Rectangle {
                     x: 100.0,
@@ -14544,6 +17209,7 @@ mod tests {
                     height: 160.0,
                 },
                 Some(2),
+                0.0,
                 32.0,
             ),
             Some(Rectangle {
@@ -14552,41 +17218,14 @@ mod tests {
                 width: 3.0,
                 height: 18.0,
             }),
-            "WinUI ComboBox selected-row marker uses a narrow accent bar inside the row"
+            "WinUI ComboBox selected rows keep the accent marker"
         );
-        assert_eq!(
-            selected_combo_indicator_bounds(
-                Rectangle {
-                    x: 100.0,
-                    y: 40.0,
-                    width: 220.0,
-                    height: 64.0,
-                },
-                Some(3),
-                32.0,
-            ),
-            None,
-            "off-viewport selected rows must not paint an accent marker outside the flyout"
-        );
-        assert_eq!(
-            selected_combo_focus_bounds(
-                Rectangle {
-                    x: 100.0,
-                    y: 40.0,
-                    width: 220.0,
-                    height: 160.0,
-                },
-                Some(0),
-                34.0,
-            ),
-            Some(Rectangle {
-                x: 104.0,
-                y: 42.0,
-                width: 212.0,
-                height: 30.0,
-            }),
-            "WinUI source-language flyouts show a focus rectangle around the first selected row"
-        );
+        let selected_focus_bounds = Rectangle {
+            x: 104.0,
+            y: 42.0,
+            width: 212.0,
+            height: 30.0,
+        };
         assert_eq!(
             selected_combo_focus_bounds(
                 Rectangle {
@@ -14596,21 +17235,14 @@ mod tests {
                     height: 160.0,
                 },
                 Some(2),
+                68.0,
                 34.0,
             ),
-            None,
-            "target-language flyouts with a non-first selected row should keep the softer selected surface"
+            Some(selected_focus_bounds),
+            "a scrolled nonzero selected row keeps the WinUI focus outline"
         );
         assert_eq!(
-            selected_combo_focus_segments(
-                Rectangle {
-                    x: 104.0,
-                    y: 42.0,
-                    width: 212.0,
-                    height: 30.0,
-                },
-                2.0,
-            ),
+            selected_combo_focus_segments(selected_focus_bounds, 2.0),
             [
                 Rectangle {
                     x: 104.0,
@@ -14636,8 +17268,7 @@ mod tests {
                     width: 2.0,
                     height: 26.0,
                 },
-            ],
-            "focus rectangle segments paint visibly even when the interior remains transparent"
+            ]
         );
 
         let combo_disabled = ControlState::default()
@@ -14662,6 +17293,331 @@ mod tests {
                 .border
                 .color,
             iced_color(theme.border)
+        );
+    }
+
+    #[test]
+    fn combo_menu_scroll_offset_reveals_selected_row_in_height_limited_lists() {
+        assert_eq!(
+            selected_combo_menu_scroll_offset(None, 26, 204.0, 34.0),
+            0.0
+        );
+        assert_eq!(
+            selected_combo_menu_scroll_offset(Some(18), 26, 204.0, 34.0),
+            612.0,
+            "a selected row beyond the six visible rows should scroll to the menu top"
+        );
+        assert_eq!(
+            selected_combo_menu_scroll_offset(Some(25), 26, 204.0, 34.0),
+            680.0,
+            "the last row should clamp to the maximum scroll offset"
+        );
+    }
+    #[test]
+    fn combo_wheel_scroll_refreshes_hover_for_the_scrolled_row() {
+        let menu_bounds = Rectangle {
+            x: 100.0,
+            y: 40.0,
+            width: 220.0,
+            height: 204.0,
+        };
+        let cursor = mouse::Cursor::Available(Point::new(200.0, 180.0));
+        let wheel = Event::Mouse(mouse::Event::WheelScrolled {
+            delta: mouse::ScrollDelta::Lines { x: 0.0, y: -1.0 },
+        });
+
+        assert_eq!(
+            selected_combo_hover_refresh_event(&wheel, cursor, menu_bounds),
+            Some(Event::Mouse(mouse::Event::CursorMoved {
+                position: Point::new(200.0, 180.0),
+            })),
+            "Iced caches the hovered option separately from its scroll offset, so a wheel must refresh the hover before the next click"
+        );
+        assert!(
+            selected_combo_hover_refresh_event(
+                &wheel,
+                mouse::Cursor::Available(Point::new(20.0, 20.0)),
+                menu_bounds,
+            )
+            .is_none(),
+            "a wheel outside the open menu must not affect its hovered option"
+        );
+    }
+
+    #[test]
+    fn combo_scroll_initialization_resets_persisted_offset_before_reopen() {
+        let item_count = 26;
+        let menu_height = 204.0;
+        let row_height = 34.0;
+        let maximum_scroll_offset =
+            selected_combo_menu_max_scroll_offset(item_count, menu_height, row_height);
+
+        for (persisted_offset, selected_index, expected_offset) in
+            [(340.0, Some(18), 612.0), (680.0, Some(0), 0.0)]
+        {
+            let initial_scroll_offset = selected_combo_menu_scroll_offset(
+                selected_index,
+                item_count,
+                menu_height,
+                row_height,
+            );
+            let mut nested_scroll_offset = persisted_offset;
+            initialize_selected_combo_scroll(
+                item_count,
+                row_height,
+                initial_scroll_offset,
+                |delta_y| {
+                    nested_scroll_offset =
+                        (nested_scroll_offset - delta_y).clamp(0.0, maximum_scroll_offset);
+                },
+            );
+
+            assert_eq!(
+                nested_scroll_offset, expected_offset,
+                "reopening must reset the persisted inner scroll before revealing the selection"
+            );
+        }
+    }
+
+    #[test]
+    fn combo_overlay_translation_aligns_scrolled_selected_row() {
+        let native_bounds = Rectangle {
+            x: 20.0,
+            y: 200.0,
+            width: 200.0,
+            height: 204.0,
+        };
+        let scroll_offset =
+            selected_combo_menu_scroll_offset(Some(18), 26, native_bounds.height, 34.0);
+
+        assert_eq!(
+            selected_aligned_combo_overlay_translation(
+                native_bounds,
+                Size::new(419.0, 820.0),
+                100.0,
+                Some(18),
+                scroll_offset,
+                34.0,
+            ),
+            Vector::new(0.0, -100.0),
+            "the now-visible selected row should align to the control"
+        );
+        assert_eq!(
+            selected_combo_indicator_bounds(
+                Rectangle {
+                    x: 20.0,
+                    y: 100.0,
+                    width: 200.0,
+                    height: 204.0,
+                },
+                Some(18),
+                scroll_offset,
+                34.0,
+            ),
+            Some(Rectangle {
+                x: 26.0,
+                y: 108.0,
+                width: 3.0,
+                height: 18.0,
+            }),
+            "the selected marker follows the scrolled row"
+        );
+    }
+
+    #[test]
+    fn combo_selected_visuals_follow_scrolled_nonzero_row() {
+        let menu_bounds = Rectangle {
+            x: 20.0,
+            y: 100.0,
+            width: 200.0,
+            height: 204.0,
+        };
+        let scroll_offset =
+            selected_combo_menu_scroll_offset(Some(25), 26, menu_bounds.height, 34.0);
+
+        assert_eq!(
+            selected_combo_focus_bounds(menu_bounds, Some(25), scroll_offset, 34.0),
+            Some(Rectangle {
+                x: 24.0,
+                y: 272.0,
+                width: 192.0,
+                height: 30.0,
+            })
+        );
+        assert_eq!(
+            selected_combo_indicator_bounds(menu_bounds, Some(25), scroll_offset, 34.0),
+            Some(Rectangle {
+                x: 26.0,
+                y: 278.0,
+                width: 3.0,
+                height: 18.0,
+            })
+        );
+    }
+
+    #[test]
+    fn combo_selected_visuals_follow_user_wheel_scroll() {
+        let menu_bounds = Rectangle {
+            x: 20.0,
+            y: 100.0,
+            width: 200.0,
+            height: 204.0,
+        };
+        let initial_scroll_offset =
+            selected_combo_menu_scroll_offset(Some(18), 26, menu_bounds.height, 34.0);
+        let mut state = SelectedAlignedComboOverlayState::default();
+        state.initialize_scroll(initial_scroll_offset);
+
+        state.track_scroll_event(
+            &Event::Mouse(mouse::Event::WheelScrolled {
+                delta: mouse::ScrollDelta::Pixels { x: 0.0, y: -34.0 },
+            }),
+            mouse::Cursor::Available(menu_bounds.center()),
+            menu_bounds,
+            selected_combo_menu_max_scroll_offset(26, menu_bounds.height, 34.0),
+        );
+
+        assert_eq!(state.current_scroll_offset, initial_scroll_offset + 34.0);
+        assert_eq!(
+            selected_combo_indicator_bounds(
+                menu_bounds,
+                Some(18),
+                state.current_scroll_offset,
+                34.0,
+            ),
+            None,
+            "the selected marker must disappear when the selected row scrolls out of view"
+        );
+        assert_eq!(
+            selected_combo_focus_bounds(menu_bounds, Some(18), state.current_scroll_offset, 34.0,),
+            None,
+            "the selected focus ring must not remain on the row replacing the selection"
+        );
+    }
+
+    #[test]
+    fn combo_scroll_modifiers_refresh_while_menu_is_closed() {
+        let menu_bounds = Rectangle {
+            x: 20.0,
+            y: 100.0,
+            width: 200.0,
+            height: 204.0,
+        };
+        let cursor = mouse::Cursor::Available(menu_bounds.center());
+        let maximum_scroll_offset =
+            selected_combo_menu_max_scroll_offset(26, menu_bounds.height, 34.0);
+        let mut state = SelectedAlignedComboOverlayState::default();
+
+        state.track_keyboard_event(&Event::Keyboard(keyboard::Event::ModifiersChanged(
+            keyboard::Modifiers::SHIFT,
+        )));
+        state.initialize_scroll(0.0);
+        state.reset_scroll();
+        state.track_keyboard_event(&Event::Keyboard(keyboard::Event::ModifiersChanged(
+            keyboard::Modifiers::empty(),
+        )));
+        state.initialize_scroll(0.0);
+        state.track_scroll_event(
+            &Event::Mouse(mouse::Event::WheelScrolled {
+                delta: mouse::ScrollDelta::Lines { x: 0.0, y: -1.0 },
+            }),
+            cursor,
+            menu_bounds,
+            maximum_scroll_offset,
+        );
+
+        assert_eq!(
+            state.current_scroll_offset, 60.0,
+            "modifier releases while the menu is closed must affect the next wheel event"
+        );
+    }
+
+    #[test]
+    fn combo_selected_visuals_hide_for_untracked_scroll_interactions() {
+        let menu_bounds = Rectangle {
+            x: 20.0,
+            y: 100.0,
+            width: 200.0,
+            height: 204.0,
+        };
+        let mut state = SelectedAlignedComboOverlayState::default();
+        state.initialize_scroll(612.0);
+
+        state.track_scroll_event(
+            &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            mouse::Cursor::Available(menu_bounds.center()),
+            menu_bounds,
+            680.0,
+        );
+
+        assert_eq!(
+            state.visual_scroll_offset(),
+            None,
+            "scrollbar drags must hide visuals whose exact nested scroll offset is unavailable"
+        );
+    }
+
+    #[test]
+    fn combo_selected_visuals_keep_fractional_last_row_visible() {
+        let row_height = 34.2;
+        let menu_bounds = Rectangle {
+            x: 20.0,
+            y: 100.0,
+            width: 200.0,
+            height: 205.1,
+        };
+        let scroll_offset =
+            selected_combo_menu_scroll_offset(Some(25), 26, menu_bounds.height, row_height);
+        let rounded_row_bottom = menu_bounds.y + 25.0 * row_height - scroll_offset + row_height;
+        assert!(
+            rounded_row_bottom > menu_bounds.y + menu_bounds.height,
+            "fixture must reproduce the fractional-row f32 overshoot"
+        );
+
+        assert!(
+            selected_combo_indicator_bounds(menu_bounds, Some(25), scroll_offset, row_height,)
+                .is_some(),
+            "f32 rounding at maximum scroll must not hide the selected-row marker"
+        );
+        assert!(
+            selected_combo_focus_bounds(menu_bounds, Some(25), scroll_offset, row_height).is_some(),
+            "f32 rounding at maximum scroll must not hide the selected-row focus ring"
+        );
+    }
+
+    #[test]
+    fn combo_overlay_translation_clamps_aligned_menu_to_viewport() {
+        let native_bounds = Rectangle {
+            x: 20.0,
+            y: 200.0,
+            width: 200.0,
+            height: 204.0,
+        };
+        let viewport = Size::new(419.0, 600.0);
+
+        assert_eq!(
+            selected_aligned_combo_overlay_translation(
+                native_bounds,
+                viewport,
+                -68.0,
+                Some(2),
+                0.0,
+                34.0,
+            ),
+            Vector::new(0.0, -200.0),
+            "top-edge menus should remain fully on-screen"
+        );
+        assert_eq!(
+            selected_aligned_combo_overlay_translation(
+                native_bounds,
+                viewport,
+                500.0,
+                Some(2),
+                0.0,
+                34.0,
+            ),
+            Vector::new(0.0, 196.0),
+            "bottom-edge menus should remain fully on-screen"
         );
     }
 
@@ -14796,6 +17752,13 @@ mod tests {
         assert!(settings.resizable);
         assert!(settings.transparent);
         assert_eq!(settings.level, iced::window::Level::AlwaysOnTop);
+        #[cfg(windows)]
+        assert!(
+            !settings.visible,
+            "native styles must be applied before showing"
+        );
+        #[cfg(not(windows))]
+        assert!(settings.visible);
 
         #[cfg(windows)]
         {

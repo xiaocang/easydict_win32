@@ -179,9 +179,10 @@ pub(crate) fn log_message(message: &Message) {
                 log(
                     "ui",
                     format_args!(
-                        "message={} text_len={}",
+                        "message={} text_len={} text_hash={:016x}",
                         message_variant_name(message),
-                        char_len(text)
+                        char_len(text),
+                        stable_text_hash(text)
                     ),
                 );
             }
@@ -242,6 +243,32 @@ pub(crate) fn log_message(message: &Message) {
             log(
                 "ui",
                 format_args!("message={} value=redacted", message_variant_name(message)),
+            );
+        }
+        Message::FloatingSourceLanguageChanged(_, value)
+        | Message::FloatingTargetLanguageChanged(_, value) => {
+            log(
+                "ui",
+                format_args!("message={} value={value}", message_variant_name(message)),
+            );
+        }
+        Message::ModeChanged(value)
+        | Message::SourceLanguageChanged(value)
+        | Message::TargetLanguageChanged(value)
+        | Message::LongDocumentSourceLanguageChanged(value)
+        | Message::LongDocumentTargetLanguageChanged(value)
+        | Message::LongDocumentServiceChanged(value)
+        | Message::LongDocumentInputModeChanged(value)
+        | Message::LongDocumentOutputModeChanged(value) => {
+            log(
+                "ui",
+                format_args!("message={} value={value}", message_variant_name(message)),
+            );
+        }
+        Message::ToggleLongDocumentHistoryExpanded(value) => {
+            log(
+                "ui",
+                format_args!("message={} value={value}", message_variant_name(message)),
             );
         }
         _ if high_volume_message(message) => {}
@@ -558,12 +585,22 @@ fn char_len(value: &str) -> usize {
     value.chars().count()
 }
 
+fn stable_text_hash(value: &str) -> u64 {
+    value
+        .as_bytes()
+        .iter()
+        .fold(0xcbf29ce484222325, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+}
+
 fn window_event_parts(event: &WindowEvent) -> (&'static str, &str) {
     match event {
         WindowEvent::Opened(id) => ("Opened", id.as_str()),
         WindowEvent::CloseRequested(id) => ("CloseRequested", id.as_str()),
         WindowEvent::Closed(id) => ("Closed", id.as_str()),
         WindowEvent::Focused(id) => ("Focused", id.as_str()),
+        WindowEvent::Unfocused(id) => ("Unfocused", id.as_str()),
         WindowEvent::DpiChanged(id) => ("DpiChanged", id.as_str()),
     }
 }
@@ -636,6 +673,7 @@ fn button_like_message(message: &Message) -> bool {
             | Message::SpeakResult
             | Message::SpeakResultIn(_, _)
             | Message::OpenSettings
+            | Message::SettingsRuntimeLoadingDelayElapsed(_)
             | Message::Back
             | Message::SaveSettingsChanges
             | Message::DiscardSettingsChanges
@@ -697,6 +735,7 @@ fn message_variant_name(message: &Message) -> &'static str {
         Message::DesktopShellActionFinished(_) => "DesktopShellActionFinished",
         Message::DesktopIntegrationActionFinished(_) => "DesktopIntegrationActionFinished",
         Message::ThemeChanged(_) => "ThemeChanged",
+        Message::SystemThemeChanged(_) => "SystemThemeChanged",
         Message::ToggleMinimizeToTray(_) => "ToggleMinimizeToTray",
         Message::ToggleStartMinimized(_) => "ToggleStartMinimized",
         Message::ToggleMonitorClipboard(_) => "ToggleMonitorClipboard",
@@ -784,6 +823,7 @@ fn message_variant_name(message: &Message) -> &'static str {
         Message::ToggleWindowServiceQuery(_, _, _) => "ToggleWindowServiceQuery",
         Message::MoveWindowService(_, _, _) => "MoveWindowService",
         Message::ToggleTwoPassContext(_) => "ToggleTwoPassContext",
+        Message::ToggleLongDocumentHistoryExpanded(_) => "ToggleLongDocumentHistoryExpanded",
         Message::TogglePin(_) => "TogglePin",
         Message::ToggleResultExpanded(_) => "ToggleResultExpanded",
         Message::ToggleResultExpandedIn(_, _) => "ToggleResultExpandedIn",
@@ -842,7 +882,8 @@ fn message_variant_name(message: &Message) -> &'static str {
         Message::SpeakResultFinished(_) => "SpeakResultFinished",
         Message::ClipboardOperationFinished(_) => "ClipboardOperationFinished",
         Message::OpenSettings => "OpenSettings",
-        Message::SettingsRuntimeStatusLoaded(_) => "SettingsRuntimeStatusLoaded",
+        Message::SettingsRuntimeLoadingDelayElapsed(_) => "SettingsRuntimeLoadingDelayElapsed",
+        Message::SettingsRuntimeStatusLoaded(_, _) => "SettingsRuntimeStatusLoaded",
         Message::SettingsSaveFinished(_) => "SettingsSaveFinished",
         Message::BuiltInAiDeviceRegistrationFinished(_) => "BuiltInAiDeviceRegistrationFinished",
         Message::Back => "Back",
@@ -880,6 +921,12 @@ fn message_variant_name(message: &Message) -> &'static str {
         Message::PopButtonAutoDismiss(_) => "PopButtonAutoDismiss",
         Message::PopButtonClicked => "PopButtonClicked",
         Message::PreviewScrollReady => "PreviewScrollReady",
+        #[cfg(feature = "parity-diagnostics")]
+        Message::PreviewControlSignaled => "PreviewControlSignaled",
+        #[cfg(feature = "parity-diagnostics")]
+        Message::PreviewControlArtifactsWritten(_) => "PreviewControlArtifactsWritten",
+        #[cfg(feature = "parity-diagnostics")]
+        Message::PreviewControlTimedOut(_) => "PreviewControlTimedOut",
         Message::Noop => "Noop",
     }
 }
@@ -915,6 +962,12 @@ mod tests {
             assert!(!env_value_enabled(Some(value.to_string())));
         }
         assert!(!env_value_enabled(None));
+    }
+
+    #[test]
+    fn stable_text_hash_tracks_character_order_without_logging_content() {
+        assert_eq!(stable_text_hash("abc"), 0xe71fa2190541574b);
+        assert_ne!(stable_text_hash("abc"), stable_text_hash("cba"));
     }
 
     #[test]

@@ -21,6 +21,7 @@ pub enum WindowEvent {
     CloseRequested(WindowId),
     Closed(WindowId),
     Focused(WindowId),
+    Unfocused(WindowId),
     DpiChanged(WindowId),
 }
 
@@ -31,6 +32,7 @@ impl WindowEvent {
             | Self::CloseRequested(id)
             | Self::Closed(id)
             | Self::Focused(id)
+            | Self::Unfocused(id)
             | Self::DpiChanged(id) => id,
         }
     }
@@ -194,6 +196,12 @@ mod tests {
                 WindowId::new("mini"),
             ))),
             None
+        );
+        assert_eq!(
+            map(PlatformEvent::Window(WindowEvent::Unfocused(
+                WindowId::new("main",)
+            ))),
+            Some(Msg::Window(WindowEvent::Unfocused(WindowId::new("main"))))
         );
         assert_eq!(map(PlatformEvent::ClipboardChanged), None);
     }

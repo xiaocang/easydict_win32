@@ -47,6 +47,36 @@ public static class ScreenshotHelper
     }
 
     /// <summary>
+    /// Capture a physical-pixel desktop region. Used when a transient popup is
+    /// outside its owner window and both surfaces must remain in one artifact.
+    /// </summary>
+    public static string CaptureScreenRegion(Rectangle physicalBounds, string name)
+    {
+        var bounds = IntersectWithVirtualScreen(physicalBounds);
+        if (bounds.Width <= 1 || bounds.Height <= 1)
+        {
+            throw new InvalidOperationException(
+                $"Screenshot '{name}' cannot capture desktop bounds {physicalBounds}.");
+        }
+
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.CopyFromScreen(
+                bounds.Left,
+                bounds.Top,
+                0,
+                0,
+                bounds.Size,
+                CopyPixelOperation.SourceCopy);
+        }
+
+        var path = SaveBitmap(bitmap, name);
+        ValidateSavedScreenshot(path, name);
+        return path;
+    }
+
+    /// <summary>
     /// Capture a specific window and save with the given name.
     /// </summary>
     public static string CaptureWindow(Window window, string name)

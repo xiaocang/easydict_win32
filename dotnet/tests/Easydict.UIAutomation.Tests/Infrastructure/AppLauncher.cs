@@ -293,6 +293,9 @@ public sealed class AppLauncher : IDisposable
         }
     }
 
+    public static string? TryGetInstalledExecutablePath() =>
+        FindInstalledPackageInfo().ExePath;
+
     private static (string? FamilyName, string? ExePath) FindInstalledPackageInfo()
     {
         try

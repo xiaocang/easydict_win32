@@ -46,6 +46,7 @@ easydict_windows_tts = { path = "../../../lib/easydict-windows-tts" }
 easydict_windows_ai = { path = "../../../lib/easydict-windows-ai" }
 easydict_windows_ocr = { path = "../easydict_windows_ocr" }
 win_fluent = { path = "../../../lib/winfluent-rs/crates/win_fluent" }
+win_fluent_platform_win = { path = "../../../lib/winfluent-rs/crates/win_fluent_platform_win" }
 zip = "8.6"
 
 [features]

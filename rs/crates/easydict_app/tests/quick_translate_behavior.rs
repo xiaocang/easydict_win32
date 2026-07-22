@@ -9188,8 +9188,9 @@ fn encrypted_local_dictionary_suggestions_with_invalid_regcode_fail_locally_with
     state.settings.imported_mdx_dictionaries[0].regcode = Some("not a base64 regcode".to_string());
     state.settings.imported_mdx_dictionaries[0].email = Some("email@example.com".to_string());
     state.source_text = "app".to_string();
-    let request =
+    let mut request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&temp_dir.join("cache")));
 
     assert!(!local_dictionary_suggestion_request_can_route_natively(
         &request
@@ -9228,8 +9229,9 @@ fn unsupported_encrypted_local_dictionary_suggestions_fail_locally_without_compa
     ))));
     state.settings.imported_mdx_dictionaries[0].is_encrypted = true;
     state.source_text = "app".to_string();
-    let request =
+    let mut request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&temp_dir.join("cache")));
 
     assert!(!local_dictionary_suggestion_request_can_route_natively(
         &request
@@ -9330,8 +9332,9 @@ fn unencrypted_local_dictionary_suggestions_route_natively_without_compat_host_s
         r"C:\Dicts\Demo Dictionary.mdx".to_string(),
     )));
     state.source_text = "app".to_string();
-    let request =
+    let mut request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&temp_dir.join("cache")));
 
     assert!(local_dictionary_suggestion_request_can_route_natively(
         &request
@@ -9364,8 +9367,9 @@ fn local_dictionary_suggestions_app_dir_ignores_stale_dotnet_payload_markers() {
         r"C:\Dicts\Demo Dictionary.mdx".to_string(),
     )));
     state.source_text = "app".to_string();
-    let request =
+    let mut request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&temp_dir.join("cache")));
 
     assert!(local_dictionary_suggestion_request_can_route_natively(
         &request
@@ -9410,8 +9414,9 @@ fn mixed_local_dictionary_suggestions_with_missing_files_finish_without_compat_h
     state.settings.imported_mdx_dictionaries[1].regcode = Some("reg".to_string());
     state.settings.imported_mdx_dictionaries[1].email = Some("email@example.com".to_string());
     state.source_text = "app".to_string();
-    let request =
+    let mut request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&temp_dir.join("cache")));
 
     assert!(!local_dictionary_suggestion_request_can_route_natively(
         &request
@@ -9448,8 +9453,9 @@ fn encrypted_local_dictionary_suggestions_with_credentials_missing_file_fail_loc
     state.settings.imported_mdx_dictionaries[0].regcode = Some("reg".to_string());
     state.settings.imported_mdx_dictionaries[0].email = Some("email@example.com".to_string());
     state.source_text = "app".to_string();
-    let request =
+    let mut request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&temp_dir.join("cache")));
 
     assert!(!local_dictionary_suggestion_request_can_route_natively(
         &request
@@ -9485,8 +9491,9 @@ fn encrypted_local_dictionary_suggestions_without_credentials_fail_locally_witho
     )));
     state.settings.imported_mdx_dictionaries[0].is_encrypted = true;
     state.source_text = "app".to_string();
-    let request =
+    let mut request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&temp_dir.join("cache")));
 
     assert!(!local_dictionary_suggestion_request_can_route_natively(
         &request
@@ -9740,6 +9747,9 @@ fn hotkey_settings_disable_invalid_and_derive_toggle_subscriptions() {
 
 #[test]
 fn default_tray_menu_covers_migration_contract() {
+    let _guard = ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let menu = default_tray_menu();
     let ids = menu
         .items
@@ -9873,6 +9883,9 @@ fn default_tray_menu_covers_migration_contract() {
 
 #[test]
 fn tray_menu_labels_follow_ui_language_like_winui_tray() {
+    let _guard = ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let menu = tray_menu_for_browser_support_locale(&BrowserSupportState::default(), "zh-CN");
     let labels = menu
         .items
@@ -9908,6 +9921,9 @@ fn tray_menu_labels_follow_ui_language_like_winui_tray() {
 
 #[test]
 fn tray_menu_uia_scroll_fixture_adds_extra_items_and_max_height() {
+    let _guard = ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _extra_items = EnvironmentVariableGuard::set("EASYDICT_UIA_TRAY_EXTRA_ITEMS", "12");
     let _max_height = EnvironmentVariableGuard::set("EASYDICT_UIA_TRAY_MAX_HEIGHT_DIPS", "280");
 
@@ -9924,6 +9940,9 @@ fn tray_menu_uia_scroll_fixture_adds_extra_items_and_max_height() {
 
 #[test]
 fn tray_browser_support_menu_reflects_installation_status() {
+    let _guard = ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let menu = tray_menu_for_browser_support(&BrowserSupportState {
         chrome_installed: true,
         firefox_installed: false,
@@ -9948,6 +9967,9 @@ fn tray_browser_support_menu_reflects_installation_status() {
 
 #[test]
 fn default_tray_menu_keeps_native_tray_shape_without_platform_adapter() {
+    let _guard = ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let menu = default_tray_menu();
 
     assert_eq!(menu.tooltip, "Easydict - Dictionary & Translation");
@@ -9985,6 +10007,18 @@ fn default_tray_menu_keeps_native_tray_shape_without_platform_adapter() {
             .expect("exit command")
             .enabled
     );
+}
+
+#[test]
+fn mode_switch_stays_in_process_without_a_native_popup_command() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let task = app.update(Message::ModeChanged("long-document".to_string()));
+
+    assert_eq!(app.state.mode, easydict_app::AppMode::LongDocument);
+    assert!(!contains_window_command(&task, |_| true));
 }
 
 #[test]
@@ -10502,16 +10536,24 @@ fn settings_button_routes_main_window_to_settings_and_back_restores_content() {
 
     let task = app.update(Message::OpenSettings);
 
-    // Opening settings now spawns the async on-disk runtime-status check and
-    // shows the loading overlay until it resolves.
-    assert_eq!(task_kind(&task), "future");
+    // Opening settings starts the status check immediately, but defers the
+    // overlay so a fast result does not flash during the view transition.
+    assert_eq!(task_kind(&task), "batch");
     assert!(app.state.settings_open);
     assert!(app.state.settings.settings_runtime.is_loading());
+    assert!(!app.state.settings.settings_runtime_overlay_visible);
     assert_eq!(app.title(&main_window), "Easydict Settings");
     let settings_snapshot = win_fluent_testkit::view_snapshot(&app.view(&main_window));
     assert!(settings_snapshot.contains("Page title=\"Settings\""));
     assert!(settings_snapshot.contains("id=\"BackButton\""));
     assert!(!settings_snapshot.contains("id=\"QuickInputCard\""));
+    assert!(!settings_snapshot.contains("id=\"LoadingOverlay\""));
+
+    let generation = app.state.settings.settings_runtime_generation;
+    app.update(Message::SettingsRuntimeLoadingDelayElapsed(generation));
+    assert!(app.state.settings.settings_runtime_overlay_visible);
+    let delayed_snapshot = win_fluent_testkit::view_snapshot(&app.view(&main_window));
+    assert!(delayed_snapshot.contains("id=\"LoadingOverlay\""));
 
     let task = app.update(Message::Back);
 
@@ -10524,10 +10566,99 @@ fn settings_button_routes_main_window_to_settings_and_back_restores_content() {
 }
 
 #[test]
+fn stale_settings_loading_delay_does_not_reveal_overlay_after_reopen() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    app.update(Message::OpenSettings);
+    let first_generation = app.state.settings.settings_runtime_generation;
+    app.update(Message::Back);
+    app.update(Message::OpenSettings);
+    assert_ne!(
+        first_generation,
+        app.state.settings.settings_runtime_generation
+    );
+
+    // The first round's debounce firing during the second round must not
+    // reveal the overlay before the second round's own 200ms elapses.
+    app.update(Message::SettingsRuntimeLoadingDelayElapsed(
+        first_generation,
+    ));
+    assert!(app.state.settings.settings_runtime.is_loading());
+    assert!(!app.state.settings.settings_runtime_overlay_visible);
+
+    app.update(Message::SettingsRuntimeLoadingDelayElapsed(
+        app.state.settings.settings_runtime_generation,
+    ));
+    assert!(app.state.settings.settings_runtime_overlay_visible);
+}
+
+#[test]
+fn stale_settings_runtime_status_does_not_settle_reopened_generation() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    app.update(Message::OpenSettings);
+    let first_generation = app.state.settings.settings_runtime_generation;
+    app.update(Message::Back);
+    app.update(Message::OpenSettings);
+    let second_generation = app.state.settings.settings_runtime_generation;
+    let initial_layout_status = app.state.settings.layout_model_status.clone();
+
+    app.update(Message::SettingsRuntimeStatusLoaded(
+        first_generation,
+        easydict_app::settings_status::SettingsRuntimeStatus {
+            layout_model: "Stale layout status".to_string(),
+            cjk_font: "Stale font status".to_string(),
+            windows_ai_status: "Stale Windows AI status".to_string(),
+            foundry_local_status: "Stale Foundry status".to_string(),
+            open_vino_status: "Stale OpenVINO status".to_string(),
+            open_vino_download_progress: "Idle".to_string(),
+        },
+    ));
+
+    assert!(app.state.settings.settings_runtime.is_loading());
+    assert!(!app.state.settings.settings_runtime_overlay_visible);
+    assert_eq!(
+        app.state.settings.layout_model_status,
+        initial_layout_status
+    );
+
+    app.update(Message::SettingsRuntimeLoadingDelayElapsed(
+        second_generation,
+    ));
+    assert!(app.state.settings.settings_runtime_overlay_visible);
+
+    app.update(Message::SettingsRuntimeStatusLoaded(
+        second_generation,
+        easydict_app::settings_status::SettingsRuntimeStatus {
+            layout_model: "Current layout status".to_string(),
+            cjk_font: "Current font status".to_string(),
+            windows_ai_status: "Current Windows AI status".to_string(),
+            foundry_local_status: "Current Foundry status".to_string(),
+            open_vino_status: "Current OpenVINO status".to_string(),
+            open_vino_download_progress: "Idle".to_string(),
+        },
+    ));
+
+    assert!(!app.state.settings.settings_runtime.is_loading());
+    assert!(!app.state.settings.settings_runtime_overlay_visible);
+    assert_eq!(
+        app.state.settings.layout_model_status,
+        "Current layout status"
+    );
+}
+
+#[test]
 fn settings_runtime_status_loaded_updates_open_vino_panel_status_when_idle() {
     let mut state = EasydictUiState::default();
+    state.settings.settings_runtime = win_fluent::Loadable::Loading;
+    state.settings.settings_runtime_overlay_visible = true;
 
     state.apply(Message::SettingsRuntimeStatusLoaded(
+        state.settings.settings_runtime_generation,
         easydict_app::settings_status::SettingsRuntimeStatus {
             layout_model: "Available".to_string(),
             cjk_font: "Available".to_string(),
@@ -10548,6 +10679,7 @@ fn settings_runtime_status_loaded_updates_open_vino_panel_status_when_idle() {
     assert_eq!(state.settings.open_vino_status, "NLLB-200 model ready");
     assert_eq!(state.settings.open_vino_download_progress, "Idle");
     assert!(!state.settings.settings_runtime.is_loading());
+    assert!(!state.settings.settings_runtime_overlay_visible);
 }
 
 #[test]
@@ -10556,6 +10688,7 @@ fn settings_runtime_status_loaded_preserves_queued_open_vino_download_state() {
 
     state.apply(Message::DownloadOpenVinoModel);
     state.apply(Message::SettingsRuntimeStatusLoaded(
+        state.settings.settings_runtime_generation,
         easydict_app::settings_status::SettingsRuntimeStatus {
             layout_model: "Available".to_string(),
             cjk_font: "Available".to_string(),
@@ -10580,6 +10713,7 @@ fn settings_runtime_status_loaded_preserves_starting_foundry_local_status() {
 
     state.apply(Message::StartFoundryLocal);
     state.apply(Message::SettingsRuntimeStatusLoaded(
+        state.settings.settings_runtime_generation,
         easydict_app::settings_status::SettingsRuntimeStatus {
             layout_model: "Available".to_string(),
             cjk_font: "Available".to_string(),

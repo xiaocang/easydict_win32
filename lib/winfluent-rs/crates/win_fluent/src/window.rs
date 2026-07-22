@@ -84,6 +84,13 @@ pub enum WindowPlacement {
         inset_x: f32,
         inset_y: f32,
     },
+    /// Anchor a popup at the current cursor using signed content insets.
+    /// Negative vertical insets create a gap above the cursor and preserve the
+    /// same gap below it when placement falls back near the top edge.
+    ContextMenuAtCursor {
+        inset_x: f32,
+        inset_y: f32,
+    },
     TopRight {
         margin_x: f32,
         margin_y: f32,

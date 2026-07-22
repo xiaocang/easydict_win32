@@ -20,6 +20,14 @@ pub use crate::platform::{
 };
 pub use crate::runtime::{Application, DesktopIntegrationPlan, RuntimePlan};
 pub use crate::schema::{view_schema, SchemaNode, SchemaProperty, ViewSchema, VIEW_SCHEMA_VERSION};
+
+#[cfg(feature = "parity-diagnostics")]
+pub use crate::provenance::{PropertyProvenance, SourceLocation, ViewProvenance};
+#[cfg(feature = "parity-diagnostics")]
+pub use crate::schema::{
+    diagnostic_diff_views, diagnostic_view_schema, DiagnosticChange, DiagnosticNode,
+    DiagnosticViewDiff, DiagnosticViewSchema,
+};
 pub use crate::screenshot::{ScreenshotError, WindowScreenshot};
 pub use crate::state::{
     CommonVisualState, ControlState, FocusVisualState, SelectionVisualState, ValidationSeverity,

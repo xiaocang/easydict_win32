@@ -6,6 +6,7 @@ using Xunit;
 namespace Easydict.WinUI.Tests.Services;
 
 [Trait("Category", "WinUI")]
+[Collection("ScreenCapture")]
 public class ScreenCaptureServiceTests
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
@@ -131,4 +132,9 @@ public class ScreenCaptureServiceTests
             }
         }
     }
+}
+
+[CollectionDefinition("ScreenCapture", DisableParallelization = true)]
+public sealed class ScreenCaptureTestCollection
+{
 }

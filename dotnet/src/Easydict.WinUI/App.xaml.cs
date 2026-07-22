@@ -17,9 +17,11 @@ namespace Easydict.WinUI
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
+        private const uint WM_QUERYENDSESSION = 0x0011;
+        private const uint WM_ENDSESSION = 0x0016;
         private const uint WM_SETTINGCHANGE = 0x001A;
         private const uint WM_THEMECHANGED = 0x031A;
-        private const nuint ThemeSubclassId = 2;
+        private const nuint AppWindowSubclassId = 2;
 
         private delegate nint SubclassProc(
             nint hWnd,
@@ -59,8 +61,10 @@ namespace Easydict.WinUI
         private AppWindow? _appWindow;
         private bool? _lastSystemDark;
         private int _systemThemeRefreshQueued;
-        private nint _themeSubclassHwnd;
-        private SubclassProc? _themeSubclassProc;
+        private int _sessionEndQueryLogged;
+        private nint _appWindowSubclassHwnd;
+        private SubclassProc? _appWindowSubclassProc;
+        private volatile bool _isSystemShutdownRequested;
         private bool _servicesInitialized;
         private static int _pendingRedirectedOcrTranslate;
 
@@ -122,77 +126,23 @@ namespace Easydict.WinUI
             this.UnhandledException += OnUnhandledException;
         }
 
-        /// <summary>
-        /// Diagnostic logging with fallback locations for MSIX troubleshooting.
-        /// </summary>
-        internal static void LogToFile(string message)
-        {
-            var timestamp = DateTime.UtcNow.ToString("O");
-            var entry = $"[{timestamp}] {message}\n";
-
-            // Try LocalApplicationData first
-            try
-            {
-                var logDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Easydict");
-                Directory.CreateDirectory(logDir);
-                var logPath = Path.Combine(logDir, "debug.log");
-                File.AppendAllText(logPath, entry);
-                return;
-            }
-            catch { /* Try fallback */ }
-
-            // Fallback: Windows Temp directory
-            try
-            {
-                var tempLog = Path.Combine(Path.GetTempPath(), "Easydict-debug.log");
-                File.AppendAllText(tempLog, entry);
-            }
-            catch { /* Must not throw */ }
-        }
-
         private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         {
             var message = e.Exception?.ToString() ?? "Unknown error";
-
-            // ALWAYS log to debug log first
-            LogToFile($"[UnhandledException] {message}");
-
-            // Log to persistent file so crashes are diagnosable in release builds
-            try
-            {
-                var logDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Easydict");
-                Directory.CreateDirectory(logDir);
-                var logPath = Path.Combine(logDir, "crash.log");
-                var entry = $"[{DateTime.UtcNow:O}] {message}\n";
-                File.AppendAllText(logPath, entry);
-            }
-            catch
-            {
-                // Logging must not throw
-            }
-
+            CrashDiagnostics.LogException(
+                "App.OnUnhandledException",
+                e.Exception,
+                isTerminating: false,
+                isHandled: false);
             System.Diagnostics.Debug.WriteLine($"[App] Unhandled exception: {message}");
 
-            // Let fatal exceptions (OOM, stack overflow, access violation) crash the process
-            // rather than continuing in a corrupted state.
-            if (IsFatalException(e.Exception))
+            if (CrashDiagnostics.IsProcessFatal(e.Exception))
+            {
                 return;
+            }
 
-            // For non-fatal exceptions, show an error dialog so the user sees what happened
             e.Handled = true;
             ShowErrorDialog(message);
-        }
-
-        private static bool IsFatalException(Exception? ex)
-        {
-            return ex is OutOfMemoryException
-                or StackOverflowException
-                or System.Runtime.InteropServices.SEHException
-                or AccessViolationException;
         }
 
         private async void ShowErrorDialog(string message)
@@ -219,25 +169,25 @@ namespace Easydict.WinUI
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
-            LogToFile($"[OnLaunched] Starting - Args: {e.Arguments}");
+            CrashDiagnostics.Log($"[OnLaunched] Starting - Args: {e.Arguments}");
             if (EasydictConditions.IsPackaged)
             {
                 try
                 {
-                    LogToFile($"[OnLaunched] Package: {Windows.ApplicationModel.Package.Current.Id.FullName}");
+                    CrashDiagnostics.Log($"[OnLaunched] Package: {Windows.ApplicationModel.Package.Current.Id.FullName}");
                 }
                 catch (Exception ex)
                 {
-                    LogToFile($"[OnLaunched] Package: (read failed: {ex.Message})");
+                    CrashDiagnostics.Log($"[OnLaunched] Package: (read failed: {ex.Message})");
                 }
             }
             else
             {
-                LogToFile("[OnLaunched] Package: (unpackaged)");
+                CrashDiagnostics.Log("[OnLaunched] Package: (unpackaged)");
             }
 
             _window = new Window();
-            LogToFile("[OnLaunched] Window created");
+            CrashDiagnostics.Log("[OnLaunched] Window created");
 
             // Set window title
             _window.Title = "Easydict ᵇᵉᵗᵃ";
@@ -285,26 +235,26 @@ namespace Easydict.WinUI
                 return;
             }
 
-            LogToFile("[OnLaunched] Navigating to MainPage...");
+            CrashDiagnostics.Log("[OnLaunched] Navigating to MainPage...");
             _ = rootFrame.Navigate(typeof(MainPage), e.Arguments);
-            LogToFile("[OnLaunched] Navigation complete");
+            CrashDiagnostics.Log("[OnLaunched] Navigation complete");
 
-            LogToFile("[OnLaunched] Activating window...");
+            CrashDiagnostics.Log("[OnLaunched] Activating window...");
             _window.Activate();
-            LogToFile("[OnLaunched] Window activated");
+            CrashDiagnostics.Log("[OnLaunched] Window activated");
 
             // Initialize services
-            LogToFile("[OnLaunched] Initializing services...");
+            CrashDiagnostics.Log("[OnLaunched] Initializing services...");
             InitializeServices();
             _servicesInitialized = true;
-            LogToFile("[OnLaunched] Launch complete!");
+            CrashDiagnostics.Log("[OnLaunched] Launch complete!");
 
             // If "minimize to tray on startup" is enabled, hide the window immediately
             // after activation (window must be activated first for services to initialize properly)
             var startupSettings = SettingsService.Instance;
             if (startupSettings.MinimizeToTrayOnStartup && startupSettings.MinimizeToTray)
             {
-                LogToFile("[OnLaunched] MinimizeToTrayOnStartup enabled, hiding window");
+                CrashDiagnostics.Log("[OnLaunched] MinimizeToTrayOnStartup enabled, hiding window");
                 HideWindow();
             }
 
@@ -340,8 +290,8 @@ namespace Easydict.WinUI
             // Initialize hotkey service
             try
             {
-                LogToFile($"[App] Starting HotkeyService initialization... HWND: {WindowNative.GetWindowHandle(_window)}");
-                LogToFile($"[App] Hotkey settings: Show={settings.EnableShowWindowHotkey}, Translate={settings.EnableTranslateSelectionHotkey}, Mini={settings.EnableShowMiniWindowHotkey}, Fixed={settings.EnableShowFixedWindowHotkey}, OCR={settings.EnableOcrTranslateHotkey}, Silent={settings.EnableSilentOcrHotkey}");
+                CrashDiagnostics.Log($"[App] Starting HotkeyService initialization... HWND: {WindowNative.GetWindowHandle(_window)}");
+                CrashDiagnostics.Log($"[App] Hotkey settings: Show={settings.EnableShowWindowHotkey}, Translate={settings.EnableTranslateSelectionHotkey}, Mini={settings.EnableShowMiniWindowHotkey}, Fixed={settings.EnableShowFixedWindowHotkey}, OCR={settings.EnableOcrTranslateHotkey}, Silent={settings.EnableSilentOcrHotkey}");
                 
                 _hotkeyService = new HotkeyService(_window);
                 _hotkeyService.OnShowWindow += OnShowWindowHotkey;
@@ -354,11 +304,11 @@ namespace Easydict.WinUI
                 _hotkeyService.OnSilentOcr += OnSilentOcrHotkey;
                 var hotkeyFailures = _hotkeyService.Initialize();
                 QueueHotkeyRegistrationWarning(hotkeyFailures);
-                LogToFile("[App] HotkeyService initialization call completed.");
+                CrashDiagnostics.Log("[App] HotkeyService initialization call completed.");
             }
             catch (Exception ex)
             {
-                LogToFile($"[App] HotkeyService initialization CRITICAL FAILURE: {ex}");
+                CrashDiagnostics.Log($"[App] HotkeyService initialization CRITICAL FAILURE: {ex}");
                 System.Diagnostics.Debug.WriteLine($"[App] HotkeyService initialization failed: {ex}");
             }
 
@@ -492,7 +442,7 @@ namespace Easydict.WinUI
             ApplyAlwaysOnTop(settings.AlwaysOnTop);
 
             // Apply saved theme setting
-            RegisterSystemThemeWatcher();
+            RegisterSystemMessageHandlers();
             ApplyTheme(settings.AppTheme);
 
             // Pre-warm TTS service to avoid first-use delay, but only when the user
@@ -1195,7 +1145,7 @@ namespace Easydict.WinUI
 
             if (_window?.Content is not Frame frame)
             {
-                LogToFile($"[MemoryGate] Root frame release skipped: content={_window?.Content?.GetType().FullName ?? "<null>"}");
+                CrashDiagnostics.Log($"[MemoryGate] Root frame release skipped: content={_window?.Content?.GetType().FullName ?? "<null>"}");
                 return;
             }
 
@@ -1205,28 +1155,74 @@ namespace Easydict.WinUI
             frame.ForwardStack.Clear();
             frame.Content = null;
             _window.Content = null;
-            LogToFile("[MemoryGate] Root frame released after hiding main window");
+            CrashDiagnostics.Log("[MemoryGate] Root frame released after hiding main window");
         }
 
         private void OnWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
         {
-            var settings = SettingsService.Instance;
-
-            // Save window dimensions before closing/minimizing
-            SaveWindowDimensions();
-
-            if (settings.MinimizeToTray)
+            try
             {
-                // Minimize to tray instead of closing
-                LogToFile($"[WindowClosing] MinimizeToTray=True, memoryAbB={IsMemoryAbVariantB()}");
-                args.Cancel = true;
-                HideWindow();
+                SaveWindowDimensions();
             }
-            else
+            catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
             {
-                // Actually close and cleanup
-                LogToFile($"[WindowClosing] MinimizeToTray=False, memoryAbB={IsMemoryAbVariantB()}");
+                CrashDiagnostics.LogException(
+                    "App.OnWindowClosing.SaveWindowDimensions",
+                    ex,
+                    isTerminating: false,
+                    isHandled: true);
+            }
+
+            var minimizeToTray = false;
+            try
+            {
+                minimizeToTray = SettingsService.Instance.MinimizeToTray;
+            }
+            catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+            {
+                CrashDiagnostics.LogException(
+                    "App.OnWindowClosing.ReadMinimizeToTray",
+                    ex,
+                    isTerminating: false,
+                    isHandled: true);
+            }
+
+            if (minimizeToTray && !_isSystemShutdownRequested)
+            {
+                CrashDiagnostics.Log($"[WindowClosing] MinimizeToTray=True, memoryAbB={IsMemoryAbVariantB()}");
+                args.Cancel = true;
+
+                try
+                {
+                    HideWindow();
+                }
+                catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+                {
+                    CrashDiagnostics.LogException(
+                        "App.OnWindowClosing.HideWindow",
+                        ex,
+                        isTerminating: false,
+                        isHandled: true);
+                    args.Cancel = false;
+                }
+
+                return;
+            }
+
+            args.Cancel = false;
+            CrashDiagnostics.Log(
+                $"[WindowClosing] Closing, shutdownRequested={_isSystemShutdownRequested}, memoryAbB={IsMemoryAbVariantB()}");
+            try
+            {
                 CleanupServices();
+            }
+            catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+            {
+                CrashDiagnostics.LogException(
+                    "App.OnWindowClosing.CleanupServices",
+                    ex,
+                    isTerminating: false,
+                    isHandled: true);
             }
         }
 
@@ -1297,7 +1293,7 @@ namespace Easydict.WinUI
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
             TextToSpeechService.StopIfInitialized();
-            app.UnregisterSystemThemeWatcher();
+            app.UnregisterSystemMessageHandlers();
         }
 
         /// <summary>
@@ -1440,48 +1436,55 @@ namespace Easydict.WinUI
         private static bool IsSystemTheme(string? theme) =>
             string.Equals(theme, "System", StringComparison.OrdinalIgnoreCase);
 
-        private void RegisterSystemThemeWatcher()
+        private void RegisterSystemMessageHandlers()
         {
             SystemEvents.UserPreferenceChanged -= OnSystemUserPreferenceChanged;
             SystemEvents.UserPreferenceChanged += OnSystemUserPreferenceChanged;
             _lastSystemDark = SystemThemeProbe.IsSystemDark();
 
-            if (_themeSubclassProc is not null || _window is null)
+            if (_appWindowSubclassProc is not null || _window is null)
             {
                 return;
             }
 
-            _themeSubclassHwnd = WindowNative.GetWindowHandle(_window);
-            if (_themeSubclassHwnd == 0)
+            _appWindowSubclassHwnd = WindowNative.GetWindowHandle(_window);
+            if (_appWindowSubclassHwnd == 0)
             {
                 return;
             }
 
-            _themeSubclassProc = SystemThemeSubclassWndProc;
-            if (!SetWindowSubclass(_themeSubclassHwnd, _themeSubclassProc, ThemeSubclassId, 0))
+            _appWindowSubclassProc = AppWindowSubclassWndProc;
+            if (!SetWindowSubclass(
+                    _appWindowSubclassHwnd,
+                    _appWindowSubclassProc,
+                    AppWindowSubclassId,
+                    0))
             {
-                _themeSubclassProc = null;
-                _themeSubclassHwnd = 0;
+                _appWindowSubclassProc = null;
+                _appWindowSubclassHwnd = 0;
             }
         }
 
-        private void UnregisterSystemThemeWatcher()
+        private void UnregisterSystemMessageHandlers()
         {
             SystemEvents.UserPreferenceChanged -= OnSystemUserPreferenceChanged;
-            if (_themeSubclassProc is not null && _themeSubclassHwnd != 0)
+            if (_appWindowSubclassProc is not null && _appWindowSubclassHwnd != 0)
             {
-                RemoveWindowSubclass(_themeSubclassHwnd, _themeSubclassProc, ThemeSubclassId);
+                RemoveWindowSubclass(
+                    _appWindowSubclassHwnd,
+                    _appWindowSubclassProc,
+                    AppWindowSubclassId);
             }
 
-            _themeSubclassProc = null;
-            _themeSubclassHwnd = 0;
+            _appWindowSubclassProc = null;
+            _appWindowSubclassHwnd = 0;
             _systemThemeRefreshQueued = 0;
         }
 
         private void OnSystemUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
             => QueueSystemThemeRefresh();
 
-        private nint SystemThemeSubclassWndProc(
+        private nint AppWindowSubclassWndProc(
             nint hWnd,
             uint uMsg,
             nint wParam,
@@ -1489,9 +1492,56 @@ namespace Easydict.WinUI
             nuint uIdSubclass,
             nuint dwRefData)
         {
-            if (uMsg is WM_SETTINGCHANGE or WM_THEMECHANGED)
+            try
             {
-                QueueSystemThemeRefresh();
+                switch (uMsg)
+                {
+                    case WM_QUERYENDSESSION:
+                        if (Interlocked.Exchange(ref _sessionEndQueryLogged, 1) == 0)
+                        {
+                            CrashDiagnostics.Log("[AppWindow] WM_QUERYENDSESSION accepted");
+                        }
+
+                        return 1;
+
+                    case WM_ENDSESSION when wParam == 0:
+                        _isSystemShutdownRequested = false;
+                        CrashDiagnostics.Log("[AppWindow] WM_ENDSESSION cancelled");
+                        return 0;
+
+                    case WM_ENDSESSION:
+                        _isSystemShutdownRequested = true;
+                        CrashDiagnostics.Log(
+                            $"[AppWindow] WM_ENDSESSION confirmed, reasonFlags=0x{unchecked((nuint)lParam):X}");
+                        try
+                        {
+                            Application.Current.Exit();
+                        }
+                        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+                        {
+                            CrashDiagnostics.LogException(
+                                "AppWindowSubclassWndProc.Application.Exit",
+                                ex,
+                                isTerminating: false,
+                                isHandled: true);
+                            Environment.Exit(0);
+                        }
+
+                        return 0;
+
+                    case WM_SETTINGCHANGE:
+                    case WM_THEMECHANGED:
+                        QueueSystemThemeRefresh();
+                        break;
+                }
+            }
+            catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+            {
+                CrashDiagnostics.LogException(
+                    "AppWindowSubclassWndProc",
+                    ex,
+                    isTerminating: false,
+                    isHandled: true);
             }
 
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);

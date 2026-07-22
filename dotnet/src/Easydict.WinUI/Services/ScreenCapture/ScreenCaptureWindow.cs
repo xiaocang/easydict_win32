@@ -34,6 +34,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     private const int WS_VISIBLE = 0x10000000;
 
     // Messages
+    private const int WM_CLOSE = 0x0010;
     private const int WM_PAINT = 0x000F;
     private const int WM_ERASEBKGND = 0x0014;
     private const int WM_MOUSEMOVE = 0x0200;
@@ -293,6 +294,25 @@ public sealed class ScreenCaptureWindow : IDisposable
     }
 
     private nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
+    {
+        try
+        {
+            return WndProcCore(hwnd, msg, wParam, lParam);
+        }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(
+                "ScreenCaptureWindow.WndProc",
+                ex,
+                isTerminating: false,
+                isHandled: true);
+            _resultTcs?.TrySetException(ex);
+            PostMessage(hwnd, WM_CLOSE, 0, 0);
+            return 0;
+        }
+    }
+
+    private nint WndProcCore(nint hwnd, uint msg, nint wParam, nint lParam)
     {
         switch (msg)
         {
@@ -1116,6 +1136,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassEx(ref WNDCLASSEX lpwcx);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool UnregisterClass(string lpClassName, nint hInstance);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint CreateWindowEx(int dwExStyle, string lpClassName, string lpWindowName, int dwStyle, int x, int y, int nWidth, int nHeight, nint hWndParent, nint hMenu, nint hInstance, nint lpParam);
+    [DllImport("user32.dll")] private static extern bool PostMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern nint DefWindowProc(nint hwnd, uint msg, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern int GetMessage(out MSG lpMsg, nint hwnd, uint wMsgFilterMin, uint wMsgFilterMax);
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref MSG lpMsg);

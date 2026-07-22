@@ -35,6 +35,7 @@ public static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        CrashDiagnostics.RegisterGlobalHandlers();
 #if LOCAL_DEBUG_LONGDOC_CLI
         if (LongDocumentCliCommand.IsCommand(args))
         {

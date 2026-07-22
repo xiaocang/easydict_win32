@@ -206,6 +206,8 @@ jobs:
             -p:EnableInProcLongDocFallback=false `
             -p:PublishTrimmed=false `
             -p:PublishReadyToRun=false `
+            -p:DebugSymbols=true `
+            -p:DebugType=portable `
             -p:WindowsAppSDKSelfContained=false
 
       # Publish NativeBridge into MSIX output (for browser extension support)
@@ -283,6 +285,27 @@ jobs:
           ./scripts/Extract-DotnetRuntime.ps1 `
             -Rid win-${{ matrix.platform }} `
             -OutputDir ./publish-msix/${{ matrix.platform }}/dotnet
+
+      - name: Stage MSIX symbols
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          $publishDir = (Resolve-Path "./publish-msix/${{ matrix.platform }}").Path
+          $symbolDir = Join-Path (Get-Location) "store-symbols/${{ matrix.platform }}"
+          New-Item -ItemType Directory -Force -Path $symbolDir | Out-Null
+          $pdbs = @(Get-ChildItem -LiteralPath $publishDir -Filter "*.pdb" -File -Recurse)
+          if ($pdbs.Count -eq 0) {
+            throw "No PDBs found in $publishDir"
+          }
+          foreach ($pdb in $pdbs) {
+            $relativePath = [System.IO.Path]::GetRelativePath($publishDir, $pdb.FullName)
+            $destination = Join-Path $symbolDir $relativePath
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+            Copy-Item -LiteralPath $pdb.FullName -Destination $destination -Force
+          }
+          if (-not (Get-ChildItem -LiteralPath $symbolDir -Filter "Easydict.WinUI.pdb" -File -Recurse)) {
+            throw "Easydict.WinUI.pdb was not staged from $publishDir"
+          }
 
       - name: Package MSIX (shared script)
         shell: pwsh
@@ -434,6 +457,14 @@ jobs:
           path: dotnet/installer-output/Easydict-v${{ needs.prepare.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe
           retention-days: 7
 
+      - name: Upload MSIX symbols as private artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easydict-symbols-${{ matrix.platform }}
+          path: dotnet/store-symbols/${{ matrix.platform }}
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Upload MSIX as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -480,12 +511,30 @@ jobs:
     needs: [prepare, publish-msix, portable-downlevel-smoke]
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
       - name: Download all MSIX artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: easydict-msix-*
           path: msix-packages
           merge-multiple: true
+
+      - name: Download x64 symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: easydict-symbols-x64
+          path: store-symbols/x64
+
+      - name: Download arm64 symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: easydict-symbols-arm64
+          path: store-symbols/arm64
+
 
       - name: Download all ZIP artifacts
         uses: actions/download-artifact@v4
@@ -588,6 +637,24 @@ jobs:
 
           # Cleanup
           Remove-Item $extractDir -Recurse -Force
+
+      - name: Create private Store upload
+        shell: pwsh
+        run: |
+          dotnet/scripts/New-StoreUpload.ps1 `
+            -BundlePath "Easydict-${{ github.ref_name }}.unsigned.msixbundle" `
+            -X64SymbolsPath "store-symbols/x64" `
+            -Arm64SymbolsPath "store-symbols/arm64" `
+            -OutputPath "Easydict-${{ github.ref_name }}.msixupload"
+
+      - name: Upload Store upload as private artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easydict-store-upload
+          path: Easydict-${{ github.ref_name }}.msixupload
+          retention-days: 30
+          if-no-files-found: error
+
 
       - name: Upload all release assets
         uses: softprops/action-gh-release@v1

@@ -2466,11 +2466,10 @@ fn mode_menu_visual_label(mode: AppMode, locale: &str, minimal: bool) -> String 
     if minimal {
         label
     } else {
-        let glyph = match mode {
-            AppMode::QuickTranslate => "🌐",
-            AppMode::LongDocument => "📄",
-        };
-        format!("{glyph}  {label}")
+        match mode {
+            AppMode::QuickTranslate => format!("🌐\u{2009}  {label}"),
+            AppMode::LongDocument => format!("📄  {label}"),
+        }
     }
 }
 

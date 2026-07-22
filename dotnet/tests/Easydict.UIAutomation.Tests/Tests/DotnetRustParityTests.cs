@@ -1605,7 +1605,7 @@ public sealed class DotnetRustParityTests : IDisposable
         return Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
     }
 
-    private static void ClickRustBoundsCenter(Window window, UiParityControlBoundsDips bounds)
+    private static Point RustBoundsCenter(Window window, UiParityControlBoundsDips bounds)
     {
         var hwnd = SafeNativeWindowHandle(window);
         hwnd.Should().NotBe(IntPtr.Zero, "a live HWND is required for Rust bounds input");
@@ -1620,6 +1620,12 @@ public sealed class DotnetRustParityTests : IDisposable
         GetNativeWindowBounds(window)
             .Contains(point)
             .Should().BeTrue($"physical point {point} must lie inside Rust preview window");
+        return point;
+    }
+
+    private static void ClickRustBoundsCenter(Window window, UiParityControlBoundsDips bounds)
+    {
+        var point = RustBoundsCenter(window, bounds);
         Mouse.MoveTo(point);
         Thread.Sleep(100);
         Mouse.Click(point);
@@ -1786,9 +1792,7 @@ public sealed class DotnetRustParityTests : IDisposable
             ?? throw new InvalidOperationException("Mode menu trigger bounds are missing.");
         var mainBounds = ScreenshotHelper.GetWindowPhysicalBounds(rendered.Window);
         var dpiScale = ScreenshotHelper.GetWindowDpiScale(rendered.Window);
-        var triggerPoint = new Point(
-            mainBounds.Left + (int)Math.Round((trigger.Left + trigger.Width / 2) * dpiScale),
-            mainBounds.Top + (int)Math.Round((trigger.Top + trigger.Height / 2) * dpiScale));
+        var triggerPoint = RustBoundsCenter(rendered.Window, trigger);
         if (optionId == "long-document")
         {
             CaptureForegroundWindow(
@@ -1970,12 +1974,7 @@ public sealed class DotnetRustParityTests : IDisposable
             var reopenedTrigger = session.WaitForLiveControlBounds(
                 "ModeMenuButton",
                 TimeSpan.FromSeconds(5));
-            var reopenedMainBounds = ScreenshotHelper.GetWindowPhysicalBounds(rendered.Window);
-            var reopenedTriggerPoint = new Point(
-                reopenedMainBounds.Left +
-                    (int)Math.Round((reopenedTrigger.Left + reopenedTrigger.Width / 2) * dpiScale),
-                reopenedMainBounds.Top +
-                    (int)Math.Round((reopenedTrigger.Top + reopenedTrigger.Height / 2) * dpiScale));
+            var reopenedTriggerPoint = RustBoundsCenter(rendered.Window, reopenedTrigger);
             var reopenMarker = session.CaptureDebugLineMarker();
             Mouse.MoveTo(reopenedTriggerPoint);
             Thread.Sleep(100);
@@ -7910,15 +7909,15 @@ public sealed class DotnetRustParityTests : IDisposable
             dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
             var dotnetWindow = dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
             TriggerDotnetTrayContextMenu(dotnetWindow, anchor);
-            var dotnetMenuHwnd = WaitForTrayMenuWindow(
+            var dotnetMenuTarget = WaitForTrayMenuWindow(
                 dotnetLauncher.Application.ProcessId,
                 anchor,
                 [SafeNativeWindowHandle(dotnetWindow)],
                 $"{scenarioId}.dotnet");
-            dotnetMenuPath = ScreenshotHelper.CaptureWindowHandlePhysical(
-                dotnetMenuHwnd,
+            dotnetMenuPath = ScreenshotHelper.CaptureScreenRegion(
+                dotnetMenuTarget.CaptureBounds,
                 dotnetScreenshotName);
-            dotnetMenuManifest = CaptureWindowManifest(dotnetMenuHwnd);
+            dotnetMenuManifest = CaptureWindowManifest(dotnetMenuTarget.ContentHwnd);
             DismissTrayMenu();
         }
         using var trayDpiScope = new EnvironmentVariableScope(
@@ -7999,7 +7998,7 @@ public sealed class DotnetRustParityTests : IDisposable
                     processId,
                     anchor,
                     excludedHwnds,
-                    $"{scenarioId}.rust");
+                    $"{scenarioId}.rust").ContentHwnd;
             }
             catch (TimeoutException ex) when (attempt < maxAttempts)
             {
@@ -8111,8 +8110,7 @@ public sealed class DotnetRustParityTests : IDisposable
         }, IntPtr.Zero);
         return result;
     }
-
-    private IntPtr WaitForTrayMenuWindow(
+    private TrayMenuCaptureTarget WaitForTrayMenuWindow(
         int processId,
         Point anchor,
         IReadOnlyCollection<IntPtr> excludedHwnds,
@@ -8138,7 +8136,14 @@ public sealed class DotnetRustParityTests : IDisposable
                     _output.WriteLine($"[tray-menu.{label}] Candidate {candidate}");
                 }
                 Thread.Sleep(requireRustFluentPopup ? 700 : 250);
-                return ResolveTrayMenuCaptureHwnd(best, requireDotnetWinuiPopup, anchor, label);
+                try
+                {
+                    return ResolveTrayMenuCaptureHwnd(best, requireDotnetWinuiPopup, anchor, label);
+                }
+                catch (InvalidOperationException ex) when (requireDotnetWinuiPopup)
+                {
+                    _output.WriteLine($"[tray-menu.{label}] Candidate is not ready: {ex.Message}");
+                }
             }
 
             Thread.Sleep(120);
@@ -8237,16 +8242,51 @@ public sealed class DotnetRustParityTests : IDisposable
             candidates.FirstOrDefault(candidate => IsDotnetWinuiTrayMenuCandidate(candidate, anchor));
     }
 
-    private IntPtr ResolveTrayMenuCaptureHwnd(
+    private TrayMenuCaptureTarget ResolveTrayMenuCaptureHwnd(
         TrayMenuWindowCandidate candidate,
         bool preferDotnetWinuiContentHwnd,
         Point anchor,
         string label)
     {
-        _ = preferDotnetWinuiContentHwnd;
-        _ = anchor;
-        _ = label;
-        return candidate.Hwnd;
+        if (!preferDotnetWinuiContentHwnd)
+        {
+            return new TrayMenuCaptureTarget(candidate.Hwnd, Rectangle.Inflate(candidate.Bounds, 12, 12));
+        }
+
+        var content = FindDotnetWinuiTrayMenuContentCandidate(candidate, anchor);
+        if (content is null ||
+            !IsWindowVisible(content.Hwnd) ||
+            TryGetNativeWindowRectangle(content.Hwnd) is not { } contentBounds ||
+            !candidate.Bounds.IntersectsWith(contentBounds) ||
+            DistanceFromPointToRectangle(anchor, contentBounds) > 220)
+        {
+            throw new InvalidOperationException(
+                $"Validated .NET tray menu content HWND was not found for {label}.");
+        }
+
+        GetWindowThreadProcessId(content.Hwnd, out var ownerProcessId);
+        GetWindowThreadProcessId(candidate.Hwnd, out var candidateProcessId);
+        ownerProcessId.Should().Be(candidateProcessId);
+
+        using var uia = new UIA3Automation();
+        var automation = uia.FromHandle(content.Hwnd);
+        automation.Should().NotBeNull("the .NET tray content must expose UI Automation");
+        var descendants = automation!.FindAllDescendants();
+        (automation.ControlType == ControlType.Menu ||
+                descendants.Any(element => element.ControlType == ControlType.Menu))
+            .Should().BeTrue("the .NET tray content must expose a Menu subtree");
+        descendants.Any(element => element.ControlType == ControlType.MenuItem)
+            .Should().BeTrue("the .NET tray content must expose MenuItem elements");
+        var names = descendants
+            .Select(element => element.Name)
+            .Append(automation.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        TrayMenuRequiredVisibleTexts()
+            .Should()
+            .OnlyContain(name => names.Contains(name), "the .NET tray content must expose every expected localized menu label");
+
+        return new TrayMenuCaptureTarget(content.Hwnd, Rectangle.Inflate(candidate.Bounds, 12, 12));
     }
 
     private static TrayMenuWindowCandidate? FindDotnetWinuiTrayMenuContentCandidate(
@@ -12770,6 +12810,8 @@ public sealed class DotnetRustParityTests : IDisposable
         public override string ToString() =>
             $"HWND=0x{Hwnd.ToInt64():X}, class='{ClassName}', title='{Title}', bounds={Bounds}, score={Score}";
     }
+
+    private sealed record TrayMenuCaptureTarget(IntPtr ContentHwnd, Rectangle CaptureBounds);
 
     private sealed record TrayMenuCaptureResult(
         string ScenarioId,

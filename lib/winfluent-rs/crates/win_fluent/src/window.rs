@@ -118,6 +118,7 @@ pub struct WindowOptions {
     pub visible_on_start: bool,
     pub skip_taskbar: bool,
     pub no_activate: bool,
+    pub native_border: bool,
 }
 
 impl WindowOptions {
@@ -138,6 +139,7 @@ impl WindowOptions {
             visible_on_start: true,
             skip_taskbar: false,
             no_activate: false,
+            native_border: true,
         }
     }
 
@@ -192,11 +194,15 @@ impl WindowOptions {
         self.skip_taskbar = skip_taskbar;
         self
     }
-
     pub fn no_activate(mut self, no_activate: bool) -> Self {
         self.no_activate = no_activate;
         self
     }
+    pub fn native_border(mut self, native_border: bool) -> Self {
+        self.native_border = native_border;
+        self
+    }
+
 }
 
 #[derive(Clone, Debug)]
@@ -248,4 +254,19 @@ pub enum WindowCommand<Message> {
         width: f32,
         height: f32,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WindowOptions;
+
+    #[test]
+    fn native_border_defaults_to_true() {
+        assert!(WindowOptions::new("test", "Test").native_border);
+    }
+
+    #[test]
+    fn native_border_can_be_disabled() {
+        assert!(!WindowOptions::new("test", "Test").native_border(false).native_border);
+    }
 }

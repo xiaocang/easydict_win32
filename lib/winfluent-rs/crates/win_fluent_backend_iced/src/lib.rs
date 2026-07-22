@@ -53,7 +53,8 @@ use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
     AdaptiveSwitchToken, Alignment, AutoSuggestBoxToken, BusyOverlayToken, ButtonKind,
     CaptureOverlayToken, CardKind, CardToken, CheckBoxToken, CollapseTransition, ComboBoxItem,
-    Edges, ExpanderToken, FlyoutButtonToken, FlyoutMenuItem, FlyoutPlacement, FlyoutToken,
+    Edges, ExpanderToken, FlyoutButtonToken, FlyoutMenuItem, FlyoutMenuItemKind, FlyoutPlacement,
+    FlyoutToken,
     GridToken, InfoBarToken, IntoView, LayoutDistribution, LayoutKind, LayoutToken, Length,
     ListViewToken, NavigationViewToken, NumberBoxToken, Orientation, OverlayToken, PaneDisplayMode,
     PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken,
@@ -1881,6 +1882,7 @@ fn fluent_tray_menu_window_options<Message>(
     })
     .screen_constraint(win_fluent::window::WindowScreenConstraint::SizeAndPosition)
     .skip_taskbar(true)
+    .native_border(false)
 }
 
 fn fluent_tray_submenu_window_options<Message>(
@@ -1931,6 +1933,7 @@ fn fluent_tray_submenu_window_options<Message>(
         .resize_mode(WindowResizeMode::Fixed)
         .placement(WindowPlacement::Explicit { x, y })
         .screen_constraint(win_fluent::window::WindowScreenConstraint::None)
+        .native_border(false)
         .skip_taskbar(true),
         submenu_side,
     ))
@@ -6267,6 +6270,14 @@ where
     .into()
 }
 
+fn flyout_menu_item_label(item: &FlyoutMenuItem) -> String {
+    match item.kind {
+        FlyoutMenuItemKind::Radio if item.checked => format!("● {}", item.label),
+        FlyoutMenuItemKind::Radio => format!("○ {}", item.label),
+        FlyoutMenuItemKind::Command => item.label.clone(),
+    }
+}
+
 fn compile_flyout_button<'a, Message>(
     token: &'a FlyoutButtonToken<Message>,
     visual: IcedVisualTheme,
@@ -6281,11 +6292,7 @@ where
             .filter(|item| item.enabled)
             .map(|item| ComboChoice {
                 id: item.id.clone(),
-                label: if item.checked {
-                    format!("● {}", item.label)
-                } else {
-                    item.label.clone()
-                },
+                label: flyout_menu_item_label(item),
             })
             .collect::<Vec<_>>();
         let trigger_action = token.action.clone();
@@ -18676,6 +18683,15 @@ mod tests {
             first_enabled_flyout_item(&items).map(|item| item.id.as_str()),
             Some("enabled")
         );
+    }
+
+    #[test]
+    fn flyout_radio_items_reserve_the_same_title_column() {
+        let checked = FlyoutMenuItem::radio("quick", "🌐  Translate", true);
+        let unchecked = FlyoutMenuItem::radio("long-document", "📄  Long Document", false);
+
+        assert_eq!(flyout_menu_item_label(&checked), "● 🌐  Translate");
+        assert_eq!(flyout_menu_item_label(&unchecked), "○ 📄  Long Document");
     }
 
     fn assert_button_style_visual_eq(

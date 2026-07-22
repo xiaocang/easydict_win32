@@ -155,7 +155,7 @@ fn mode_selector_uses_an_inline_flyout_with_the_current_selection() {
     assert_control_contains(
         &main,
         "ModeMenuButton",
-        "quick:\"🌐  Translate\":Radio:checked=true",
+        "quick:\"🌐\\u{2009}  Translate\":Radio:checked=true",
     );
     assert_control_contains(
         &main,

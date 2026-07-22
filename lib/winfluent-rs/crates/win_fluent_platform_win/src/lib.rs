@@ -386,6 +386,7 @@ impl WindowsPlatformAdapter {
             options.level == WindowLevel::ToolWindow
                 && options.resize_mode == WindowResizeMode::Fixed,
         );
+        native::apply_window_native_border(hwnd, options.native_border)?;
         Ok(())
     }
     pub fn show_window(hwnd: isize, activate: bool) -> Result<(), WindowsPlatformError> {
@@ -1679,6 +1680,9 @@ mod native {
         DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_USE_IMMERSIVE_DARK_MODE,
         DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL,
     };
+    const DWMWA_BORDER_COLOR: u32 = 34;
+    const DWMWA_COLOR_DEFAULT: i32 = -1;
+    const DWMWA_COLOR_NONE: i32 = -2;
     use windows_sys::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
         GetDIBits, GetMonitorInfoW, GetWindowDC, MonitorFromPoint, MonitorFromWindow, ReleaseDC,
@@ -2444,6 +2448,28 @@ mod native {
                 std::mem::size_of_val(&preference) as u32,
             )
         };
+    }
+
+    pub fn apply_window_native_border(
+        hwnd: isize,
+        enabled: bool,
+    ) -> Result<(), WindowsPlatformError> {
+        let value = if enabled { DWMWA_COLOR_DEFAULT } else { DWMWA_COLOR_NONE };
+        let result = unsafe {
+            DwmSetWindowAttribute(
+                hwnd as HWND,
+                DWMWA_BORDER_COLOR,
+                (&value as *const i32).cast(),
+                std::mem::size_of::<i32>() as u32,
+            )
+        };
+        if result == 0 || result == -2147024809 {
+            return Ok(());
+        }
+        Err(WindowsPlatformError::NativeCallFailed {
+            operation: "DwmSetWindowAttribute(DWMWA_BORDER_COLOR)",
+            code: result as u32,
+        })
     }
 
     pub fn configure_resize_hit_test(
@@ -5245,6 +5271,12 @@ mod native {
         Err(WindowsPlatformError::UnsupportedPlatform)
     }
 
+    pub fn apply_window_native_border(
+        _hwnd: isize,
+        _enabled: bool,
+    ) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
     pub fn wait_for_named_event(
         _handle: &WindowsNamedEventHandle,
         _timeout: std::time::Duration,

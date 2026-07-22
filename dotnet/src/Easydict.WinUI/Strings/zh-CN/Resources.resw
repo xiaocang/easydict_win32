@@ -1355,4 +1355,37 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>快捷键无效，示例：Ctrl+Alt+T</value>
   </data>
+  <data name="ClaudeCode_EnableToggle" xml:space="preserve">
+    <value>启用 Claude Code</value>
+  </data>
+  <data name="Codex_EnableToggle" xml:space="preserve">
+    <value>启用 Codex</value>
+  </data>
+  <data name="ClaudeCode_Description" xml:space="preserve">
+    <value>使用本地安装的 Claude Code 命令行工具进行翻译，复用你的 Claude 订阅，无需 API Key。需要已安装并登录该 CLI。</value>
+  </data>
+  <data name="Codex_Description" xml:space="preserve">
+    <value>使用本地安装的 OpenAI Codex 命令行工具进行翻译，复用你的 ChatGPT 订阅，无需 API Key。需要已安装并登录该 CLI。</value>
+  </data>
+  <data name="AgentCli_InstallLinkText" xml:space="preserve">
+    <value>安装指南</value>
+  </data>
+  <data name="Codex_ModelPlaceholder" xml:space="preserve">
+    <value>CLI 默认</value>
+  </data>
+  <data name="Codex_ReasoningEffort" xml:space="preserve">
+    <value>思考程度</value>
+  </data>
+  <data name="Codex_EffortDefault" xml:space="preserve">
+    <value>默认</value>
+  </data>
+  <data name="AgentCliRiskTitle" xml:space="preserve">
+    <value>启用此服务？</value>
+  </data>
+  <data name="AgentCliRiskMessage" xml:space="preserve">
+    <value>该服务会使用你的个人订阅账号运行本地 AI 智能体 CLI。每次翻译都会消耗订阅额度，自动化调用也可能受服务条款约束。使用前需已安装并登录对应 CLI。请自行斟酌启用。</value>
+  </data>
+  <data name="AgentCliRiskConfirm" xml:space="preserve">
+    <value>启用</value>
+  </data>
 </root>

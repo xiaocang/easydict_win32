@@ -110,7 +110,7 @@ public sealed class OcrTranslateService
         {
             var message = $"[OcrTranslate] {label} timed out: {ex.Message}";
             Debug.WriteLine(message);
-            App.LogToFile(message);
+            CrashDiagnostics.Log(message);
             return null;
         }
         catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
@@ -122,7 +122,7 @@ public sealed class OcrTranslateService
         {
             var message = $"[OcrTranslate] {label} cancelled unexpectedly: {ex.Message}";
             Debug.WriteLine(message);
-            App.LogToFile(message);
+            CrashDiagnostics.Log(message);
             return null;
         }
         catch (Exception ex)
@@ -176,7 +176,7 @@ public sealed class OcrTranslateService
             $"useWorker={settings.UseOcrWorker} endpoint={FormatEndpointForDiagnostics(options)} " +
             $"model={options.Model}";
         Debug.WriteLine(message);
-        App.LogToFile(message);
+        CrashDiagnostics.Log(message);
     }
 
     internal static string FormatEndpointForDiagnostics(OcrServiceOptions options) =>

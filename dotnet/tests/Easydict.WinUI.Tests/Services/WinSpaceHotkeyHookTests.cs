@@ -129,4 +129,32 @@ public class WinSpaceHotkeyHookTests
         suppressed.Should().BeTrue();
         counters.Masks.Should().Be(1);
     }
+    [Fact]
+    public void SpaceDown_ThrowingMaskStillInvokesHandler_AndSuppresses()
+    {
+        var handlerFires = 0;
+        var hook = new WinSpaceHotkeyHook(maskAction: () => throw new InvalidOperationException("test"));
+        hook.SetHandler(() => handlerFires++);
+
+        Action process = () =>
+            hook.ProcessKey(WM_KEYDOWN, VK_SPACE, isWinDown: true).Should().BeTrue();
+
+        process.Should().NotThrow();
+        handlerFires.Should().Be(1);
+    }
+
+    [Fact]
+    public void SpaceDown_ThrowingHandler_DoesNotEscape_AndSuppresses()
+    {
+        var maskCalls = 0;
+        var hook = new WinSpaceHotkeyHook(maskAction: () => maskCalls++);
+        hook.SetHandler(() => throw new InvalidOperationException("test"));
+
+        Action process = () =>
+            hook.ProcessKey(WM_KEYDOWN, VK_SPACE, isWinDown: true).Should().BeTrue();
+
+        process.Should().NotThrow();
+        maskCalls.Should().Be(1);
+    }
+
 }

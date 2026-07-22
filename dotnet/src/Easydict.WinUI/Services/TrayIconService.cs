@@ -358,18 +358,18 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public void ExitApplication()
     {
-        App.LogToFile($"[TrayExit] Exit requested. pid={Environment.ProcessId}");
+        CrashDiagnostics.Log($"[TrayExit] Exit requested. pid={Environment.ProcessId}");
 
         try
         {
             // Clean up all services including Win32 hooks before exit.
             App.CleanupServices();
-            App.LogToFile($"[TrayExit] Cleanup completed. pid={Environment.ProcessId}");
+            CrashDiagnostics.Log($"[TrayExit] Cleanup completed. pid={Environment.ProcessId}");
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[TrayExit] Cleanup failed: {ex}");
-            App.LogToFile($"[TrayExit] Cleanup failed. pid={Environment.ProcessId}, error={ex}");
+            CrashDiagnostics.Log($"[TrayExit] Cleanup failed. pid={Environment.ProcessId}, error={ex}");
         }
         finally
         {
@@ -381,10 +381,10 @@ public sealed class TrayIconService : IDisposable
             catch (Exception ex)
             {
                 Debug.WriteLine($"[TrayExit] Application.Current.Exit failed: {ex}");
-                App.LogToFile($"[TrayExit] Application.Current.Exit failed. pid={Environment.ProcessId}, error={ex}");
+                CrashDiagnostics.Log($"[TrayExit] Application.Current.Exit failed. pid={Environment.ProcessId}, error={ex}");
             }
 
-            App.LogToFile($"[TrayExit] Forcing process exit. pid={Environment.ProcessId}");
+            CrashDiagnostics.Log($"[TrayExit] Forcing process exit. pid={Environment.ProcessId}");
 
             // Fallback: force process termination if any stubborn threads remain.
             // This ensures the process doesn't become a zombie.

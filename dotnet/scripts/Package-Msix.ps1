@@ -78,50 +78,87 @@ if ($VerifyTargetsizeIcons) {
     }
 }
 
-# Fix PRI name for MSIX
-$sourcePri = Join-Path $PublishDir "Easydict.WinUI.pri"
-$targetPri = Join-Path $PublishDir "resources.pri"
-if (Test-Path $sourcePri) {
-    Copy-Item -Path $sourcePri -Destination $targetPri -Force
-    Write-Host "[MSIX] Copied Easydict.WinUI.pri -> resources.pri"
-} elseif (Test-Path $targetPri) {
-    Write-Host "[MSIX] resources.pri already exists"
-} else {
-    Write-Warning "[MSIX] No PRI file found; localization may be incomplete"
-}
-
-# Generate temporary manifest with architecture/version overrides. Keep the
-# version write scoped to <Identity>; TargetDeviceFamily MinVersion and
-# MaxVersionTested must remain the OS compatibility values from the source
-# manifest.
+# Copy the source publish tree to an isolated staging directory. The source tree
+# retains its symbols for Store upload assembly; the customer-facing MSIX never does.
 $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
-$tempManifest = Join-Path $tempRoot "Package.$Platform.appxmanifest"
-[xml]$manifest = Get-Content $ManifestPath -Raw
-$manifest.Package.Identity.ProcessorArchitecture = $Platform
-if ($MsixVersion) {
-    $manifest.Package.Identity.Version = $MsixVersion
-}
+$stageId = [guid]::NewGuid().ToString("N")
+$stagingDir = Join-Path $tempRoot "Easydict-msix-$stageId"
+$tempManifest = Join-Path $tempRoot "Package.$Platform.$stageId.appxmanifest"
+$sourcePublishDir = (Resolve-Path $PublishDir).Path
 
-$settings = New-Object System.Xml.XmlWriterSettings
-$settings.Encoding = New-Object System.Text.UTF8Encoding($false)
-$settings.Indent = $true
-$writer = [System.Xml.XmlWriter]::Create($tempManifest, $settings)
 try {
-    $manifest.Save($writer)
+    New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+    Get-ChildItem -LiteralPath $sourcePublishDir -Force | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $stagingDir -Recurse -Force
+    }
+
+    Get-ChildItem -LiteralPath $stagingDir -Filter "*.pdb" -File -Recurse |
+        Remove-Item -Force
+
+    # Fix PRI name in the staging tree only.
+    $sourcePri = Join-Path $stagingDir "Easydict.WinUI.pri"
+    $targetPri = Join-Path $stagingDir "resources.pri"
+    if (Test-Path $sourcePri) {
+        Copy-Item -Path $sourcePri -Destination $targetPri -Force
+        Write-Host "[MSIX] Copied Easydict.WinUI.pri -> resources.pri in staging"
+    } elseif (Test-Path $targetPri) {
+        Write-Host "[MSIX] resources.pri already exists in staging"
+    } else {
+        Write-Warning "[MSIX] No PRI file found; localization may be incomplete"
+    }
+
+    # Generate temporary manifest with architecture/version overrides. Keep the
+    # version write scoped to <Identity>; TargetDeviceFamily MinVersion and
+    # MaxVersionTested must remain the OS compatibility values from the source
+    # manifest.
+    [xml]$manifest = Get-Content $ManifestPath -Raw
+    $manifest.Package.Identity.ProcessorArchitecture = $Platform
+    if ($MsixVersion) {
+        $manifest.Package.Identity.Version = $MsixVersion
+    }
+
+    $settings = New-Object System.Xml.XmlWriterSettings
+    $settings.Encoding = New-Object System.Text.UTF8Encoding($false)
+    $settings.Indent = $true
+    $writer = [System.Xml.XmlWriter]::Create($tempManifest, $settings)
+    try {
+        $manifest.Save($writer)
+    } finally {
+        $writer.Dispose()
+    }
+
+    $outputDir = Split-Path -Parent $OutputMsixPath
+    if (-not (Test-Path $outputDir)) {
+        New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+    }
+
+    winapp package $stagingDir --output $OutputMsixPath --manifest $tempManifest --skip-pri --verbose
+    if ($LASTEXITCODE -ne 0) {
+        throw "winapp package failed with exit code $LASTEXITCODE"
+    }
+
+    $scriptDir = Split-Path -Parent $PSCommandPath
+    & (Join-Path $scriptDir "Fix-MsixMinVersion.ps1") -MsixPath $OutputMsixPath
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $OutputMsixPath))
+    try {
+        $symbolEntry = $archive.Entries |
+            Where-Object { $_.FullName.EndsWith(".pdb", [System.StringComparison]::OrdinalIgnoreCase) } |
+            Select-Object -First 1
+        if ($symbolEntry) {
+            throw "Customer MSIX contains a PDB entry: $($symbolEntry.FullName)"
+        }
+    } finally {
+        $archive.Dispose()
+    }
+
+    Write-Host "[MSIX] Packaging finished: $OutputMsixPath"
 } finally {
-    $writer.Dispose()
+    if (Test-Path $stagingDir) {
+        Remove-Item -LiteralPath $stagingDir -Recurse -Force
+    }
+    if (Test-Path $tempManifest) {
+        Remove-Item -LiteralPath $tempManifest -Force
+    }
 }
-
-# Package
-$outputDir = Split-Path -Parent $OutputMsixPath
-if (-not (Test-Path $outputDir)) {
-    New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
-}
-
-winapp package $PublishDir --output $OutputMsixPath --manifest $tempManifest --skip-pri --verbose
-
-# MinVersion fix
-$scriptDir = Split-Path -Parent $PSCommandPath
-& (Join-Path $scriptDir "Fix-MsixMinVersion.ps1") -MsixPath $OutputMsixPath
-
-Write-Host "[MSIX] Packaging finished: $OutputMsixPath"

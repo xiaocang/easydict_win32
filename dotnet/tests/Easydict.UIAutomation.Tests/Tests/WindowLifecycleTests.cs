@@ -1,6 +1,8 @@
+using System.Runtime.InteropServices;
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.Tools;
 using Xunit;
 using Xunit.Abstractions;
@@ -20,6 +22,11 @@ public class WindowLifecycleTests : IDisposable
         _launcher = new AppLauncher();
         _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
     }
+
+    private const uint WM_QUERYENDSESSION = 0x0011;
+    private const uint WM_ENDSESSION = 0x0016;
+    private const nint ENDSESSION_CLOSEAPP = 0x00000001;
+    private const uint SMTO_ABORTIFHUNG = 0x0002;
 
     [Fact]
     public void App_ShouldLaunchAndShowMainWindow()
@@ -65,8 +72,67 @@ public class WindowLifecycleTests : IDisposable
         _output.WriteLine($"App has exited: {_launcher.Application.HasExited}");
     }
 
+    [Fact]
+    public void App_ShouldExitForConfirmedEndSession_WhenMinimizeToTrayIsEnabled()
+    {
+        var window = _launcher.GetMainWindow();
+        var settingsButton = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton")),
+            TimeSpan.FromSeconds(10)).Result;
+        settingsButton.Should().NotBeNull("the tray setting must be configurable for this lifecycle test");
+        settingsButton!.Click();
+
+        var minimizeToTrayToggle = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("MinimizeToTrayToggle")),
+            TimeSpan.FromSeconds(10)).Result;
+        minimizeToTrayToggle.Should().NotBeNull("the minimize-to-tray toggle must be available");
+        minimizeToTrayToggle!.Patterns.Toggle.IsSupported.Should().BeTrue();
+        if (minimizeToTrayToggle.Patterns.Toggle.Pattern.ToggleState != ToggleState.On)
+        {
+            minimizeToTrayToggle.Patterns.Toggle.Pattern.Toggle();
+        }
+
+        var saveButton = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SaveButton")),
+            TimeSpan.FromSeconds(10)).Result;
+        saveButton.Should().NotBeNull("the tray setting must be saved before sending session-end messages");
+        saveButton!.Click();
+
+        var hwnd = new nint(window.Properties.NativeWindowHandle.Value);
+        SendMessageTimeout(
+            hwnd,
+            WM_QUERYENDSESSION,
+            0,
+            ENDSESSION_CLOSEAPP,
+            SMTO_ABORTIFHUNG,
+            5000,
+            out var queryResult);
+        queryResult.Should().NotBe(0, "WM_QUERYENDSESSION must acknowledge a confirmed session end");
+
+        PostMessage(hwnd, WM_ENDSESSION, 1, ENDSESSION_CLOSEAPP).Should().BeTrue();
+        SpinWait.SpinUntil(() => _launcher.Application.HasExited, TimeSpan.FromSeconds(5))
+            .Should().BeTrue("a confirmed session end must override minimize-to-tray");
+    }
+
     public void Dispose()
     {
         _launcher.Dispose();
     }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint SendMessageTimeout(
+        nint hWnd,
+        uint msg,
+        nuint wParam,
+        nint lParam,
+        uint flags,
+        uint timeout,
+        out nint result);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostMessage(
+        nint hWnd,
+        uint msg,
+        nuint wParam,
+        nint lParam);
 }

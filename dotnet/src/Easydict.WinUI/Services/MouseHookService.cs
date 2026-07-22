@@ -220,28 +220,52 @@ public sealed partial class MouseHookService : IDisposable
 
     private unsafe IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0)
+        try
         {
-            // Read the POINT directly from unmanaged memory to avoid the marshalling overhead
-            // of Marshal.PtrToStructure<MSLLHOOKSTRUCT>, which copies the entire struct on every
-            // call. Since this callback fires on every mouse message (including WM_MOUSEMOVE at
-            // high frequency), the repeated marshalling adds measurable overhead to the hot path.
-            var pt = ((MSLLHOOKSTRUCT*)lParam)->pt;
-            ProcessMouseMessage((int)wParam, pt);
+            if (nCode >= 0)
+            {
+                // Read the POINT directly from unmanaged memory to avoid the marshalling overhead
+                // of Marshal.PtrToStructure<MSLLHOOKSTRUCT>, which copies the entire struct on every
+                // call. Since this callback fires on every mouse message (including WM_MOUSEMOVE at
+                // high frequency), the repeated marshalling adds measurable overhead to the hot path.
+                var pt = ((MSLLHOOKSTRUCT*)lParam)->pt;
+                ProcessMouseMessage((int)wParam, pt);
+            }
         }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(
+                "MouseHookService.MouseHookCallback",
+                ex,
+                isTerminating: false,
+                isHandled: true);
+        }
+
         return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
     }
 
     private unsafe IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0)
+        try
         {
-            var extraInfo = ((KBDLLHOOKSTRUCT*)lParam)->dwExtraInfo;
-            if (extraInfo != EASYDICT_SYNTHETIC_KEY)
+            if (nCode >= 0)
             {
-                ProcessKeyboardMessage((int)wParam);
+                var extraInfo = ((KBDLLHOOKSTRUCT*)lParam)->dwExtraInfo;
+                if (extraInfo != EASYDICT_SYNTHETIC_KEY)
+                {
+                    ProcessKeyboardMessage((int)wParam);
+                }
             }
         }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(
+                "MouseHookService.KeyboardHookCallback",
+                ex,
+                isTerminating: false,
+                isHandled: true);
+        }
+
         return CallNextHookEx(_keyboardHookId, nCode, wParam, lParam);
     }
 
@@ -271,7 +295,7 @@ public sealed partial class MouseHookService : IDisposable
                     if (!isPopButtonClick)
                     {
                         Debug.WriteLine($"[MouseHook] Click on window 0x{windowAtPoint:X} (root=0x{rootWindow:X}, PopButton=0x{_popButtonWindowHandle:X}), dismissing");
-                        OnMouseDown?.Invoke();
+                        NativeCallbackGuard.Invoke("MouseHookService.OnMouseDown", OnMouseDown);
                     }
                     else
                     {
@@ -280,7 +304,7 @@ public sealed partial class MouseHookService : IDisposable
                 }
                 else
                 {
-                    OnMouseDown?.Invoke();
+                    NativeCallbackGuard.Invoke("MouseHookService.OnMouseDown", OnMouseDown);
                 }
                 Detector.OnLeftButtonDown(pt);
                 break;
@@ -296,10 +320,13 @@ public sealed partial class MouseHookService : IDisposable
                     // Drag selection — cancel any pending multi-click
                     ClickDetector.Reset();
                     CancelMultiClickTimer();
-                    if (IsCurrentAppExcluded?.Invoke() != true)
+                    if (!IsCurrentAppExcludedSafely())
                     {
                         Debug.WriteLine($"[MouseHook] Drag selection detected at ({pt.x}, {pt.y})");
-                        OnDragSelectionEnd?.Invoke(pt);
+                        NativeCallbackGuard.Invoke(
+                            "MouseHookService.OnDragSelectionEnd",
+                            OnDragSelectionEnd,
+                            pt);
                     }
                 }
                 else
@@ -309,7 +336,7 @@ public sealed partial class MouseHookService : IDisposable
                     // (e.g. unit tests calling ProcessMouseMessage directly).
                     var dct = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
                     var clickResult = ClickDetector.OnClick(pt, Environment.TickCount64, dct);
-                    if (clickResult.ClickCount >= 2 && IsCurrentAppExcluded?.Invoke() != true)
+                    if (clickResult.ClickCount >= 2 && !IsCurrentAppExcludedSafely())
                     {
                         // Start/restart a short timer to allow for additional clicks
                         // (e.g. triple-click after double-click)
@@ -319,11 +346,11 @@ public sealed partial class MouseHookService : IDisposable
                 break;
 
             case WM_MOUSEWHEEL:
-                OnMouseScroll?.Invoke();
+                NativeCallbackGuard.Invoke("MouseHookService.OnMouseScroll", OnMouseScroll);
                 break;
 
             case WM_RBUTTONDOWN:
-                OnRightMouseDown?.Invoke();
+                NativeCallbackGuard.Invoke("MouseHookService.OnRightMouseDown", OnRightMouseDown);
                 break;
         }
     }
@@ -335,8 +362,18 @@ public sealed partial class MouseHookService : IDisposable
     {
         if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
         {
-            OnKeyDown?.Invoke();
+            NativeCallbackGuard.Invoke("MouseHookService.OnKeyDown", OnKeyDown);
         }
+    }
+
+    private bool IsCurrentAppExcludedSafely()
+    {
+        var predicate = IsCurrentAppExcluded;
+        return predicate is not null &&
+            NativeCallbackGuard.Invoke(
+                "MouseHookService.IsCurrentAppExcluded",
+                predicate,
+                fallback: true);
     }
 
     private CancellationTokenSource? _multiClickCts;
@@ -359,10 +396,13 @@ public sealed partial class MouseHookService : IDisposable
                 var delay = (int)dctTimer + 50;
                 await Task.Delay(delay, ct);
 
-                if (!ct.IsCancellationRequested)
+                if (!ct.IsCancellationRequested && !IsCurrentAppExcludedSafely())
                 {
                     Debug.WriteLine($"[MouseHook] Multi-click selection detected (clicks={clickCount}) at ({pt.x}, {pt.y})");
-                    OnDragSelectionEnd?.Invoke(pt);
+                    NativeCallbackGuard.Invoke(
+                        "MouseHookService.OnDragSelectionEnd",
+                        OnDragSelectionEnd,
+                        pt);
                 }
             }
             catch (OperationCanceledException)

@@ -3977,44 +3977,73 @@ public sealed partial class SettingsPage : Page
             await ShowNavigationLoadingOverlayAsync();
         }
 
-        if (Frame is not null)
-        {
-            var frame = Frame;
+        NavigateBackToMainPage();
+    }
 
-            _releaseVisualTreeImmediatelyOnUnload = true;
-            bool navigated;
-            try
-            {
-                navigated = frame.Navigate(typeof(MainPage));
-            }
-            catch (Exception ex)
-            {
-                _releaseVisualTreeImmediatelyOnUnload = false;
-                Debug.WriteLine($"[SettingsPage] Failed to navigate back to MainPage: {ex.Message}");
-                HideNavigationLoadingOverlay();
-                return;
-            }
-
-            if (navigated)
-            {
-                // Settings owns a large, lazily-inflated tree for service/window controls.
-                // Release it only after MainPage navigation succeeds so a navigation failure
-                // cannot leave the frame on a blank Settings page.
-                QueueTeardownOnUnload(deferVisualTreeRelease: false);
-                _releaseVisualTreeImmediatelyOnUnload = false;
-                frame.BackStack.Clear();
-                frame.ForwardStack.Clear();
-            }
-            else
-            {
-                _releaseVisualTreeImmediatelyOnUnload = false;
-                HideNavigationLoadingOverlay();
-            }
-        }
-        else
+    /// <summary>
+    /// Navigates the hosting frame back to <see cref="MainPage"/> and releases the
+    /// settings visual tree once that navigation succeeds.
+    /// </summary>
+    /// <returns>True when the frame left the settings page.</returns>
+    private bool NavigateBackToMainPage()
+    {
+        if (Frame is null)
         {
             HideNavigationLoadingOverlay();
+            return false;
         }
+
+        var frame = Frame;
+
+        _releaseVisualTreeImmediatelyOnUnload = true;
+        bool navigated;
+        try
+        {
+            navigated = frame.Navigate(typeof(MainPage));
+        }
+        catch (Exception ex)
+        {
+            _releaseVisualTreeImmediatelyOnUnload = false;
+            Debug.WriteLine($"[SettingsPage] Failed to navigate back to MainPage: {ex.Message}");
+            HideNavigationLoadingOverlay();
+            return false;
+        }
+
+        if (navigated)
+        {
+            // Settings owns a large, lazily-inflated tree for service/window controls.
+            // Release it only after MainPage navigation succeeds so a navigation failure
+            // cannot leave the frame on a blank Settings page.
+            QueueTeardownOnUnload(deferVisualTreeRelease: false);
+            _releaseVisualTreeImmediatelyOnUnload = false;
+            frame.BackStack.Clear();
+            frame.ForwardStack.Clear();
+            return true;
+        }
+
+        _releaseVisualTreeImmediatelyOnUnload = false;
+        HideNavigationLoadingOverlay();
+        return false;
+    }
+
+    /// <summary>
+    /// Returns the frame to <see cref="MainPage"/> on behalf of a background trigger
+    /// (global hotkey, tray menu) that needs the translation UI. The main window keeps
+    /// whatever page it was left on when it is hidden to tray, so without this a hotkey
+    /// pressed after a visit to settings only re-showed the settings page (issue #188).
+    /// Refuses while the page holds unsaved edits — a background trigger must never
+    /// discard settings the user is still typing.
+    /// </summary>
+    /// <returns>True when the frame now shows <see cref="MainPage"/>.</returns>
+    internal bool TryReturnToMainPage()
+    {
+        if (_hasUnsavedChanges)
+        {
+            Debug.WriteLine("[SettingsPage] Unsaved changes — staying on settings page");
+            return false;
+        }
+
+        return NavigateBackToMainPage();
     }
 
     private async Task ShowNavigationLoadingOverlayAsync()

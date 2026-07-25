@@ -531,6 +531,10 @@ namespace Easydict.WinUI
                 }
                 else
                 {
+                    // Leave the settings page before raising the window: this hotkey opens
+                    // the query input, and the window keeps whatever page it was last left
+                    // on when hidden to tray (issue #188).
+                    EnsureMainPageForQuery();
                     ShowAndActivateWindow();
                     FocusMainWindowInputForTyping();
                 }
@@ -548,20 +552,43 @@ namespace Easydict.WinUI
 
                 var text = await TextSelectionService.GetSelectedTextAsync();
 
-                _window?.DispatcherQueue.TryEnqueue(() =>
-                {
-                    ShowAndActivateWindow();
-
-                    if (!string.IsNullOrWhiteSpace(text)
-                        && _window?.Content is Frame frame && frame.Content is MainPage mainPage)
-                    {
-                        mainPage.SetTextAndTranslate(text);
-                    }
-                });
+                _window?.DispatcherQueue.TryEnqueue(() => ShowQueryInMainWindow(text));
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Hotkey] OnTranslateSelectionHotkey error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Surfaces <paramref name="text"/> in the main window's translation UI, returning
+        /// the window to <see cref="MainPage"/> first when it was left on the settings page.
+        /// If settings cannot be left because it holds unsaved edits, the query goes to the
+        /// mini window rather than being dropped behind the settings page (issue #188).
+        /// Must be called on the UI thread.
+        /// </summary>
+        private void ShowQueryInMainWindow(string? text)
+        {
+            var mainPage = EnsureMainPageForQuery();
+
+            if (mainPage is null)
+            {
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    MiniWindowService.Instance.ShowWithText(text);
+                }
+                else
+                {
+                    ShowAndActivateWindow();
+                }
+                return;
+            }
+
+            ShowAndActivateWindow();
+
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                mainPage.SetTextAndTranslate(text);
             }
         }
 
@@ -678,15 +705,7 @@ namespace Easydict.WinUI
             var text = await ClipboardService.GetTextAsync();
             if (!string.IsNullOrWhiteSpace(text))
             {
-                _window?.DispatcherQueue.TryEnqueue(() =>
-                {
-                    ShowAndActivateWindow();
-
-                    if (_window?.Content is Frame frame && frame.Content is MainPage mainPage)
-                    {
-                        mainPage.SetTextAndTranslate(text);
-                    }
-                });
+                _window?.DispatcherQueue.TryEnqueue(() => ShowQueryInMainWindow(text));
             }
         }
 
@@ -1064,6 +1083,37 @@ namespace Easydict.WinUI
             {
                 _ = frame.Navigate(typeof(MainPage));
             }
+        }
+
+        /// <summary>
+        /// Brings the root frame back to <see cref="MainPage"/> before a translation-intent
+        /// activation raises the main window. Hiding the window to tray keeps the page it was
+        /// showing, so a hotkey pressed after visiting settings used to re-raise the settings
+        /// page and silently discard the selected text (issue #188).
+        /// </summary>
+        /// <returns>
+        /// The <see cref="MainPage"/> now hosted by the frame, or null when the frame could not
+        /// be brought there — today only when the settings page holds unsaved edits, which a
+        /// background trigger must not discard.
+        /// </returns>
+        private MainPage? EnsureMainPageForQuery()
+        {
+            var frame = EnsureRootFrame();
+            if (frame is null)
+            {
+                return null;
+            }
+
+            if (frame.Content is SettingsPage settingsPage)
+            {
+                settingsPage.TryReturnToMainPage();
+            }
+            else if (frame.Content is null)
+            {
+                _ = frame.Navigate(typeof(MainPage));
+            }
+
+            return frame.Content as MainPage;
         }
 
         private Frame? EnsureRootFrame()

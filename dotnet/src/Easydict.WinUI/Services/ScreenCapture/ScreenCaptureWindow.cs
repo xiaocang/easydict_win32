@@ -1241,7 +1241,6 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern void PostQuitMessage(int nExitCode);
-    [DllImport("user32.dll")] private static extern bool PostMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern nint SetFocus(nint hwnd);
     [DllImport("user32.dll")] private static extern nint LoadCursor(nint hInstance, int lpCursorName);

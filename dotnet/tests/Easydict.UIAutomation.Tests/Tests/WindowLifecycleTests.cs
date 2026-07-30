@@ -90,13 +90,13 @@ public class WindowLifecycleTests : IDisposable
         if (minimizeToTrayToggle.Patterns.Toggle.Pattern.ToggleState != ToggleState.On)
         {
             minimizeToTrayToggle.Patterns.Toggle.Pattern.Toggle();
-        }
 
-        var saveButton = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SaveButton")),
-            TimeSpan.FromSeconds(10)).Result;
-        saveButton.Should().NotBeNull("the tray setting must be saved before sending session-end messages");
-        saveButton!.Click();
+            var saveButton = Retry.WhileNull(
+                () => window.FindFirstDescendant(cf => cf.ByAutomationId("SaveButton")),
+                TimeSpan.FromSeconds(10)).Result;
+            saveButton.Should().NotBeNull("the tray setting must be saved before sending session-end messages");
+            saveButton!.Click();
+        }
 
         var hwnd = new nint(window.Properties.NativeWindowHandle.Value);
         SendMessageTimeout(

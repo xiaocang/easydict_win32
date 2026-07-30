@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
@@ -16,11 +17,19 @@ public class CrashDiagnosticsTests
     [Fact]
     public void IsProcessFatal_FatalInnerException_IsTrue()
     {
-        var exception = new InvalidOperationException(
-            "outer",
-            new TypeInitializationException("Easydict.TestType", new InvalidOperationException("inner")));
+        var exception = new InvalidOperationException("outer", new SEHException());
 
         CrashDiagnostics.IsProcessFatal(exception).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsProcessFatal_OrdinaryTypeInitializationException_IsFalse()
+    {
+        var exception = new TypeInitializationException(
+            "Easydict.TestType",
+            new InvalidOperationException("inner"));
+
+        CrashDiagnostics.IsProcessFatal(exception).Should().BeFalse();
     }
 
     [Fact]

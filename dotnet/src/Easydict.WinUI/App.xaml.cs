@@ -1129,6 +1129,7 @@ namespace Easydict.WinUI
                 try
                 {
                     HideWindow();
+                    return;
                 }
                 catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
                 {
@@ -1140,7 +1141,6 @@ namespace Easydict.WinUI
                     args.Cancel = false;
                 }
 
-                return;
             }
 
             args.Cancel = false;

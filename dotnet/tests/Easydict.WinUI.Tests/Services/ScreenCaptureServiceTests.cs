@@ -132,6 +132,41 @@ public class ScreenCaptureServiceTests
             }
         }
     }
+    [Fact]
+    public async Task CaptureAsync_WndProcFailure_CompletesOnlyAfterCleanup()
+    {
+        using var cleanupGate = new ManualResetEventSlim(false);
+        var failure = new InvalidOperationException("Injected WndProc failure");
+        var probe = new ScreenCaptureLifecycleProbe { BeforeCleanupGate = cleanupGate };
+        using var window = new ScreenCaptureWindow(probe);
+        var captureTask = window.CaptureAsync();
+
+        try
+        {
+            await probe.Ready.Task.WaitAsync(TestTimeout);
+            probe.FailNextWndProc(failure);
+            window.Cancel();
+
+            await probe.CleanupStarted.Task.WaitAsync(TestTimeout);
+            captureTask.IsCompleted.Should().BeFalse(
+                "WndProc failures must not escape before capture resources are released");
+
+            cleanupGate.Set();
+
+            var exception = await Record.ExceptionAsync(
+                async () => await captureTask.WaitAsync(TestTimeout));
+            exception.Should().BeSameAs(failure);
+            probe.Closed.Task.IsCompleted.Should().BeTrue();
+        }
+        finally
+        {
+            cleanupGate.Set();
+            window.Cancel();
+            _ = await Record.ExceptionAsync(
+                async () => await captureTask.WaitAsync(TestTimeout));
+        }
+    }
+
 }
 
 [CollectionDefinition("ScreenCapture", DisableParallelization = true)]

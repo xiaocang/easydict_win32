@@ -107,6 +107,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     // Result and lifecycle
     private TaskCompletionSource<ScreenCaptureResult?>? _resultTcs;
     private ScreenCaptureResult? _captureResult;
+    private Exception? _captureException;
     private CancellationTokenRegistration _cancellationReg;
     private readonly object _lifecycleLock = new();
     private readonly ScreenCaptureLifecycleProbe? _lifecycleProbe;
@@ -259,10 +260,19 @@ public sealed class ScreenCaptureWindow : IDisposable
         }
         finally
         {
+            _lifecycleProbe?.CleanupStarted.TrySetResult();
+            _lifecycleProbe?.BeforeCleanupGate?.Wait();
             Cleanup();
             _lifecycleProbe?.Closed.TrySetResult();
-            _resultTcs?.TrySetResult(
-                Volatile.Read(ref _cancellationRequested) != 0 || failed ? null : _captureResult);
+            if (_captureException is not null)
+            {
+                _resultTcs?.TrySetException(_captureException);
+            }
+            else
+            {
+                _resultTcs?.TrySetResult(
+                    Volatile.Read(ref _cancellationRequested) != 0 || failed ? null : _captureResult);
+            }
         }
     }
 
@@ -405,7 +415,7 @@ public sealed class ScreenCaptureWindow : IDisposable
                 ex,
                 isTerminating: false,
                 isHandled: true);
-            _resultTcs?.TrySetException(ex);
+            _captureException ??= ex;
             PostMessage(hwnd, WM_CLOSE, 0, 0);
             return 0;
         }
@@ -413,6 +423,11 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private nint WndProcCore(nint hwnd, uint msg, nint wParam, nint lParam)
     {
+        if (_lifecycleProbe?.TakeWndProcFailure() is { } injectedFailure)
+        {
+            throw injectedFailure;
+        }
+
         switch (msg)
         {
             case WM_PAINT:
@@ -1261,14 +1276,29 @@ public sealed class ScreenCaptureWindow : IDisposable
 
 internal sealed class ScreenCaptureLifecycleProbe
 {
+    private Exception? _wndProcFailure;
+
     public TaskCompletionSource ThreadStarted { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public TaskCompletionSource Ready { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public TaskCompletionSource CleanupStarted { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public TaskCompletionSource Closed { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public ManualResetEventSlim? BeforeCaptureGate { get; init; }
+    public ManualResetEventSlim? BeforeCleanupGate { get; init; }
+
+    public void FailNextWndProc(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        Interlocked.Exchange(ref _wndProcFailure, exception);
+    }
+
+    internal Exception? TakeWndProcFailure() =>
+        Interlocked.Exchange(ref _wndProcFailure, null);
 }

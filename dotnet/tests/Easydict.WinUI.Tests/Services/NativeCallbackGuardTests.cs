@@ -40,12 +40,12 @@ public class NativeCallbackGuardTests
     }
 
     [Fact]
-    public void Invoke_FatalInitializerFailure_Rethrows()
+    public void Invoke_InitializerFailure_DoesNotEscape()
     {
         Action action = () => NativeCallbackGuard.Invoke(
-            "NativeCallbackGuardTests.Fatal",
+            "NativeCallbackGuardTests.Initializer",
             () => throw new TypeInitializationException("Easydict.TestType", new InvalidOperationException()));
 
-        action.Should().Throw<TypeInitializationException>();
+        action.Should().NotThrow();
     }
 }

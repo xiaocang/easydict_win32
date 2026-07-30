@@ -23,7 +23,7 @@ internal static class CrashDiagnostics
             if (current is StackOverflowException
                 or OutOfMemoryException
                 or AccessViolationException
-                or TypeInitializationException)
+                or SEHException)
             {
                 return true;
             }

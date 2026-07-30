@@ -174,7 +174,7 @@ public sealed class OcrTranslateService
         var message =
             $"[OcrTranslate] {flow} pid={Environment.ProcessId} engine={options.Engine} " +
             $"useWorker={settings.UseOcrWorker} endpoint={FormatEndpointForDiagnostics(options)} " +
-            $"model={options.Model}";
+            $"model={options.Model} thinking={options.EnableThinking}";
         Debug.WriteLine(message);
         CrashDiagnostics.Log(message);
     }

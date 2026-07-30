@@ -332,6 +332,13 @@ public sealed class SettingsService
     public string OcrModel { get; set; } = OcrServiceOptions.DefaultModel;
     public string OcrSystemPrompt { get; set; } = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
 
+    /// <summary>
+    /// Whether the OCR model may think before answering. Off by default: reasoning adds
+    /// substantial latency without improving text recognition. Only has an effect on
+    /// models that support thinking.
+    /// </summary>
+    public bool OcrEnableThinking { get; set; }
+
     // Layout detection settings (long document translation)
 
     /// <summary>
@@ -805,6 +812,7 @@ public sealed class SettingsService
         OcrEndpoint = GetValue(nameof(OcrEndpoint), OcrServiceOptions.DefaultEndpoint);
         OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
         OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
+        OcrEnableThinking = GetValue(nameof(OcrEnableThinking), false);
 
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
         TtsSpeed = GetValue(nameof(TtsSpeed), 1.0);
@@ -1065,6 +1073,7 @@ public sealed class SettingsService
         _settings[nameof(OcrEndpoint)] = OcrEndpoint;
         _settings[nameof(OcrModel)] = OcrModel;
         _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
+        _settings[nameof(OcrEnableThinking)] = OcrEnableThinking;
 
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
         _settings[nameof(TtsSpeed)] = TtsSpeed;

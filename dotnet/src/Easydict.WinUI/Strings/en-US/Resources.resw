@@ -1227,6 +1227,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>System Prompt</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Enable model thinking</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Only applies to models that support thinking. Leaving it off makes recognition much faster.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Test OCR Connection</value>
   </data>

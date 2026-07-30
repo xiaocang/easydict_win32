@@ -937,6 +937,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>Prompt Sistem</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Aktifkan pemikiran model</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Hanya berlaku untuk model yang mendukung pemikiran. Menonaktifkannya membuat pengenalan jauh lebih cepat.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Uji Koneksi OCR</value>
   </data>

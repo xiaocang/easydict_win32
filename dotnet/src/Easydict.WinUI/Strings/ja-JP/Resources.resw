@@ -1149,6 +1149,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>システムプロンプト</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>モデルの思考を有効にする</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>思考に対応したモデルにのみ適用されます。オフにすると認識がかなり速くなります。</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>OCR 接続をテスト</value>
   </data>

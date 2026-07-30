@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
@@ -10,8 +11,14 @@ namespace Easydict.WinUI.Tests.Services;
 /// Tests for CustomApiOcrService request construction with injected OCR options.
 /// </summary>
 [Trait("Category", "WinUI")]
-public class CustomApiOcrServiceTests
+[Collection("OcrThinking")] // OcrThinkingSupport caches rejections process-wide
+public class CustomApiOcrServiceTests : IDisposable
 {
+    public CustomApiOcrServiceTests() => OcrThinkingSupport.ResetForTests();
+
+    // The rejected-configuration cache is process-wide; keep it from leaking between tests.
+    public void Dispose() => OcrThinkingSupport.ResetForTests();
+
     [Fact]
     public async Task RecognizeAsync_UsesInjectedOptionsForRequestConstruction()
     {
@@ -106,4 +113,336 @@ public class CustomApiOcrServiceTests
         await act.Should().ThrowAsync<TimeoutException>()
             .WithMessage("*Custom API OCR request timed out*5s*");
     }
+
+    #region Adaptive max tokens
+
+    [Fact]
+    public async Task RecognizeAsync_StartsAtDefaultMaxTokens_ForChatCompletions()
+    {
+        var handler = StubHandler(ChatCompletionsResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        handler.RequestBodies.Should().HaveCount(1);
+        MaxTokensOf(handler.RequestBodies[0]).Should().Be(512);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_StartsAtDefaultMaxTokens_ForResponses()
+    {
+        var handler = StubHandler(ResponsesResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions());
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        handler.RequestBodies.Should().HaveCount(1);
+        MaxOutputTokensOf(handler.RequestBodies[0]).Should().Be(512);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_DoublesMaxTokens_WhenChatCompletionIsTruncated()
+    {
+        var handler = SequencedHandler(
+            ChatCompletionsResponse("truncated", finishReason: "length"),
+            ChatCompletionsResponse("the complete recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("the complete recognized text");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_DoublesMaxTokens_WhenResponsesGenerationIsIncomplete()
+    {
+        var handler = SequencedHandler(
+            ResponsesResponse("truncated", status: "incomplete", incompleteReason: "max_output_tokens"),
+            ResponsesResponse("the complete recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("the complete recognized text");
+        handler.RequestBodies.Select(MaxOutputTokensOf).Should().Equal(512, 1024);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_TreatsUsageAtBudgetAsTruncated_WhenFinishReasonIsMissing()
+    {
+        var handler = SequencedHandler(
+            """{"choices":[{"message":{"content":"truncated"}}],"usage":{"completion_tokens":512}}""",
+            ChatCompletionsResponse("the complete recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("the complete recognized text");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_StopsEscalatingAtCeiling_AndKeepsLongestText()
+    {
+        var handler = SequencedHandler(
+            ChatCompletionsResponse("a", finishReason: "length"),
+            ChatCompletionsResponse("the longest partial result", finishReason: "length"),
+            ChatCompletionsResponse("bb", finishReason: "length"),
+            ChatCompletionsResponse("ccc", finishReason: "length"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("the longest partial result");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024, 2048, 4096);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_StartsHigher_WhenThinkingIsEnabled()
+    {
+        var handler = StubHandler(ChatCompletionsResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions(enableThinking: true));
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        MaxTokensOf(handler.RequestBodies[0]).Should().Be(2048);
+    }
+
+    #endregion
+
+    #region Thinking control
+
+    [Fact]
+    public async Task RecognizeAsync_DisablesThinkingByDefault_ForChatCompletions()
+    {
+        var handler = StubHandler(ChatCompletionsResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        StringAt(handler.RequestBodies[0], "thinking", "type").Should().Be("disabled");
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_OmitsThinkingField_WhenThinkingIsEnabled()
+    {
+        var handler = StubHandler(ChatCompletionsResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions(enableThinking: true));
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        HasProperty(handler.RequestBodies[0], "thinking").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_UsesReasoningEffort_ForGpt5OnResponsesEndpoint()
+    {
+        var handler = StubHandler(ResponsesResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions(model: "gpt-5.4-mini"));
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        StringAt(handler.RequestBodies[0], "reasoning", "effort").Should().Be("none");
+        HasProperty(handler.RequestBodies[0], "thinking").Should().BeFalse(
+            "the Responses API has no thinking field");
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_OmitsReasoning_ForModelWithoutReasoningControl()
+    {
+        var handler = StubHandler(ResponsesResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions(model: "qwen-vl-max"));
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        HasProperty(handler.RequestBodies[0], "reasoning").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_RetriesWithoutThinkingField_WhenProviderRejectsIt()
+    {
+        var handler = SequencedHandler(
+            (HttpStatusCode.BadRequest,
+                """{"error":{"message":"Unrecognized request argument supplied: thinking"}}"""),
+            (HttpStatusCode.OK, ChatCompletionsResponse("recognized text")));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("recognized text");
+        handler.RequestBodies.Should().HaveCount(2);
+        HasProperty(handler.RequestBodies[0], "thinking").Should().BeTrue();
+        HasProperty(handler.RequestBodies[1], "thinking").Should().BeFalse();
+        MaxTokensOf(handler.RequestBodies[1]).Should().Be(512,
+            "dropping the field must not change the token budget");
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_RemembersRejection_AndSkipsThinkingFieldNextTime()
+    {
+        var options = ChatCompletionsOptions();
+        var firstHandler = SequencedHandler(
+            (HttpStatusCode.BadRequest, """{"error":"does not support thinking"}"""),
+            (HttpStatusCode.OK, ChatCompletionsResponse("recognized text")));
+        using var firstClient = new HttpClient(firstHandler);
+        await new CustomApiOcrService(firstClient, options).RecognizeAsync(new byte[4], 1, 1);
+
+        var secondHandler = StubHandler(ChatCompletionsResponse("recognized again"));
+        using var secondClient = new HttpClient(secondHandler);
+        var result = await new CustomApiOcrService(secondClient, options)
+            .RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("recognized again");
+        secondHandler.RequestBodies.Should().HaveCount(1);
+        HasProperty(secondHandler.RequestBodies[0], "thinking").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_ThrowsWithResponseBody_WhenErrorIsUnrelatedToThinking()
+    {
+        var handler = StubHandler("""{"error":{"message":"invalid api key"}}""", HttpStatusCode.Unauthorized);
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var act = async () => await service.RecognizeAsync(new byte[4], 1, 1);
+
+        await act.Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*401*invalid api key*");
+        handler.RequestBodies.Should().HaveCount(1, "an auth failure is not worth retrying");
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_StripsInlineThinkingMarkupFromRecognizedText()
+    {
+        var handler = StubHandler(
+            ChatCompletionsResponse("<think>The image shows a sign.</think>\\nSTOP"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions(enableThinking: true));
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("STOP");
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static OcrServiceOptions ChatCompletionsOptions(bool enableThinking = false) =>
+        new(
+            OcrEngineType.CustomApi,
+            "test-key",
+            "https://example.com/v1/chat/completions",
+            "mimo-vl",
+            "extract the text",
+            enableThinking);
+
+    private static OcrServiceOptions ResponsesOptions(
+        string model = "gpt-5.4-mini",
+        bool enableThinking = false) =>
+        new(
+            OcrEngineType.CustomApi,
+            "test-key",
+            "https://api.openai.com/v1/responses",
+            model,
+            "extract the text",
+            enableThinking);
+
+    private static string ChatCompletionsResponse(string content, string finishReason = "stop") =>
+        $$"""{"choices":[{"message":{"content":"{{content}}"},"finish_reason":"{{finishReason}}"}]}""";
+
+    private static string ResponsesResponse(
+        string text,
+        string status = "completed",
+        string? incompleteReason = null)
+    {
+        var details = incompleteReason is null
+            ? string.Empty
+            : $$""","incomplete_details":{"reason":"{{incompleteReason}}"}""";
+
+        return $$"""{"status":"{{status}}"{{details}},"output":[{"content":[{"type":"output_text","text":"{{text}}"}]}]}""";
+    }
+
+    private static int MaxTokensOf(string requestBody) => IntAt(requestBody, "max_tokens");
+
+    private static int MaxOutputTokensOf(string requestBody) => IntAt(requestBody, "max_output_tokens");
+
+    private static int IntAt(string json, string propertyName)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty(propertyName).GetInt32();
+    }
+
+    /// <summary>
+    /// Value at a nested property path, or null when any step is missing.
+    /// </summary>
+    private static string? StringAt(string json, params string[] path)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var element = doc.RootElement;
+
+        foreach (var step in path)
+        {
+            if (!element.TryGetProperty(step, out var child))
+            {
+                return null;
+            }
+
+            element = child;
+        }
+
+        return element.ToString();
+    }
+
+    private static bool HasProperty(string json, string propertyName)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.TryGetProperty(propertyName, out _);
+    }
+
+    private static RecordingHttpMessageHandler StubHandler(
+        string responseBody,
+        HttpStatusCode statusCode = HttpStatusCode.OK) =>
+        new((_, _) => Task.FromResult(new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(responseBody)
+        }));
+
+    private static RecordingHttpMessageHandler SequencedHandler(params string[] responseBodies) =>
+        SequencedHandler(responseBodies.Select(body => (HttpStatusCode.OK, body)).ToArray());
+
+    /// <summary>
+    /// Replies with each response in order; the last one repeats if the service asks again.
+    /// </summary>
+    private static RecordingHttpMessageHandler SequencedHandler(
+        params (HttpStatusCode StatusCode, string Body)[] responses)
+    {
+        var callCount = 0;
+
+        return new RecordingHttpMessageHandler((_, _) =>
+        {
+            var (statusCode, body) = responses[Math.Min(callCount, responses.Length - 1)];
+            callCount++;
+
+            return Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(body)
+            });
+        });
+    }
+
+    #endregion
 }

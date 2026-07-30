@@ -1182,6 +1182,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>系統提示詞</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>啟用模型思考</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>僅對支援思考的模型生效。關閉後辨識速度快很多。</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>測試 OCR 連線</value>
   </data>

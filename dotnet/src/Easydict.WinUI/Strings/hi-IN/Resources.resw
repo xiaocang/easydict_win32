@@ -579,6 +579,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>सिस्टम प्रॉम्प्ट</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>मॉडल थिंकिंग सक्षम करें</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>यह केवल उन मॉडलों पर लागू होता है जो थिंकिंग का समर्थन करते हैं। इसे बंद रखने से पहचान बहुत तेज़ हो जाती है।</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>OCR कनेक्शन परीक्षण करें</value>
   </data>

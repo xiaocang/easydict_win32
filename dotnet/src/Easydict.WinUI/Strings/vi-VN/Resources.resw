@@ -991,6 +991,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>Lời nhắc hệ thống</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Bật chế độ suy luận của mô hình</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Chỉ áp dụng cho các mô hình hỗ trợ suy luận. Tắt đi giúp nhận dạng nhanh hơn nhiều.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Kiểm tra kết nối OCR</value>
   </data>

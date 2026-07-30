@@ -17,6 +17,24 @@ public sealed record OcrServiceOptions
     public const string DefaultCustomApiModel = OpenAIService.DefaultModel;
     public const string DefaultModel = DefaultOllamaModel;
 
+    /// <summary>
+    /// Initial output token budget for API-based OCR. A screenshot rarely needs more,
+    /// and services escalate from here when a response comes back truncated.
+    /// </summary>
+    public const int DefaultMaxTokens = 512;
+
+    /// <summary>
+    /// Initial output token budget when thinking is allowed. Reasoning tokens are
+    /// drawn from the same budget, so starting at <see cref="DefaultMaxTokens"/>
+    /// would truncate before the model emits any recognized text.
+    /// </summary>
+    public const int ThinkingMaxTokens = 2048;
+
+    /// <summary>
+    /// Upper bound for token escalation.
+    /// </summary>
+    public const int MaxTokensCeiling = 4096;
+
     public OcrEngineType Engine { get; }
 
     public string? ApiKey { get; }
@@ -27,18 +45,27 @@ public sealed record OcrServiceOptions
 
     public string SystemPrompt { get; }
 
+    /// <summary>
+    /// Whether the model is allowed to think before answering. Off by default:
+    /// reasoning adds substantial latency without improving text recognition.
+    /// Only has an effect on models that actually support thinking.
+    /// </summary>
+    public bool EnableThinking { get; }
+
     public OcrServiceOptions(
         OcrEngineType engine,
         string? apiKey,
         string? endpoint,
         string? model,
-        string? systemPrompt)
+        string? systemPrompt,
+        bool enableThinking = false)
     {
         Engine = engine;
         ApiKey = NormalizeOptional(apiKey);
         Endpoint = NormalizeRequired(endpoint, GetDefaultEndpoint(engine));
         Model = NormalizeRequired(model, GetDefaultModel(engine));
         SystemPrompt = systemPrompt?.Trim() ?? string.Empty;
+        EnableThinking = enableThinking;
     }
 
     public static OcrServiceOptions FromSettings(SettingsService settings)
@@ -50,8 +77,14 @@ public sealed record OcrServiceOptions
             settings.OcrApiKey,
             settings.OcrEndpoint,
             settings.OcrModel,
-            settings.OcrSystemPrompt);
+            settings.OcrSystemPrompt,
+            settings.OcrEnableThinking);
     }
+
+    /// <summary>
+    /// Initial output token budget for this configuration.
+    /// </summary>
+    public int GetInitialMaxTokens() => EnableThinking ? ThinkingMaxTokens : DefaultMaxTokens;
 
     public static string GetDefaultEndpoint(OcrEngineType engine) => engine switch
     {

@@ -1107,6 +1107,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>System-Prompt</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Modell-Denkprozess aktivieren</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Gilt nur für Modelle, die Denkprozesse unterstützen. Deaktiviert ist die Texterkennung deutlich schneller.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>OCR-Verbindung testen</value>
   </data>

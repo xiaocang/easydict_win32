@@ -983,6 +983,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>Prompt di sistema</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Abilita il ragionamento del modello</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Si applica solo ai modelli che supportano il ragionamento. Disattivarlo rende il riconoscimento molto più rapido.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Test connessione OCR</value>
   </data>

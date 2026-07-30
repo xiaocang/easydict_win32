@@ -579,6 +579,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>Systemprompt</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Aktivér modeltænkning</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Gælder kun for modeller, der understøtter tænkning. Slået fra bliver genkendelsen meget hurtigere.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Test OCR-forbindelse</value>
   </data>

@@ -1149,6 +1149,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>시스템 프롬프트</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>모델 사고 활성화</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>사고를 지원하는 모델에만 적용됩니다. 끄면 인식 속도가 훨씬 빨라집니다.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>OCR 연결 테스트</value>
   </data>

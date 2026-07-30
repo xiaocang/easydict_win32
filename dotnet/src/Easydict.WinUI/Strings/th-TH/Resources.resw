@@ -945,6 +945,12 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>พรอมต์ระบบ</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>เปิดการคิดของโมเดล</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>ใช้ได้กับโมเดลที่รองรับการคิดเท่านั้น การปิดไว้จะทำให้การรู้จำเร็วขึ้นมาก</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>ทดสอบการเชื่อมต่อ OCR</value>
   </data>

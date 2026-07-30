@@ -6,6 +6,7 @@ namespace Easydict.WinUI.Tests.Services;
 internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
 {
     private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _responseFactory;
+    private readonly List<string> _requestBodies = new();
 
     public Uri? LastRequestUri { get; private set; }
 
@@ -14,6 +15,11 @@ internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
     public string? LastRequestBody { get; private set; }
 
     public string? LastContentType { get; private set; }
+
+    /// <summary>
+    /// Every request body seen, in order — for services that retry.
+    /// </summary>
+    public IReadOnlyList<string> RequestBodies => _requestBodies;
 
     public RecordingHttpMessageHandler(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? responseFactory = null)
@@ -32,6 +38,7 @@ internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
         {
             LastContentType = request.Content.Headers.ContentType?.MediaType;
             LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
+            _requestBodies.Add(LastRequestBody);
         }
 
         return await _responseFactory(request, cancellationToken);

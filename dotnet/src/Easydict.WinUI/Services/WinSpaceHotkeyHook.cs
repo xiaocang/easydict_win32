@@ -185,20 +185,32 @@ public sealed partial class WinSpaceHotkeyHook : IDisposable
 
     private unsafe IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0)
+        try
         {
-            var ks = (KBDLLHOOKSTRUCT*)lParam;
-            // Ignore our own injected (masking) keystrokes.
-            if (ks->dwExtraInfo != MouseHookService.EASYDICT_SYNTHETIC_KEY)
+            if (nCode >= 0)
             {
-                bool winDown = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
-                            || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
-                if (ProcessKey((int)wParam, ks->vkCode, winDown))
+                var ks = (KBDLLHOOKSTRUCT*)lParam;
+                // Ignore our own injected (masking) keystrokes.
+                if (ks->dwExtraInfo != MouseHookService.EASYDICT_SYNTHETIC_KEY)
                 {
-                    return (IntPtr)1; // suppress
+                    var winDown = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
+                        || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+                    if (ProcessKey((int)wParam, ks->vkCode, winDown))
+                    {
+                        return (IntPtr)1; // suppress
+                    }
                 }
             }
         }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(
+                "WinSpaceHotkeyHook.HookCallback",
+                ex,
+                isTerminating: false,
+                isHandled: true);
+        }
+
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
@@ -223,8 +235,8 @@ public sealed partial class WinSpaceHotkeyHook : IDisposable
                 return true; // auto-repeat while held — suppress without re-firing
 
             _spaceConsumed = true;
-            _maskAction();      // disguise the Win key so the Start menu stays closed
-            _handler?.Invoke();
+            NativeCallbackGuard.Invoke("WinSpaceHotkeyHook.MaskAction", _maskAction);
+            NativeCallbackGuard.Invoke("WinSpaceHotkeyHook.Handler", _handler);
             return true;
         }
 

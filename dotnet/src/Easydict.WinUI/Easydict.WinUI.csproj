@@ -360,6 +360,8 @@
       <!-- PdfPig fork (submodule at lib/PdfPig) with CID/CTM/CharacterCode exposure for pdf2zh-aligned pipeline. -->
       <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj"
                         Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
+      <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig.Core\UglyToad.PdfPig.Core.csproj"
+                        Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
       <!-- ONNX Runtime managed wrapper only (native binary downloaded on first use) -->
       <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0"
                         Condition="'$(EnableInProcLongDocFallback)' == 'true'" />

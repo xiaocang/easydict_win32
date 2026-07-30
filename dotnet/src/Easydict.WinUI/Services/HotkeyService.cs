@@ -81,14 +81,14 @@ public sealed class HotkeyService : IDisposable
 
     public HotkeyService(Window window)
     {
-        App.LogToFile("[Hotkey] Constructor entered");
+        CrashDiagnostics.Log("[Hotkey] Constructor entered");
         _window = window;
         _hwnd = WindowNative.GetWindowHandle(window);
-        App.LogToFile($"[Hotkey] HWND obtained: {_hwnd}");
+        CrashDiagnostics.Log($"[Hotkey] HWND obtained: {_hwnd}");
         
         if (_hwnd == IntPtr.Zero)
         {
-            App.LogToFile("[Hotkey] CRITICAL: HWND is zero in constructor!");
+            CrashDiagnostics.Log("[Hotkey] CRITICAL: HWND is zero in constructor!");
         }
     }
 
@@ -101,23 +101,23 @@ public sealed class HotkeyService : IDisposable
     {
         if (_isInitialized) return Array.Empty<HotkeyRegistrationFailure>();
 
-        App.LogToFile("[Hotkey] Initializing hotkey service...");
+        CrashDiagnostics.Log("[Hotkey] Initializing hotkey service...");
 
         if (_hwnd == IntPtr.Zero)
         {
-            App.LogToFile("[Hotkey] ABORTING: Cannot initialize with zero HWND");
+            CrashDiagnostics.Log("[Hotkey] ABORTING: Cannot initialize with zero HWND");
             return Array.Empty<HotkeyRegistrationFailure>();
         }
 
         // Set up window subclass to intercept WM_HOTKEY messages
         _subclassProc = SubclassWndProc;
         var subclassResult = SetWindowSubclass(_hwnd, _subclassProc, 1, 0);
-        App.LogToFile($"[Hotkey] SetWindowSubclass: {subclassResult}");
+        CrashDiagnostics.Log($"[Hotkey] SetWindowSubclass: {subclassResult}");
 
         var failures = RegisterAllHotkeys();
 
         _isInitialized = true;
-        App.LogToFile($"[Hotkey] Hotkey service initialized. {failures.Count} failure(s).");
+        CrashDiagnostics.Log($"[Hotkey] Hotkey service initialized. {failures.Count} failure(s).");
         return failures;
     }
 
@@ -133,11 +133,11 @@ public sealed class HotkeyService : IDisposable
     {
         if (!_isInitialized || _hwnd == IntPtr.Zero)
         {
-            App.LogToFile("[Hotkey] Reload requested but service is not initialized or HWND is zero");
+            CrashDiagnostics.Log("[Hotkey] Reload requested but service is not initialized or HWND is zero");
             return Array.Empty<HotkeyRegistrationFailure>();
         }
 
-        App.LogToFile("[Hotkey] Reloading hotkeys...");
+        CrashDiagnostics.Log("[Hotkey] Reloading hotkeys...");
 
         // Unregister all current hotkeys
         UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW);
@@ -152,7 +152,7 @@ public sealed class HotkeyService : IDisposable
         // Re-register with current settings
         var failures = RegisterAllHotkeys();
 
-        App.LogToFile($"[Hotkey] Hotkey reload complete. {failures.Count} failure(s).");
+        CrashDiagnostics.Log($"[Hotkey] Hotkey reload complete. {failures.Count} failure(s).");
         return failures;
     }
 
@@ -177,7 +177,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            App.LogToFile("[Hotkey] SHOW hotkey skipped (disabled in settings)");
+            CrashDiagnostics.Log("[Hotkey] SHOW hotkey skipped (disabled in settings)");
         }
 
         // Register Translate Selection hotkey (default: Ctrl+Alt+D)
@@ -187,7 +187,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            App.LogToFile("[Hotkey] TRANSLATE hotkey skipped (disabled in settings)");
+            CrashDiagnostics.Log("[Hotkey] TRANSLATE hotkey skipped (disabled in settings)");
         }
 
         // Register Show Mini Window hotkey (default: Ctrl+Alt+M)
@@ -206,12 +206,12 @@ public sealed class HotkeyService : IDisposable
             }
             else
             {
-                App.LogToFile($"[Hotkey] Failed to parse ShowMiniWindowHotkey '{settings.ShowMiniWindowHotkey}': {miniResult.ErrorMessage}");
+                CrashDiagnostics.Log($"[Hotkey] Failed to parse ShowMiniWindowHotkey '{settings.ShowMiniWindowHotkey}': {miniResult.ErrorMessage}");
             }
         }
         else
         {
-            App.LogToFile("[Hotkey] MINI hotkey skipped (disabled in settings)");
+            CrashDiagnostics.Log("[Hotkey] MINI hotkey skipped (disabled in settings)");
         }
 
         // Register Show Fixed Window hotkey (default: Ctrl+Alt+F)
@@ -230,12 +230,12 @@ public sealed class HotkeyService : IDisposable
             }
             else
             {
-                App.LogToFile($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
+                CrashDiagnostics.Log($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
             }
         }
         else
         {
-            App.LogToFile("[Hotkey] FIXED hotkey skipped (disabled in settings)");
+            CrashDiagnostics.Log("[Hotkey] FIXED hotkey skipped (disabled in settings)");
         }
 
         // Register OCR Translate hotkey (default: Ctrl+Alt+S)
@@ -245,7 +245,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            App.LogToFile("[Hotkey] OCR_TRANSLATE hotkey skipped (disabled in settings)");
+            CrashDiagnostics.Log("[Hotkey] OCR_TRANSLATE hotkey skipped (disabled in settings)");
         }
 
         // Register Silent OCR hotkey (default: Ctrl+Alt+Shift+S)
@@ -255,7 +255,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            App.LogToFile("[Hotkey] SILENT_OCR hotkey skipped (disabled in settings)");
+            CrashDiagnostics.Log("[Hotkey] SILENT_OCR hotkey skipped (disabled in settings)");
         }
 
         // No slot uses Win+Space anymore — tear down the keyboard hook so we don't
@@ -280,7 +280,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            App.LogToFile($"[Hotkey] Failed to parse {debugName} hotkey '{hotkeyString}': {parseResult.ErrorMessage}");
+            CrashDiagnostics.Log($"[Hotkey] Failed to parse {debugName} hotkey '{hotkeyString}': {parseResult.ErrorMessage}");
         }
     }
 
@@ -298,7 +298,7 @@ public sealed class HotkeyService : IDisposable
             if (_winSpaceBound)
             {
                 // Another slot already owns Win+Space; only one owner is allowed.
-                App.LogToFile($"[Hotkey] Win+Space already bound; {debugName} ({hotkeyString}) ignored");
+                CrashDiagnostics.Log($"[Hotkey] Win+Space already bound; {debugName} ({hotkeyString}) ignored");
                 failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, 0));
                 return;
             }
@@ -312,7 +312,7 @@ public sealed class HotkeyService : IDisposable
             });
             var installed = _winSpaceHook.Install();
             _winSpaceBound = installed;
-            App.LogToFile($"[Hotkey] {debugName} ({hotkeyString}) bound via low-level keyboard hook: installed={installed}");
+            CrashDiagnostics.Log($"[Hotkey] {debugName} ({hotkeyString}) bound via low-level keyboard hook: installed={installed}");
             if (!installed)
             {
                 failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, Marshal.GetLastWin32Error()));
@@ -322,7 +322,7 @@ public sealed class HotkeyService : IDisposable
 
         var result = RegisterHotKey(_hwnd, hotkeyId, modifiers | MOD_NOREPEAT, virtualKey);
         var error = Marshal.GetLastWin32Error();
-        App.LogToFile($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {error}");
+        CrashDiagnostics.Log($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {error}");
         if (!result)
         {
             failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, error));
@@ -334,14 +334,30 @@ public sealed class HotkeyService : IDisposable
     /// </summary>
     private nint SubclassWndProc(nint hWnd, uint uMsg, nint wParam, nint lParam, nuint uIdSubclass, nuint dwRefData)
     {
-        if (uMsg == WM_HOTKEY)
+        try
         {
-            int hotkeyId = (int)wParam;
-            App.LogToFile($"[Hotkey] HOTKEY DETECTED: WM_HOTKEY received, id={hotkeyId}");
-            ForegroundWindowHelper.AllowCurrentProcessToSetForeground("Hotkey");
-            ProcessHotkeyMessage(hotkeyId);
-            return 0;
+            if (uMsg == WM_HOTKEY)
+            {
+                var hotkeyId = (int)wParam;
+                CrashDiagnostics.Log($"[Hotkey] HOTKEY DETECTED: WM_HOTKEY received, id={hotkeyId}");
+                ForegroundWindowHelper.AllowCurrentProcessToSetForeground("Hotkey");
+                ProcessHotkeyMessage(hotkeyId);
+                return 0;
+            }
         }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(
+                "HotkeyService.SubclassWndProc",
+                ex,
+                isTerminating: false,
+                isHandled: true);
+            if (uMsg == WM_HOTKEY)
+            {
+                return 0;
+            }
+        }
+
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -354,28 +370,28 @@ public sealed class HotkeyService : IDisposable
         switch (hotkeyId)
         {
             case HOTKEY_ID_SHOW:
-                OnShowWindow?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnShowWindow", OnShowWindow);
                 break;
             case HOTKEY_ID_TRANSLATE_SELECTION:
-                OnTranslateSelection?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnTranslateSelection", OnTranslateSelection);
                 break;
             case HOTKEY_ID_SHOW_MINI:
-                OnShowMiniWindow?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnShowMiniWindow", OnShowMiniWindow);
                 break;
             case HOTKEY_ID_SHOW_FIXED:
-                OnShowFixedWindow?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnShowFixedWindow", OnShowFixedWindow);
                 break;
             case HOTKEY_ID_TOGGLE_MINI:
-                OnToggleMiniWindow?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnToggleMiniWindow", OnToggleMiniWindow);
                 break;
             case HOTKEY_ID_TOGGLE_FIXED:
-                OnToggleFixedWindow?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnToggleFixedWindow", OnToggleFixedWindow);
                 break;
             case HOTKEY_ID_OCR_TRANSLATE:
-                OnOcrTranslate?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnOcrTranslate", OnOcrTranslate);
                 break;
             case HOTKEY_ID_SILENT_OCR:
-                OnSilentOcr?.Invoke();
+                NativeCallbackGuard.Invoke("HotkeyService.OnSilentOcr", OnSilentOcr);
                 break;
         }
     }

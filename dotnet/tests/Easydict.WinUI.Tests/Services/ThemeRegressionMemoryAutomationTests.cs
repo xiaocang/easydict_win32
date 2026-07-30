@@ -101,8 +101,8 @@ public sealed class ThemeRegressionMemoryAutomationTests
 
         app.Should().Contain("SystemEvents.UserPreferenceChanged += OnSystemUserPreferenceChanged");
         app.Should().Contain("SystemEvents.UserPreferenceChanged -= OnSystemUserPreferenceChanged");
-        app.Should().Contain("SetWindowSubclass(_themeSubclassHwnd");
-        app.Should().Contain("RemoveWindowSubclass(_themeSubclassHwnd");
+        app.Should().MatchRegex(@"SetWindowSubclass\(\s+_appWindowSubclassHwnd");
+        app.Should().MatchRegex(@"RemoveWindowSubclass\(\s+_appWindowSubclassHwnd");
         app.Should().Contain("WM_SETTINGCHANGE");
         app.Should().Contain("WM_THEMECHANGED");
         app.Should().Contain("IsSystemTheme(SettingsService.Instance.AppTheme)",

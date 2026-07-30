@@ -942,36 +942,48 @@
     <value>Vis ombyt-knap</value>
   </data>
   <data name="ClaudeCode_EnableToggle" xml:space="preserve">
-    <value>Enable Claude Code</value>
+    <value>Aktivér Claude Code</value>
   </data>
   <data name="Codex_EnableToggle" xml:space="preserve">
-    <value>Enable Codex</value>
+    <value>Aktivér Codex</value>
   </data>
   <data name="ClaudeCode_Description" xml:space="preserve">
-    <value>Translate with the locally installed Claude Code CLI using your Claude subscription — no API key needed. The CLI must be installed and signed in.</value>
+    <value>Oversæt med den lokalt installerede Claude Code CLI ved hjælp af dit Claude-abonnement — ingen API-nøgle er nødvendig. CLI'en skal være installeret, og du skal være logget ind.</value>
   </data>
   <data name="Codex_Description" xml:space="preserve">
-    <value>Translate with the locally installed OpenAI Codex CLI using your ChatGPT subscription — no API key needed. The CLI must be installed and signed in.</value>
+    <value>Oversæt med den lokalt installerede OpenAI Codex CLI ved hjælp af dit ChatGPT-abonnement — ingen API-nøgle er nødvendig. CLI'en skal være installeret, og du skal være logget ind.</value>
   </data>
   <data name="AgentCli_InstallLinkText" xml:space="preserve">
-    <value>Installation guide</value>
+    <value>Installationsvejledning</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>CLI default</value>
+    <value>luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
-    <value>Reasoning Effort</value>
+    <value>Ræsonneringsindsats</value>
   </data>
   <data name="Codex_EffortDefault" xml:space="preserve">
-    <value>Default</value>
+    <value>Fra (anbefalet)</value>
   </data>
   <data name="AgentCliRiskTitle" xml:space="preserve">
-    <value>Enable this service?</value>
+    <value>Aktivér denne tjeneste?</value>
   </data>
   <data name="AgentCliRiskMessage" xml:space="preserve">
-    <value>This service runs a local AI agent CLI with your personal subscription account. Each translation consumes your subscription quota, and automated use may be subject to the provider's terms of service. The CLI must already be installed and signed in. Enable at your own discretion.</value>
+    <value>Denne tjeneste kører en lokal AI-agent-CLI med din personlige abonnementskonto. Hver oversættelse bruger af din abonnementskvote, og automatiseret brug kan være underlagt udbyderens servicevilkår. CLI'en skal allerede være installeret, og du skal være logget ind. Aktivér efter eget skøn.</value>
   </data>
   <data name="AgentCliRiskConfirm" xml:space="preserve">
-    <value>Enable</value>
+    <value>Aktivér</value>
+  </data>
+  <data name="AgentCli_ExecutablePath" xml:space="preserve">
+    <value>Sti til eksekverbar fil</value>
+  </data>
+  <data name="AgentCli_AutomaticDiscovery" xml:space="preserve">
+    <value>Automatisk registrering</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Gennemse...</value>
+  </data>
+  <data name="Codex_UpdateRequired" xml:space="preserve">
+    <value>Codex CLI skal opdateres, før den kan køre sikkert. Installér den nyeste Codex CLI, og prøv igen.</value>
   </data>
 </root>

@@ -465,7 +465,10 @@ public sealed class TranslationManagerService : IDisposable
         {
             if (service is ClaudeCodeService claudeCode)
             {
-                claudeCode.Configure(_settings.ClaudeCodeEnabled, _settings.ClaudeCodeModel);
+                claudeCode.Configure(
+                    _settings.ClaudeCodeEnabled,
+                    _settings.ClaudeCodeModel,
+                    _settings.ClaudeCodeExecutablePath);
             }
         });
 

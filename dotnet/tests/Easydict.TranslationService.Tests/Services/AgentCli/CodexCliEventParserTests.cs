@@ -89,12 +89,14 @@ public class CodexCliEventParserTests
     [InlineData("Not signed in. Run `codex login` to authenticate.")]
     [InlineData("401 Unauthorized")]
     [InlineData("OPENAI_API_KEY is not set")]
+    [InlineData("API key is required by the configured model provider")]
     public void ClassifyFailure_AuthErrors_MapToInvalidApiKey(string stdErr)
     {
         var ex = CodexCliEventParser.ClassifyFailure("codex", 1, [], stdErr);
 
         ex.ErrorCode.Should().Be(TranslationErrorCode.InvalidApiKey);
         ex.ServiceId.Should().Be("codex");
+        ex.Message.Should().Contain(stdErr);
     }
 
     [Theory]

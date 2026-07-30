@@ -195,9 +195,10 @@ public sealed class SettingsService
     // settings UI shows a risk acknowledgment before the first enable.
     public bool ClaudeCodeEnabled { get; set; } = false;
     public string ClaudeCodeModel { get; set; } = ClaudeCodeService.DefaultModel;
+    public string ClaudeCodeExecutablePath { get; set; } = "";
     public bool CodexEnabled { get; set; } = false;
-    public string CodexModel { get; set; } = "";
-    public string CodexReasoningEffort { get; set; } = "";
+    public string CodexModel { get; set; } = CodexCliService.DefaultModel;
+    public string CodexReasoningEffort { get; set; } = CodexCliService.DefaultReasoningEffort;
 
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
@@ -769,9 +770,12 @@ public sealed class SettingsService
         // Agent CLI settings
         ClaudeCodeEnabled = GetValue(nameof(ClaudeCodeEnabled), false);
         ClaudeCodeModel = GetValue(nameof(ClaudeCodeModel), ClaudeCodeService.DefaultModel);
+        ClaudeCodeExecutablePath = GetValue(nameof(ClaudeCodeExecutablePath), "");
         CodexEnabled = GetValue(nameof(CodexEnabled), false);
-        CodexModel = GetValue(nameof(CodexModel), "");
-        CodexReasoningEffort = GetValue(nameof(CodexReasoningEffort), "");
+        CodexModel = GetValue(nameof(CodexModel), CodexCliService.DefaultModel);
+        CodexReasoningEffort = GetValue(
+            nameof(CodexReasoningEffort),
+            CodexCliService.DefaultReasoningEffort);
 
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
@@ -1020,6 +1024,7 @@ public sealed class SettingsService
         // Agent CLI settings
         _settings[nameof(ClaudeCodeEnabled)] = ClaudeCodeEnabled;
         _settings[nameof(ClaudeCodeModel)] = ClaudeCodeModel;
+        _settings[nameof(ClaudeCodeExecutablePath)] = ClaudeCodeExecutablePath;
         _settings[nameof(CodexEnabled)] = CodexEnabled;
         _settings[nameof(CodexModel)] = CodexModel;
         _settings[nameof(CodexReasoningEffort)] = CodexReasoningEffort;

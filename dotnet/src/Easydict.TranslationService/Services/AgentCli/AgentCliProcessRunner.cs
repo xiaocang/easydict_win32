@@ -32,13 +32,14 @@ internal sealed class AgentCliProcessException : Exception
 internal sealed class AgentCliProcessRunner
 {
     private const int StdErrCaptureLimitChars = 1024 * 1024;
+    private const string CmdShimPathEnvironmentVariable = "EASYDICT_AGENT_CLI_SHIM_PATH";
 
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(120);
 
-    // cmd.exe metacharacters that must never reach a .cmd shim invocation.
-    // All argv content is fixed literals or whitelisted model names, so hitting
-    // this guard indicates a programming error, not a user-input problem.
-    private static readonly char[] CmdUnsafeCharacters = ['&', '|', '<', '>', '^', '%', '\r', '\n', '\0'];
+    // Arguments are embedded in a cmd.exe command string for npm .cmd shims.
+    // User-configurable values are whitelisted before they reach this guard.
+    private static readonly char[] CmdUnsafeArgumentCharacters =
+        ['&', '|', '<', '>', '(', ')', '^', '%', '!', '"', '\r', '\n', '\0'];
 
     /// <summary>
     /// Run the CLI and yield stdout lines as they arrive. Throws
@@ -53,13 +54,14 @@ internal sealed class AgentCliProcessRunner
         IReadOnlyList<string> arguments,
         string stdinText,
         TimeSpan? timeout = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
         using var timeoutCts = new CancellationTokenSource(timeout ?? DefaultTimeout);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
         using var process = new Process();
-        process.StartInfo = CreateStartInfo(executablePath, arguments);
+        process.StartInfo = CreateStartInfo(executablePath, arguments, environment);
 
         try
         {
@@ -123,7 +125,39 @@ internal sealed class AgentCliProcessRunner
         }
     }
 
-    private static ProcessStartInfo CreateStartInfo(string executablePath, IReadOnlyList<string> arguments)
+    /// <summary>
+    /// Runs a short metadata command and returns its complete stdout.
+    /// </summary>
+    public async Task<string> RunToEndAsync(
+        string executablePath,
+        IReadOnlyList<string> arguments,
+        string stdinText,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        var output = new StringBuilder();
+        await foreach (var line in RunLinesAsync(
+            executablePath,
+            arguments,
+            stdinText,
+            timeout,
+            cancellationToken).ConfigureAwait(false))
+        {
+            if (output.Length > 0)
+            {
+                output.Append('\n');
+            }
+
+            output.Append(line);
+        }
+
+        return output.ToString();
+    }
+
+    private static ProcessStartInfo CreateStartInfo(
+        string executablePath,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string?>? environment)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -139,14 +173,29 @@ internal sealed class AgentCliProcessRunner
             StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
         };
 
+        if (environment is not null)
+        {
+            foreach (var (name, value) in environment)
+            {
+                if (value is null)
+                {
+                    startInfo.Environment.Remove(name);
+                }
+                else
+                {
+                    startInfo.Environment[name] = value;
+                }
+            }
+        }
+
         if (IsCmdShim(executablePath))
         {
-            // npm global installs are .cmd batch shims; CreateProcess needs cmd.exe
-            // for those, and cmd.exe does not honor CRT argument quoting for
-            // metacharacters — hence the strict whitelist guard.
+            // npm global installs are .cmd batch shims. Keep the executable path
+            // in an environment variable so cmd.exe performs exactly one expansion:
+            // literal %, &, and parentheses in valid paths never become command text.
             foreach (var argument in arguments)
             {
-                if (argument.IndexOfAny(CmdUnsafeCharacters) >= 0)
+                if (argument.IndexOfAny(CmdUnsafeArgumentCharacters) >= 0)
                 {
                     throw new InvalidOperationException(
                         $"Argument contains characters unsafe for a .cmd shim: {argument}");
@@ -154,7 +203,9 @@ internal sealed class AgentCliProcessRunner
             }
 
             startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
-            startInfo.Arguments = $"/d /s /c \"{BuildCommandLine(executablePath, arguments)}\"";
+            startInfo.Environment[CmdShimPathEnvironmentVariable] = executablePath;
+            startInfo.Arguments =
+                $"/d /v:off /s /c \"{BuildCommandLine($"%{CmdShimPathEnvironmentVariable}%", arguments)}\"";
         }
         else
         {
@@ -177,7 +228,7 @@ internal sealed class AgentCliProcessRunner
     internal static string BuildCommandLine(string executablePath, IReadOnlyList<string> arguments)
     {
         var sb = new StringBuilder();
-        sb.Append(QuoteArgument(executablePath));
+        sb.Append(QuoteArgument(executablePath, forceQuotes: true));
         foreach (var argument in arguments)
         {
             sb.Append(' ').Append(QuoteArgument(argument));
@@ -191,7 +242,12 @@ internal sealed class AgentCliProcessRunner
     /// </summary>
     internal static string QuoteArgument(string argument)
     {
-        if (argument.Length > 0 && argument.IndexOfAny([' ', '\t', '"']) < 0)
+        return QuoteArgument(argument, forceQuotes: false);
+    }
+
+    private static string QuoteArgument(string argument, bool forceQuotes)
+    {
+        if (!forceQuotes && argument.Length > 0 && argument.IndexOfAny([' ', '\t', '"']) < 0)
         {
             return argument;
         }

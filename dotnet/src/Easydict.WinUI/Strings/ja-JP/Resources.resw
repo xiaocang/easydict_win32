@@ -1374,13 +1374,13 @@
     <value>インストールガイド</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>CLI デフォルト</value>
+    <value>luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
     <value>推論レベル</value>
   </data>
   <data name="Codex_EffortDefault" xml:space="preserve">
-    <value>デフォルト</value>
+    <value>オフ（推奨）</value>
   </data>
   <data name="AgentCliRiskTitle" xml:space="preserve">
     <value>このサービスを有効にしますか？</value>
@@ -1390,5 +1390,17 @@
   </data>
   <data name="AgentCliRiskConfirm" xml:space="preserve">
     <value>有効にする</value>
+  </data>
+  <data name="AgentCli_ExecutablePath" xml:space="preserve">
+    <value>実行ファイルのパス</value>
+  </data>
+  <data name="AgentCli_AutomaticDiscovery" xml:space="preserve">
+    <value>自動検出</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>参照...</value>
+  </data>
+  <data name="Codex_UpdateRequired" xml:space="preserve">
+    <value>Codex CLI を安全に実行するには更新が必要です。最新の Codex CLI をインストールして、もう一度お試しください。</value>
   </data>
 </root>

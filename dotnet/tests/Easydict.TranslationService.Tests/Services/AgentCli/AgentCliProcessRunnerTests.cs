@@ -15,7 +15,7 @@ public class AgentCliProcessRunnerTests
     [InlineData("", "\"\"")]
     [InlineData("a b", "\"a b\"")]
     [InlineData("a\"b", "\"a\\\"b\"")]
-    [InlineData("trailing\\", "\"trailing\\\\\"")]
+    [InlineData("trailing\\", "trailing\\")]
     [InlineData("--flag", "--flag")]
     public void QuoteArgument_AppliesMsvcrtRules(string input, string expected)
     {
@@ -40,6 +40,58 @@ public class AgentCliProcessRunnerTests
             ["-p", "--tools", ""]);
 
         commandLine.Should().Be("\"C:\\Program Files\\claude.cmd\" -p --tools \"\"");
+    }
+
+    [Fact]
+    public async Task RunLinesAsync_CmdShimPathMetacharacters_ExecutesLiteralPath()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"agent&()^!%USERNAME%-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var executablePath = Path.Combine(directory, "test shim.cmd");
+        await File.WriteAllTextAsync(executablePath, "@echo off\r\necho shim-ok:%~1\r\n");
+
+        try
+        {
+            var runner = new AgentCliProcessRunner();
+            var lines = new List<string>();
+            await foreach (var line in runner.RunLinesAsync(executablePath, ["--version"], ""))
+            {
+                lines.Add(line);
+            }
+
+            lines.Should().ContainSingle().Which.Should().Be("shim-ok:--version");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("bad&argument")]
+    [InlineData("bad%PATH%")]
+    [InlineData("bad(argument)")]
+    public async Task RunLinesAsync_UnsafeCmdShimArgument_ThrowsInvalidOperationException(
+        string argument)
+    {
+        var runner = new AgentCliProcessRunner();
+
+        var act = async () =>
+        {
+            await foreach (var _ in runner.RunLinesAsync("test.cmd", [argument], ""))
+            {
+            }
+        };
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Argument contains characters unsafe*");
     }
 
     [Fact]

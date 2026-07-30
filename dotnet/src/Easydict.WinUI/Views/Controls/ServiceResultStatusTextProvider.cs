@@ -1,3 +1,4 @@
+using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 
@@ -67,6 +68,19 @@ internal static class ServiceResultStatusTextProvider
 
     public static string GetErrorFallbackText() =>
         LocalizationService.Instance.GetString("StatusError");
+
+    public static string GetErrorText(TranslationException? error)
+    {
+        if (string.Equals(
+            error?.RecoveryAction,
+            "install-latest-codex",
+            StringComparison.Ordinal))
+        {
+            return LocalizationService.Instance.GetString("Codex_UpdateRequired");
+        }
+
+        return error?.Message ?? GetErrorFallbackText();
+    }
 
     public static string GetTranslationErrorTooltipText() =>
         LocalizationService.Instance.GetString(TranslationErrorTooltipKey);

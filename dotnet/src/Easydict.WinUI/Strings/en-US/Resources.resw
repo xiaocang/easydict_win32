@@ -1371,13 +1371,13 @@
     <value>Installation guide</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>CLI default</value>
+    <value>luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
     <value>Reasoning Effort</value>
   </data>
   <data name="Codex_EffortDefault" xml:space="preserve">
-    <value>Default</value>
+    <value>Off (recommended)</value>
   </data>
   <data name="AgentCliRiskTitle" xml:space="preserve">
     <value>Enable this service?</value>
@@ -1387,5 +1387,17 @@
   </data>
   <data name="AgentCliRiskConfirm" xml:space="preserve">
     <value>Enable</value>
+  </data>
+  <data name="AgentCli_ExecutablePath" xml:space="preserve">
+    <value>Executable path</value>
+  </data>
+  <data name="AgentCli_AutomaticDiscovery" xml:space="preserve">
+    <value>Automatic discovery</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Browse...</value>
+  </data>
+  <data name="Codex_UpdateRequired" xml:space="preserve">
+    <value>Codex CLI must be updated before it can run safely. Install the latest Codex CLI and try again.</value>
   </data>
 </root>

@@ -1374,13 +1374,13 @@
     <value>安裝指南</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>CLI 預設</value>
+    <value>luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
     <value>思考程度</value>
   </data>
   <data name="Codex_EffortDefault" xml:space="preserve">
-    <value>預設</value>
+    <value>關閉（建議）</value>
   </data>
   <data name="AgentCliRiskTitle" xml:space="preserve">
     <value>啟用此服務？</value>
@@ -1390,5 +1390,17 @@
   </data>
   <data name="AgentCliRiskConfirm" xml:space="preserve">
     <value>啟用</value>
+  </data>
+  <data name="AgentCli_ExecutablePath" xml:space="preserve">
+    <value>執行檔路徑</value>
+  </data>
+  <data name="AgentCli_AutomaticDiscovery" xml:space="preserve">
+    <value>自動偵測</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>瀏覽...</value>
+  </data>
+  <data name="Codex_UpdateRequired" xml:space="preserve">
+    <value>必須更新 Codex CLI 才能安全執行。請安裝最新版 Codex CLI，然後再試一次。</value>
   </data>
 </root>

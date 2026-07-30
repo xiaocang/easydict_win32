@@ -76,8 +76,31 @@ public class AgentCliServiceTests
         service.ReasoningEffort.Should().Be("high");
 
         service.Configure(enabled: true, model: "bad|model", reasoningEffort: "extreme");
-        service.Model.Should().Be("");
-        service.ReasoningEffort.Should().Be("");
+        service.Model.Should().Be(CodexCliService.DefaultModel);
+        service.ReasoningEffort.Should().Be(CodexCliService.DefaultReasoningEffort);
+    }
+
+    [Fact]
+    public void AgentCli_Defaults_PreferFastModelsWithThinkingDisabled()
+    {
+        var claude = CreateClaudeService();
+        var codex = CreateCodexService();
+
+        claude.Model.Should().Be("haiku");
+        codex.Model.Should().Be("luna");
+        codex.ReasoningEffort.Should().Be("none");
+        CodexCliService.BuildArguments(codex.Model, codex.ReasoningEffort)
+            .Should().ContainInOrder("-c", "model_reasoning_effort=none");
+    }
+
+    [Fact]
+    public void ClaudeCode_Configure_StoresCustomExecutablePath()
+    {
+        var service = CreateClaudeService();
+
+        service.Configure(enabled: true, executablePath: @" C:\tools\claude.exe ");
+
+        service.ExecutablePath.Should().Be(@"C:\tools\claude.exe");
     }
 
     [Fact]
@@ -146,8 +169,12 @@ public class AgentCliServiceTests
         var arguments = CodexCliService.BuildArguments("gpt-5.2", "low");
 
         arguments.Should().ContainInOrder("exec", "--json", "--skip-git-repo-check", "--ephemeral");
+        arguments.Should().Contain("--ignore-user-config");
+        arguments.Should().Contain("--ignore-rules");
+        arguments.Should().Contain("--strict-config");
         arguments.Should().ContainInOrder("--sandbox", "read-only");
         arguments.Should().ContainInOrder("-C", ".");
+        arguments.Should().ContainInOrder("-c", "web_search=disabled");
         arguments.Should().ContainInOrder("--disable", "shell_tool");
         arguments.Should().ContainInOrder("-m", "gpt-5.2");
         arguments.Should().ContainInOrder("-c", "model_reasoning_effort=low");
@@ -160,8 +187,130 @@ public class AgentCliServiceTests
         var arguments = CodexCliService.BuildArguments("", "");
 
         arguments.Should().NotContain("-m");
-        arguments.Should().NotContain("-c");
+        arguments.Should().NotContain(arg => arg.StartsWith("model_reasoning_effort=", StringComparison.Ordinal));
+        arguments.Should().ContainInOrder("-c", "web_search=disabled");
         arguments.TakeLast(2).Should().Equal("--", "-");
+    }
+
+    [Fact]
+    public void Codex_BuildArguments_UsesOnlyFeaturesReportedByInstalledCli()
+    {
+        var capabilities = new CodexCliCapabilities(
+            new HashSet<string>(["shell_tool", "browser_use"], StringComparer.Ordinal),
+            SupportsStrictConfig: false);
+
+        var arguments = CodexCliService.BuildArguments("luna", "", capabilities);
+
+        arguments.Should().ContainInOrder("--disable", "shell_tool");
+        arguments.Should().ContainInOrder("--disable", "browser_use");
+        arguments.Should().NotContain("shell_snapshot");
+        arguments.Should().Contain("--ignore-rules");
+        arguments.Should().NotContain("--strict-config");
+    }
+
+    [Fact]
+    public void CodexCapabilities_Parse_RequiresIsolationFlags()
+    {
+        var act = () => CodexCliCapabilities.Parse(
+            "--ephemeral",
+            "shell_tool stable true");
+
+        var ex = act.Should().Throw<TranslationException>().Which;
+        ex.RecoveryAction.Should().Be("install-latest-codex");
+        ex.DocumentationUrl.Should().Be(CodexCliService.InstallDocumentationUrl);
+    }
+
+    [Fact]
+    public void CodexCapabilities_Parse_ReturnsSupportedFeatures()
+    {
+        var capabilities = CodexCliCapabilities.Parse(
+            "--json --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules --sandbox --cd --config --disable --strict-config",
+            "shell_tool stable true\nbrowser_use stable true");
+
+        capabilities.Features.Should().BeEquivalentTo("shell_tool", "browser_use");
+        capabilities.SupportsStrictConfig.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ErrorFormatter_RedactsSecretsBeforeDisplay()
+    {
+        var detail = AgentCliErrorFormatter.BuildDetail(
+            [],
+            "OPENAI_API_KEY=sk-secretvalue123456789");
+
+        detail.Should().Contain("[redacted]");
+        detail.Should().NotContain("secretvalue");
+    }
+
+    [Fact]
+    public void ModelCatalog_ParseClaudeHelp_ReturnsDocumentedAliases()
+    {
+        const string Help = """
+            --model <model> Model alias (e.g. 'fable', 'opus', or 'sonnet')
+              -n, --name
+            """;
+
+        AgentCliModelCatalog.ParseClaudeHelp(Help)
+            .Should().Equal("fable", "opus", "sonnet");
+    }
+
+    [Fact]
+    public void ModelCatalog_ParseCodexCatalog_ReturnsVisibleModelSlugs()
+    {
+        const string Catalog =
+            """{"models":[{"slug":"sol","visibility":"list"},{"slug":"hidden","visibility":"hide"},{"id":"terra"}]}""";
+
+        AgentCliModelCatalog.ParseCodexCatalog(Catalog)
+            .Should().Equal("sol", "terra");
+    }
+
+    [Fact]
+    public void Codex_ValidateCompletedResponse_EmptySuccess_ThrowsInvalidResponse()
+    {
+        var act = () => CodexCliService.ValidateCompletedResponse(null, null, []);
+
+        var ex = act.Should().Throw<TranslationException>().Which;
+        ex.ErrorCode.Should().Be(TranslationErrorCode.InvalidResponse);
+        ex.ServiceId.Should().Be(CodexCliService.ServiceIdValue);
+    }
+
+    [Fact]
+    public async Task ClaudeCode_TranslateAsync_UsesCustomExecutablePath()
+    {
+        var (directory, executable) = await CreateClaudeShimAsync("translated");
+        try
+        {
+            var service = CreateClaudeService();
+            service.Configure(enabled: true, model: "haiku", executablePath: executable);
+
+            var result = await service.TranslateAsync(CreateTranslationRequest());
+
+            result.TranslatedText.Should().Be("translated");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ClaudeCode_TranslateAsync_EmptySuccessfulResponse_ThrowsInvalidResponse()
+    {
+        var (directory, executable) = await CreateClaudeShimAsync("");
+        try
+        {
+            var service = CreateClaudeService();
+            service.Configure(enabled: true, model: "haiku", executablePath: executable);
+
+            var act = () => service.TranslateAsync(CreateTranslationRequest());
+
+            var ex = await act.Should().ThrowAsync<TranslationException>();
+            ex.Which.ErrorCode.Should().Be(TranslationErrorCode.InvalidResponse);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -226,4 +375,42 @@ public class AgentCliServiceTests
     {
         AgentCliPromptBuilder.SanitizeModelName(input).Should().Be(expected);
     }
+
+    private static TranslationRequest CreateTranslationRequest()
+    {
+        return new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese,
+        };
+    }
+
+    private static async Task<(string Directory, string Executable)> CreateClaudeShimAsync(
+        string resultText)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"easydict-cli-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var json =
+            "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"" + resultText + "\"}";
+
+        if (OperatingSystem.IsWindows())
+        {
+            var executable = Path.Combine(directory, "claude.cmd");
+            await File.WriteAllTextAsync(
+                executable,
+                $"@echo off\r\nif not \"%MAX_THINKING_TOKENS%\"==\"0\" exit /b 9\r\necho {json}\r\n");
+            return (directory, executable);
+        }
+
+        var shellExecutable = Path.Combine(directory, "claude");
+        await File.WriteAllTextAsync(
+            shellExecutable,
+            $"#!/bin/sh\n[ \"$MAX_THINKING_TOKENS\" = \"0\" ] || exit 9\nprintf '%s\\n' '{json}'\n");
+        File.SetUnixFileMode(
+            shellExecutable,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return (directory, shellExecutable);
+    }
+
 }

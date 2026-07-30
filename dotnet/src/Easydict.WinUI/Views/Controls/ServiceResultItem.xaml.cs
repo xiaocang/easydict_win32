@@ -1838,7 +1838,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             return string.Empty;
         }
 
-        var message = error.Message;
+        var message = ServiceResultStatusTextProvider.GetErrorText(error);
 
         // Append region hint for international services that fail with network errors.
         // Also notify SettingsService so it can lazily migrate defaults (timezone + failure = China network).

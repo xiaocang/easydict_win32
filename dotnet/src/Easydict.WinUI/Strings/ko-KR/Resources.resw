@@ -1374,13 +1374,13 @@
     <value>설치 가이드</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>CLI 기본값</value>
+    <value>luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
     <value>추론 수준</value>
   </data>
   <data name="Codex_EffortDefault" xml:space="preserve">
-    <value>기본값</value>
+    <value>끔(권장)</value>
   </data>
   <data name="AgentCliRiskTitle" xml:space="preserve">
     <value>이 서비스를 사용하시겠습니까?</value>
@@ -1390,5 +1390,17 @@
   </data>
   <data name="AgentCliRiskConfirm" xml:space="preserve">
     <value>사용</value>
+  </data>
+  <data name="AgentCli_ExecutablePath" xml:space="preserve">
+    <value>실행 파일 경로</value>
+  </data>
+  <data name="AgentCli_AutomaticDiscovery" xml:space="preserve">
+    <value>자동 검색</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>찾아보기...</value>
+  </data>
+  <data name="Codex_UpdateRequired" xml:space="preserve">
+    <value>Codex CLI를 안전하게 실행하려면 업데이트해야 합니다. 최신 Codex CLI를 설치한 후 다시 시도하세요.</value>
   </data>
 </root>

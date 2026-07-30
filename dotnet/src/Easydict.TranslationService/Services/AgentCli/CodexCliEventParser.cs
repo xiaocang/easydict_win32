@@ -20,6 +20,16 @@ internal static class CodexCliEventParser
         "openai_api_key",
         "invalid api key",
         "401",
+        "api key is required",
+        "api key is missing",
+        "api key is not set",
+        "api key must be set",
+        "api key required",
+        "api key missing",
+        "api key not set",
+        "api key not found",
+        "missing api key",
+        "no api key",
     ];
 
     private static readonly string[] QuotaPatterns =
@@ -122,14 +132,17 @@ internal static class CodexCliEventParser
     {
         var errorMessages = controlLines
             .Select(TryExtractErrorMessage)
-            .Where(static message => message != null)
+            .OfType<string>()
             .ToList();
         var haystack = string.Join('\n', errorMessages) + '\n' + stdErr;
 
         if (ContainsAny(haystack, AuthPatterns))
         {
+            var authDetail = AgentCliErrorFormatter.BuildDetail(errorMessages, stdErr);
             return new TranslationException(
-                "Codex CLI is not signed in. Run `codex login` in a terminal, then try again.")
+                "Codex CLI authentication failed or a required API key is missing. "
+                + "Run `codex login` in a terminal, or configure the API key required "
+                + $"by your CLI provider, then try again{authDetail}")
             {
                 ErrorCode = TranslationErrorCode.InvalidApiKey,
                 ServiceId = serviceId,
@@ -146,9 +159,7 @@ internal static class CodexCliEventParser
             };
         }
 
-        var detail = errorMessages.Count > 0
-            ? $": {string.Join("; ", errorMessages)}"
-            : AgentCliErrorFormatter.BuildDetail(controlLines, stdErr);
+        var detail = AgentCliErrorFormatter.BuildDetail(errorMessages, stdErr);
         return new TranslationException(
             $"Codex CLI failed (exit code {exitCode}){detail}")
         {

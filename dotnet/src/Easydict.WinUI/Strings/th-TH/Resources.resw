@@ -1308,36 +1308,48 @@
     <value>แสดงปุ่มสลับ</value>
   </data>
   <data name="ClaudeCode_EnableToggle" xml:space="preserve">
-    <value>Enable Claude Code</value>
+    <value>เปิดใช้งาน Claude Code</value>
   </data>
   <data name="Codex_EnableToggle" xml:space="preserve">
-    <value>Enable Codex</value>
+    <value>เปิดใช้งาน Codex</value>
   </data>
   <data name="ClaudeCode_Description" xml:space="preserve">
-    <value>Translate with the locally installed Claude Code CLI using your Claude subscription — no API key needed. The CLI must be installed and signed in.</value>
+    <value>แปลด้วย Claude Code CLI ที่ติดตั้งในเครื่องโดยใช้การสมัครสมาชิก Claude ของคุณ — ไม่ต้องใช้คีย์ API ต้องติดตั้ง CLI และลงชื่อเข้าใช้แล้ว</value>
   </data>
   <data name="Codex_Description" xml:space="preserve">
-    <value>Translate with the locally installed OpenAI Codex CLI using your ChatGPT subscription — no API key needed. The CLI must be installed and signed in.</value>
+    <value>แปลด้วย OpenAI Codex CLI ที่ติดตั้งในเครื่องโดยใช้การสมัครสมาชิก ChatGPT ของคุณ — ไม่ต้องใช้คีย์ API ต้องติดตั้ง CLI และลงชื่อเข้าใช้แล้ว</value>
   </data>
   <data name="AgentCli_InstallLinkText" xml:space="preserve">
-    <value>Installation guide</value>
+    <value>คู่มือการติดตั้ง</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>CLI default</value>
+    <value>luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
-    <value>Reasoning Effort</value>
+    <value>ระดับการใช้เหตุผล</value>
   </data>
   <data name="Codex_EffortDefault" xml:space="preserve">
-    <value>Default</value>
+    <value>ปิด (แนะนำ)</value>
   </data>
   <data name="AgentCliRiskTitle" xml:space="preserve">
-    <value>Enable this service?</value>
+    <value>เปิดใช้งานบริการนี้หรือไม่</value>
   </data>
   <data name="AgentCliRiskMessage" xml:space="preserve">
-    <value>This service runs a local AI agent CLI with your personal subscription account. Each translation consumes your subscription quota, and automated use may be subject to the provider's terms of service. The CLI must already be installed and signed in. Enable at your own discretion.</value>
+    <value>บริการนี้เรียกใช้ AI Agent CLI ในเครื่องด้วยบัญชีการสมัครสมาชิกส่วนตัวของคุณ การแปลแต่ละครั้งจะใช้โควตาการสมัครสมาชิก และการใช้งานอัตโนมัติอาจอยู่ภายใต้ข้อกำหนดในการให้บริการของผู้ให้บริการ ต้องติดตั้ง CLI และลงชื่อเข้าใช้ไว้แล้ว เปิดใช้งานตามดุลยพินิจของคุณ</value>
   </data>
   <data name="AgentCliRiskConfirm" xml:space="preserve">
-    <value>Enable</value>
+    <value>เปิดใช้งาน</value>
+  </data>
+  <data name="AgentCli_ExecutablePath" xml:space="preserve">
+    <value>เส้นทางไฟล์ปฏิบัติการ</value>
+  </data>
+  <data name="AgentCli_AutomaticDiscovery" xml:space="preserve">
+    <value>ตรวจหาอัตโนมัติ</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>เรียกดู...</value>
+  </data>
+  <data name="Codex_UpdateRequired" xml:space="preserve">
+    <value>ต้องอัปเดต Codex CLI ก่อนจึงจะเรียกใช้ได้อย่างปลอดภัย ติดตั้ง Codex CLI เวอร์ชันล่าสุดแล้วลองอีกครั้ง</value>
   </data>
 </root>

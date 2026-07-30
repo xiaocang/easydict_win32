@@ -106,11 +106,13 @@ public class ClaudeCodeEventParserTests
     [InlineData("Not logged in")]
     [InlineData("authentication_failed")]
     [InlineData("OAuth token has expired")]
+    [InlineData("ANTHROPIC_API_KEY is not set")]
     public void ClassifyFailure_AuthErrors_MapToInvalidApiKey(string stdErr)
     {
         var ex = ClaudeCodeEventParser.ClassifyFailure("claude-code", 1, [], stdErr);
 
         ex.ErrorCode.Should().Be(TranslationErrorCode.InvalidApiKey);
+        ex.Message.Should().Contain(stdErr);
     }
 
     [Fact]

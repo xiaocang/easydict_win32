@@ -14,17 +14,23 @@ namespace Easydict.TranslationService.Services.AgentCli;
 public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslationService
 {
     public const string ServiceIdValue = "claude-code";
-    public const string DefaultModel = "sonnet";
+    public const string DefaultModel = "haiku";
     public const string InstallDocumentationUrl = "https://code.claude.com/docs/en/quickstart";
 
-    /// <summary>Common model aliases accepted by the CLI.</summary>
-    public static readonly string[] AvailableModels = ["sonnet", "opus", "haiku"];
+    /// <summary>Fallback aliases used when the CLI exposes no model catalog.</summary>
+    public static readonly string[] AvailableModels = ["sonnet", "haiku", "opus"];
 
     internal const string CliName = "claude";
+    private static readonly IReadOnlyDictionary<string, string?> ThinkingDisabledEnvironment =
+        new Dictionary<string, string?>
+        {
+            ["MAX_THINKING_TOKENS"] = "0",
+        };
 
     private readonly AgentCliProcessRunner _runner = new();
     private bool _enabled;
     private string _model = DefaultModel;
+    private string _executablePath = "";
 
     public ClaudeCodeService(HttpClient httpClient) : base(httpClient) { }
 
@@ -37,16 +43,24 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
     public bool IsStreaming => true;
 
     public string Model => _model;
+    public string ExecutablePath => _executablePath;
 
     /// <summary>
     /// Configure from user settings. An invalid or empty model falls back to
-    /// <see cref="DefaultModel"/>; model names are whitelisted because they are
-    /// passed on the CLI command line.
+    /// <see cref="DefaultModel"/>. A non-empty executable path is authoritative
+    /// and bypasses PATH discovery.
     /// </summary>
-    public void Configure(bool enabled, string? model = null)
+    public void Configure(bool enabled, string? model = null, string? executablePath = null)
     {
         _enabled = enabled;
         _model = AgentCliPromptBuilder.SanitizeModelName(model) ?? DefaultModel;
+
+        var normalizedPath = executablePath?.Trim() ?? "";
+        if (!string.Equals(_executablePath, normalizedPath, StringComparison.OrdinalIgnoreCase))
+        {
+            _executablePath = normalizedPath;
+            AgentCliExecutableLocator.InvalidateCache(CliName);
+        }
     }
 
     protected override void ValidateRequest(TranslationRequest request)
@@ -87,13 +101,10 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
     {
         ValidateRequest(request);
 
-        var executable = await AgentCliExecutableLocator
-            .LocateAsync(CliName, GetCandidatePaths(), cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw NotInstalledError();
+        var executable = await ResolveExecutableAsync(cancellationToken).ConfigureAwait(false);
 
         var controlLines = new List<string>();
-        var deltaSeen = false;
+        var textSeen = false;
         ClaudeCodeEventParser.ResultInfo? result = null;
 
         var lines = _runner.RunLinesAsync(
@@ -101,7 +112,8 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
             BuildArguments(_model),
             AgentCliPromptBuilder.BuildUserPrompt(request),
             timeout: null,
-            cancellationToken);
+            cancellationToken,
+            environment: ThinkingDisabledEnvironment);
 
         await using var enumerator = lines.GetAsyncEnumerator(cancellationToken);
         while (true)
@@ -128,8 +140,11 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
 
             if (ClaudeCodeEventParser.TryExtractTextDelta(line, out var delta))
             {
-                deltaSeen = true;
-                yield return delta;
+                if (!string.IsNullOrEmpty(delta))
+                {
+                    textSeen = true;
+                    yield return delta;
+                }
             }
             else
             {
@@ -146,10 +161,30 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
 
         // Older CLIs without --include-partial-messages emit no deltas;
         // fall back to the full text from the final result event.
-        if (!deltaSeen && result?.ResultText is { Length: > 0 } fullText)
+        if (!textSeen && !string.IsNullOrWhiteSpace(result?.ResultText))
         {
-            yield return fullText;
+            yield return result.ResultText;
+            yield break;
         }
+
+        if (!textSeen)
+        {
+            throw InvalidResponseError();
+        }
+    }
+
+    /// <summary>
+    /// Tries the CLI's non-inference metadata output. Current Claude versions
+    /// expose aliases in --help; an empty result keeps the fallback list.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> DiscoverModelsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var executable = await ResolveExecutableAsync(cancellationToken).ConfigureAwait(false);
+        var discovered = await AgentCliModelCatalog
+            .DiscoverClaudeModelsAsync(executable, cancellationToken)
+            .ConfigureAwait(false);
+        return discovered.Count > 0 ? discovered : AvailableModels;
     }
 
     /// <summary>
@@ -202,6 +237,39 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
         }
 
         return paths;
+    }
+
+    private async Task<string> ResolveExecutableAsync(CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(_executablePath))
+        {
+            if (!Path.IsPathFullyQualified(_executablePath) || !File.Exists(_executablePath))
+            {
+                throw new TranslationException(
+                    $"Configured Claude Code executable was not found: {_executablePath}")
+                {
+                    ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                    ServiceId = ServiceId,
+                };
+            }
+
+            return Path.GetFullPath(_executablePath);
+        }
+
+        return await AgentCliExecutableLocator
+            .LocateAsync(CliName, GetCandidatePaths(), cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw NotInstalledError();
+    }
+
+    private TranslationException InvalidResponseError()
+    {
+        return new TranslationException(
+            "Claude Code CLI completed without returning a translation. Update the CLI and try again.")
+        {
+            ErrorCode = TranslationErrorCode.InvalidResponse,
+            ServiceId = ServiceId,
+        };
     }
 
     private TranslationException NotInstalledError()

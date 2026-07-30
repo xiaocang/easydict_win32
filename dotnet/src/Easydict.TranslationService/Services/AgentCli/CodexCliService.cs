@@ -17,9 +17,14 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
 {
     public const string ServiceIdValue = "codex";
     public const string InstallDocumentationUrl = "https://developers.openai.com/codex/cli";
+    public const string DefaultModel = "luna";
+    public const string DefaultReasoningEffort = "none";
+
+    /// <summary>Fallback aliases used when model discovery is unavailable.</summary>
+    public static readonly string[] AvailableModels = ["sol", "terra", "luna"];
 
     /// <summary>Reasoning effort values accepted by `-c model_reasoning_effort=`.</summary>
-    public static readonly string[] AvailableReasoningEfforts = ["minimal", "low", "medium", "high"];
+    public static readonly string[] AvailableReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh"];
 
     internal const string CliName = "codex";
 
@@ -46,8 +51,8 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
 
     private readonly AgentCliProcessRunner _runner = new();
     private bool _enabled;
-    private string _model = "";
-    private string _reasoningEffort = "";
+    private string _model = DefaultModel;
+    private string _reasoningEffort = DefaultReasoningEffort;
 
     public CodexCliService(HttpClient httpClient) : base(httpClient) { }
 
@@ -63,16 +68,18 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
     public string ReasoningEffort => _reasoningEffort;
 
     /// <summary>
-    /// Configure from user settings. Empty model uses the CLI default; model
-    /// names are whitelisted and the reasoning effort is restricted to known
-    /// values because both are passed on the CLI command line.
+    /// Configure from user settings. Empty or invalid models use
+    /// <see cref="DefaultModel"/>; reasoning defaults to
+    /// <see cref="DefaultReasoningEffort"/> ("none").
     /// </summary>
     public void Configure(bool enabled, string? model = null, string? reasoningEffort = null)
     {
         _enabled = enabled;
-        _model = AgentCliPromptBuilder.SanitizeModelName(model) ?? "";
-        var effort = reasoningEffort?.Trim().ToLowerInvariant() ?? "";
-        _reasoningEffort = AvailableReasoningEfforts.Contains(effort) ? effort : "";
+        _model = AgentCliPromptBuilder.SanitizeModelName(model) ?? DefaultModel;
+        var effort = reasoningEffort?.Trim().ToLowerInvariant() ?? DefaultReasoningEffort;
+        _reasoningEffort = AvailableReasoningEfforts.Contains(effort)
+            ? effort
+            : DefaultReasoningEffort;
     }
 
     protected override void ValidateRequest(TranslationRequest request)
@@ -118,13 +125,17 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
             .ConfigureAwait(false)
             ?? throw NotInstalledError();
 
+        var capabilities = await CodexCliCapabilities
+            .GetAsync(executable, cancellationToken)
+            .ConfigureAwait(false);
+
         var controlLines = new List<string>();
         string? agentMessage = null;
         string? errorMessage = null;
 
         var lines = _runner.RunLinesAsync(
             executable,
-            BuildArguments(_model, _reasoningEffort),
+            BuildArguments(_model, _reasoningEffort, capabilities),
             AgentCliPromptBuilder.BuildCombinedPrompt(request),
             timeout: null,
             cancellationToken);
@@ -158,15 +169,45 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
             errorMessage = CodexCliEventParser.TryExtractErrorMessage(line) ?? errorMessage;
         }
 
-        if (agentMessage is null && errorMessage != null)
+        yield return ValidateCompletedResponse(agentMessage, errorMessage, controlLines);
+    }
+
+    internal static string ValidateCompletedResponse(
+        string? agentMessage,
+        string? errorMessage,
+        IReadOnlyList<string> controlLines)
+    {
+        if (errorMessage != null)
         {
-            throw CodexCliEventParser.ClassifyFailure(ServiceId, exitCode: 0, controlLines, errorMessage);
+            throw CodexCliEventParser.ClassifyFailure(
+                ServiceIdValue,
+                exitCode: 0,
+                controlLines,
+                errorMessage);
         }
 
-        if (!string.IsNullOrEmpty(agentMessage))
+        if (string.IsNullOrWhiteSpace(agentMessage))
         {
-            yield return agentMessage;
+            throw InvalidResponseError();
         }
+
+        return agentMessage;
+    }
+
+    /// <summary>
+    /// Tries to load the current account's model catalog without starting a turn.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> DiscoverModelsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var executable = await AgentCliExecutableLocator
+            .LocateAsync(CliName, GetCandidatePaths(), cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw NotInstalledError();
+        var discovered = await AgentCliModelCatalog
+            .DiscoverCodexModelsAsync(executable, cancellationToken)
+            .ConfigureAwait(false);
+        return discovered.Count > 0 ? discovered : AvailableModels;
     }
 
     /// <summary>
@@ -175,7 +216,10 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
     /// features disabled, optional model and reasoning effort, and a trailing
     /// `-` so the prompt is read from stdin.
     /// </summary>
-    internal static List<string> BuildArguments(string model, string reasoningEffort)
+    internal static List<string> BuildArguments(
+        string model,
+        string reasoningEffort,
+        CodexCliCapabilities? capabilities = null)
     {
         var arguments = new List<string>
         {
@@ -183,15 +227,27 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
             "--json",
             "--skip-git-repo-check",
             "--ephemeral",
+            "--ignore-user-config",
+            "--ignore-rules",
             "--sandbox", "read-only",
             // The runner already sets the process working directory to the temp
-            // folder; "." keeps user-profile paths (which may contain cmd.exe
-            // metacharacters) off the command line.
+            // folder; "." keeps user-profile paths off the command line.
             "-C", ".",
+            "-c", "web_search=disabled",
         };
+
+        if (capabilities?.SupportsStrictConfig != false)
+        {
+            arguments.Add("--strict-config");
+        }
 
         foreach (var feature in DisabledFeatures)
         {
+            if (capabilities is not null && !capabilities.Features.Contains(feature))
+            {
+                continue;
+            }
+
             arguments.Add("--disable");
             arguments.Add(feature);
         }
@@ -232,6 +288,16 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
         }
 
         return paths;
+    }
+
+    private static TranslationException InvalidResponseError()
+    {
+        return new TranslationException(
+            "Codex CLI completed without returning a translation. Install the latest Codex CLI and try again.")
+        {
+            ErrorCode = TranslationErrorCode.InvalidResponse,
+            ServiceId = ServiceIdValue,
+        };
     }
 
     private TranslationException NotInstalledError()

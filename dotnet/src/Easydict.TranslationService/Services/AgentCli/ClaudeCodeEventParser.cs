@@ -28,6 +28,17 @@ internal static class ClaudeCodeEventParser
         "not authenticated",
         "invalid api key",
         "oauth token has expired",
+        "anthropic_api_key",
+        "api key is required",
+        "api key is missing",
+        "api key is not set",
+        "api key must be set",
+        "api key required",
+        "api key missing",
+        "api key not set",
+        "api key not found",
+        "missing api key",
+        "no api key",
     ];
 
     /// <summary>
@@ -127,8 +138,11 @@ internal static class ClaudeCodeEventParser
 
         if (ContainsAny(haystack, AuthPatterns))
         {
+            var authDetail = AgentCliErrorFormatter.BuildDetail(controlLines, stdErr);
             return new TranslationException(
-                "Claude Code CLI is not signed in. Run `claude` in a terminal and complete /login, then try again.")
+                "Claude Code CLI authentication failed or a required API key is missing. "
+                + "Run `claude` in a terminal and complete /login, or configure the API key "
+                + $"required by your CLI provider, then try again{authDetail}")
             {
                 ErrorCode = TranslationErrorCode.InvalidApiKey,
                 ServiceId = serviceId,

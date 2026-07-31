@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
+using Easydict.TranslationService.Services.AgentCli;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Easydict.TranslationService;
@@ -113,6 +114,10 @@ public sealed class TranslationManager : IDisposable
         RegisterService(new CaiyunService(_httpClient));
         RegisterService(new NiuTransService(_httpClient));
         RegisterService(new VolcanoService(_httpClient));
+
+        // Register local agent CLI services (subscription-based, no API key)
+        RegisterService(new ClaudeCodeService(_httpClient));
+        RegisterService(new CodexCliService(_httpClient));
 #if ENABLE_LINGUEE_SERVICE
         RegisterService(new LingueeService(_httpClient));
 #endif

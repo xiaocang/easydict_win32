@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Services;
+using Easydict.TranslationService.Services.AgentCli;
 using Easydict.WindowsAI;
 using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
@@ -189,6 +190,15 @@ public sealed class SettingsService
     // Volcano settings
     public string? VolcanoAccessKeyId { get; set; }
     public string? VolcanoSecretAccessKey { get; set; }
+
+    // Agent CLI settings (Claude Code / Codex). Disabled by default; the
+    // settings UI shows a risk acknowledgment before the first enable.
+    public bool ClaudeCodeEnabled { get; set; } = false;
+    public string ClaudeCodeModel { get; set; } = ClaudeCodeService.DefaultModel;
+    public string ClaudeCodeExecutablePath { get; set; } = "";
+    public bool CodexEnabled { get; set; } = false;
+    public string CodexModel { get; set; } = CodexCliService.DefaultModel;
+    public string CodexReasoningEffort { get; set; } = CodexCliService.DefaultReasoningEffort;
 
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
@@ -757,6 +767,16 @@ public sealed class SettingsService
         VolcanoAccessKeyId = GetSensitiveSetting(nameof(VolcanoAccessKeyId));
         VolcanoSecretAccessKey = GetSensitiveSetting(nameof(VolcanoSecretAccessKey));
 
+        // Agent CLI settings
+        ClaudeCodeEnabled = GetValue(nameof(ClaudeCodeEnabled), false);
+        ClaudeCodeModel = GetValue(nameof(ClaudeCodeModel), ClaudeCodeService.DefaultModel);
+        ClaudeCodeExecutablePath = GetValue(nameof(ClaudeCodeExecutablePath), "");
+        CodexEnabled = GetValue(nameof(CodexEnabled), false);
+        CodexModel = NormalizeCodexModel(GetValue(nameof(CodexModel), CodexCliService.DefaultModel));
+        CodexReasoningEffort = GetValue(
+            nameof(CodexReasoningEffort),
+            CodexCliService.DefaultReasoningEffort);
+
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
@@ -910,6 +930,17 @@ public sealed class SettingsService
         }
     }
 
+    internal static string NormalizeCodexModel(string model)
+    {
+        return model switch
+        {
+            "luna" => "gpt-5.6-luna",
+            "terra" => "gpt-5.6-terra",
+            "sol" => "gpt-5.6-sol",
+            _ => model,
+        };
+    }
+
     public void Save()
         => SaveCore(preserveUnmigratedSensitiveSettings: false);
 
@@ -1000,6 +1031,14 @@ public sealed class SettingsService
         // Volcano settings
         SaveSensitiveSetting(nameof(VolcanoAccessKeyId), VolcanoAccessKeyId, preserveUnmigratedSensitiveSettings);
         SaveSensitiveSetting(nameof(VolcanoSecretAccessKey), VolcanoSecretAccessKey, preserveUnmigratedSensitiveSettings);
+
+        // Agent CLI settings
+        _settings[nameof(ClaudeCodeEnabled)] = ClaudeCodeEnabled;
+        _settings[nameof(ClaudeCodeModel)] = ClaudeCodeModel;
+        _settings[nameof(ClaudeCodeExecutablePath)] = ClaudeCodeExecutablePath;
+        _settings[nameof(CodexEnabled)] = CodexEnabled;
+        _settings[nameof(CodexModel)] = CodexModel;
+        _settings[nameof(CodexReasoningEffort)] = CodexReasoningEffort;
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;

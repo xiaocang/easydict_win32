@@ -35,6 +35,7 @@ internal static class PickerFactory
         public const string MddAdd = "Easydict.Mdx.AddMdd";
         public const string BilingualExport = "Easydict.LongDoc.BilingualExport";
         public const string OcrOutput = "Easydict.Ocr.OutputFolder";
+        public const string ClaudeCodeExecutable = "Easydict.AgentCli.ClaudeExecutable";
     }
 
     /// <summary>Pick a single file. Returns the absolute path or null if cancelled.</summary>

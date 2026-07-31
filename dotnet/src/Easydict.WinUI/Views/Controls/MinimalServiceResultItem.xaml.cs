@@ -163,8 +163,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         {
             if (_serviceResult.HasError && !_serviceResult.IsLoading)
             {
-                ErrorText.Text = _serviceResult.Error?.Message
-                    ?? ServiceResultStatusTextProvider.GetErrorFallbackText();
+                ErrorText.Text = ServiceResultStatusTextProvider.GetErrorText(_serviceResult.Error);
                 ErrorText.Visibility = Visibility.Visible;
             }
             else if (_serviceResult.IsStreaming)

@@ -124,7 +124,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
-- **多种翻译服务**（19 种可用服务；Linguee 当前不可用）
+- **多种翻译服务**（21 种可用服务；Linguee 当前不可用）
   - Google 翻译（免费，无需 API Key）
   - Google 词典（丰富词典：音标、释义、例句）
   - 必应翻译（免费，无需 API Key）
@@ -145,6 +145,8 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
   - Windows Local AI（Copilot+ PC 上使用 Phi Silica，OpenVINO 回退）
   - 内置 AI（免费，由 Groq 提供）
   - 自定义 OpenAI 兼容服务
+  - Claude Code（本地智能体 CLI，复用 Claude 订阅 — 无需 API Key）
+  - Codex（本地智能体 CLI，复用 ChatGPT 订阅 — 无需 API Key）
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
@@ -243,6 +245,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Windows Local AI | 本地运行时 | ✅ | 已测试 TranslationManager 路由；真实推理需要 Phi Silica、Foundry Local 或 OpenVINO 模型 |
 | 内置 AI | OpenAI API | — | 内置密钥 |
 | 自定义 OpenAI | OpenAI API | — | OpenAI 兼容，用户自定义端点 |
+| Claude Code | 本地 CLI（stream-json） | — | 需要本地已登录的 `claude` CLI |
+| Codex | 本地 CLI（JSONL） | — | 需要本地已登录的 `codex` CLI |
 
 > 标记为 **OpenAI API** 的服务均继承自 `BaseOpenAIService`，共享相同的 OpenAI 兼容实现，因此未测试的服务预期行为一致。
 

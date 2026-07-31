@@ -131,7 +131,7 @@ make run
 
 ## Key Features
 
-- **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, and custom OpenAI-compatible services
+- **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, custom OpenAI-compatible services, and local agent CLIs (Claude Code / Codex) that reuse the user's subscription without an API key
 - **LLM Streaming Translation**: Real-time display of translation results
 - **Multiple Window Modes**: Main, Mini, Fixed windows
 - **Long Document Translation**: PDF/Text/Markdown translation with ML layout detection, formula protection, parallel processing, bilingual output, and translation cache
@@ -176,6 +176,8 @@ BaseTranslationService : ITranslationService            # Abstract base with val
 ├── NiuTransService
 ├── GeminiService : IStreamTranslationService           # Custom SSE protocol (not OpenAI-compatible)
 ├── DoubaoService : IStreamTranslationService           # Custom SSE protocol (ByteDance)
+├── ClaudeCodeService : IStreamTranslationService       # Local `claude` CLI subprocess (Services/AgentCli/)
+├── CodexCliService : IStreamTranslationService         # Local `codex` CLI subprocess (Services/AgentCli/)
 └── BaseOpenAIService : IStreamTranslationService       # Abstract base for OpenAI-compatible LLM services
     ├── OpenAIService
     ├── OllamaService

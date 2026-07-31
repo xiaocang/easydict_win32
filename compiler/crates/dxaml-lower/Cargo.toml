@@ -1,0 +1,13 @@
+[package]
+name = "dxaml-lower"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Lowers the Direct XAML HIR into the backend-neutral UI IR."
+
+[dependencies]
+dxaml-hir.workspace = true
+dxaml-ir.workspace = true
+dxaml-schema.workspace = true

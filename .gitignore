@@ -50,6 +50,9 @@ project.lock.json
 worker/node_modules/
 worker/.wrangler/
 
+# Rust (Direct XAML compiler)
+compiler/target/
+
 # macOS
 .DS_Store
 

@@ -1,0 +1,74 @@
+{
+  "$comment": "Machine-readable mirror of spec/direct-xaml-v0.md. The authoritative tables live in crates/dxaml-schema/src/lib.rs; a golden test asserts the two agree. Consumed by editor tooling that wants to know the accepted surface without linking the compiler.",
+  "subset_version": "0.1.0",
+  "namespaces": {
+    "presentation": "http://schemas.microsoft.com/winfx/2006/xaml/presentation",
+    "directives": "http://schemas.microsoft.com/winfx/2006/xaml",
+    "ignorable": [
+      "http://schemas.microsoft.com/expression/blend/2008",
+      "http://schemas.openxmlformats.org/markup-compatibility/2006"
+    ]
+  },
+  "root_element": "UserControl",
+  "controls": {
+    "UserControl": { "content": "single", "root_only": true },
+    "Border": { "content": "single" },
+    "Grid": { "content": "many", "property_elements": ["RowDefinitions", "ColumnDefinitions"] },
+    "StackPanel": { "content": "many" },
+    "TextBlock": { "content": "text" },
+    "RowDefinition": { "content": "none", "parent": "Grid.RowDefinitions" },
+    "ColumnDefinition": { "content": "none", "parent": "Grid.ColumnDefinitions" }
+  },
+  "properties": [
+    { "name": "Width", "type": "length", "applies": "all", "invalidation": ["measure", "paint"] },
+    { "name": "Height", "type": "length", "applies": "all", "invalidation": ["measure", "paint"] },
+    { "name": "MinWidth", "type": "length", "applies": "all", "invalidation": ["measure", "paint"] },
+    { "name": "MinHeight", "type": "length", "applies": "all", "invalidation": ["measure", "paint"] },
+    { "name": "MaxWidth", "type": "length", "applies": "all", "invalidation": ["measure", "paint"] },
+    { "name": "MaxHeight", "type": "length", "applies": "all", "invalidation": ["measure", "paint"] },
+    { "name": "Margin", "type": "thickness", "applies": "all", "invalidation": ["measure", "paint"] },
+    { "name": "Opacity", "type": "double", "applies": "all", "invalidation": ["paint"], "mutable": true },
+    { "name": "Visibility", "type": "enum:Visibility", "applies": "all", "invalidation": ["measure", "paint", "semantics"], "mutable": true },
+    { "name": "HorizontalAlignment", "type": "enum:HorizontalAlignment", "applies": "all", "invalidation": ["arrange", "paint"] },
+    { "name": "VerticalAlignment", "type": "enum:VerticalAlignment", "applies": "all", "invalidation": ["arrange", "paint"] },
+
+    { "name": "Padding", "type": "thickness", "applies": ["Border", "Grid", "StackPanel", "TextBlock"], "invalidation": ["measure", "paint"] },
+    { "name": "Background", "type": "brush", "applies": ["Border", "Grid", "StackPanel"], "invalidation": ["paint"], "mutable": true },
+
+    { "name": "BorderBrush", "type": "brush", "applies": ["Border"], "invalidation": ["paint"] },
+    { "name": "BorderThickness", "type": "thickness", "applies": ["Border"], "invalidation": ["measure", "paint"] },
+    { "name": "CornerRadius", "type": "cornerRadius", "applies": ["Border"], "invalidation": ["paint"] },
+
+    { "name": "Spacing", "type": "double", "applies": ["StackPanel"], "invalidation": ["measure", "paint"] },
+    { "name": "Orientation", "type": "enum:Orientation", "applies": ["StackPanel"], "invalidation": ["measure", "paint"] },
+
+    { "name": "Text", "type": "string", "applies": ["TextBlock"], "invalidation": ["measure", "paint"], "mutable": true },
+    { "name": "FontSize", "type": "double", "applies": ["TextBlock"], "invalidation": ["measure", "paint"], "mutable": true },
+    { "name": "FontWeight", "type": "enum:FontWeight", "applies": ["TextBlock"], "invalidation": ["measure", "paint"] },
+    { "name": "Foreground", "type": "brush", "applies": ["TextBlock"], "invalidation": ["paint"], "mutable": true },
+    { "name": "TextWrapping", "type": "enum:TextWrapping", "applies": ["TextBlock"], "invalidation": ["measure", "paint"] },
+    { "name": "TextTrimming", "type": "enum:TextTrimming", "applies": ["TextBlock"], "invalidation": ["measure", "paint"] },
+    { "name": "IsTextSelectionEnabled", "type": "bool", "applies": ["TextBlock"], "invalidation": ["semantics"] },
+
+    { "name": "Height", "type": "gridLength", "applies": ["RowDefinition"], "invalidation": ["measure"] },
+    { "name": "Width", "type": "gridLength", "applies": ["ColumnDefinition"], "invalidation": ["measure"] }
+  ],
+  "attached_properties": [
+    { "name": "Grid.Row", "type": "int", "parent": "Grid", "invalidation": ["measure", "arrange", "paint"] },
+    { "name": "Grid.Column", "type": "int", "parent": "Grid", "invalidation": ["measure", "arrange", "paint"] },
+    { "name": "Grid.RowSpan", "type": "int", "parent": "Grid", "invalidation": ["measure", "arrange", "paint"] },
+    { "name": "Grid.ColumnSpan", "type": "int", "parent": "Grid", "invalidation": ["measure", "arrange", "paint"] }
+  ],
+  "markup_extensions": ["ThemeResource", "StaticResource"],
+  "directives": ["x:Class", "x:Name"],
+  "events": ["PointerPressed", "PointerEntered", "PointerExited", "Tapped"],
+  "enums": {
+    "Visibility": ["Visible", "Collapsed"],
+    "Orientation": ["Horizontal", "Vertical"],
+    "TextWrapping": ["NoWrap", "Wrap", "WrapWholeWords"],
+    "TextTrimming": ["None", "CharacterEllipsis", "WordEllipsis", "Clip"],
+    "HorizontalAlignment": ["Left", "Center", "Right", "Stretch"],
+    "VerticalAlignment": ["Top", "Center", "Bottom", "Stretch"],
+    "FontWeight": ["Thin", "ExtraLight", "Light", "Normal", "Medium", "SemiBold", "Bold", "ExtraBold", "Black"]
+  }
+}

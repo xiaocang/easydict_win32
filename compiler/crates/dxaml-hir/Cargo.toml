@@ -1,0 +1,13 @@
+[package]
+name = "dxaml-hir"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Typed high-level IR for Direct XAML: schema-checked nodes and parsed property values."
+
+[dependencies]
+dxaml-ast.workspace = true
+dxaml-schema.workspace = true
+dxaml-syntax.workspace = true

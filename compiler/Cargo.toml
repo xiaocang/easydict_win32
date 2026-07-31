@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/dxaml-syntax",
+    "crates/dxaml-ast",
+    "crates/dxaml-schema",
+    "crates/dxaml-hir",
+    "crates/dxaml-lower",
+    "crates/dxaml-ir",
+    "crates/dxaml-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+repository = "https://github.com/xiaocang/easydict_win32"
+rust-version = "1.75"
+
+[workspace.dependencies]
+dxaml-syntax = { path = "crates/dxaml-syntax" }
+dxaml-ast = { path = "crates/dxaml-ast" }
+dxaml-schema = { path = "crates/dxaml-schema" }
+dxaml-hir = { path = "crates/dxaml-hir" }
+dxaml-lower = { path = "crates/dxaml-lower" }
+dxaml-ir = { path = "crates/dxaml-ir" }
+
+# quick-xml is used ONLY by dxaml-syntax/src/lexer.rs. It breaks API across minor
+# versions, so the blast radius of a version bump is deliberately one file.
+quick-xml = "0.37"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

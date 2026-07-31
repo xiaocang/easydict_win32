@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xiaocang/easydict_win32/compiler/schemas/dxir-v0.schema.json",
+  "title": "Direct XAML UI IR v0",
+  "description": "Backend-neutral compiled representation of a Direct XAML document. Describes structure and semantics only; it carries no layout geometry and no resolved colours, because both depend on runtime state (window size, DPI, active theme).",
+  "type": "object",
+  "required": ["ir_version", "compiler_version", "source", "class_name", "nodes"],
+  "additionalProperties": false,
+  "properties": {
+    "ir_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Schema version. A runtime must refuse IR whose major/minor it does not implement."
+    },
+    "compiler_version": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["path", "hash"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Path as given to the compiler, for diagnostics only." },
+        "hash": {
+          "type": "string",
+          "pattern": "^fnv1a64:[0-9a-f]{16}$",
+          "description": "Non-cryptographic content hash, used for build-cache invalidation only."
+        }
+      }
+    },
+    "class_name": {
+      "type": "string",
+      "description": "Fully-qualified type from x:Class. The generated accessor type is derived from it."
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Capabilities this IR relies on. A runtime must reject IR naming a feature it lacks."
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "children"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "kind": {
+            "type": "string",
+            "enum": ["userControl", "border", "grid", "stackPanel", "textBlock", "rowDefinition", "columnDefinition"]
+          },
+          "parent": { "type": ["integer", "null"], "minimum": 0 },
+          "children": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 0 },
+            "description": "For a grid this includes its rowDefinition and columnDefinition nodes as well as its visual children; consumers separate them by kind."
+          },
+          "text": {
+            "type": ["string", "null"],
+            "description": "Literal text content; TextBlock only."
+          }
+        }
+      }
+    },
+    "properties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node", "name", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "node": { "type": "integer", "minimum": 0 },
+          "name": { "type": "string" },
+          "value": { "$ref": "#/$defs/value" }
+        }
+      }
+    },
+    "named_slots": {
+      "type": "array",
+      "description": "x:Name targets. The v0 binding model: the C# accessor type is generated from this table.",
+      "items": {
+        "type": "object",
+        "required": ["name", "node", "mutable"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "node": { "type": "integer", "minimum": 0 },
+          "mutable": {
+            "type": "array",
+            "description": "Properties this slot may write at runtime, with what each write invalidates.",
+            "items": {
+              "type": "object",
+              "required": ["property", "invalidation"],
+              "additionalProperties": false,
+              "properties": {
+                "property": { "type": "string" },
+                "invalidation": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": { "type": "string", "enum": ["measure", "arrange", "paint", "semantics"] }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "description": "Theme and static resource references, kept as runtime slots so Light/Dark/HighContrast stay switchable.",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "key"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "kind": { "type": "string", "enum": ["themeResource", "staticResource"] },
+          "key": { "type": "string" }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node", "event", "handler"],
+        "additionalProperties": false,
+        "properties": {
+          "node": { "type": "integer", "minimum": 0 },
+          "event": { "type": "string", "enum": ["pointerPressed", "pointerEntered", "pointerExited", "tapped"] },
+          "handler": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        }
+      }
+    },
+    "semantics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node"],
+        "additionalProperties": false,
+        "properties": {
+          "node": { "type": "integer", "minimum": 0 },
+          "role": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "focusable": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "value": {
+      "oneOf": [
+        { "type": "object", "required": ["type", "resource"], "additionalProperties": false,
+          "description": "Resolved at runtime through the host's resource lookup. Legal for any property type, not only brushes.",
+          "properties": { "type": { "const": "resource" }, "resource": { "type": "integer", "minimum": 0 } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "double" }, "value": { "type": "number" } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "length" }, "value": { "$ref": "#/$defs/length" } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "gridLength" }, "value": { "$ref": "#/$defs/gridLength" } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "thickness" },
+            "value": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4,
+                       "description": "left, top, right, bottom" } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "cornerRadius" },
+            "value": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4,
+                       "description": "topLeft, topRight, bottomRight, bottomLeft" } } },
+        { "type": "object", "required": ["type", "argb"], "additionalProperties": false,
+          "properties": { "type": { "const": "color" },
+                          "argb": { "type": "string", "pattern": "^#[0-9A-F]{8}$" } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "string" }, "value": { "type": "string" } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "bool" }, "value": { "type": "boolean" } } },
+        { "type": "object", "required": ["type", "enum", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "enum" }, "enum": { "type": "string" }, "value": { "type": "string" } } },
+        { "type": "object", "required": ["type", "value"], "additionalProperties": false,
+          "properties": { "type": { "const": "int" }, "value": { "type": "integer" } } }
+      ]
+    },
+    "length": {
+      "oneOf": [
+        { "type": "object", "required": ["kind"], "additionalProperties": false,
+          "properties": { "kind": { "const": "auto" } } },
+        { "type": "object", "required": ["kind", "value"], "additionalProperties": false,
+          "properties": { "kind": { "const": "dip" }, "value": { "type": "number" } } }
+      ]
+    },
+    "gridLength": {
+      "oneOf": [
+        { "type": "object", "required": ["kind"], "additionalProperties": false,
+          "properties": { "kind": { "const": "auto" } } },
+        { "type": "object", "required": ["kind", "value"], "additionalProperties": false,
+          "properties": { "kind": { "const": "dip" }, "value": { "type": "number" } } },
+        { "type": "object", "required": ["kind", "value"], "additionalProperties": false,
+          "properties": { "kind": { "const": "star" }, "value": { "type": "number" } } }
+      ]
+    }
+  }
+}

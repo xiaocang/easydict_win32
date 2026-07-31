@@ -1,0 +1,13 @@
+[package]
+name = "dxaml-schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "The Direct XAML v0 control, property and enumeration tables."
+
+[dependencies]
+
+[dev-dependencies]
+serde_json.workspace = true

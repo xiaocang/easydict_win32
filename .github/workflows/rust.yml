@@ -1,0 +1,84 @@
+name: Direct XAML Compiler
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'compiler/**'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'compiler/**'
+      - '.github/workflows/rust.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  compiler:
+    name: fmt, clippy, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: compiler
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            compiler/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('compiler/**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features
+
+      - name: Test
+        run: cargo test --all-features
+
+      # The golden file is created on first run rather than failing, so a missing commit would
+      # otherwise go unnoticed. Fail the build instead.
+      - name: Verify the IR golden is committed
+        run: |
+          golden=crates/dxaml-cli/tests/fixtures/MinimalServiceResultItem.dxir.json
+          if [ -n "$(git status --porcelain -- "$golden")" ]; then
+            echo "::error file=compiler/$golden::The IR golden is missing or stale. Run 'cargo test' locally and commit the result."
+            git --no-pager diff -- "$golden"
+            exit 1
+          fi
+
+      - name: Compile the shipping card end to end
+        run: |
+          cargo run -p dxaml-cli -- compile \
+            --input ../dotnet/src/Easydict.WinUI/Views/Controls/MinimalServiceResultItem.xaml \
+            --output "$RUNNER_TEMP/dxir"
+          cat "$RUNNER_TEMP/dxir/MinimalServiceResultItem.dxir.json"
+
+      # The full card is deliberately outside v0; if it ever compiles, the subset has drifted.
+      - name: Confirm the full card is still rejected
+        run: |
+          if cargo run -p dxaml-cli -- compile \
+              --input ../dotnet/src/Easydict.WinUI/Views/Controls/ServiceResultItem.xaml \
+              --check; then
+            echo "::error::ServiceResultItem.xaml compiled under Direct XAML v0, which the spec says it must not."
+            exit 1
+          fi

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Every construct below is taken from ServiceResultItem.xaml, the full translation-result card.
+    None of it is in the v0 subset, and each line must produce a diagnostic rather than being
+    quietly dropped. This fixture is the negative half of the compiler's totality contract.
+-->
+<UserControl
+    x:Class="Easydict.WinUI.Views.Controls.UnsupportedConstructs"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel>
+        <ProgressRing/>
+        <FontIcon Glyph="&#xE8C8;"/>
+        <Image/>
+        <HyperlinkButton Content="link"/>
+        <ScrollViewer VerticalScrollMode="Auto"/>
+        <TextBlock Text="{Binding ResultText, Mode=OneWay}"/>
+        <TextBlock ToolTipService.ToolTip="copy"/>
+        <TextBlock AutomationProperties.AutomationId="Result"/>
+        <TextBlock x:Uid="ResultLabel"/>
+        <TextBlock Visibility="Hidden"/>
+        <Border TextWrapping="Wrap"/>
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,12 @@
+[package]
+name = "dxaml-ast"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "XAML abstract syntax tree: namespaces, directives, property elements and markup extensions."
+
+[dependencies]
+dxaml-syntax.workspace = true
+dxaml-schema.workspace = true

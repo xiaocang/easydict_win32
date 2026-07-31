@@ -1374,7 +1374,7 @@
     <value>安裝指南</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>luna</value>
+    <value>gpt-5.6-luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
     <value>思考程度</value>

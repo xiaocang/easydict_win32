@@ -1466,7 +1466,9 @@
 
                         <!-- Claude Code (local agent CLI) -->
                         <Expander HorizontalAlignment="Stretch"
+                                x:Name="ClaudeCodeExpander"
                                 HorizontalContentAlignment="Stretch"
+                                Expanding="OnClaudeCodeExpanding"
                                 Tag="claude-code">
                             <Expander.Header>
                                 <Grid>
@@ -1528,7 +1530,9 @@
 
                         <!-- Codex (local agent CLI) -->
                         <Expander HorizontalAlignment="Stretch"
+                                x:Name="CodexExpander"
                                 HorizontalContentAlignment="Stretch"
+                                Expanding="OnCodexExpanding"
                                 Tag="codex">
                             <Expander.Header>
                                 <Grid>
@@ -1553,13 +1557,13 @@
                                         Width="280"
                                         HorizontalAlignment="Left"
                                         IsEditable="True"
-                                        PlaceholderText="luna">
-                                    <ComboBoxItem Content="sol"
-                                            Tag="sol"/>
-                                    <ComboBoxItem Content="terra"
-                                            Tag="terra"/>
-                                    <ComboBoxItem Content="luna"
-                                            Tag="luna"/>
+                                        PlaceholderText="gpt-5.6-luna">
+                                    <ComboBoxItem Content="gpt-5.6-luna"
+                                            Tag="gpt-5.6-luna"/>
+                                    <ComboBoxItem Content="gpt-5.6-terra"
+                                            Tag="gpt-5.6-terra"/>
+                                    <ComboBoxItem Content="gpt-5.6-sol"
+                                            Tag="gpt-5.6-sol"/>
                                 </ComboBox>
                                 <Button x:Name="RefreshCodexModelsButton"
                                         Content="Refresh models"

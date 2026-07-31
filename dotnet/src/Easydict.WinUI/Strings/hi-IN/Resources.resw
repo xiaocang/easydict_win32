@@ -957,7 +957,7 @@
     <value>इंस्टॉलेशन गाइड</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>luna</value>
+    <value>gpt-5.6-luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
     <value>तर्क प्रयास</value>

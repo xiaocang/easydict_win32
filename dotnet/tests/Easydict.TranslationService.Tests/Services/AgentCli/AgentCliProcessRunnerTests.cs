@@ -1,4 +1,5 @@
 using Easydict.TranslationService.Services.AgentCli;
+using Easydict.TranslationService.Services;
 using FluentAssertions;
 using Xunit;
 
@@ -39,7 +40,7 @@ public class AgentCliProcessRunnerTests
             @"C:\Program Files\claude.cmd",
             ["-p", "--tools", ""]);
 
-        commandLine.Should().Be("\"C:\\Program Files\\claude.cmd\" -p --tools \"\"");
+        commandLine.Should().Be("\"C:\\Program Files\\claude.cmd\" \"-p\" \"--tools\" \"\"");
     }
 
     [Fact]
@@ -70,6 +71,77 @@ public class AgentCliProcessRunnerTests
         }
         finally
         {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunLinesAsync_CmdShim_CarriesGrammarInstructionOverrides()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), $"agent-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var executablePath = Path.Combine(directory, "codex.cmd");
+        await File.WriteAllTextAsync(
+            executablePath,
+            "@echo off\r\necho %*\r\n");
+
+        string? instructionsFilePath = null;
+        try
+        {
+            var systemPrompt = GrammarCorrectionPromptResources.GetSystemPrompt(includeExplanations: true);
+            var instructionsFile = await CodexCliService.WriteInstructionsFileAsync(
+                systemPrompt,
+                CancellationToken.None);
+            instructionsFilePath = instructionsFile.FullPath;
+            var capabilities = new CodexCliCapabilities(
+                new HashSet<string>(StringComparer.Ordinal),
+                SupportsStrictConfig: false);
+            var arguments = CodexCliService.BuildArguments(
+                CodexCliService.DefaultModel,
+                CodexCliService.DefaultReasoningEffort,
+                capabilities,
+                instructionsFile.FileName);
+            var lines = new List<string>();
+
+            await foreach (var line in new AgentCliProcessRunner().RunLinesAsync(
+                               executablePath,
+                               arguments,
+                               "translate"))
+            {
+                lines.Add(line);
+            }
+
+            (await File.ReadAllTextAsync(instructionsFile.FullPath)).Should().Be(systemPrompt);
+            var normalizedSystemPrompt = AgentCliPromptBuilder.BuildSystemPromptArgument(systemPrompt);
+            var output = string.Join('\n', lines);
+            output.Should().Contain("\"project_doc_max_bytes=0\"");
+            output.Should().Contain($"\"model_instructions_file='{instructionsFile.FileName}'\"");
+
+            lines.Clear();
+            await foreach (var line in new AgentCliProcessRunner().RunLinesAsync(
+                               executablePath,
+                               ClaudeCodeService.BuildArguments(ClaudeCodeService.DefaultModel, systemPrompt),
+                               "correct"))
+            {
+                lines.Add(line);
+            }
+
+            output = string.Join('\n', lines);
+            output.Should().Contain("\"stream-json\"");
+            output.Should().Contain($"\"{normalizedSystemPrompt}\"");
+        }
+        finally
+        {
+            if (instructionsFilePath is not null)
+            {
+                CodexCliService.TryDeleteInstructionsFile(instructionsFilePath);
+            }
+
             Directory.Delete(directory, recursive: true);
         }
     }

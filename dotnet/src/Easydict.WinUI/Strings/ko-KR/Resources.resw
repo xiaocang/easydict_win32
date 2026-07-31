@@ -1374,7 +1374,7 @@
     <value>설치 가이드</value>
   </data>
   <data name="Codex_ModelPlaceholder" xml:space="preserve">
-    <value>luna</value>
+    <value>gpt-5.6-luna</value>
   </data>
   <data name="Codex_ReasoningEffort" xml:space="preserve">
     <value>추론 수준</value>

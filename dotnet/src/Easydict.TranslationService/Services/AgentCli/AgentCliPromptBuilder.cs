@@ -28,13 +28,12 @@ internal static class AgentCliPromptBuilder
         return prompt;
     }
 
-    /// <summary>
-    /// System prompt + task prompt in one string, for CLIs without a
-    /// system-prompt flag (codex exec).
-    /// </summary>
-    public static string BuildCombinedPrompt(TranslationRequest request)
+    public static string BuildSystemPromptArgument(string prompt)
     {
-        return $"{BaseOpenAIService.TranslationSystemPrompt}\n\n{BuildUserPrompt(request)}";
+        // Flatten newlines and use ASCII backticks to avoid .cmd metacharacter and code-page corruption.
+        return prompt.ReplaceLineEndings(" ")
+            .Replace('\'', '`')
+            .Replace('"', '`');
     }
 
     /// <summary>

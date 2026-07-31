@@ -23,6 +23,7 @@ internal sealed record CodexCliCapabilities(
         "--cd",
         "--config",
         "--disable",
+        "--strict-config",
     ];
 
     public static async Task<CodexCliCapabilities> GetAsync(
@@ -105,6 +106,10 @@ internal sealed record CodexCliCapabilities(
     private static async Task<CodexCliCapabilities> ProbeAsync(string executablePath)
     {
         var runner = new AgentCliProcessRunner();
+        var (instructionsFileName, instructionsFilePath) =
+            await CodexCliService.WriteInstructionsFileAsync(
+                BaseOpenAIService.TranslationSystemPrompt,
+                CancellationToken.None).ConfigureAwait(false);
         try
         {
             var execHelp = await runner.RunToEndAsync(
@@ -113,9 +118,32 @@ internal sealed record CodexCliCapabilities(
                 "",
                 ProbeTimeout,
                 CancellationToken.None).ConfigureAwait(false);
+            if (execHelp.Contains("--strict-config", StringComparison.Ordinal))
+            {
+                await runner.RunToEndAsync(
+                    executablePath,
+                    [
+                        "exec",
+                        "--strict-config",
+                        "-c", $"model_instructions_file='{instructionsFileName}'",
+                        "-c", "project_doc_max_bytes=0",
+                        "--help",
+                    ],
+                    "",
+                    ProbeTimeout,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+
+            var probeArguments = new List<string>
+            {
+                "-c", "model_reasoning_effort=" + CodexCliService.DefaultReasoningEffort,
+                "-c", $"model_instructions_file='{instructionsFileName}'",
+                "-c", "project_doc_max_bytes=0",
+                "features", "list",
+            };
             var featureList = await runner.RunToEndAsync(
                 executablePath,
-                ["-c", "model_reasoning_effort=" + CodexCliService.DefaultReasoningEffort, "features", "list"],
+                probeArguments,
                 "",
                 ProbeTimeout,
                 CancellationToken.None).ConfigureAwait(false);
@@ -128,6 +156,10 @@ internal sealed record CodexCliCapabilities(
         catch (TimeoutException ex)
         {
             throw CreateUpdateRequiredException(ex);
+        }
+        finally
+        {
+            CodexCliService.TryDeleteInstructionsFile(instructionsFilePath);
         }
     }
 }

@@ -1,4 +1,5 @@
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
 using Easydict.TranslationService.Services.AgentCli;
 using FluentAssertions;
 using Xunit;
@@ -26,6 +27,7 @@ public class AgentCliServiceTests
         service.DisplayName.Should().Be("Claude Code");
         service.RequiresApiKey.Should().BeFalse();
         service.IsStreaming.Should().BeTrue();
+        service.Should().BeAssignableTo<IGrammarCorrectionService>();
     }
 
     [Fact]
@@ -37,6 +39,7 @@ public class AgentCliServiceTests
         service.DisplayName.Should().Be("Codex");
         service.RequiresApiKey.Should().BeFalse();
         service.IsStreaming.Should().BeTrue();
+        service.Should().BeAssignableTo<IGrammarCorrectionService>();
     }
 
     [Fact]
@@ -87,7 +90,7 @@ public class AgentCliServiceTests
         var codex = CreateCodexService();
 
         claude.Model.Should().Be("haiku");
-        codex.Model.Should().Be("luna");
+        codex.Model.Should().Be("gpt-5.6-luna");
         codex.ReasoningEffort.Should().Be("none");
         CodexCliService.BuildArguments(codex.Model, codex.ReasoningEffort)
             .Should().ContainInOrder("-c", "model_reasoning_effort=none");
@@ -143,13 +146,14 @@ public class AgentCliServiceTests
         var arguments = ClaudeCodeService.BuildArguments("sonnet");
 
         arguments.Should().ContainInOrder("-p", "--verbose", "--output-format", "stream-json");
+        arguments.Should().Contain("--safe-mode");
         arguments.Should().Contain("--include-partial-messages");
         arguments.Should().Contain("--no-session-persistence");
         arguments.Should().Contain("--strict-mcp-config");
         arguments.Should().ContainInOrder("--model", "sonnet");
         arguments.Should().ContainInOrder("--tools", "");
         arguments.Should().ContainInOrder("--setting-sources", "");
-        arguments.Should().Contain("--system-prompt");
+        arguments.Should().ContainInOrder("--system-prompt", BaseOpenAIService.TranslationSystemPrompt);
 
         // The prompt itself must never be on the command line — it goes to stdin.
         arguments.Should().NotContain(arg => arg.Contains("Translate the following"));
@@ -164,9 +168,23 @@ public class AgentCliServiceTests
     }
 
     [Fact]
+    public void AgentCli_BuildArguments_UseOperationSpecificPromptSources()
+    {
+        var systemPrompt = GrammarCorrectionPromptResources.GetSystemPrompt(includeExplanations: true);
+
+        ClaudeCodeService.BuildArguments("haiku", systemPrompt)
+            .Should().ContainInOrder(
+                "--system-prompt",
+                AgentCliPromptBuilder.BuildSystemPromptArgument(systemPrompt));
+        CodexCliService.BuildArguments("gpt-5.6-luna", "none", instructionsFileName: "grammar.md")
+            .Should().ContainInOrder("-c", "model_instructions_file='grammar.md'");
+    }
+
+    [Fact]
     public void Codex_BuildArguments_MirrorsUpstreamFlagSet()
     {
-        var arguments = CodexCliService.BuildArguments("gpt-5.2", "low");
+        var arguments = CodexCliService.BuildArguments(
+            "gpt-5.2", "low", instructionsFileName: "translation.md");
 
         arguments.Should().ContainInOrder("exec", "--json", "--skip-git-repo-check", "--ephemeral");
         arguments.Should().Contain("--ignore-user-config");
@@ -175,6 +193,8 @@ public class AgentCliServiceTests
         arguments.Should().ContainInOrder("--sandbox", "read-only");
         arguments.Should().ContainInOrder("-C", ".");
         arguments.Should().ContainInOrder("-c", "web_search=disabled");
+        arguments.Should().ContainInOrder("-c", "project_doc_max_bytes=0");
+        arguments.Should().ContainInOrder("-c", "model_instructions_file='translation.md'");
         arguments.Should().ContainInOrder("--disable", "shell_tool");
         arguments.Should().ContainInOrder("-m", "gpt-5.2");
         arguments.Should().ContainInOrder("-c", "model_reasoning_effort=low");
@@ -187,6 +207,8 @@ public class AgentCliServiceTests
         var arguments = CodexCliService.BuildArguments("", "");
 
         arguments.Should().NotContain("-m");
+        arguments.Should().NotContain(argument =>
+            argument.StartsWith("model_instructions_file=", StringComparison.Ordinal));
         arguments.Should().NotContain(arg => arg.StartsWith("model_reasoning_effort=", StringComparison.Ordinal));
         arguments.Should().ContainInOrder("-c", "web_search=disabled");
         arguments.TakeLast(2).Should().Equal("--", "-");
@@ -199,7 +221,7 @@ public class AgentCliServiceTests
             new HashSet<string>(["shell_tool", "browser_use"], StringComparer.Ordinal),
             SupportsStrictConfig: false);
 
-        var arguments = CodexCliService.BuildArguments("luna", "", capabilities);
+        var arguments = CodexCliService.BuildArguments("gpt-5.6-luna", "", capabilities);
 
         arguments.Should().ContainInOrder("--disable", "shell_tool");
         arguments.Should().ContainInOrder("--disable", "browser_use");
@@ -255,6 +277,13 @@ public class AgentCliServiceTests
     }
 
     [Fact]
+    public void ClaudeCode_MergeDiscoveredModels_PreservesHaikuFallback()
+    {
+        ClaudeCodeService.MergeDiscoveredModels(["fable", "opus", "sonnet"])
+            .Should().Equal("fable", "opus", "sonnet", "haiku");
+    }
+
+    [Fact]
     public void ModelCatalog_ParseCodexCatalog_ReturnsVisibleModelSlugs()
     {
         const string Catalog =
@@ -262,6 +291,13 @@ public class AgentCliServiceTests
 
         AgentCliModelCatalog.ParseCodexCatalog(Catalog)
             .Should().Equal("sol", "terra");
+    }
+
+    [Fact]
+    public void Codex_MergeDiscoveredModels_PreservesRequestedDefaults()
+    {
+        CodexCliService.MergeDiscoveredModels(["gpt-5.5"])
+            .Should().Equal("gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.5");
     }
 
     [Fact]
@@ -314,6 +350,34 @@ public class AgentCliServiceTests
     }
 
     [Fact]
+    public async Task ClaudeCode_CorrectGrammarStreamAsync_UsesStreamJson()
+    {
+        var (directory, executable) = await CreateClaudeShimAsync("corrected");
+        try
+        {
+            var service = CreateClaudeService();
+            service.Configure(enabled: true, model: "haiku", executablePath: executable);
+            var chunks = new List<string>();
+
+            await foreach (var chunk in service.CorrectGrammarStreamAsync(new GrammarCorrectionRequest
+                           {
+                               Text = "This are wrong.",
+                               Language = Language.English,
+                               IncludeExplanations = true,
+                           }))
+            {
+                chunks.Add(chunk);
+            }
+
+            string.Concat(chunks).Should().Be("corrected");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void PromptBuilder_BuildUserPrompt_IncludesLanguagesAndText()
     {
         var request = new TranslationRequest
@@ -327,6 +391,7 @@ public class AgentCliServiceTests
 
         prompt.Should().Contain("hello");
         prompt.Should().Contain("Translate the following");
+        prompt.Should().NotContain("translation expert");
     }
 
     [Fact]
@@ -343,22 +408,6 @@ public class AgentCliServiceTests
         var prompt = AgentCliPromptBuilder.BuildUserPrompt(request);
 
         prompt.Should().Contain("Prefer formal tone");
-    }
-
-    [Fact]
-    public void PromptBuilder_BuildCombinedPrompt_PrependsSystemPrompt()
-    {
-        var request = new TranslationRequest
-        {
-            Text = "hello",
-            FromLanguage = Language.English,
-            ToLanguage = Language.SimplifiedChinese,
-        };
-
-        var prompt = AgentCliPromptBuilder.BuildCombinedPrompt(request);
-
-        prompt.Should().Contain("translation expert");
-        prompt.Should().Contain("hello");
     }
 
     [Theory]

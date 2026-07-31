@@ -772,7 +772,7 @@ public sealed class SettingsService
         ClaudeCodeModel = GetValue(nameof(ClaudeCodeModel), ClaudeCodeService.DefaultModel);
         ClaudeCodeExecutablePath = GetValue(nameof(ClaudeCodeExecutablePath), "");
         CodexEnabled = GetValue(nameof(CodexEnabled), false);
-        CodexModel = GetValue(nameof(CodexModel), CodexCliService.DefaultModel);
+        CodexModel = NormalizeCodexModel(GetValue(nameof(CodexModel), CodexCliService.DefaultModel));
         CodexReasoningEffort = GetValue(
             nameof(CodexReasoningEffort),
             CodexCliService.DefaultReasoningEffort);
@@ -928,6 +928,17 @@ public sealed class SettingsService
         {
             DeepLUseFreeApi = false;
         }
+    }
+
+    internal static string NormalizeCodexModel(string model)
+    {
+        return model switch
+        {
+            "luna" => "gpt-5.6-luna",
+            "terra" => "gpt-5.6-terra",
+            "sol" => "gpt-5.6-sol",
+            _ => model,
+        };
     }
 
     public void Save()

@@ -193,6 +193,8 @@ public sealed partial class SettingsPage : Page
     private string _pendingTtsVoiceId = string.Empty;
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
     private bool _suppressAgentCliToggleDialog; // Reentrancy guard while reverting an agent CLI toggle
+    private bool _hasRefreshedClaudeCodeModels;
+    private bool _hasRefreshedCodexModels;
     private bool _isMainWindowReorderModeEnabled;
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
@@ -5419,9 +5421,22 @@ public sealed partial class SettingsPage : Page
         }, TestVolcanoButton, VolcanoStatusText);
     }
 
+    private async void OnClaudeCodeExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (_hasRefreshedClaudeCodeModels) return;
+
+        _hasRefreshedClaudeCodeModels = true;
+        await RefreshClaudeCodeModelsAsync();
+    }
+
     private async void OnRefreshClaudeCodeModels(object sender, RoutedEventArgs e)
     {
-        await RefreshAgentCliModelsAsync(
+        await RefreshClaudeCodeModelsAsync();
+    }
+
+    private Task RefreshClaudeCodeModelsAsync()
+    {
+        return RefreshAgentCliModelsAsync(
             ClaudeCodeModelCombo,
             RefreshClaudeCodeModelsButton,
             ClaudeCodeService.DefaultModel,
@@ -5437,9 +5452,22 @@ public sealed partial class SettingsPage : Page
             });
     }
 
+    private async void OnCodexExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (_hasRefreshedCodexModels) return;
+
+        _hasRefreshedCodexModels = true;
+        await RefreshCodexModelsAsync();
+    }
+
     private async void OnRefreshCodexModels(object sender, RoutedEventArgs e)
     {
-        await RefreshAgentCliModelsAsync(
+        await RefreshCodexModelsAsync();
+    }
+
+    private Task RefreshCodexModelsAsync()
+    {
+        return RefreshAgentCliModelsAsync(
             CodexModelCombo,
             RefreshCodexModelsButton,
             CodexCliService.DefaultModel,
@@ -5504,14 +5532,26 @@ public sealed partial class SettingsPage : Page
         if (_isUnloaded) return;
 
         var loc = LocalizationService.Instance;
+        var errorText = GetAgentCliErrorText(
+            exception,
+            Controls.ServiceResultStatusTextProvider.GetErrorText);
         var dialog = new ContentDialog
         {
             Title = loc.GetString("TestFailedTitle"),
-            Content = string.Format(loc.GetString("TestFailedMessage"), exception.Message),
+            Content = string.Format(loc.GetString("TestFailedMessage"), errorText),
             CloseButtonText = loc.GetString("OK"),
             XamlRoot = this.XamlRoot,
         };
         await ShowDialogAsync(dialog);
+    }
+
+    internal static string GetAgentCliErrorText(
+        Exception exception,
+        Func<TranslationException, string> getTranslationErrorText)
+    {
+        return exception is TranslationException translationError
+            ? getTranslationErrorText(translationError)
+            : exception.Message;
     }
 
     /// <summary>

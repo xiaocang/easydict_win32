@@ -11,7 +11,7 @@ namespace Easydict.TranslationService.Services.AgentCli;
 /// stream-json text deltas. Disabled by default; the user must opt in via
 /// Settings after a risk acknowledgment.
 /// </summary>
-public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslationService
+public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
     public const string ServiceIdValue = "claude-code";
     public const string DefaultModel = "haiku";
@@ -65,6 +65,12 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
 
     protected override void ValidateRequest(TranslationRequest request)
     {
+        ValidateEnabled();
+        base.ValidateRequest(request);
+    }
+
+    private void ValidateEnabled()
+    {
         if (!_enabled)
         {
             throw new TranslationException(
@@ -74,8 +80,6 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
                 ServiceId = ServiceId,
             };
         }
-
-        base.ValidateRequest(request);
     }
 
     protected override async Task<TranslationResult> TranslateInternalAsync(
@@ -100,7 +104,39 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ValidateRequest(request);
+        await foreach (var chunk in RunStreamAsync(
+                           AgentCliPromptBuilder.BuildUserPrompt(request),
+                           BaseOpenAIService.TranslationSystemPrompt,
+                           cancellationToken).ConfigureAwait(false))
+        {
+            yield return chunk;
+        }
+    }
 
+    public async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
+        GrammarCorrectionRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ValidateEnabled();
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            throw new TranslationException("Text cannot be empty") { ServiceId = ServiceId };
+        }
+
+        await foreach (var chunk in RunStreamAsync(
+                           GrammarCorrectionPromptResources.BuildUserPrompt(request),
+                           GrammarCorrectionPromptResources.GetSystemPrompt(request.IncludeExplanations),
+                           cancellationToken).ConfigureAwait(false))
+        {
+            yield return chunk;
+        }
+    }
+
+    private async IAsyncEnumerable<string> RunStreamAsync(
+        string userPrompt,
+        string systemPrompt,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var executable = await ResolveExecutableAsync(cancellationToken).ConfigureAwait(false);
 
         var controlLines = new List<string>();
@@ -109,8 +145,8 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
 
         var lines = _runner.RunLinesAsync(
             executable,
-            BuildArguments(_model),
-            AgentCliPromptBuilder.BuildUserPrompt(request),
+            BuildArguments(_model, systemPrompt),
+            userPrompt,
             timeout: null,
             cancellationToken,
             environment: ThinkingDisabledEnvironment);
@@ -184,20 +220,29 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
         var discovered = await AgentCliModelCatalog
             .DiscoverClaudeModelsAsync(executable, cancellationToken)
             .ConfigureAwait(false);
-        return discovered.Count > 0 ? discovered : AvailableModels;
+        return MergeDiscoveredModels(discovered);
+    }
+
+    internal static IReadOnlyList<string> MergeDiscoveredModels(IReadOnlyList<string> discovered)
+    {
+        return discovered
+            .Concat(AvailableModels)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     /// <summary>
-    /// CLI arguments mirroring the upstream macOS implementation: stream-json
-    /// output with partial messages, and token-reduction flags that disable
-    /// tools, MCP servers, plugins, and session persistence. The prompt itself
-    /// is written to stdin, so `-p` carries no inline prompt argument.
+    /// Runs Claude in safe, non-persistent stream-JSON mode with a replacement
+    /// operation-specific system prompt. Safe mode skips local CLAUDE.md and
+    /// customization discovery while preserving subscription authentication.
+    /// The user prompt is written to stdin.
     /// </summary>
-    internal static List<string> BuildArguments(string model)
+    internal static List<string> BuildArguments(string model, string? systemPrompt = null)
     {
         var arguments = new List<string>
         {
             "-p",
+            "--safe-mode",
             "--verbose",
             "--output-format", "stream-json",
             "--include-partial-messages",
@@ -205,7 +250,8 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
             "--tools", "",
             "--strict-mcp-config",
             "--setting-sources", "",
-            "--system-prompt", BaseOpenAIService.TranslationSystemPrompt,
+            "--system-prompt", AgentCliPromptBuilder.BuildSystemPromptArgument(
+                systemPrompt ?? BaseOpenAIService.TranslationSystemPrompt),
         };
 
         if (!string.IsNullOrEmpty(model))

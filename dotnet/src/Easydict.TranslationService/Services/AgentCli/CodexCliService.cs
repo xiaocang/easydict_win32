@@ -13,15 +13,15 @@ namespace Easydict.TranslationService.Services.AgentCli;
 /// the stream yields one chunk. Disabled by default; the user must opt in via
 /// Settings after a risk acknowledgment.
 /// </summary>
-public sealed class CodexCliService : BaseTranslationService, IStreamTranslationService
+public sealed class CodexCliService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
     public const string ServiceIdValue = "codex";
     public const string InstallDocumentationUrl = "https://developers.openai.com/codex/cli";
-    public const string DefaultModel = "luna";
+    public const string DefaultModel = "gpt-5.6-luna";
     public const string DefaultReasoningEffort = "none";
 
     /// <summary>Fallback aliases used when model discovery is unavailable.</summary>
-    public static readonly string[] AvailableModels = ["sol", "terra", "luna"];
+    public static readonly string[] AvailableModels = ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"];
 
     /// <summary>Reasoning effort values accepted by `-c model_reasoning_effort=`.</summary>
     public static readonly string[] AvailableReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh"];
@@ -84,6 +84,12 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
 
     protected override void ValidateRequest(TranslationRequest request)
     {
+        ValidateEnabled();
+        base.ValidateRequest(request);
+    }
+
+    private void ValidateEnabled()
+    {
         if (!_enabled)
         {
             throw new TranslationException(
@@ -93,8 +99,6 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
                 ServiceId = ServiceId,
             };
         }
-
-        base.ValidateRequest(request);
     }
 
     protected override async Task<TranslationResult> TranslateInternalAsync(
@@ -119,57 +123,123 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ValidateRequest(request);
-
-        var executable = await AgentCliExecutableLocator
-            .LocateAsync(CliName, GetCandidatePaths(), cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw NotInstalledError();
-
-        var capabilities = await CodexCliCapabilities
-            .GetAsync(executable, cancellationToken)
-            .ConfigureAwait(false);
-
-        var controlLines = new List<string>();
-        string? agentMessage = null;
-        string? errorMessage = null;
-
-        var lines = _runner.RunLinesAsync(
-            executable,
-            BuildArguments(_model, _reasoningEffort, capabilities),
-            AgentCliPromptBuilder.BuildCombinedPrompt(request),
-            timeout: null,
-            cancellationToken);
-
-        await using var enumerator = lines.GetAsyncEnumerator(cancellationToken);
-        while (true)
+        await foreach (var chunk in RunStreamAsync(
+                           AgentCliPromptBuilder.BuildUserPrompt(request),
+                           BaseOpenAIService.TranslationSystemPrompt,
+                           cancellationToken).ConfigureAwait(false))
         {
-            string line;
-            try
-            {
-                if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
-                    break;
-                line = enumerator.Current;
-            }
-            catch (AgentCliProcessException ex)
-            {
-                throw CodexCliEventParser.ClassifyFailure(ServiceId, ex.ExitCode, controlLines, ex.StdErr);
-            }
-            catch (TimeoutException ex)
-            {
-                throw new TranslationException("Codex CLI timed out", ex)
-                {
-                    ErrorCode = TranslationErrorCode.Timeout,
-                    ServiceId = ServiceId,
-                };
-            }
+            yield return chunk;
+        }
+    }
 
-            controlLines.Add(line);
-            // Keep the latest agent message; a turn normally produces exactly one.
-            agentMessage = CodexCliEventParser.TryExtractAgentMessage(line) ?? agentMessage;
-            errorMessage = CodexCliEventParser.TryExtractErrorMessage(line) ?? errorMessage;
+    public async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
+        GrammarCorrectionRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ValidateEnabled();
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            throw new TranslationException("Text cannot be empty") { ServiceId = ServiceId };
         }
 
-        yield return ValidateCompletedResponse(agentMessage, errorMessage, controlLines);
+        await foreach (var chunk in RunStreamAsync(
+                           GrammarCorrectionPromptResources.BuildUserPrompt(request),
+                           GrammarCorrectionPromptResources.GetSystemPrompt(request.IncludeExplanations),
+                           cancellationToken).ConfigureAwait(false))
+        {
+            yield return chunk;
+        }
+    }
+
+    private async IAsyncEnumerable<string> RunStreamAsync(
+        string userPrompt,
+        string systemPrompt,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var (instructionsFileName, instructionsFilePath) =
+            await WriteInstructionsFileAsync(systemPrompt, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var executable = await AgentCliExecutableLocator
+                .LocateAsync(CliName, GetCandidatePaths(), cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw NotInstalledError();
+
+            var capabilities = await CodexCliCapabilities
+                .GetAsync(executable, cancellationToken)
+                .ConfigureAwait(false);
+
+            var controlLines = new List<string>();
+            string? agentMessage = null;
+            string? errorMessage = null;
+
+            var lines = _runner.RunLinesAsync(
+                executable,
+                BuildArguments(_model, _reasoningEffort, capabilities, instructionsFileName),
+                userPrompt,
+                timeout: null,
+                cancellationToken);
+
+            await using var enumerator = lines.GetAsyncEnumerator(cancellationToken);
+            while (true)
+            {
+                string line;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                        break;
+                    line = enumerator.Current;
+                }
+                catch (AgentCliProcessException ex)
+                {
+                    throw CodexCliEventParser.ClassifyFailure(ServiceId, ex.ExitCode, controlLines, ex.StdErr);
+                }
+                catch (TimeoutException ex)
+                {
+                    throw new TranslationException("Codex CLI timed out", ex)
+                    {
+                        ErrorCode = TranslationErrorCode.Timeout,
+                        ServiceId = ServiceId,
+                    };
+                }
+
+                controlLines.Add(line);
+                // Keep the latest agent message; a turn normally produces exactly one.
+                agentMessage = CodexCliEventParser.TryExtractAgentMessage(line) ?? agentMessage;
+                errorMessage = CodexCliEventParser.TryExtractErrorMessage(line) ?? errorMessage;
+            }
+
+            yield return ValidateCompletedResponse(agentMessage, errorMessage, controlLines);
+        }
+        finally
+        {
+            TryDeleteInstructionsFile(instructionsFilePath);
+        }
+    }
+
+    internal static async Task<(string FileName, string FullPath)> WriteInstructionsFileAsync(
+        string instructions,
+        CancellationToken cancellationToken)
+    {
+        // The runner uses Path.GetTempPath() as cwd; a controlled relative name stays .cmd-safe.
+        var fileName = $"easydict-codex-{Guid.NewGuid():N}.md";
+        var fullPath = Path.Combine(Path.GetTempPath(), fileName);
+        await File.WriteAllTextAsync(fullPath, instructions, cancellationToken).ConfigureAwait(false);
+        return (fileName, fullPath);
+    }
+
+    internal static void TryDeleteInstructionsFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     internal static string ValidateCompletedResponse(
@@ -207,19 +277,27 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
         var discovered = await AgentCliModelCatalog
             .DiscoverCodexModelsAsync(executable, cancellationToken)
             .ConfigureAwait(false);
-        return discovered.Count > 0 ? discovered : AvailableModels;
+        return MergeDiscoveredModels(discovered);
+    }
+
+    internal static IReadOnlyList<string> MergeDiscoveredModels(IReadOnlyList<string> discovered)
+    {
+        return AvailableModels
+            .Concat(discovered)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     /// <summary>
-    /// CLI arguments mirroring the upstream macOS implementation: JSONL output,
-    /// ephemeral session, read-only sandbox, neutral working directory, agent
-    /// features disabled, optional model and reasoning effort, and a trailing
-    /// `-` so the prompt is read from stdin.
+    /// Runs Codex with an operation-specific instructions file, AGENTS.md loading
+    /// disabled, stream-JSON output, an ephemeral session, and a read-only sandbox.
+    /// The user prompt is read from stdin.
     /// </summary>
     internal static List<string> BuildArguments(
         string model,
         string reasoningEffort,
-        CodexCliCapabilities? capabilities = null)
+        CodexCliCapabilities? capabilities = null,
+        string? instructionsFileName = null)
     {
         var arguments = new List<string>
         {
@@ -234,7 +312,14 @@ public sealed class CodexCliService : BaseTranslationService, IStreamTranslation
             // folder; "." keeps user-profile paths off the command line.
             "-C", ".",
             "-c", "web_search=disabled",
+            "-c", "project_doc_max_bytes=0",
         };
+
+        if (!string.IsNullOrEmpty(instructionsFileName))
+        {
+            arguments.Add("-c");
+            arguments.Add($"model_instructions_file='{instructionsFileName}'");
+        }
 
         if (capabilities?.SupportsStrictConfig != false)
         {

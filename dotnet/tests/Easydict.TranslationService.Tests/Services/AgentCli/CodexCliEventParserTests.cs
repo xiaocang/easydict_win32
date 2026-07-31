@@ -125,6 +125,20 @@ public class CodexCliEventParserTests
     }
 
     [Fact]
+    public void ClassifyFailure_IncompatibleModelsCache_TakesPriorityOverAuthError()
+    {
+        const string StdErr =
+            "failed to load models cache: unknown variant `max`, expected one of `none`, `minimal`, `low`, "
+            + "`medium`, `high`, `xhigh`\nAPI key is missing";
+
+        var ex = CodexCliEventParser.ClassifyFailure("codex", 1, [], StdErr);
+
+        ex.ErrorCode.Should().Be(TranslationErrorCode.ServiceUnavailable);
+        ex.RecoveryAction.Should().Be("install-latest-codex");
+        ex.Message.Should().Contain("updated");
+    }
+
+    [Fact]
     public void ClassifyFailure_UnknownError_MapsToServiceUnavailableWithDetail()
     {
         var controlLines = new[] { TurnFailedLine };

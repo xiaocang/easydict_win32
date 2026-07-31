@@ -135,6 +135,11 @@ internal static class CodexCliEventParser
             .OfType<string>()
             .ToList();
         var haystack = string.Join('\n', errorMessages) + '\n' + stdErr;
+        if (haystack.Contains("failed to load models cache", StringComparison.OrdinalIgnoreCase)
+            && haystack.Contains("unknown variant", StringComparison.OrdinalIgnoreCase))
+        {
+            return CodexCliCapabilities.CreateUpdateRequiredException();
+        }
 
         if (ContainsAny(haystack, AuthPatterns))
         {

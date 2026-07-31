@@ -231,7 +231,7 @@ internal sealed class AgentCliProcessRunner
         sb.Append(QuoteArgument(executablePath, forceQuotes: true));
         foreach (var argument in arguments)
         {
-            sb.Append(' ').Append(QuoteArgument(argument));
+            sb.Append(' ').Append(QuoteArgument(argument, forceQuotes: true));
         }
 
         return sb.ToString();

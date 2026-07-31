@@ -1,6 +1,7 @@
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services.AgentCli;
 using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
@@ -53,6 +54,15 @@ public sealed class LongDocumentServiceSupportTests
                 service,
                 new Dictionary<string, bool> { [service.ServiceId] = true })
             .Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsSupported_IncludesAgentCliStreamingServices()
+    {
+        using var httpClient = new HttpClient();
+
+        LongDocumentServiceSupport.IsSupported(new ClaudeCodeService(httpClient)).Should().BeTrue();
+        LongDocumentServiceSupport.IsSupported(new CodexCliService(httpClient)).Should().BeTrue();
     }
 
     private class FakeTranslationService : ITranslationService

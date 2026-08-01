@@ -53,27 +53,36 @@ jobs:
         shell: pwsh
         run: |
           $filter = "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
+          # Platform is per project, not uniform. The plain net8.0 projects are mapped to Any CPU
+          # by the solution and build into bin/Debug, so passing -p:Platform=x64 would send VSTest
+          # to a bin/x64/Debug that was never produced. Easydict.WinUI.Tests is the opposite: it
+          # builds into bin/x64/Debug/<tfm>/win-x64 and needs the property to be found. A
+          # solution-level run resolved this per project automatically; running each one directly
+          # means stating it.
           $projects = @(
-            "tests/Easydict.Llm.Streaming.Tests",
-            "tests/Polyglot.TextLayout.Tests",
-            "tests/Easydict.DirectXaml.Tests",
-            "tests/Easydict.TranslationService.Tests",
-            "tests/Easydict.WinUI.Tests",
-            "tests/Easydict.BrowserRegistrar.Tests",
-            "lib/LexIndex/tests/LexIndex.Tests"
+            @{ Path = "tests/Easydict.Llm.Streaming.Tests" },
+            @{ Path = "tests/Polyglot.TextLayout.Tests" },
+            @{ Path = "tests/Easydict.DirectXaml.Tests" },
+            @{ Path = "tests/Easydict.TranslationService.Tests" },
+            @{ Path = "tests/Easydict.WinUI.Tests"; Platform = "x64" },
+            @{ Path = "tests/Easydict.BrowserRegistrar.Tests" },
+            @{ Path = "lib/LexIndex/tests/LexIndex.Tests" }
           )
           foreach ($project in $projects) {
-            Write-Host "::group::$project"
-            # No -p:Platform=x64 here. These test projects are mapped to Any CPU by the solution,
-            # so the build put their assemblies in bin/Debug; passing the platform through would
-            # send VSTest looking in bin/x64/Debug, which does not exist. The solution-level run
-            # got this right only because it applied the solution's per-project mapping.
-            dotnet test $project --no-build --verbosity normal `
-              --logger "trx;LogFileName=test-results.trx" --filter $filter
+            $dotnetArgs = @(
+              "test", $project.Path, "--no-build", "--verbosity", "normal",
+              "--logger", "trx;LogFileName=test-results.trx", "--filter", $filter
+            )
+            if ($project.Platform) {
+              $dotnetArgs += "-p:Platform=$($project.Platform)"
+            }
+
+            Write-Host "::group::$($project.Path)"
+            & dotnet @dotnetArgs
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {
-              Write-Host "::error::$project failed with exit code $code"
+              Write-Host "::error::$($project.Path) failed with exit code $code"
               exit $code
             }
           }

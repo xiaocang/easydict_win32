@@ -57,6 +57,26 @@ jobs:
       - name: Test
         run: cargo test --all-features
 
+      # `cargo test` writes the golden on first run. Publishing it — together with the IR compiled
+      # from the shipping card — is how an environment that cannot build the compiler still obtains
+      # the artifacts it has to check in.
+      - name: Compile the shipping card
+        if: always()
+        run: |
+          cargo run -p dxaml-cli -- compile \
+            --input ../dotnet/src/Easydict.WinUI/Views/Controls/MinimalServiceResultItem.xaml \
+            --output ./out || true
+
+      - name: Upload compiled IR
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-xaml-ir
+          path: |
+            compiler/crates/dxaml-cli/tests/fixtures/MinimalServiceResultItem.dxir.json
+            compiler/out/MinimalServiceResultItem.dxir.json
+          if-no-files-found: warn
+
       # The golden file is created on first run rather than failing, so a missing commit would
       # otherwise go unnoticed. Fail the build instead.
       - name: Verify the IR golden is committed

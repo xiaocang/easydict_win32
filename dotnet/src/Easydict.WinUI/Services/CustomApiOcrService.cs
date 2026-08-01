@@ -124,7 +124,12 @@ public sealed class CustomApiOcrService : IOcrService
 
             if ((int)statusCode is >= 200 and < 300)
             {
-                var emptyResponseRetryCeiling = _options.EnableThinking
+                // Reasoning can still consume the budget whenever no disable directive was
+                // actually in force — the user enabled thinking, the provider rejected the
+                // control field, or the model has no compatible control. Key this off what
+                // was sent rather than the setting, so those configurations get the full
+                // ceiling before an empty metadata-less response is taken at face value.
+                var emptyResponseRetryCeiling = disableThinkingControlField is null
                     ? OcrServiceOptions.MaxTokensCeiling
                     : OcrServiceOptions.ThinkingMaxTokens;
                 return usesResponses

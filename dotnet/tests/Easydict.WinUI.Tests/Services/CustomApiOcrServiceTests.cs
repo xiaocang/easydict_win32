@@ -350,6 +350,45 @@ public class CustomApiOcrServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecognizeAsync_RetriesEmptyMetadataLessChatResponse_ToCeiling_AfterDisableFieldWasRejected()
+    {
+        // The provider refuses the disable directive, so reasoning stays active even though
+        // the setting is off. The empty-response ceiling must follow what was actually sent,
+        // otherwise a model that spends the budget thinking stops at 2048 and yields nothing.
+        var callCount = 0;
+        var handler = new RecordingHttpMessageHandler((_, _) =>
+        {
+            var call = callCount++;
+
+            if (call == 0)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(
+                        """{"error":{"message":"Unrecognized request argument supplied: thinking","param":"thinking"}}""")
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(call < 4
+                    ? """{"choices":[{"message":{"content":""}}]}"""
+                    : ChatCompletionsResponse("recognized text"))
+            });
+        });
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("recognized text");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 512, 1024, 2048, 4096);
+        HasProperty(handler.RequestBodies[0], "thinking").Should().BeTrue();
+        HasProperty(handler.RequestBodies[1], "thinking").Should().BeFalse(
+            "the rejected field is dropped for the rest of the session");
+    }
+
+    [Fact]
     public async Task RecognizeAsync_StopsEscalatingAtCeiling_AndKeepsLongestText()
     {
         var handler = SequencedHandler(

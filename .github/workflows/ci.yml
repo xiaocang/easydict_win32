@@ -43,13 +43,42 @@ jobs:
         working-directory: dotnet
         run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore --maxcpucount:1 -p:Platform=x64 -p:BuildWorkerOutputs=false
 
+      # Enumerated rather than run across the solution. Every test in
+      # Easydict.UIAutomation.Tests carries Category=UIAutomation, which the filter below
+      # excludes, so a solution-wide run matches zero tests there and VSTest fails the whole
+      # command ("No test matches the given testcase filter" -> MSB4181). That project is covered
+      # by ui-automation.yml instead. The list mirrors the Makefile's `test` target.
       - name: Run tests
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
+        shell: pwsh
+        run: |
+          $filter = "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
+          $projects = @(
+            "tests/Easydict.Llm.Streaming.Tests",
+            "tests/Polyglot.TextLayout.Tests",
+            "tests/Easydict.DirectXaml.Tests",
+            "tests/Easydict.TranslationService.Tests",
+            "tests/Easydict.WinUI.Tests",
+            "tests/Easydict.BrowserRegistrar.Tests",
+            "lib/LexIndex/tests/LexIndex.Tests"
+          )
+          foreach ($project in $projects) {
+            Write-Host "::group::$project"
+            dotnet test $project --no-build --verbosity normal `
+              --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter $filter
+            $code = $LASTEXITCODE
+            Write-Host "::endgroup::"
+            if ($code -ne 0) {
+              Write-Host "::error::$project failed with exit code $code"
+              exit $code
+            }
+          }
 
+      # Scoped to the project that owns the long-document tests, for the same reason as above:
+      # a solution-wide run would match zero tests in every other project and fail there.
       - name: Run long-document regression gate
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
+        run: dotnet test tests/Easydict.TranslationService.Tests --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

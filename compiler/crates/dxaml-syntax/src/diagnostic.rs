@@ -146,7 +146,11 @@ mod tests {
     fn renders_msbuild_format() {
         let source = "line one\nline two\n";
         let index = LineIndex::new(source);
-        let diagnostic = Diagnostic::error(codes::UNSUPPORTED_CONTROL, "control 'X' unsupported", Span::new(9, 13));
+        let diagnostic = Diagnostic::error(
+            codes::UNSUPPORTED_CONTROL,
+            "control 'X' unsupported",
+            Span::new(9, 13),
+        );
         assert_eq!(
             diagnostic.render("Foo.xaml", &index),
             "Foo.xaml(2,1): error DX3001: control 'X' unsupported"

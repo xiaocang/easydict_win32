@@ -5,7 +5,9 @@
 
 use std::collections::HashSet;
 
-use dxaml_ast::{AttributeValue, XamlChild, XamlDocument, XamlElement, XamlProperty, XamlPropertyElement};
+use dxaml_ast::{
+    AttributeValue, XamlChild, XamlDocument, XamlElement, XamlProperty, XamlPropertyElement,
+};
 use dxaml_schema::{self as schema, ContentKind, ControlKind, Invalidation, ValueType};
 use dxaml_syntax::{codes, DiagnosticBag, Span};
 
@@ -435,10 +437,7 @@ impl Builder<'_> {
                     _ => {
                         self.diagnostics.error(
                             codes::BAD_VALUE,
-                            format!(
-                                "{{{}}} takes exactly one resource key",
-                                extension.name
-                            ),
+                            format!("{{{}}} takes exactly one resource key", extension.name),
                             property.value_span,
                         );
                         return None;

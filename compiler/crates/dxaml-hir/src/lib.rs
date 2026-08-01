@@ -136,8 +136,9 @@ mod tests {
 
     #[test]
     fn records_events_as_actions() {
-        let (hir, diagnostics) =
-            analyze_body(r#"<Border PointerPressed="OnHeaderPointerPressed"><TextBlock/></Border>"#);
+        let (hir, diagnostics) = analyze_body(
+            r#"<Border PointerPressed="OnHeaderPointerPressed"><TextBlock/></Border>"#,
+        );
         assert!(!diagnostics.has_errors(), "{:?}", diagnostics.sorted());
 
         let hir = hir.expect("hir");
@@ -175,7 +176,8 @@ mod tests {
 
     #[test]
     fn rejects_grid_attached_properties_outside_a_grid() {
-        let (_, diagnostics) = analyze_body(r#"<StackPanel><TextBlock Grid.Row="1"/></StackPanel>"#);
+        let (_, diagnostics) =
+            analyze_body(r#"<StackPanel><TextBlock Grid.Row="1"/></StackPanel>"#);
         assert!(codes_of(&diagnostics).contains(&codes::PROPERTY_NOT_VALID_HERE));
     }
 

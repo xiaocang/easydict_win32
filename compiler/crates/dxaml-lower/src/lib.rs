@@ -271,7 +271,9 @@ mod tests {
     fn records_features_actually_used() {
         let document = lower_body(r#"<Border PointerPressed="OnPressed"><TextBlock/></Border>"#);
         assert!(document.features.contains(&features::ACTIONS.to_string()));
-        assert!(!document.features.contains(&features::NAMED_SLOTS.to_string()));
+        assert!(!document
+            .features
+            .contains(&features::NAMED_SLOTS.to_string()));
     }
 
     #[test]

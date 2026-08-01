@@ -337,8 +337,14 @@ mod tests {
         let (tree, _) = parse(source);
         let root = tree.get(tree.root.expect("root"));
         let padding = &root.attributes[0];
-        assert_eq!(&source[padding.name_span.start..padding.name_span.end], "Padding");
-        assert_eq!(&source[padding.value_span.start..padding.value_span.end], "12");
+        assert_eq!(
+            &source[padding.name_span.start..padding.name_span.end],
+            "Padding"
+        );
+        assert_eq!(
+            &source[padding.value_span.start..padding.value_span.end],
+            "12"
+        );
     }
 
     #[test]
@@ -379,9 +385,7 @@ mod tests {
     #[test]
     fn reports_empty_documents() {
         let (_, diagnostics) = parse("   ");
-        assert!(diagnostics
-            .iter()
-            .any(|d| d.code == codes::NO_ROOT));
+        assert!(diagnostics.iter().any(|d| d.code == codes::NO_ROOT));
     }
 
     #[test]

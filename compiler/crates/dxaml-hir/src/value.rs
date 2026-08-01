@@ -130,7 +130,9 @@ pub fn parse_bool(raw: &str) -> Result<bool, String> {
     match raw.trim() {
         "True" | "true" => Ok(true),
         "False" | "false" => Ok(false),
-        other => Err(format!("'{other}' is not a boolean; expected True or False")),
+        other => Err(format!(
+            "'{other}' is not a boolean; expected True or False"
+        )),
     }
 }
 
@@ -240,9 +242,8 @@ pub fn parse_color(raw: &str) -> Result<Color, String> {
     let nibble = |index: usize| -> u8 {
         u8::from_str_radix(&digits[index..index + 1], 16).unwrap_or(0) * 17
     };
-    let byte = |index: usize| -> u8 {
-        u8::from_str_radix(&digits[index..index + 2], 16).unwrap_or(0)
-    };
+    let byte =
+        |index: usize| -> u8 { u8::from_str_radix(&digits[index..index + 2], 16).unwrap_or(0) };
 
     match digits.len() {
         3 => Ok(Color {
@@ -300,15 +301,30 @@ mod tests {
     fn thickness_supports_one_two_and_four_components() {
         assert_eq!(
             parse_thickness("4"),
-            Ok(Thickness { left: 4.0, top: 4.0, right: 4.0, bottom: 4.0 })
+            Ok(Thickness {
+                left: 4.0,
+                top: 4.0,
+                right: 4.0,
+                bottom: 4.0
+            })
         );
         assert_eq!(
             parse_thickness("6,4"),
-            Ok(Thickness { left: 6.0, top: 4.0, right: 6.0, bottom: 4.0 })
+            Ok(Thickness {
+                left: 6.0,
+                top: 4.0,
+                right: 6.0,
+                bottom: 4.0
+            })
         );
         assert_eq!(
             parse_thickness("0,0,0,1"),
-            Ok(Thickness { left: 0.0, top: 0.0, right: 0.0, bottom: 1.0 })
+            Ok(Thickness {
+                left: 0.0,
+                top: 0.0,
+                right: 0.0,
+                bottom: 1.0
+            })
         );
         assert!(parse_thickness("1,2,3").is_err());
     }
@@ -324,13 +340,26 @@ mod tests {
     fn colours_expand_shorthand() {
         assert_eq!(
             parse_color("#F00"),
-            Ok(Color { a: 255, r: 255, g: 0, b: 0 })
+            Ok(Color {
+                a: 255,
+                r: 255,
+                g: 0,
+                b: 0
+            })
         );
         assert_eq!(
             parse_color("#80FF0000"),
-            Ok(Color { a: 128, r: 255, g: 0, b: 0 })
+            Ok(Color {
+                a: 128,
+                r: 255,
+                g: 0,
+                b: 0
+            })
         );
-        assert_eq!(parse_color("#102030").map(|c| c.to_argb_hex()), Ok("#FF102030".to_string()));
+        assert_eq!(
+            parse_color("#102030").map(|c| c.to_argb_hex()),
+            Ok("#FF102030".to_string())
+        );
         assert!(parse_color("Red").is_err());
         assert!(parse_color("#GGG").is_err());
     }

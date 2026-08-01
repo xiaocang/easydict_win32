@@ -216,7 +216,9 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
 
     let root_count = document.nodes.iter().filter(|n| n.parent.is_none()).count();
     if !document.nodes.is_empty() && root_count != 1 {
-        problems.push(format!("expected exactly one root node, found {root_count}"));
+        problems.push(format!(
+            "expected exactly one root node, found {root_count}"
+        ));
     }
 
     for property in &document.properties {
@@ -270,7 +272,10 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
 
     for entry in &document.semantics {
         if entry.node >= document.nodes.len() {
-            problems.push(format!("semantics entry references unknown node {}", entry.node));
+            problems.push(format!(
+                "semantics entry references unknown node {}",
+                entry.node
+            ));
         }
     }
 
@@ -292,8 +297,20 @@ mod tests {
             class_name: "A.B".to_string(),
             features: vec![features::NAMED_SLOTS.to_string()],
             nodes: vec![
-                IrNode { id: 0, kind: "userControl".into(), parent: None, children: vec![1], text: None },
-                IrNode { id: 1, kind: "textBlock".into(), parent: Some(0), children: vec![], text: Some("hi".into()) },
+                IrNode {
+                    id: 0,
+                    kind: "userControl".into(),
+                    parent: None,
+                    children: vec![1],
+                    text: None,
+                },
+                IrNode {
+                    id: 1,
+                    kind: "textBlock".into(),
+                    parent: Some(0),
+                    children: vec![],
+                    text: Some("hi".into()),
+                },
             ],
             properties: vec![IrProperty {
                 node: 1,
@@ -367,7 +384,9 @@ mod tests {
         document.nodes[1].parent = Some(0);
         document.nodes[0].children.clear();
         let problems = validate(&document);
-        assert!(problems.iter().any(|p| p.contains("does not list it as a child")));
+        assert!(problems
+            .iter()
+            .any(|p| p.contains("does not list it as a child")));
     }
 
     #[test]

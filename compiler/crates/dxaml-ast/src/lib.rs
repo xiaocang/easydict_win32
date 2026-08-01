@@ -361,7 +361,10 @@ mod tests {
         assert_eq!(document.class_name.as_deref(), Some("A.B"));
 
         let border = root.element_children().next().expect("border");
-        assert_eq!(border.directive("Name").map(|d| d.value.as_str()), Some("Root"));
+        assert_eq!(
+            border.directive("Name").map(|d| d.value.as_str()),
+            Some("Root")
+        );
         assert_eq!(border.properties.len(), 1);
         assert_eq!(border.properties[0].name, "Padding");
     }
@@ -372,7 +375,13 @@ mod tests {
         let (document, diagnostics) = parse(&source);
         assert!(!diagnostics.has_errors(), "{:?}", diagnostics.sorted());
 
-        let border = document.root.expect("root").element_children().next().cloned().expect("border");
+        let border = document
+            .root
+            .expect("root")
+            .element_children()
+            .next()
+            .cloned()
+            .expect("border");
         let property = &border.properties[0];
         assert_eq!(property.owner.as_deref(), Some("Grid"));
         assert_eq!(property.name, "Row");
@@ -387,7 +396,13 @@ mod tests {
         let (document, diagnostics) = parse(&source);
         assert!(!diagnostics.has_errors(), "{:?}", diagnostics.sorted());
 
-        let grid = document.root.expect("root").element_children().next().cloned().expect("grid");
+        let grid = document
+            .root
+            .expect("root")
+            .element_children()
+            .next()
+            .cloned()
+            .expect("grid");
         match &grid.children[0] {
             XamlChild::PropertyElement(property_element) => {
                 assert_eq!(property_element.owner, "Grid");
@@ -425,7 +440,13 @@ mod tests {
     fn keeps_text_content() {
         let source = format!(r#"<UserControl {HEADER}><TextBlock>hello</TextBlock></UserControl>"#);
         let (document, _) = parse(&source);
-        let text = document.root.expect("root").element_children().next().cloned().expect("text");
+        let text = document
+            .root
+            .expect("root")
+            .element_children()
+            .next()
+            .cloned()
+            .expect("text");
         assert_eq!(text.text, "hello");
     }
 }

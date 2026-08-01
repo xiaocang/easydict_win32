@@ -164,6 +164,7 @@
   <data name="EasydictForWindows" xml:space="preserve"><value>Windows के लिए Easydict</value></data>
   <data name="GitHubRepository" xml:space="preserve"><value>GitHub रिपॉज़िटरी</value></data>
   <data name="IssueFeedback" xml:space="preserve"><value>समस्या प्रतिक्रिया</value></data>
+  <data name="RateApp" xml:space="preserve"><value>ऐप को रेट करें</value></data>
   <data name="InspiredBy" xml:space="preserve"><value>से प्रेरित</value></data>
   <data name="EasydictForMacOS" xml:space="preserve"><value>macOS के लिए Easydict</value></data>
   <data name="License" xml:space="preserve"><value>लाइसेंस: GPL-3.0</value></data>

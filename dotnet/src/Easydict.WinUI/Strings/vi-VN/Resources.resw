@@ -386,6 +386,9 @@
   <data name="IssueFeedback" xml:space="preserve">
     <value>Ph&#x1EA3;n h&#x1ED3;i l&#x1ED7;i</value>
   </data>
+  <data name="RateApp" xml:space="preserve">
+    <value>Đánh giá ứng dụng</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>L&#x1EA5;y c&#x1EA3;m h&#x1EE9;ng t&#x1EEB;</value>
   </data>

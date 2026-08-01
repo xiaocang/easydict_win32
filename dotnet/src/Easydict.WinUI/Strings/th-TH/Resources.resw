@@ -362,6 +362,9 @@
   <data name="IssueFeedback" xml:space="preserve">
     <value>&#xE41;&#xE08;&#xE49;&#xE07;&#xE1B;&#xE31;&#xE0D;&#xE2B;&#xE32;</value>
   </data>
+  <data name="RateApp" xml:space="preserve">
+    <value>ให้คะแนนแอป</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>&#xE44;&#xE14;&#xE49;&#xE41;&#xE23;&#xE07;&#xE1A;&#xE31;&#xE19;&#xE14;&#xE32;&#xE25;&#xE43;&#xE08;&#xE08;&#xE32;&#xE01;</value>
   </data>

@@ -164,6 +164,7 @@
   <data name="EasydictForWindows" xml:space="preserve"><value>Easydict untuk Windows</value></data>
   <data name="GitHubRepository" xml:space="preserve"><value>Repositori GitHub</value></data>
   <data name="IssueFeedback" xml:space="preserve"><value>Maklum Balas Isu</value></data>
+  <data name="RateApp" xml:space="preserve"><value>Nilai aplikasi</value></data>
   <data name="InspiredBy" xml:space="preserve"><value>Diilhamkan oleh</value></data>
   <data name="EasydictForMacOS" xml:space="preserve"><value>Easydict untuk macOS</value></data>
   <data name="License" xml:space="preserve"><value>Lesen: GPL-3.0</value></data>

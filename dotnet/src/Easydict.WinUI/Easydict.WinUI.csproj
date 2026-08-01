@@ -86,6 +86,10 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- Use custom Program.cs entry point (handles OCR translate from Shell context menu) -->
         <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+        <!-- Local Debug builds keep the update banner visible for UI verification, even when current. -->
+        <EnableGitHubUpdateCheck Condition="'$(EnableGitHubUpdateCheck)' == '' and '$(Configuration)' == 'Debug' and '$(CI)' != 'true'">true</EnableGitHubUpdateCheck>
+        <EnableGitHubUpdateCheck Condition="'$(EnableGitHubUpdateCheck)' == ''">false</EnableGitHubUpdateCheck>
+        <DefineConstants Condition="'$(EnableGitHubUpdateCheck)' == 'true'">$(DefineConstants);PORTABLE_UPDATE_CHECK</DefineConstants>
 
         <!-- App Options -->
         <UseRidGraph>true</UseRidGraph>

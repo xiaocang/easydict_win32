@@ -49,6 +49,17 @@ internal static class EasydictConditions
         false;
 #endif
 
+    /// <summary>
+    /// True when the Microsoft Store rating action is available.
+    /// Debug builds keep it visible to verify the Store launch path.
+    /// </summary>
+    public static bool CanRateApp =>
+#if DEBUG
+        true;
+#else
+        IsStoreBuild;
+#endif
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, char[]? packageFullName);
 

@@ -497,6 +497,9 @@
   <data name="IssueFeedback" xml:space="preserve">
     <value>问题反馈</value>
   </data>
+  <data name="RateApp" xml:space="preserve">
+    <value>为应用评分</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>灵感来自</value>
   </data>

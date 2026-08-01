@@ -139,6 +139,9 @@ namespace Easydict.WinUI.Views
             {
                 System.Diagnostics.Debug.WriteLine("[MainPage] Constructor starting...");
                 this.InitializeComponent();
+#if PORTABLE_UPDATE_CHECK
+                InitializePortableUpdateBanner();
+#endif
                 System.Diagnostics.Debug.WriteLine("[MainPage] InitializeComponent completed");
             }
             catch (Exception ex)
@@ -302,6 +305,9 @@ namespace Easydict.WinUI.Views
                 ApplyThemeChrome();
             }
             SyncLocalModelPreparationProgressFromCoordinator();
+#if PORTABLE_UPDATE_CHECK
+            StartPortableUpdateCheck();
+#endif
 #if DEBUG
             MemoryDiagnostics.LogDelta("MainPage.OnPageLoaded retained after init", loadBaseline);
             MemoryDiagnostics.LogSnapshot("MainPage.OnPageLoaded complete");
@@ -311,6 +317,9 @@ namespace Easydict.WinUI.Views
 
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
+#if PORTABLE_UPDATE_CHECK
+            RefreshPortableUpdateBannerTheme();
+#endif
             QueueApplyThemeChrome();
         }
 
@@ -1078,6 +1087,9 @@ namespace Easydict.WinUI.Views
             _isLoaded = false;
             HideSuggestionPopup();
             _suggestionDebounceTimer.Stop();
+#if PORTABLE_UPDATE_CHECK
+            StopPortableUpdateCheck();
+#endif
 
             SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
 

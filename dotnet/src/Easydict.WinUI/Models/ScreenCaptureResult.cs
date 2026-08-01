@@ -9,8 +9,8 @@ public sealed class ScreenCaptureResult : IDisposable
     private OwnedPixelBuffer? _pixelBuffer;
 
     /// <summary>
-    /// Raw BGRA8 pixel data of the captured region.
-    /// </summary>
+    /// Raw BGRX pixel data from a 32-bit BI_RGB DIB. The fourth byte is unused
+    /// and must be ignored by image consumers rather than treated as transparency.
     public ReadOnlyMemory<byte> PixelMemory
     {
         get

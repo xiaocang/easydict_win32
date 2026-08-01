@@ -591,6 +591,15 @@
   <data name="OcrTestResult" xml:space="preserve">
     <value>Hasil Ujian</value>
   </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>Tiada teks dikenal pasti. Pilih kawasan yang lebih jelas dan semak tetapan bahasa OCR.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>Enjin OCR yang dipilih tidak tersedia. Untuk OCR Windows, pasang pek bahasa yang serasi.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR gagal. Cuba lagi atau semak tetapan OCR.</value>
+  </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>Padam</value>
   </data>

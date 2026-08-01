@@ -1194,6 +1194,15 @@
   <data name="OcrTestResult" xml:space="preserve">
     <value>測試結果</value>
   </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>未辨識到文字。請選取更清晰的區域，並檢查 OCR 語言設定。</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>所選 OCR 引擎無法使用。使用 Windows OCR 時，請安裝相容的語言套件。</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR 失敗。請重試或檢查 OCR 設定。</value>
+  </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>刪除</value>
   </data>

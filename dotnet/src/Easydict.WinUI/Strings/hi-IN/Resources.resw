@@ -591,6 +591,15 @@
   <data name="OcrTestResult" xml:space="preserve">
     <value>परीक्षण परिणाम</value>
   </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>कोई पाठ पहचाना नहीं गया। अधिक स्पष्ट क्षेत्र चुनें और OCR भाषा सेटिंग जाँचें।</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>चयनित OCR इंजन उपलब्ध नहीं है। Windows OCR के लिए संगत भाषा पैक स्थापित करें।</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR विफल हुआ। पुनः प्रयास करें या OCR सेटिंग जाँचें।</value>
+  </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>हटाएँ</value>
   </data>

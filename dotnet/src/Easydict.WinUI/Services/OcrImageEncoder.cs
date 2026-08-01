@@ -40,7 +40,7 @@ internal static class OcrImageEncoder
 
             encoder.SetPixelData(
                 BitmapPixelFormat.Bgra8,
-                BitmapAlphaMode.Premultiplied,
+                BitmapAlphaMode.Ignore,
                 (uint)width,
                 (uint)height,
                 96,

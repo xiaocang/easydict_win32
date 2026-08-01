@@ -4,6 +4,16 @@ using Microsoft.UI.Dispatching;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
+/// Identifies an OCR result that should be surfaced to the user.
+/// </summary>
+internal enum OcrFailureReason
+{
+    NoTextRecognized,
+    EngineUnavailable,
+    Failed
+}
+
+/// <summary>
 /// Orchestrates the OCR translation flow: Screenshot → OCR → Translate.
 /// All operations are asynchronous and non-blocking to the UI thread.
 /// </summary>
@@ -11,16 +21,23 @@ public sealed class OcrTranslateService
 {
     private readonly ScreenCaptureService _captureService = new();
     private readonly DispatcherQueue _dispatcherQueue;
-
-
+    private readonly Action<OcrFailureReason>? _failureReporter;
     // Concurrency guard: only one OCR operation can run at a time.
     // Owned by RunOcrPipelineAsync — only that method creates and disposes.
     // Other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _currentCts;
 
     public OcrTranslateService(DispatcherQueue dispatcherQueue)
+        : this(dispatcherQueue, failureReporter: null)
+    {
+    }
+
+    internal OcrTranslateService(
+        DispatcherQueue dispatcherQueue,
+        Action<OcrFailureReason>? failureReporter)
     {
         _dispatcherQueue = dispatcherQueue;
+        _failureReporter = failureReporter;
     }
 
     /// <summary>
@@ -90,6 +107,15 @@ public sealed class OcrTranslateService
                 var ocrOptions = OcrServiceOptions.FromSettings(SettingsService.Instance);
                 LogOcrDiagnostics(label, ocrOptions);
                 var ocrEngine = OcrServiceFactory.Create(ocrOptions);
+                if (!ocrEngine.IsAvailable)
+                {
+                    var message = $"[OcrTranslate] {label} OCR engine unavailable";
+                    Debug.WriteLine(message);
+                    CrashDiagnostics.Log(message);
+                    ReportFailure(OcrFailureReason.EngineUnavailable);
+                    return null;
+                }
+
                 var preferredLanguage = GetPreferredOcrLanguage();
                 var ocrResult = await ocrEngine.RecognizeAsync(
                     capture, preferredLanguage, cts.Token).ConfigureAwait(false);
@@ -99,6 +125,7 @@ public sealed class OcrTranslateService
                 if (string.IsNullOrWhiteSpace(ocrResult.Text))
                 {
                     Debug.WriteLine($"[OcrTranslate] No text recognized ({label})");
+                    ReportFailure(OcrFailureReason.NoTextRecognized);
                     return null;
                 }
 
@@ -111,6 +138,7 @@ public sealed class OcrTranslateService
             var message = $"[OcrTranslate] {label} timed out: {ex.Message}";
             Debug.WriteLine(message);
             CrashDiagnostics.Log(message);
+            ReportFailure(OcrFailureReason.Failed);
             return null;
         }
         catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
@@ -123,11 +151,15 @@ public sealed class OcrTranslateService
             var message = $"[OcrTranslate] {label} cancelled unexpectedly: {ex.Message}";
             Debug.WriteLine(message);
             CrashDiagnostics.Log(message);
+            ReportFailure(OcrFailureReason.Failed);
             return null;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[OcrTranslate] {label} error: {ex.Message}");
+            var message = $"[OcrTranslate] {label} error: {ex.Message}";
+            Debug.WriteLine(message);
+            CrashDiagnostics.Log(message);
+            ReportFailure(OcrFailureReason.Failed);
             return null;
         }
         finally
@@ -145,6 +177,29 @@ public sealed class OcrTranslateService
         catch (ObjectDisposedException)
         {
             // The previous operation owner completed between the exchange and cancellation.
+        }
+    }
+
+    private void ReportFailure(OcrFailureReason reason)
+    {
+        if (_failureReporter is null)
+        {
+            return;
+        }
+
+        if (!_dispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                _failureReporter(reason);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[OcrTranslate] Failed to report OCR failure: {ex.Message}");
+            }
+        }))
+        {
+            Debug.WriteLine("[OcrTranslate] Failed to enqueue OCR failure notification — dispatcher shut down?");
         }
     }
 
@@ -171,10 +226,11 @@ public sealed class OcrTranslateService
     private static void LogOcrDiagnostics(string flow, OcrServiceOptions options)
     {
         var settings = SettingsService.Instance;
+        var engineDetails = options.Engine is Models.OcrEngineType.WindowsNative
+            ? $"useWorker={settings.UseOcrWorker}"
+            : $"endpoint={FormatEndpointForDiagnostics(options)} model={options.Model} thinking={options.EnableThinking}";
         var message =
-            $"[OcrTranslate] {flow} pid={Environment.ProcessId} engine={options.Engine} " +
-            $"useWorker={settings.UseOcrWorker} endpoint={FormatEndpointForDiagnostics(options)} " +
-            $"model={options.Model} thinking={options.EnableThinking}";
+            $"[OcrTranslate] {flow} pid={Environment.ProcessId} engine={options.Engine} {engineDetails}";
         Debug.WriteLine(message);
         CrashDiagnostics.Log(message);
     }

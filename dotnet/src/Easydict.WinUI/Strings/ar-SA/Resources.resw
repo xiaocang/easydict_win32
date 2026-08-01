@@ -1003,6 +1003,15 @@
   <data name="OcrTestResult" xml:space="preserve">
     <value>نتيجة الاختبار</value>
   </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>لم يتم التعرّف على أي نص. حدّد منطقة أوضح وتحقق من إعداد لغة OCR.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>محرك OCR المحدد غير متاح. لاستخدام OCR في Windows، ثبّت حزمة لغة متوافقة.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>فشل OCR. حاول مرة أخرى أو تحقق من إعدادات OCR.</value>
+  </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>حذف</value>
   </data>

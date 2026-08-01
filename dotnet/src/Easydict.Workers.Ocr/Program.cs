@@ -152,7 +152,7 @@ internal static class Program
             BitmapPixelFormat.Bgra8,
             parameters.PixelWidth,
             parameters.PixelHeight,
-            BitmapAlphaMode.Premultiplied);
+            BitmapAlphaMode.Ignore);
         bitmap.CopyFromBuffer(pixelData.AsBuffer());
         Array.Clear(pixelData);
 

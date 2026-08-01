@@ -1239,6 +1239,15 @@
   <data name="OcrTestResult" xml:space="preserve">
     <value>Test Result</value>
   </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>No text was recognized. Select a clearer region and verify the OCR language setting.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>The selected OCR engine is unavailable. For Windows OCR, install a compatible language pack.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR failed. Please try again or check the OCR settings.</value>
+  </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>Delete</value>
   </data>

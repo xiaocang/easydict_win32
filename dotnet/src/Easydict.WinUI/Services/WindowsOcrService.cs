@@ -65,7 +65,7 @@ public sealed class WindowsOcrService : IOcrService
 
     private static SoftwareBitmap CreateSoftwareBitmap(ReadOnlyMemory<byte> pixelData, int width, int height)
     {
-        var bitmap = new SoftwareBitmap(BitmapPixelFormat.Bgra8, width, height, BitmapAlphaMode.Premultiplied);
+        var bitmap = new SoftwareBitmap(BitmapPixelFormat.Bgra8, width, height, BitmapAlphaMode.Ignore);
         byte[]? temporaryArray = null;
         try
         {

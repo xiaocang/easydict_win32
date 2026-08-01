@@ -957,6 +957,15 @@
   <data name="OcrTestResult" xml:space="preserve">
     <value>ผลการทดสอบ</value>
   </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>ไม่พบข้อความที่จดจำได้ โปรดเลือกพื้นที่ที่ชัดเจนขึ้นและตรวจสอบการตั้งค่าภาษา OCR</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>เครื่องมือ OCR ที่เลือกไม่พร้อมใช้งาน สำหรับ Windows OCR โปรดติดตั้งชุดภาษาที่เข้ากันได้</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR ล้มเหลว โปรดลองอีกครั้งหรือตรวจสอบการตั้งค่า OCR</value>
+  </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>ลบ</value>
   </data>

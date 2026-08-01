@@ -14,8 +14,7 @@ namespace Easydict.DirectXaml.Layout;
 /// </summary>
 public sealed class LayoutEngine(CompiledView view, ITextMeasurerFactory measurers)
 {
-    /// <summary>Stands in for an unbounded constraint without risking arithmetic overflow.</summary>
-    internal const double Unbounded = 1_000_000;
+    private const double Unbounded = Size.Unbounded;
 
     public const double DefaultFontSize = 14;
 

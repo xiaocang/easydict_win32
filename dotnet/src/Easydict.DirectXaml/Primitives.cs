@@ -5,6 +5,15 @@ public readonly record struct Size(double Width, double Height)
 {
     public static readonly Size Empty = new(0, 0);
 
+    /// <summary>
+    /// Stands in for an unbounded constraint. A finite value avoids the overflow and NaN traps
+    /// that <see cref="double.PositiveInfinity"/> introduces once sizes start being added up.
+    /// </summary>
+    public const double Unbounded = 1_000_000;
+
+    /// <summary>A constraint fixed in width and unbounded in height — how a list row is measured.</summary>
+    public static Size FromWidth(double width) => new(width, Unbounded);
+
     public Size Deflate(Thickness by) =>
         new(Math.Max(0, Width - by.Horizontal), Math.Max(0, Height - by.Vertical));
 

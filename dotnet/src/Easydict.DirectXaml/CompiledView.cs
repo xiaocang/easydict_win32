@@ -61,6 +61,12 @@ public sealed class CompiledView
 
     public IReadOnlyList<int> ChildrenOf(int node) => _ir.Nodes[node].Children;
 
+    /// <summary>
+    /// The containing node, or <c>null</c> at the root. Hit testing walks this upwards so a click
+    /// on a leaf still reaches a handler declared on an ancestor, as routed events would.
+    /// </summary>
+    public int? ParentOf(int node) => _ir.Nodes[node].Parent;
+
     /// <summary>Literal text baked into the IR, before any slot override.</summary>
     public string? LiteralTextOf(int node) => _ir.Nodes[node].Text;
 

@@ -200,7 +200,11 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     private static string GetStatusText(ServiceQueryResult serviceResult) =>
         ServiceResultStatusTextProvider.GetStatusText(serviceResult);
 
-    private static string GetMinimalDisplayText(ServiceQueryResult serviceResult)
+    /// <remarks>
+    /// Shared with <see cref="DirectServiceResultItem"/> so both renderers derive display text
+    /// identically; duplicating this would let the two drift apart silently.
+    /// </remarks>
+    internal static string GetMinimalDisplayText(ServiceQueryResult serviceResult)
     {
         var displayText = serviceResult.DisplayText;
         if (!string.IsNullOrWhiteSpace(displayText))

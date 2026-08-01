@@ -49,6 +49,7 @@ build-debug: restore
 test: restore
 	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"
 	dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal"
+	dotnet test tests/Easydict.DirectXaml.Tests --logger "console;verbosity=minimal"
 	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"
 	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
 

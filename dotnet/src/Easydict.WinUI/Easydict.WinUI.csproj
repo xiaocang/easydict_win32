@@ -298,6 +298,17 @@
       <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj"
                         Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
       <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
+      <ProjectReference Include="..\Easydict.DirectXaml\Easydict.DirectXaml.csproj" />
+      <ProjectReference Include="..\Easydict.DirectXaml.Win2D\Easydict.DirectXaml.Win2D.csproj" />
+    </ItemGroup>
+
+    <!-- Compiled Direct XAML IR for the experimental direct renderer.
+         Conditional because the file is produced by `dxamlc` and checked in separately; until it
+         is, DirectServiceResultItem.IsAvailable reports false and the host keeps using the XAML
+         renderers. This is what decouples "does the rendering work" from "is the build wired up". -->
+    <ItemGroup>
+      <EmbeddedResource Include="Views\Controls\MinimalServiceResultItem.dxir.json"
+                        Condition="Exists('Views\Controls\MinimalServiceResultItem.dxir.json')" />
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
       <!-- Windows AI APIs / Phi Silica provider (windows-local-ai). Compile-only;
            runtime availability is checked dynamically and the service degrades gracefully

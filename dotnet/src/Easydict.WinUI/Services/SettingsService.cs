@@ -241,6 +241,13 @@ public sealed class SettingsService
     public bool MouseSelectionTranslate { get; set; } = true;
 
     /// <summary>
+    /// Render translation-result cards by painting compiled XAML directly onto a Win2D canvas
+    /// instead of building a FrameworkElement tree. Experimental and off by default: it does not
+    /// yet support text selection inside a result, which the XAML renderers do.
+    /// </summary>
+    public bool DirectRenderer { get; set; }
+
+    /// <summary>
     /// Process names excluded from mouse selection translate.
     /// When the foreground app matches any name in this list, the pop button is suppressed.
     /// </summary>
@@ -791,6 +798,7 @@ public sealed class SettingsService
         UseLocalAiWorker = ResolveWorkerIsolationSetting(nameof(UseLocalAiWorker), DisableLocalAiWorkerEnvironmentVariable);
         UseOcrWorker = ResolveWorkerIsolationSetting(nameof(UseOcrWorker), DisableOcrWorkerEnvironmentVariable);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
+        DirectRenderer = GetValue(nameof(DirectRenderer), false);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
@@ -1052,6 +1060,7 @@ public sealed class SettingsService
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
+        _settings[nameof(DirectRenderer)] = DirectRenderer;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;

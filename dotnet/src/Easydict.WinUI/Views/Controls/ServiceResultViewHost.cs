@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
@@ -16,9 +17,7 @@ internal static class ServiceResultViewHost
         FrameworkElement? themeRoot = null,
         EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
-        IServiceResultView control = MinimalThemeService.IsActive
-            ? new MinimalServiceResultItem()
-            : new ServiceResultItem();
+        IServiceResultView control = CreateRenderer(themeRoot);
 
         control.ThemeRoot = themeRoot;
         control.CollapseToggled += collapseToggled;
@@ -53,6 +52,30 @@ internal static class ServiceResultViewHost
         resultsPanel.Items.Add(control.Element);
         control.RefreshThemeChrome();
         return control;
+    }
+
+    private static IServiceResultView CreateRenderer(FrameworkElement? themeRoot)
+    {
+        if (SettingsService.Instance.DirectRenderer && DirectServiceResultItem.IsAvailable)
+        {
+            try
+            {
+                return new DirectServiceResultItem(themeRoot);
+            }
+            catch (Exception ex)
+            {
+                // Deliberately broad: this is a resilience boundary, not error handling. The
+                // direct renderer is experimental and reaches compiled IR, embedded resources and
+                // a Win2D device, any of which can fail on a given machine. None of that may take
+                // the results view down, so anything at all falls back to the XAML renderer.
+                Debug.WriteLine(
+                    $"[ServiceResultViewHost] direct renderer unavailable, falling back to XAML: {ex.Message}");
+            }
+        }
+
+        return MinimalThemeService.IsActive
+            ? new MinimalServiceResultItem()
+            : new ServiceResultItem();
     }
 
     private static void ApplyAutomationProperties(IServiceResultView control, ServiceQueryResult result)
@@ -118,6 +141,13 @@ internal static class ServiceResultViewHost
                 control.FoundryLocalStartRequested -= foundryLocalStartRequested;
             }
             control.Cleanup();
+
+            // The direct renderer owns a Win2D device and cached text formats; the XAML renderers
+            // are not disposable, so this is a no-op for them.
+            if (control is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
 
         controls.Clear();

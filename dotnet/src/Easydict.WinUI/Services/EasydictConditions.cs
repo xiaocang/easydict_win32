@@ -60,6 +60,17 @@ internal static class EasydictConditions
         IsStoreBuild;
 #endif
 
+    /// <summary>
+    /// True when global-hotkey registration conflicts may be surfaced to the user.
+    /// Debug and WinUI test builds still register hotkeys but suppress the modal warning.
+    /// </summary>
+    public static bool ShouldShowHotkeyRegistrationWarnings =>
+#if DEBUG || WINUI_TEST
+        false;
+#else
+        true;
+#endif
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, char[]? packageFullName);
 

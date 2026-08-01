@@ -21,6 +21,18 @@ public class UpdateCheckPackagingTests
     }
 
     [Fact]
+    public void WinUiProject_UsesExplicitStoreBuildCompilationSwitch()
+    {
+        var csproj = File.ReadAllText(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "Easydict.WinUI.csproj"));
+
+        csproj.Should().Contain("<DefineConstants Condition=\"'$(EasydictStoreBuild)' == 'true'\">$(DefineConstants);STORE_BUILD</DefineConstants>");
+    }
+
+    [Fact]
     public void ReleaseWorkflow_EnablesUpdateCheckOnlyForPortablePublish()
     {
         var workflow = File.ReadAllText(Path.Combine(
@@ -28,7 +40,7 @@ public class UpdateCheckPackagingTests
             "..",
             ".github",
             "workflows",
-            "release-publish.yml"));
+            "release-publish.yml")).Replace("\r\n", "\n");
 
         var portableStart = workflow.IndexOf("- name: Publish WinUI App (portable)", StringComparison.Ordinal);
         var msixStart = workflow.IndexOf("- name: Publish WinUI App (MSIX)", StringComparison.Ordinal);
@@ -40,6 +52,10 @@ public class UpdateCheckPackagingTests
         portableBlock.Should().Contain("-p:EnableGitHubUpdateCheck=true");
         portableBlock.Should().NotContain("-p:EnableGitHubUpdateCheck=false");
         msixBlock.Should().Contain("-p:EnableGitHubUpdateCheck=false");
+        portableBlock.Should().NotContain("-p:EasydictStoreBuild=true");
+        msixBlock.Should().Contain("-p:EasydictStoreBuild=true");
+        msixBlock.Should().Contain(
+            "-p:WindowsAppSDKSelfContained=false `\n            -p:EasydictStoreBuild=true");
     }
 
     private static string FindProjectRoot()

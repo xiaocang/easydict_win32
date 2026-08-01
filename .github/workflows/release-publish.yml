@@ -210,7 +210,8 @@ jobs:
             -p:PublishReadyToRun=false `
             -p:DebugSymbols=true `
             -p:DebugType=portable `
-            -p:WindowsAppSDKSelfContained=false
+            -p:WindowsAppSDKSelfContained=false `
+            -p:EasydictStoreBuild=true
 
       # Publish NativeBridge into MSIX output (for browser extension support)
       - name: Publish NativeBridge (MSIX)

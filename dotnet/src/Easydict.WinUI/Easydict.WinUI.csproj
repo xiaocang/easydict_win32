@@ -90,6 +90,10 @@
         <EnableGitHubUpdateCheck Condition="'$(EnableGitHubUpdateCheck)' == '' and '$(Configuration)' == 'Debug' and '$(CI)' != 'true'">true</EnableGitHubUpdateCheck>
         <EnableGitHubUpdateCheck Condition="'$(EnableGitHubUpdateCheck)' == ''">false</EnableGitHubUpdateCheck>
         <DefineConstants Condition="'$(EnableGitHubUpdateCheck)' == 'true'">$(DefineConstants);PORTABLE_UPDATE_CHECK</DefineConstants>
+        <!-- Unit and UI automation test app builds suppress global-hotkey conflict dialogs. -->
+        <DefineConstants Condition="'$(EasydictUiTestBuild)' == 'true'">$(DefineConstants);WINUI_TEST</DefineConstants>
+        <!-- Store submission builds opt into Microsoft Store-only UI such as rating. -->
+        <DefineConstants Condition="'$(EasydictStoreBuild)' == 'true'">$(DefineConstants);STORE_BUILD</DefineConstants>
 
         <!-- App Options -->
         <UseRidGraph>true</UseRidGraph>

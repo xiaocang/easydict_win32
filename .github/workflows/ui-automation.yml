@@ -54,7 +54,8 @@ jobs:
             -p:Platform=x64 `
             -p:BuildWorkerOutputs=false `
             -p:PublishTrimmed=false `
-            -p:WindowsAppSDKSelfContained=false
+            -p:WindowsAppSDKSelfContained=false `
+            -p:EasydictUiTestBuild=true
 
       - name: Verify MSIX assets
         shell: pwsh

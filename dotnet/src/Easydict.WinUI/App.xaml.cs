@@ -304,7 +304,8 @@ namespace Easydict.WinUI
                 _hotkeyService.OnOcrTranslate += OnOcrTranslateHotkey;
                 _hotkeyService.OnSilentOcr += OnSilentOcrHotkey;
                 var hotkeyFailures = _hotkeyService.Initialize();
-                QueueHotkeyRegistrationWarning(hotkeyFailures);
+                if (EasydictConditions.ShouldShowHotkeyRegistrationWarnings)
+                    QueueHotkeyRegistrationWarning(hotkeyFailures);
                 CrashDiagnostics.Log("[App] HotkeyService initialization call completed.");
             }
             catch (Exception ex)

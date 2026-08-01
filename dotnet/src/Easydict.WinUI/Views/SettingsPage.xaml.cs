@@ -4563,7 +4563,8 @@ public sealed partial class SettingsPage : Page
 
         // Warn the user about any hotkeys that could not be registered
         // (e.g. reserved by Windows or in use by another app).
-        if (hotkeyFailures is { Count: > 0 })
+        if (EasydictConditions.ShouldShowHotkeyRegistrationWarnings &&
+            hotkeyFailures is { Count: > 0 })
         {
             var lines = hotkeyFailures
                 .Select(f => $"{loc.GetString(f.NameKey)}: {f.HotkeyString}")

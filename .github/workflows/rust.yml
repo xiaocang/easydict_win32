@@ -2,7 +2,9 @@ name: Direct XAML Compiler
 
 on:
   push:
-    branches: [master]
+    # Feature branches are included deliberately: this workflow exists to verify code that
+    # cannot be compiled in the authoring environment, so it has to run before the PR stage.
+    branches: [master, 'claude/**']
     paths:
       - 'compiler/**'
       - '.github/workflows/rust.yml'

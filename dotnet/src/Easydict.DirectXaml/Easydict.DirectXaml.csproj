@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Deliberately plain net8.0, with no WinUI or Win2D dependency.
+
+    Everything that can be tested without a Windows desktop lives here: IR loading, slot storage,
+    invalidation, layout, and display-list generation. The rendering backend is reached only
+    through ITextMeasurerFactory and IResourceResolver, which mirrors how Polyglot.TextLayout
+    keeps its ITextMeasurer seam. That split is what makes the bulk of the direct renderer
+    unit-testable rather than requiring a real device.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Easydict.DirectXaml</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Easydict.DirectXaml.Tests" />
+  </ItemGroup>
+
+</Project>

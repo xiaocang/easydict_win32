@@ -158,6 +158,53 @@ public class CustomApiOcrServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecognizeAsync_PrefersCompletedText_OverLongerTruncatedText()
+    {
+        var handler = SequencedHandler(
+            ChatCompletionsResponse("a much longer partial result", finishReason: "length"),
+            ChatCompletionsResponse("complete"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("complete");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("""{"choices":[]}""")]
+    public async Task RecognizeAsync_PreservesPartial_WhenRetryIsInvalid(string invalidResponse)
+    {
+        var handler = SequencedHandler(
+            ChatCompletionsResponse("partial result", finishReason: "length"),
+            invalidResponse);
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("partial result");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_PreservesPartial_WhenChatRetryIsContentFiltered()
+    {
+        var handler = SequencedHandler(
+            ChatCompletionsResponse("partial result", finishReason: "length"),
+            ChatCompletionsResponse(string.Empty, finishReason: "content_filter"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("partial result");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024);
+    }
+
+    [Fact]
     public async Task RecognizeAsync_DoublesMaxTokens_WhenResponsesGenerationIsIncomplete()
     {
         var handler = SequencedHandler(
@@ -169,6 +216,23 @@ public class CustomApiOcrServiceTests : IDisposable
         var result = await service.RecognizeAsync(new byte[4], 1, 1);
 
         result.Text.Should().Be("the complete recognized text");
+        handler.RequestBodies.Select(MaxOutputTokensOf).Should().Equal(512, 1024);
+    }
+
+    [Theory]
+    [InlineData("failed")]
+    [InlineData("cancelled")]
+    public async Task RecognizeAsync_PreservesPartial_WhenResponsesRetryDoesNotComplete(string status)
+    {
+        var handler = SequencedHandler(
+            ResponsesResponse("partial result", status: "incomplete", incompleteReason: "max_output_tokens"),
+            ResponsesResponse(string.Empty, status));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("partial result");
         handler.RequestBodies.Select(MaxOutputTokensOf).Should().Equal(512, 1024);
     }
 
@@ -216,6 +280,67 @@ public class CustomApiOcrServiceTests : IDisposable
         var result = await service.RecognizeAsync(new byte[4], 1, 1);
 
         result.Text.Should().Be("the complete recognized text");
+        handler.RequestBodies.Select(MaxOutputTokensOf).Should().Equal(512, 1024, 2048);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_RetriesEmptyMetadataLessChatResponse_ToCeiling()
+    {
+        var handler = SequencedHandler(
+            """{"choices":[{"message":{}}]}""",
+            ChatCompletionsResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions(enableThinking: true));
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("recognized text");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(2048, 4096);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_RetriesEmptyMetadataLessResponsesResponse_ToCeiling()
+    {
+        var handler = SequencedHandler(
+            "{}",
+            ResponsesResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(
+            client,
+            ResponsesOptions(enableThinking: true));
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("recognized text");
+        handler.RequestBodies.Select(MaxOutputTokensOf).Should().Equal(2048, 4096);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_StopsEmptyMetadataLessChatResponse_AtLegacyBudget_WhenThinkingIsDisabled()
+    {
+        var handler = SequencedHandler(
+            """{"choices":[{"message":{}}]}""",
+            """{"choices":[{"message":{}}]}""",
+            """{"choices":[{"message":{}}]}""");
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().BeEmpty();
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024, 2048);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_StopsEmptyMetadataLessResponsesResponse_AtLegacyBudget_WhenThinkingIsDisabled()
+    {
+        var handler = SequencedHandler("{}", "{}", "{}");
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().BeEmpty();
         handler.RequestBodies.Select(MaxOutputTokensOf).Should().Equal(512, 1024, 2048);
     }
 

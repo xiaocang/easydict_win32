@@ -1447,19 +1447,8 @@ namespace Easydict.WinUI
                         _isSystemShutdownRequested = true;
                         CrashDiagnostics.Log(
                             $"[AppWindow] WM_ENDSESSION confirmed, reasonFlags=0x{unchecked((nuint)lParam):X}");
-                        try
-                        {
-                            Application.Current.Exit();
-                        }
-                        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
-                        {
-                            CrashDiagnostics.LogException(
-                                "AppWindowSubclassWndProc.Application.Exit",
-                                ex,
-                                isTerminating: false,
-                                isHandled: true);
-                            Environment.Exit(0);
-                        }
+                        _trayIconService?.ExitApplication();
+                        Environment.Exit(0);
 
                         return 0;
 

@@ -62,8 +62,8 @@ public sealed class CustomApiOcrService : IOcrService
         var usesResponses = UsesResponsesEndpoint(endpoint);
 
         // Start small — a screenshot rarely needs more — and grow only when the provider
-        // reports the response was cut off. Each attempt is a fresh completion, so the
-        // longest one wins rather than being concatenated.
+        // reports the response was cut off. Each attempt is a fresh completion, so a
+        // completed response wins; the longest partial is retained only at the ceiling.
         var maxTokens = _options.GetInitialMaxTokens();
         var recognizedText = string.Empty;
 
@@ -71,12 +71,23 @@ public sealed class CustomApiOcrService : IOcrService
         {
             var attempt = await SendAttemptAsync(base64Image, usesResponses, maxTokens, cancellationToken);
 
+            if (attempt.IsValid && !attempt.Truncated)
+            {
+                recognizedText = attempt.Text;
+                break;
+            }
+
             if (attempt.Text.Length > recognizedText.Length)
             {
                 recognizedText = attempt.Text;
             }
 
-            if (!attempt.Truncated || maxTokens >= OcrServiceOptions.MaxTokensCeiling)
+            if (!attempt.Truncated)
+            {
+                break;
+            }
+
+            if (maxTokens >= OcrServiceOptions.MaxTokensCeiling)
             {
                 break;
             }
@@ -118,9 +129,12 @@ public sealed class CustomApiOcrService : IOcrService
 
             if ((int)statusCode is >= 200 and < 300)
             {
+                var emptyResponseRetryCeiling = _options.EnableThinking
+                    ? OcrServiceOptions.MaxTokensCeiling
+                    : OcrServiceOptions.ThinkingMaxTokens;
                 return usesResponses
-                    ? ParseResponsesTextResponse(body, maxTokens)
-                    : ParseOpenAIVisionResponse(body, maxTokens);
+                    ? ParseResponsesTextResponse(body, maxTokens, emptyResponseRetryCeiling)
+                    : ParseOpenAIVisionResponse(body, maxTokens, emptyResponseRetryCeiling);
             }
 
             if (disableThinkingControlField is not null &&
@@ -305,7 +319,10 @@ public sealed class CustomApiOcrService : IOcrService
     /// Extracts text from an OpenAI Vision-compatible JSON response.
     /// Response format: { "choices": [{ "message": { "content": "..." }, "finish_reason": "stop" }] }
     /// </summary>
-    private static VisionApiResult ParseOpenAIVisionResponse(string json, int maxTokens)
+    private static VisionApiResult ParseOpenAIVisionResponse(
+        string json,
+        int maxTokens,
+        int emptyResponseRetryCeiling)
     {
         try
         {
@@ -316,7 +333,7 @@ public sealed class CustomApiOcrService : IOcrService
                 choices.ValueKind != JsonValueKind.Array ||
                 choices.GetArrayLength() == 0)
             {
-                return new VisionApiResult(string.Empty, Truncated: false);
+                return new VisionApiResult(string.Empty, Truncated: false, IsValid: false);
             }
 
             // A thinking model that spent the whole budget reasoning returns no content at
@@ -325,28 +342,38 @@ public sealed class CustomApiOcrService : IOcrService
             var text = choice.TryGetProperty("message", out var message) &&
                        message.TryGetProperty("content", out var content) &&
                        content.ValueKind == JsonValueKind.String
-                ? content.GetString()
-                : null;
+                ? content.GetString()?.Trim() ?? string.Empty
+                : string.Empty;
+            var hasFinishReason =
+                choice.TryGetProperty("finish_reason", out var finishReason) &&
+                finishReason.ValueKind == JsonValueKind.String;
+            var isCompleted = hasFinishReason &&
+                string.Equals(finishReason.GetString(), "stop", StringComparison.OrdinalIgnoreCase);
 
             return new VisionApiResult(
-                text?.Trim() ?? string.Empty,
-                IsChatCompletionTruncated(root, choice, maxTokens));
+                text,
+                IsChatCompletionTruncated(
+                    root, choice, maxTokens, text.Length > 0, emptyResponseRetryCeiling),
+                isCompleted || (!hasFinishReason && text.Length > 0));
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[CustomApiOcr] Failed to parse response: {ex.Message}");
-            return new VisionApiResult(string.Empty, Truncated: false);
+            return new VisionApiResult(string.Empty, Truncated: false, IsValid: false);
         }
     }
 
     /// <summary>
-    /// Whether the model stopped because it ran out of output tokens. Providers that omit
-    /// both finish metadata and usage are retried up to the former 2048-token budget.
+    /// Whether the model stopped because it ran out of output tokens. Metadata-less
+    /// responses with content are retried to the former 2048-token budget; when thinking is
+    /// enabled, empty responses are retried to the ceiling because reasoning may consume it.
     /// </summary>
     private static bool IsChatCompletionTruncated(
         JsonElement root,
         JsonElement choice,
-        int maxTokens)
+        int maxTokens,
+        bool hasText,
+        int emptyResponseRetryCeiling)
     {
         if (choice.TryGetProperty("finish_reason", out var finishReason) &&
             finishReason.ValueKind == JsonValueKind.String)
@@ -365,31 +392,47 @@ public sealed class CustomApiOcrService : IOcrService
             return used >= maxTokens;
         }
 
-        return maxTokens < OcrServiceOptions.ThinkingMaxTokens;
+        return maxTokens < (hasText
+            ? OcrServiceOptions.ThinkingMaxTokens
+            : emptyResponseRetryCeiling);
     }
 
-    private static VisionApiResult ParseResponsesTextResponse(string json, int maxTokens)
+    private static VisionApiResult ParseResponsesTextResponse(
+        string json,
+        int maxTokens,
+        int emptyResponseRetryCeiling)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            var truncated = IsResponsesTruncated(root, maxTokens);
+            var hasStatus =
+                root.TryGetProperty("status", out var status) &&
+                status.ValueKind == JsonValueKind.String;
+            var isCompleted = hasStatus &&
+                string.Equals(status.GetString(), "completed", StringComparison.OrdinalIgnoreCase);
 
             if (root.TryGetProperty("output_text", out var outputText))
             {
+                var recognizedText = outputText.GetString()?.Trim() ?? string.Empty;
                 return new VisionApiResult(
-                    outputText.GetString()?.Trim() ?? string.Empty,
-                    truncated);
+                    recognizedText,
+                    IsResponsesTruncated(
+                        root, maxTokens, recognizedText.Length > 0, emptyResponseRetryCeiling),
+                    isCompleted || (!hasStatus && recognizedText.Length > 0));
             }
 
             if (!root.TryGetProperty("output", out var output) ||
                 output.ValueKind != JsonValueKind.Array)
             {
-                return new VisionApiResult(string.Empty, truncated);
+                return new VisionApiResult(
+                    string.Empty,
+                    IsResponsesTruncated(
+                        root, maxTokens, hasText: false, emptyResponseRetryCeiling),
+                    isCompleted);
             }
 
-            var text = new StringBuilder();
+            var textBuilder = new StringBuilder();
             foreach (var outputItem in output.EnumerateArray())
             {
                 if (!outputItem.TryGetProperty("content", out var content) ||
@@ -402,17 +445,22 @@ public sealed class CustomApiOcrService : IOcrService
                 {
                     if (contentItem.TryGetProperty("text", out var textElement))
                     {
-                        text.Append(textElement.GetString());
+                        textBuilder.Append(textElement.GetString());
                     }
                 }
             }
 
-            return new VisionApiResult(text.ToString().Trim(), truncated);
+            var text = textBuilder.ToString().Trim();
+            return new VisionApiResult(
+                text,
+                IsResponsesTruncated(
+                    root, maxTokens, text.Length > 0, emptyResponseRetryCeiling),
+                isCompleted || (!hasStatus && text.Length > 0));
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[CustomApiOcr] Failed to parse Responses response: {ex.Message}");
-            return new VisionApiResult(string.Empty, Truncated: false);
+            return new VisionApiResult(string.Empty, Truncated: false, IsValid: false);
         }
     }
 
@@ -420,7 +468,11 @@ public sealed class CustomApiOcrService : IOcrService
     /// The Responses API reports a cut-off generation as
     /// { "status": "incomplete", "incomplete_details": { "reason": "max_output_tokens" } }.
     /// </summary>
-    private static bool IsResponsesTruncated(JsonElement root, int maxTokens)
+    private static bool IsResponsesTruncated(
+        JsonElement root,
+        int maxTokens,
+        bool hasText,
+        int emptyResponseRetryCeiling)
     {
         // When the provider reports a status, trust it rather than second-guessing from usage.
         if (root.TryGetProperty("status", out var status) &&
@@ -445,14 +497,16 @@ public sealed class CustomApiOcrService : IOcrService
             return used >= maxTokens;
         }
 
-        return maxTokens < OcrServiceOptions.ThinkingMaxTokens;
+        return maxTokens < (hasText
+            ? OcrServiceOptions.ThinkingMaxTokens
+            : emptyResponseRetryCeiling);
     }
 
     /// <summary>
-    /// One completion attempt: the recognized text plus whether it was cut short by the
-    /// token budget.
+    /// One completion attempt: its text, whether the token budget cut it short, and whether
+    /// the response contained enough completion data to supersede an earlier partial.
     /// </summary>
-    private readonly record struct VisionApiResult(string Text, bool Truncated);
+    private readonly record struct VisionApiResult(string Text, bool Truncated, bool IsValid);
 
     private static bool UsesResponsesEndpoint(string endpoint)
     {

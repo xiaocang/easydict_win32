@@ -43,6 +43,7 @@ public class DirectXamlTests
         { "node": 1, "name": "BorderBrush", "value": { "type": "color", "argb": "#FF102030" } },
         { "node": 2, "name": "Spacing", "value": { "type": "double", "value": 6 } },
         { "node": 3, "name": "Text", "value": { "type": "string", "value": "AB" } },
+        { "node": 3, "name": "TextWrapping", "value": { "type": "enum", "enum": "TextWrapping", "value": "Wrap" } },
         { "node": 4, "name": "Text", "value": { "type": "string", "value": "CD" } }
       ],
       "named_slots": [

@@ -1501,6 +1501,8 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.OffContent = toggleOff;
         LaunchAtStartupToggle.OnContent = toggleOn;
         LaunchAtStartupToggle.OffContent = toggleOff;
+        OcrEnableThinkingToggle.OnContent = toggleOn;
+        OcrEnableThinkingToggle.OffContent = toggleOff;
 
         // Hotkeys section
         if (HotkeysHeaderText != null)

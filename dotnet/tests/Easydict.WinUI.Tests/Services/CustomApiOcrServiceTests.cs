@@ -188,6 +188,38 @@ public class CustomApiOcrServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecognizeAsync_RetriesMetadataLessChatResponse_ToLegacyBudget()
+    {
+        var handler = SequencedHandler(
+            """{"choices":[{"message":{"content":"partial"}}]}""",
+            """{"choices":[{"message":{"content":"longer partial"}}]}""",
+            """{"choices":[{"message":{"content":"the complete recognized text"}}]}""");
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("the complete recognized text");
+        handler.RequestBodies.Select(MaxTokensOf).Should().Equal(512, 1024, 2048);
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_RetriesMetadataLessResponsesResponse_ToLegacyBudget()
+    {
+        var handler = SequencedHandler(
+            """{"output_text":"partial"}""",
+            """{"output_text":"longer partial"}""",
+            """{"output_text":"the complete recognized text"}""");
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("the complete recognized text");
+        handler.RequestBodies.Select(MaxOutputTokensOf).Should().Equal(512, 1024, 2048);
+    }
+
+    [Fact]
     public async Task RecognizeAsync_StopsEscalatingAtCeiling_AndKeepsLongestText()
     {
         var handler = SequencedHandler(
@@ -233,6 +265,21 @@ public class CustomApiOcrServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecognizeAsync_UsesReasoningEffort_ForGpt5ChatCompletions()
+    {
+        var handler = StubHandler(ChatCompletionsResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(
+            client,
+            ChatCompletionsOptions(model: "gpt-5.4-mini"));
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        StringAt(handler.RequestBodies[0], "reasoning_effort").Should().Be("none");
+        HasProperty(handler.RequestBodies[0], "thinking").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RecognizeAsync_OmitsThinkingField_WhenThinkingIsEnabled()
     {
         var handler = StubHandler(ChatCompletionsResponse("recognized text"));
@@ -256,6 +303,18 @@ public class CustomApiOcrServiceTests : IDisposable
         StringAt(handler.RequestBodies[0], "reasoning", "effort").Should().Be("none");
         HasProperty(handler.RequestBodies[0], "thinking").Should().BeFalse(
             "the Responses API has no thinking field");
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_OmitsUnsupportedReasoningEffort_ForGpt5Pro()
+    {
+        var handler = StubHandler(ResponsesResponse("recognized text"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ResponsesOptions(model: "gpt-5.4-pro"));
+
+        await service.RecognizeAsync(new byte[4], 1, 1);
+
+        HasProperty(handler.RequestBodies[0], "reasoning").Should().BeFalse();
     }
 
     [Fact]
@@ -311,6 +370,21 @@ public class CustomApiOcrServiceTests : IDisposable
     }
 
     [Fact]
+    public void RejectionCache_PreservesEndpointPathAndModelCase()
+    {
+        OcrThinkingSupport.MarkRejectedBy(
+            "https://example.com/V1/chat/completions",
+            "Vision-A");
+
+        OcrThinkingSupport.IsRejectedBy(
+            "https://example.com/v1/chat/completions",
+            "Vision-A").Should().BeFalse();
+        OcrThinkingSupport.IsRejectedBy(
+            "https://example.com/V1/chat/completions",
+            "vision-a").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RecognizeAsync_ThrowsWithResponseBody_WhenErrorIsUnrelatedToThinking()
     {
         var handler = StubHandler("""{"error":{"message":"invalid api key"}}""", HttpStatusCode.Unauthorized);
@@ -325,7 +399,41 @@ public class CustomApiOcrServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RecognizeAsync_StripsInlineThinkingMarkupFromRecognizedText()
+    public async Task RecognizeAsync_DoesNotRetryForUnrelatedErrorContainingThink()
+    {
+        var handler = StubHandler(
+            """{"error":{"message":"I think the image text includes \"thinking\", but its dimensions are invalid"}}""",
+            HttpStatusCode.BadRequest);
+        using var client = new HttpClient(handler);
+        var options = ChatCompletionsOptions();
+        var service = new CustomApiOcrService(client, options);
+
+        var act = async () => await service.RecognizeAsync(new byte[4], 1, 1);
+
+        await act.Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*400*I think the image text includes*");
+        handler.RequestBodies.Should().HaveCount(1);
+        OcrThinkingSupport.IsRejectedBy(options.Endpoint, options.Model).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsThinkingFieldRejection_RequiresTheFieldActuallySent()
+    {
+        const string body =
+            """{"error":{"message":"Unsupported request parameter","param":"reasoning_effort"}}""";
+
+        OcrThinkingSupport.IsThinkingFieldRejection(
+            HttpStatusCode.BadRequest,
+            body,
+            "reasoning_effort").Should().BeTrue();
+        OcrThinkingSupport.IsThinkingFieldRejection(
+            HttpStatusCode.BadRequest,
+            body,
+            "thinking").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_PreservesLiteralThinkingTags_WhenThinkingIsEnabled()
     {
         var handler = StubHandler(
             ChatCompletionsResponse("<think>The image shows a sign.</think>\\nSTOP"));
@@ -334,19 +442,34 @@ public class CustomApiOcrServiceTests : IDisposable
 
         var result = await service.RecognizeAsync(new byte[4], 1, 1);
 
-        result.Text.Should().Be("STOP");
+        result.Text.Should().Be("<think>The image shows a sign.</think>\nSTOP");
+    }
+
+    [Fact]
+    public async Task RecognizeAsync_PreservesLiteralThinkingTags_WhenThinkingIsDisabled()
+    {
+        var handler = StubHandler(
+            ChatCompletionsResponse("Before <think>visible</think> after"));
+        using var client = new HttpClient(handler);
+        var service = new CustomApiOcrService(client, ChatCompletionsOptions());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("Before <think>visible</think> after");
     }
 
     #endregion
 
     #region Helpers
 
-    private static OcrServiceOptions ChatCompletionsOptions(bool enableThinking = false) =>
+    private static OcrServiceOptions ChatCompletionsOptions(
+        bool enableThinking = false,
+        string model = "mimo-vl") =>
         new(
             OcrEngineType.CustomApi,
             "test-key",
             "https://example.com/v1/chat/completions",
-            "mimo-vl",
+            model,
             "extract the text",
             enableThinking);
 

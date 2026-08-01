@@ -18,6 +18,10 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class CustomApiOcrService : IOcrService
 {
+    private const string ThinkingControlField = "thinking";
+    private const string ReasoningControlField = "reasoning";
+    private const string ReasoningEffortControlField = "reasoning_effort";
+
     private readonly HttpClient _httpClient;
     private readonly OcrServiceOptions _options;
 
@@ -105,12 +109,12 @@ public sealed class CustomApiOcrService : IOcrService
         int maxTokens,
         CancellationToken cancellationToken)
     {
-        var includeThinkingField = ShouldSendThinkingField(usesResponses);
+        var disableThinkingControlField = GetDisableThinkingControlField(usesResponses);
 
         while (true)
         {
             var (statusCode, body) = await PostRequestAsync(
-                base64Image, usesResponses, maxTokens, includeThinkingField, cancellationToken);
+                base64Image, usesResponses, maxTokens, disableThinkingControlField, cancellationToken);
 
             if ((int)statusCode is >= 200 and < 300)
             {
@@ -119,12 +123,16 @@ public sealed class CustomApiOcrService : IOcrService
                     : ParseOpenAIVisionResponse(body, maxTokens);
             }
 
-            if (includeThinkingField && OcrThinkingSupport.IsThinkingFieldRejection(statusCode, body))
+            if (disableThinkingControlField is not null &&
+                OcrThinkingSupport.IsThinkingFieldRejection(
+                    statusCode,
+                    body,
+                    disableThinkingControlField))
             {
                 OcrThinkingSupport.MarkRejectedBy(_options.Endpoint, _options.Model);
-                includeThinkingField = false;
                 Debug.WriteLine(
-                    $"[CustomApiOcr] {_options.Model} rejected the thinking field, retrying without it");
+                    $"[CustomApiOcr] {_options.Model} rejected {disableThinkingControlField}, retrying without it");
+                disableThinkingControlField = null;
                 continue;
             }
 
@@ -139,12 +147,12 @@ public sealed class CustomApiOcrService : IOcrService
         string base64Image,
         bool usesResponses,
         int maxTokens,
-        bool includeThinkingField,
+        string? disableThinkingControlField,
         CancellationToken cancellationToken)
     {
         var requestBody = usesResponses
-            ? BuildResponsesRequestBody(_options.Model, _options.SystemPrompt, base64Image, maxTokens, includeThinkingField)
-            : BuildChatCompletionsRequestBody(_options.Model, _options.SystemPrompt, base64Image, maxTokens, includeThinkingField);
+            ? BuildResponsesRequestBody(_options.Model, _options.SystemPrompt, base64Image, maxTokens, disableThinkingControlField)
+            : BuildChatCompletionsRequestBody(_options.Model, _options.SystemPrompt, base64Image, maxTokens, disableThinkingControlField);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint);
         request.Content = new StringContent(
@@ -171,7 +179,7 @@ public sealed class CustomApiOcrService : IOcrService
 
         using (response)
         {
-            // Read before checking status: a rejected thinking field is only identifiable
+            // Read before checking status: a rejected thinking control is only identifiable
             // from the error body.
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             return (response.StatusCode, body);
@@ -179,21 +187,26 @@ public sealed class CustomApiOcrService : IOcrService
     }
 
     /// <summary>
-    /// Whether to ask the model not to think. Nothing is sent when thinking is enabled —
-    /// the model's own default applies, which is what makes the setting a no-op for models
-    /// without thinking support.
+    /// The exact request field used to ask the model not to think, or null when no compatible
+    /// control should be sent.
     /// </summary>
-    private bool ShouldSendThinkingField(bool usesResponses)
+    private string? GetDisableThinkingControlField(bool usesResponses)
     {
         if (_options.EnableThinking ||
             OcrThinkingSupport.IsRejectedBy(_options.Endpoint, _options.Model))
         {
-            return false;
+            return null;
         }
 
-        // The Responses API has no "thinking" field; the equivalent knob is reasoning
-        // effort, and only the GPT-5 family accepts a value that means "barely think".
-        return !usesResponses || OpenAIService.GetResponsesReasoningEffort(_options.Model) is not null;
+        var hasReasoningEffort =
+            OpenAIService.GetResponsesReasoningEffort(_options.Model) is not null;
+
+        if (usesResponses)
+        {
+            return hasReasoningEffort ? ReasoningControlField : null;
+        }
+
+        return hasReasoningEffort ? ReasoningEffortControlField : ThinkingControlField;
     }
 
     private static string Summarize(string body)
@@ -209,7 +222,7 @@ public sealed class CustomApiOcrService : IOcrService
         string systemPrompt,
         string base64Image,
         int maxTokens,
-        bool disableThinking)
+        string? disableThinkingControlField)
     {
         var body = new Dictionary<string, object?>
         {
@@ -233,9 +246,14 @@ public sealed class CustomApiOcrService : IOcrService
             }
         };
 
-        if (disableThinking)
+        if (disableThinkingControlField == ReasoningEffortControlField &&
+            OpenAIService.GetResponsesReasoningEffort(model) is { } reasoningEffort)
         {
-            body["thinking"] = new { type = "disabled" };
+            body[ReasoningEffortControlField] = reasoningEffort;
+        }
+        else if (disableThinkingControlField == ThinkingControlField)
+        {
+            body[ThinkingControlField] = new { type = "disabled" };
         }
 
         return body;
@@ -253,7 +271,7 @@ public sealed class CustomApiOcrService : IOcrService
         string systemPrompt,
         string base64Image,
         int maxTokens,
-        bool disableThinking)
+        string? disableThinkingControlField)
     {
         var body = new Dictionary<string, object?>
         {
@@ -274,10 +292,10 @@ public sealed class CustomApiOcrService : IOcrService
             }
         };
 
-        if (disableThinking &&
+        if (disableThinkingControlField == ReasoningControlField &&
             OpenAIService.GetResponsesReasoningEffort(model) is { } reasoningEffort)
         {
-            body["reasoning"] = new { effort = reasoningEffort };
+            body[ReasoningControlField] = new { effort = reasoningEffort };
         }
 
         return body;
@@ -311,7 +329,7 @@ public sealed class CustomApiOcrService : IOcrService
                 : null;
 
             return new VisionApiResult(
-                OcrTextSanitizer.StripThinkingMarkup(text),
+                text?.Trim() ?? string.Empty,
                 IsChatCompletionTruncated(root, choice, maxTokens));
         }
         catch (Exception ex)
@@ -323,7 +341,7 @@ public sealed class CustomApiOcrService : IOcrService
 
     /// <summary>
     /// Whether the model stopped because it ran out of output tokens. Providers that omit
-    /// <c>finish_reason</c> are covered by comparing reported usage against the budget.
+    /// both finish metadata and usage are retried up to the former 2048-token budget.
     /// </summary>
     private static bool IsChatCompletionTruncated(
         JsonElement root,
@@ -339,11 +357,15 @@ public sealed class CustomApiOcrService : IOcrService
                 || string.Equals(reason, "max_tokens", StringComparison.OrdinalIgnoreCase);
         }
 
-        return root.TryGetProperty("usage", out var usage) &&
-               usage.TryGetProperty("completion_tokens", out var completionTokens) &&
-               completionTokens.ValueKind == JsonValueKind.Number &&
-               completionTokens.TryGetInt32(out var used) &&
-               used >= maxTokens;
+        if (root.TryGetProperty("usage", out var usage) &&
+            usage.TryGetProperty("completion_tokens", out var completionTokens) &&
+            completionTokens.ValueKind == JsonValueKind.Number &&
+            completionTokens.TryGetInt32(out var used))
+        {
+            return used >= maxTokens;
+        }
+
+        return maxTokens < OcrServiceOptions.ThinkingMaxTokens;
     }
 
     private static VisionApiResult ParseResponsesTextResponse(string json, int maxTokens)
@@ -357,7 +379,7 @@ public sealed class CustomApiOcrService : IOcrService
             if (root.TryGetProperty("output_text", out var outputText))
             {
                 return new VisionApiResult(
-                    OcrTextSanitizer.StripThinkingMarkup(outputText.GetString()),
+                    outputText.GetString()?.Trim() ?? string.Empty,
                     truncated);
             }
 
@@ -385,9 +407,7 @@ public sealed class CustomApiOcrService : IOcrService
                 }
             }
 
-            return new VisionApiResult(
-                OcrTextSanitizer.StripThinkingMarkup(text.ToString()),
-                truncated);
+            return new VisionApiResult(text.ToString().Trim(), truncated);
         }
         catch (Exception ex)
         {
@@ -417,11 +437,15 @@ public sealed class CustomApiOcrService : IOcrService
                    string.Equals(reason.GetString(), "max_output_tokens", StringComparison.OrdinalIgnoreCase);
         }
 
-        return root.TryGetProperty("usage", out var usage) &&
-               usage.TryGetProperty("output_tokens", out var outputTokens) &&
-               outputTokens.ValueKind == JsonValueKind.Number &&
-               outputTokens.TryGetInt32(out var used) &&
-               used >= maxTokens;
+        if (root.TryGetProperty("usage", out var usage) &&
+            usage.TryGetProperty("output_tokens", out var outputTokens) &&
+            outputTokens.ValueKind == JsonValueKind.Number &&
+            outputTokens.TryGetInt32(out var used))
+        {
+            return used >= maxTokens;
+        }
+
+        return maxTokens < OcrServiceOptions.ThinkingMaxTokens;
     }
 
     /// <summary>

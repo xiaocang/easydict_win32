@@ -125,6 +125,7 @@ public sealed class OpenAIService : BaseOpenAIService
         }
 
         return length > 0
+            && !suffix[length..].StartsWith("-pro", StringComparison.Ordinal)
             && int.TryParse(suffix[..length], out var minorVersion)
             && minorVersion >= 1;
     }

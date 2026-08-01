@@ -129,6 +129,19 @@ public class OllamaOcrServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecognizeAsync_PreservesLiteralThinkingTags_WhenThinkingIsDisabled()
+    {
+        var handler = StubHandler(
+            """{"response":"Before <think>visible</think> after"}""");
+        using var client = new HttpClient(handler);
+        var service = new OllamaOcrService(client, Options());
+
+        var result = await service.RecognizeAsync(new byte[4], 1, 1);
+
+        result.Text.Should().Be("Before <think>visible</think> after");
+    }
+
+    [Fact]
     public async Task RecognizeAsync_OmitsThinkField_WhenThinkingIsEnabled()
     {
         var handler = StubHandler("""{"response":"recognized text"}""");
@@ -156,7 +169,8 @@ public class OllamaOcrServiceTests : IDisposable
                 }
                 : new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("""{"response":"recognized text"}""")
+                    Content = new StringContent(
+                        """{"response":"Before <think>visible</think> after"}""")
                 });
         });
         using var client = new HttpClient(handler);
@@ -164,7 +178,7 @@ public class OllamaOcrServiceTests : IDisposable
 
         var result = await service.RecognizeAsync(new byte[4], 1, 1);
 
-        result.Text.Should().Be("recognized text");
+        result.Text.Should().Be("Before <think>visible</think> after");
         handler.RequestBodies.Should().HaveCount(2);
         HasThinkField(handler.RequestBodies[0]).Should().BeTrue();
         HasThinkField(handler.RequestBodies[1]).Should().BeFalse();
@@ -185,7 +199,7 @@ public class OllamaOcrServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RecognizeAsync_StripsInlineThinkingMarkupFromRecognizedText()
+    public async Task RecognizeAsync_PreservesLiteralThinkingTags_WhenThinkingIsEnabled()
     {
         var handler = StubHandler(
             """{"response":"<think>This looks like a road sign.</think>\nSTOP"}""");
@@ -194,7 +208,7 @@ public class OllamaOcrServiceTests : IDisposable
 
         var result = await service.RecognizeAsync(new byte[4], 1, 1);
 
-        result.Text.Should().Be("STOP");
+        result.Text.Should().Be("<think>This looks like a road sign.</think>\nSTOP");
     }
 
     private static bool HasThinkField(string requestBody)

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Text.Json;
 
 namespace Easydict.WinUI.Services;
 
@@ -17,41 +18,122 @@ namespace Easydict.WinUI.Services;
 /// </remarks>
 internal static class OcrThinkingSupport
 {
-    private static readonly ConcurrentDictionary<string, bool> _rejectedConfigurations =
-        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<(string Endpoint, string Model), bool>
+        _rejectedConfigurations = new();
+
+    private static readonly string[] _rejectionTerms =
+    [
+        "unknown",
+        "unrecognized",
+        "unsupported",
+        "not supported",
+        "not permitted",
+        "does not support",
+        "extra_forbidden",
+        "extra inputs are not permitted",
+    ];
+
 
     /// <summary>
     /// Whether this endpoint/model pair has already rejected the thinking field.
     /// </summary>
     public static bool IsRejectedBy(string endpoint, string model)
-        => _rejectedConfigurations.ContainsKey(BuildKey(endpoint, model));
+        => _rejectedConfigurations.ContainsKey((endpoint, model));
 
     /// <summary>
     /// Records that this endpoint/model pair rejects the thinking field.
     /// </summary>
     public static void MarkRejectedBy(string endpoint, string model)
-        => _rejectedConfigurations[BuildKey(endpoint, model)] = true;
+        => _rejectedConfigurations[(endpoint, model)] = true;
 
     /// <summary>
-    /// Whether a failed response looks like "I don't know this thinking parameter" rather
-    /// than a genuine request error worth surfacing to the user.
+    /// Whether a failed response says the exact control field sent by the caller was rejected.
     /// </summary>
-    public static bool IsThinkingFieldRejection(HttpStatusCode statusCode, string? responseBody)
+    public static bool IsThinkingFieldRejection(
+        HttpStatusCode statusCode,
+        string? responseBody,
+        string fieldName)
     {
         if (statusCode is not (HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity))
         {
             return false;
         }
 
-        return !string.IsNullOrEmpty(responseBody)
-            && (responseBody.Contains("think", StringComparison.OrdinalIgnoreCase)
-                || responseBody.Contains("reasoning", StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrEmpty(responseBody))
+        {
+            return false;
+        }
+
+        if (HasStructuredFieldParam(responseBody, fieldName))
+        {
+            return true;
+        }
+
+        var namesSentField = ContainsFieldToken(responseBody, fieldName);
+        var hasRejectionSemantics = _rejectionTerms.Any(
+            term => responseBody.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+        // Ollama names its `think` request field "thinking" in this known rejection.
+        return namesSentField && hasRejectionSemantics
+            || string.Equals(fieldName, "think", StringComparison.Ordinal)
+            && responseBody.Contains("does not support thinking", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool HasStructuredFieldParam(string responseBody, string fieldName)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            var root = document.RootElement;
+            var error = root.TryGetProperty("error", out var errorElement) &&
+                        errorElement.ValueKind == JsonValueKind.Object
+                ? errorElement
+                : root;
+
+            return error.TryGetProperty("param", out var param) &&
+                   param.ValueKind == JsonValueKind.String &&
+                   IsSameFieldPath(param.GetString(), fieldName);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSameFieldPath(string? value, string fieldName)
+    {
+        return string.Equals(value, fieldName, StringComparison.OrdinalIgnoreCase)
+            || value?.StartsWith(fieldName + ".", StringComparison.OrdinalIgnoreCase) == true
+            || value?.StartsWith(fieldName + "[", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool ContainsFieldToken(string text, string fieldName)
+    {
+        var searchStart = 0;
+
+        while (text.IndexOf(fieldName, searchStart, StringComparison.OrdinalIgnoreCase) is var index &&
+               index >= 0)
+        {
+            var end = index + fieldName.Length;
+            var hasLeftBoundary = index == 0 || !IsFieldNameCharacter(text[index - 1]);
+            var hasRightBoundary = end == text.Length || !IsFieldNameCharacter(text[end]);
+            if (hasLeftBoundary && hasRightBoundary)
+            {
+                return true;
+            }
+
+            searchStart = end;
+        }
+
+        return false;
+    }
+
+    private static bool IsFieldNameCharacter(char value) =>
+        char.IsLetterOrDigit(value) || value == '_';
 
     /// <summary>
     /// Clears the cache so tests do not leak state into each other.
     /// </summary>
     internal static void ResetForTests() => _rejectedConfigurations.Clear();
 
-    private static string BuildKey(string endpoint, string model) => $"{endpoint}|{model}";
 }

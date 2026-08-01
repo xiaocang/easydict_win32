@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: 'Service to test (all, google, openai, deepl, deepseek, groq, zhipu, github-models, gemini, doubao, caiyun, niutrans, volcano, linguee, bing, youdao, phonetic)'
+        description: 'Service to test (all, google, openai, deepl, deepseek, groq, zhipu, github-models, gemini, doubao, caiyun, niutrans, volcano, linguee, bing, youdao, phonetic, ocr)'
         required: false
         default: 'all'
         type: choice
@@ -29,6 +29,7 @@ on:
           - bing
           - youdao
           - phonetic
+          - ocr
   workflow_call:
     inputs:
       service:
@@ -58,15 +59,28 @@ jobs:
         with:
           global-json-file: dotnet/global.json
 
-      - name: Restore dependencies
+      - name: Restore translation integration tests
+        if: ${{ inputs.service != 'ocr' }}
         working-directory: dotnet
         run: dotnet restore tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj
 
-      - name: Build test project
+      - name: Restore OCR integration tests
+        if: ${{ inputs.service == 'all' || inputs.service == 'ocr' }}
+        working-directory: dotnet
+        run: dotnet restore tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj -p:Platform=x64 -p:BuildWorkerOutputs=false
+
+      - name: Build translation integration tests
+        if: ${{ inputs.service != 'ocr' }}
         working-directory: dotnet
         run: dotnet build tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-restore
 
+      - name: Build OCR integration tests
+        if: ${{ inputs.service == 'all' || inputs.service == 'ocr' }}
+        working-directory: dotnet
+        run: dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj --configuration Debug --no-restore -p:Platform=x64 -p:BuildWorkerOutputs=false
+
       - name: Run integration tests
+        if: ${{ inputs.service != 'ocr' }}
         working-directory: dotnet
         env:
           DEEPL_API_KEY: ${{ secrets.DEEPL_API_KEY }}
@@ -90,6 +104,11 @@ jobs:
           }
           Write-Host "Running integration tests with filter: $filter"
           dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-build --verbosity normal --filter "$filter" --logger "trx;LogFileName=integration-test-results.trx"
+
+      - name: Run OCR integration tests
+        if: ${{ inputs.service == 'all' || inputs.service == 'ocr' }}
+        working-directory: dotnet
+        run: dotnet test tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj --configuration Debug --no-build --verbosity normal -p:Platform=x64 --filter "Category=Integration&Service=ocr" --logger "trx;LogFileName=ocr-integration-test-results.trx"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

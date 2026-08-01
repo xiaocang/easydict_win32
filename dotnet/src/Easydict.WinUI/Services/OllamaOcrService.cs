@@ -84,7 +84,8 @@ public sealed class OllamaOcrService : IOcrService
                 };
             }
 
-            if (disableThinking && OcrThinkingSupport.IsThinkingFieldRejection(statusCode, body))
+            if (disableThinking &&
+                OcrThinkingSupport.IsThinkingFieldRejection(statusCode, body, "think"))
             {
                 OcrThinkingSupport.MarkRejectedBy(endpoint, model);
                 disableThinking = false;
@@ -159,7 +160,7 @@ public sealed class OllamaOcrService : IOcrService
             using var doc = JsonDocument.Parse(json);
             var text = doc.RootElement.GetProperty("response").GetString();
 
-            return OcrTextSanitizer.StripThinkingMarkup(text);
+            return text?.Trim() ?? string.Empty;
         }
         catch (Exception ex)
         {

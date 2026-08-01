@@ -351,22 +351,53 @@ mod tests {
     #[test]
     fn values_use_the_documented_shapes() {
         let cases = vec![
-            (IrValue::Resource { resource: 3 }, r#"{"type":"resource","resource":3}"#),
-            (IrValue::Double { value: 12.0 }, r#"{"type":"double","value":12.0}"#),
-            (IrValue::Length { value: IrLength::Auto }, r#"{"type":"length","value":{"kind":"auto"}}"#),
             (
-                IrValue::GridLength { value: IrGridLength::Star { value: 2.0 } },
+                IrValue::Resource { resource: 3 },
+                r#"{"type":"resource","resource":3}"#,
+            ),
+            (
+                IrValue::Double { value: 12.0 },
+                r#"{"type":"double","value":12.0}"#,
+            ),
+            (
+                IrValue::Length {
+                    value: IrLength::Auto,
+                },
+                r#"{"type":"length","value":{"kind":"auto"}}"#,
+            ),
+            (
+                IrValue::GridLength {
+                    value: IrGridLength::Star { value: 2.0 },
+                },
                 r#"{"type":"gridLength","value":{"kind":"star","value":2.0}}"#,
             ),
             (
-                IrValue::Thickness { value: [0.0, 0.0, 0.0, 2.0] },
+                IrValue::Thickness {
+                    value: [0.0, 0.0, 0.0, 2.0],
+                },
                 r#"{"type":"thickness","value":[0.0,0.0,0.0,2.0]}"#,
             ),
-            (IrValue::Color { argb: "#FF102030".into() }, r#"{"type":"color","argb":"#FF102030"}"#),
-            (IrValue::Str { value: "hi".into() }, r#"{"type":"string","value":"hi"}"#),
-            (IrValue::Boolean { value: true }, r#"{"type":"bool","value":true}"#),
+            // Doubled hashes: the expected JSON contains `"#`, which would otherwise terminate an
+            // `r#"..."#` literal early.
             (
-                IrValue::Enumeration { enum_name: "Visibility".into(), value: "Collapsed".into() },
+                IrValue::Color {
+                    argb: "#FF102030".into(),
+                },
+                r##"{"type":"color","argb":"#FF102030"}"##,
+            ),
+            (
+                IrValue::Str { value: "hi".into() },
+                r#"{"type":"string","value":"hi"}"#,
+            ),
+            (
+                IrValue::Boolean { value: true },
+                r#"{"type":"bool","value":true}"#,
+            ),
+            (
+                IrValue::Enumeration {
+                    enum_name: "Visibility".into(),
+                    value: "Collapsed".into(),
+                },
                 r#"{"type":"enum","enum":"Visibility","value":"Collapsed"}"#,
             ),
             (IrValue::Int { value: 1 }, r#"{"type":"int","value":1}"#),

@@ -1,15 +1,10 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Text.Json;
-using Windows.Graphics.Imaging;
-using Windows.Storage.Streams;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
-using Easydict.WinUI.Services.Memory;
 
 namespace Easydict.WinUI.Services;
 
@@ -58,7 +53,7 @@ public sealed class CustomApiOcrService : IOcrService
 
         Debug.WriteLine($"[CustomApiOcr] Sending {pixelWidth}x{pixelHeight} image to {endpoint} (model: {model})");
 
-        var base64Image = await ConvertBgraToBase64JpegAsync(pixelData, pixelWidth, pixelHeight);
+        var base64Image = await OcrImageEncoder.ToBase64PngAsync(pixelData, pixelWidth, pixelHeight);
         var usesResponses = UsesResponsesEndpoint(endpoint);
 
         // Start small — a screenshot rarely needs more — and grow only when the provider
@@ -253,7 +248,7 @@ public sealed class CustomApiOcrService : IOcrService
                         new
                         {
                             type = "image_url",
-                            image_url = new { url = $"data:image/jpeg;base64,{base64Image}" }
+                            image_url = new { url = OcrImageEncoder.ToDataUrl(base64Image) }
                         }
                     }
                 }
@@ -300,7 +295,7 @@ public sealed class CustomApiOcrService : IOcrService
                     content = new object[]
                     {
                         new { type = "input_text", text = systemPrompt },
-                        new { type = "input_image", image_url = $"data:image/jpeg;base64,{base64Image}" }
+                        new { type = "input_image", image_url = OcrImageEncoder.ToDataUrl(base64Image) }
                     }
                 }
             }
@@ -512,65 +507,5 @@ public sealed class CustomApiOcrService : IOcrService
     {
         return Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) &&
                uri.AbsolutePath.TrimEnd('/').EndsWith("/responses", StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Convert BGRA8 pixel data to a base64-encoded JPEG string.
-    /// Uses Windows.Graphics.Imaging for high-quality encoding.
-    /// </summary>
-    private static async Task<string> ConvertBgraToBase64JpegAsync(ReadOnlyMemory<byte> pixelData, int width, int height)
-    {
-        using var stream = new InMemoryRandomAccessStream();
-        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, stream);
-
-        byte[]? temporaryPixels = null;
-        try
-        {
-            var pixels = PixelMemory.ToArrayForInterop(pixelData, out var offset, out var length);
-            if (offset != 0 || length != pixels.Length)
-            {
-                temporaryPixels = pixelData.ToArray();
-                pixels = temporaryPixels;
-            }
-
-            encoder.SetPixelData(
-                BitmapPixelFormat.Bgra8,
-                BitmapAlphaMode.Premultiplied,
-                (uint)width,
-                (uint)height,
-                96,
-                96,
-                pixels);
-        }
-        finally
-        {
-            if (temporaryPixels is not null)
-            {
-                Array.Clear(temporaryPixels);
-            }
-        }
-
-        await encoder.FlushAsync();
-
-        // Convert WinRT stream to Base64
-        var streamSize = stream.Size;
-        if (streamSize > int.MaxValue)
-        {
-            throw new InvalidOperationException("Encoded image is too large to convert to Base64.");
-        }
-
-        var size = (int)streamSize;
-        stream.Seek(0);
-
-        var bytes = ArrayPool<byte>.Shared.Rent(size);
-        try
-        {
-            await stream.ReadAsync(bytes.AsBuffer(0, size), (uint)size, InputStreamOptions.None);
-            return Convert.ToBase64String(bytes, 0, size);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
-        }
     }
 }

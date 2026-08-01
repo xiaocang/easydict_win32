@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Net;
 using System.Text;
@@ -8,8 +7,8 @@ using Easydict.WinUI.Models;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
-/// OCR service using a local Ollama VLM model via the /api/generate endpoint.
-/// Sends the captured image as base64 and extracts text from the model's response.
+/// OCR service using a local or cloud Ollama VLM model via the /api/generate endpoint.
+/// Sends the captured image as base64 PNG and extracts text from the model's response.
 /// </summary>
 public sealed class OllamaOcrService : IOcrService
 {
@@ -55,8 +54,9 @@ public sealed class OllamaOcrService : IOcrService
 
         Debug.WriteLine($"[OllamaOcr] Sending {pixelWidth}x{pixelHeight} image to {endpoint} (model: {model})");
 
-        // Convert BGRA8 pixel data to base64-encoded BMP
-        var base64Image = ConvertBgraToBase64Bmp(pixelData, pixelWidth, pixelHeight);
+        // PNG keeps UI text edges intact. Uncompressed BMP triggers cloud-side 500s on some
+        // Ollama Cloud models (e.g. minimax-m3:cloud).
+        var base64Image = await OcrImageEncoder.ToBase64PngAsync(pixelData, pixelWidth, pixelHeight);
 
         // Thinking models (qwen3, deepseek-r1, ...) reason before answering, which costs a
         // lot of latency for no recognition benefit. Ollama answers 400 "does not support
@@ -182,66 +182,5 @@ public sealed class OllamaOcrService : IOcrService
         return timeout == Timeout.InfiniteTimeSpan
             ? "infinite"
             : $"{timeout.TotalSeconds:0.#}s";
-    }
-
-    /// <summary>
-    /// Convert BGRA8 pixel data to a base64-encoded BMP string.
-    /// Uses a simple uncompressed BMP → base64 approach for portability.
-    /// </summary>
-    private static string ConvertBgraToBase64Bmp(ReadOnlyMemory<byte> bgraMemory, int width, int height)
-    {
-        var bgra = bgraMemory.Span;
-        // Create a BMP file in memory (simpler than PNG, widely supported by vision APIs)
-        var bmpHeaderSize = 54;
-        var rowStride = ((width * 3 + 3) / 4) * 4; // BMP rows are 4-byte aligned
-        var imageDataSize = rowStride * height;
-        var bmpSize = bmpHeaderSize + imageDataSize;
-
-        var bmp = ArrayPool<byte>.Shared.Rent(bmpSize);
-        try
-        {
-            bmp.AsSpan(0, bmpHeaderSize).Clear();
-
-            // BMP file header
-            bmp[0] = 0x42; bmp[1] = 0x4D; // 'BM'
-            BitConverter.GetBytes(bmpSize).CopyTo(bmp, 2);
-            BitConverter.GetBytes(bmpHeaderSize).CopyTo(bmp, 10);
-
-            // DIB header (BITMAPINFOHEADER)
-            BitConverter.GetBytes(40).CopyTo(bmp, 14); // header size
-            BitConverter.GetBytes(width).CopyTo(bmp, 18);
-            BitConverter.GetBytes(height).CopyTo(bmp, 22); // positive = bottom-up
-            BitConverter.GetBytes((short)1).CopyTo(bmp, 26); // planes
-            BitConverter.GetBytes((short)24).CopyTo(bmp, 28); // bpp
-            BitConverter.GetBytes(imageDataSize).CopyTo(bmp, 34);
-
-            // Pixel data (BGRA8 → BGR24, bottom-up)
-            for (var y = 0; y < height; y++)
-            {
-                var srcRow = y * width * 4;
-                var dstRow = bmpHeaderSize + (height - 1 - y) * rowStride;
-                var paddingStart = dstRow + width * 3;
-                var paddingLength = rowStride - width * 3;
-                if (paddingLength > 0)
-                {
-                    bmp.AsSpan(paddingStart, paddingLength).Clear();
-                }
-
-                for (var x = 0; x < width; x++)
-                {
-                    var srcIdx = srcRow + x * 4;
-                    var dstIdx = dstRow + x * 3;
-                    bmp[dstIdx] = bgra[srcIdx];         // B
-                    bmp[dstIdx + 1] = bgra[srcIdx + 1]; // G
-                    bmp[dstIdx + 2] = bgra[srcIdx + 2]; // R
-                }
-            }
-
-            return Convert.ToBase64String(bmp, 0, bmpSize);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(bmp, clearArray: true);
-        }
     }
 }

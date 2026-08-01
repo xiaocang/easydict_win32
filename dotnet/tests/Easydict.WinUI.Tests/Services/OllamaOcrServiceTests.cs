@@ -99,6 +99,31 @@ public class OllamaOcrServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecognizeAsync_SendsPngImagePayload()
+    {
+        var handler = StubHandler("""{"response":"recognized text"}""");
+        using var client = new HttpClient(handler);
+        var service = new OllamaOcrService(client, Options());
+
+        // Opaque red pixel — enough to exercise the encoder path.
+        await service.RecognizeAsync(new byte[] { 0, 0, 255, 255 }, 1, 1);
+
+        using var doc = JsonDocument.Parse(handler.RequestBodies[0]);
+        var imageB64 = doc.RootElement.GetProperty("images")[0].GetString();
+        imageB64.Should().NotBeNullOrEmpty();
+
+        var bytes = Convert.FromBase64String(imageB64!);
+        bytes.Length.Should().BeGreaterThan(8);
+        // PNG signature
+        bytes[0].Should().Be(0x89);
+        bytes[1].Should().Be(0x50);
+        bytes[2].Should().Be(0x4E);
+        bytes[3].Should().Be(0x47);
+        // Must not be a BMP ("BM") payload — Ollama Cloud 500s on BMP for some models.
+        bytes[0].Should().NotBe((byte)'B');
+    }
+
+    [Fact]
     public async Task RecognizeAsync_ThrowsTimeoutException_WhenHttpClientCancelsRequest()
     {
         var handler = new RecordingHttpMessageHandler((_, _) =>

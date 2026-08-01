@@ -55,7 +55,7 @@ public class CustomApiOcrServiceTests : IDisposable
             .GetProperty("image_url")
             .GetProperty("url")
             .GetString()
-            .Should().StartWith("data:image/jpeg;base64,");
+            .Should().StartWith("data:image/png;base64,");
     }
 
     [Fact]
@@ -95,6 +95,11 @@ public class CustomApiOcrServiceTests : IDisposable
             .GetProperty("type")
             .GetString()
             .Should().Be("input_image");
+        doc.RootElement.GetProperty("input")[0]
+            .GetProperty("content")[1]
+            .GetProperty("image_url")
+            .GetString()
+            .Should().StartWith("data:image/png;base64,");
     }
 
     [Fact]

@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    # Feature branches included so work that cannot be compiled in the authoring environment
+    # gets a real build and test run before it reaches a pull request.
+    branches: [master, 'claude/**']
     paths-ignore:
       - '**.md'
       - '.vscode/**'

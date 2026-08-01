@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     # Feature branches included so work that cannot be compiled in the authoring environment
-    # gets a real build and test run before it reaches a pull request.
+    # gets a real build run before it reaches a pull request.
     branches: [master, 'claude/**']
     paths-ignore:
       - '**.md'
@@ -43,55 +43,13 @@ jobs:
         working-directory: dotnet
         run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore --maxcpucount:1 -p:Platform=x64 -p:BuildWorkerOutputs=false
 
-      # Enumerated rather than run across the solution. Every test in
-      # Easydict.UIAutomation.Tests carries Category=UIAutomation, which the filter below
-      # excludes, so a solution-wide run matches zero tests there and VSTest fails the whole
-      # command ("No test matches the given testcase filter" -> MSB4181). That project is covered
-      # by ui-automation.yml instead. The list mirrors the Makefile's `test` target.
       - name: Run tests
         working-directory: dotnet
-        shell: pwsh
-        run: |
-          $filter = "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
-          # Platform is per project, not uniform. The plain net8.0 projects are mapped to Any CPU
-          # by the solution and build into bin/Debug, so passing -p:Platform=x64 would send VSTest
-          # to a bin/x64/Debug that was never produced. Easydict.WinUI.Tests is the opposite: it
-          # builds into bin/x64/Debug/<tfm>/win-x64 and needs the property to be found. A
-          # solution-level run resolved this per project automatically; running each one directly
-          # means stating it.
-          $projects = @(
-            @{ Path = "tests/Easydict.Llm.Streaming.Tests" },
-            @{ Path = "tests/Polyglot.TextLayout.Tests" },
-            @{ Path = "tests/Easydict.DirectXaml.Tests" },
-            @{ Path = "tests/Easydict.TranslationService.Tests" },
-            @{ Path = "tests/Easydict.WinUI.Tests"; Platform = "x64" },
-            @{ Path = "tests/Easydict.BrowserRegistrar.Tests" },
-            @{ Path = "lib/LexIndex/tests/LexIndex.Tests" }
-          )
-          foreach ($project in $projects) {
-            $dotnetArgs = @(
-              "test", $project.Path, "--no-build", "--verbosity", "normal",
-              "--logger", "trx;LogFileName=test-results.trx", "--filter", $filter
-            )
-            if ($project.Platform) {
-              $dotnetArgs += "-p:Platform=$($project.Platform)"
-            }
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
 
-            Write-Host "::group::$($project.Path)"
-            & dotnet @dotnetArgs
-            $code = $LASTEXITCODE
-            Write-Host "::endgroup::"
-            if ($code -ne 0) {
-              Write-Host "::error::$($project.Path) failed with exit code $code"
-              exit $code
-            }
-          }
-
-      # Scoped to the project that owns the long-document tests, for the same reason as above:
-      # a solution-wide run would match zero tests in every other project and fail there.
       - name: Run long-document regression gate
         working-directory: dotnet
-        run: dotnet test tests/Easydict.TranslationService.Tests --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

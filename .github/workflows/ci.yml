@@ -64,8 +64,12 @@ jobs:
           )
           foreach ($project in $projects) {
             Write-Host "::group::$project"
+            # No -p:Platform=x64 here. These test projects are mapped to Any CPU by the solution,
+            # so the build put their assemblies in bin/Debug; passing the platform through would
+            # send VSTest looking in bin/x64/Debug, which does not exist. The solution-level run
+            # got this right only because it applied the solution's per-project mapping.
             dotnet test $project --no-build --verbosity normal `
-              --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter $filter
+              --logger "trx;LogFileName=test-results.trx" --filter $filter
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {
@@ -78,7 +82,7 @@ jobs:
       # a solution-wide run would match zero tests in every other project and fail there.
       - name: Run long-document regression gate
         working-directory: dotnet
-        run: dotnet test tests/Easydict.TranslationService.Tests --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
+        run: dotnet test tests/Easydict.TranslationService.Tests --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

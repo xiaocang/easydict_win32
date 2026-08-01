@@ -1107,11 +1107,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>System-Prompt</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Modell-Denkprozess aktivieren</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Gilt nur für Modelle, die Denkprozesse unterstützen. Deaktiviert ist die Texterkennung deutlich schneller.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>OCR-Verbindung testen</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>Testergebnis</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>Es wurde kein Text erkannt. Wählen Sie einen deutlicheren Bereich und überprüfen Sie die OCR-Spracheinstellung.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>Die ausgewählte OCR-Engine ist nicht verfügbar. Installieren Sie für Windows OCR ein kompatibles Sprachpaket.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR ist fehlgeschlagen. Versuchen Sie es erneut oder überprüfen Sie die OCR-Einstellungen.</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>Löschen</value>

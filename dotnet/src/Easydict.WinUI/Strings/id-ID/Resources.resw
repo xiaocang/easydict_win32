@@ -937,11 +937,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>Prompt Sistem</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Aktifkan pemikiran model</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Hanya berlaku untuk model yang mendukung pemikiran. Menonaktifkannya membuat pengenalan jauh lebih cepat.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Uji Koneksi OCR</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>Hasil Pengujian</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>Tidak ada teks yang dikenali. Pilih area yang lebih jelas dan periksa pengaturan bahasa OCR.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>Mesin OCR yang dipilih tidak tersedia. Untuk Windows OCR, instal paket bahasa yang kompatibel.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR gagal. Coba lagi atau periksa pengaturan OCR.</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>Hapus</value>

@@ -579,11 +579,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>Systemprompt</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Aktivér modeltænkning</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Gælder kun for modeller, der understøtter tænkning. Slået fra bliver genkendelsen meget hurtigere.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Test OCR-forbindelse</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>Testresultat</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>Der blev ikke genkendt nogen tekst. Vælg et tydeligere område, og kontrollér OCR-sprogindstillingen.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>Den valgte OCR-motor er ikke tilgængelig. Installer en kompatibel sprogpakke til Windows OCR.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR mislykkedes. Prøv igen, eller kontrollér OCR-indstillingerne.</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>Slet</value>

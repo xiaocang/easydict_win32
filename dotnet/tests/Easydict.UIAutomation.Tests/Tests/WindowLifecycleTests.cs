@@ -80,7 +80,20 @@ public class WindowLifecycleTests : IDisposable
             () => window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton")),
             TimeSpan.FromSeconds(10)).Result;
         settingsButton.Should().NotBeNull("the tray setting must be configurable for this lifecycle test");
-        settingsButton!.Click();
+        UITestHelper.ClickElement(settingsButton!);
+
+        var generalTab = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsTab_General")),
+            TimeSpan.FromSeconds(10)).Result;
+        generalTab.Should().NotBeNull("the General settings tab must be available");
+        UITestHelper.ClickElement(generalTab!);
+        Retry.WhileNull(
+                () => window.FindFirstDescendant(
+                    cf => cf.ByAutomationId("SettingsGeneralBehaviorHeader")),
+                TimeSpan.FromSeconds(10))
+            .Result
+            .Should()
+            .NotBeNull("clicking General must reveal the behavior settings");
 
         var minimizeToTrayToggle = Retry.WhileNull(
             () => window.FindFirstDescendant(cf => cf.ByAutomationId("MinimizeToTrayToggle")),

@@ -1182,11 +1182,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>系統提示詞</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>啟用模型思考</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>僅對支援思考的模型生效。關閉後辨識速度快很多。</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>測試 OCR 連線</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>測試結果</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>未辨識到文字。請選取更清晰的區域，並檢查 OCR 語言設定。</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>所選 OCR 引擎無法使用。使用 Windows OCR 時，請安裝相容的語言套件。</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR 失敗。請重試或檢查 OCR 設定。</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>刪除</value>

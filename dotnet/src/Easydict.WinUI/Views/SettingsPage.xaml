@@ -2535,6 +2535,19 @@
                                             HorizontalAlignment="Left"
                                             PlaceholderText="Enter system prompt for OCR..."/>
 
+                                    <StackPanel Spacing="4">
+                                        <ToggleSwitch x:Name="OcrEnableThinkingToggle"
+                                                AutomationProperties.AutomationId="OcrEnableThinkingToggle"
+                                                Header="Enable model thinking"/>
+                                        <TextBlock x:Name="OcrEnableThinkingDescriptionText"
+                                                Text="Only applies to models that support thinking. Leaving it off makes recognition much faster."
+                                                FontSize="12"
+                                                MaxWidth="350"
+                                                HorizontalAlignment="Left"
+                                                TextWrapping="Wrap"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    </StackPanel>
+
                                     <Button x:Name="TestOcrConnectionButton"
                                             Content="Test OCR Connection"
                                             Click="OnTestOcrConnection"/>

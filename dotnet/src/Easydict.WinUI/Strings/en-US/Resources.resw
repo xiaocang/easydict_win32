@@ -1227,11 +1227,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>System Prompt</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Enable model thinking</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Only applies to models that support thinking. Leaving it off makes recognition much faster.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Test OCR Connection</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>Test Result</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>No text was recognized. Select a clearer region and verify the OCR language setting.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>The selected OCR engine is unavailable. For Windows OCR, install a compatible language pack.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR failed. Please try again or check the OCR settings.</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>Delete</value>

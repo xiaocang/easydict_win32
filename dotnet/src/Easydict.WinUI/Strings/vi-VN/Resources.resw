@@ -991,11 +991,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>Lời nhắc hệ thống</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>Bật chế độ suy luận của mô hình</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>Chỉ áp dụng cho các mô hình hỗ trợ suy luận. Tắt đi giúp nhận dạng nhanh hơn nhiều.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>Kiểm tra kết nối OCR</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>Kết quả kiểm tra</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>Không nhận dạng được văn bản nào. Hãy chọn vùng rõ hơn và kiểm tra cài đặt ngôn ngữ OCR.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>Công cụ OCR đã chọn không khả dụng. Đối với Windows OCR, hãy cài đặt gói ngôn ngữ tương thích.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR thất bại. Hãy thử lại hoặc kiểm tra cài đặt OCR.</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>Xóa</value>

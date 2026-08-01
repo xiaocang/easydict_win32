@@ -991,11 +991,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>مطالبة النظام</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>تمكين تفكير النموذج</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>ينطبق فقط على الطُرز التي تدعم التفكير. إبقاؤه معطلاً يجعل التعرف أسرع بكثير.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>اختبار اتصال OCR</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>نتيجة الاختبار</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>لم يتم التعرّف على أي نص. حدّد منطقة أوضح وتحقق من إعداد لغة OCR.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>محرك OCR المحدد غير متاح. لاستخدام OCR في Windows، ثبّت حزمة لغة متوافقة.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>فشل OCR. حاول مرة أخرى أو تحقق من إعدادات OCR.</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>حذف</value>

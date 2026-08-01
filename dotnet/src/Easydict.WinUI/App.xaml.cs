@@ -669,13 +669,52 @@ namespace Easydict.WinUI
             if (_window == null) return null;
             try
             {
-                _ocrTranslateService ??= new OcrTranslateService(_window.DispatcherQueue);
+                _ocrTranslateService ??= new OcrTranslateService(
+                    _window.DispatcherQueue,
+                    ShowOcrFailureDialog);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService lazy init failed: {ex}");
             }
             return _ocrTranslateService;
+        }
+
+        private async void ShowOcrFailureDialog(OcrFailureReason reason)
+        {
+            try
+            {
+                ShowAndActivateWindow();
+
+                if (_window?.Content is not FrameworkElement root || root.XamlRoot is null)
+                {
+                    return;
+                }
+
+                var loc = LocalizationService.Instance;
+                var messageKey = reason switch
+                {
+                    OcrFailureReason.NoTextRecognized => "OcrNoTextRecognized",
+                    OcrFailureReason.EngineUnavailable => "OcrEngineUnavailable",
+                    _ => "OcrFailed"
+                };
+                var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+                {
+                    Title = loc.GetString("OcrScreenshotTranslate"),
+                    Content = loc.GetString(messageKey),
+                    CloseButtonText = loc.GetString("OK"),
+                    XamlRoot = root.XamlRoot
+                };
+                await dialog.ShowAsync();
+            }
+            catch (COMException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] OCR failure dialog failed: {ex.Message}");
+            }
+            catch (InvalidOperationException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] OCR failure dialog failed: {ex.Message}");
+            }
         }
 
         private void QueueHotkeyRegistrationWarning(IReadOnlyList<HotkeyRegistrationFailure> failures)
@@ -1447,19 +1486,8 @@ namespace Easydict.WinUI
                         _isSystemShutdownRequested = true;
                         CrashDiagnostics.Log(
                             $"[AppWindow] WM_ENDSESSION confirmed, reasonFlags=0x{unchecked((nuint)lParam):X}");
-                        try
-                        {
-                            Application.Current.Exit();
-                        }
-                        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
-                        {
-                            CrashDiagnostics.LogException(
-                                "AppWindowSubclassWndProc.Application.Exit",
-                                ex,
-                                isTerminating: false,
-                                isHandled: true);
-                            Environment.Exit(0);
-                        }
+                        _trayIconService?.ExitApplication();
+                        Environment.Exit(0);
 
                         return 0;
 

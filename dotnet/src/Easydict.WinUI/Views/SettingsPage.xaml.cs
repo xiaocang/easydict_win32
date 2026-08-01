@@ -1501,6 +1501,8 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.OffContent = toggleOff;
         LaunchAtStartupToggle.OnContent = toggleOn;
         LaunchAtStartupToggle.OffContent = toggleOff;
+        OcrEnableThinkingToggle.OnContent = toggleOn;
+        OcrEnableThinkingToggle.OffContent = toggleOff;
 
         // Hotkeys section
         if (HotkeysHeaderText != null)
@@ -1628,6 +1630,8 @@ public sealed partial class SettingsPage : Page
         OcrEndpointBox.Header = loc.GetString("OcrEndpoint");
         OcrModelBox.Header = loc.GetString("OcrModel");
         OcrSystemPromptBox.Header = loc.GetString("OcrSystemPrompt");
+        OcrEnableThinkingToggle.Header = loc.GetString("OcrEnableThinking");
+        OcrEnableThinkingDescriptionText.Text = loc.GetString("OcrEnableThinkingDescription");
         TestOcrConnectionButton.Content = loc.GetString("TestOcrConnection");
         OcrTestStatusBox.Header = loc.GetString("OcrTestResult");
     }
@@ -2257,6 +2261,7 @@ public sealed partial class SettingsPage : Page
         OcrEndpointBox.TextChanged += OnSettingChanged;
         OcrModelBox.TextChanged += OnSettingChanged;
         OcrSystemPromptBox.TextChanged += OnSettingChanged;
+        OcrEnableThinkingToggle.Toggled += OnSettingChanged;
 
         // TextBox/PasswordBox changes - new services
         DeepSeekKeyBox.PasswordChanged += OnSettingChanged;
@@ -2374,6 +2379,7 @@ public sealed partial class SettingsPage : Page
         OcrEndpointBox.TextChanged -= OnSettingChanged;
         OcrModelBox.TextChanged -= OnSettingChanged;
         OcrSystemPromptBox.TextChanged -= OnSettingChanged;
+        OcrEnableThinkingToggle.Toggled -= OnSettingChanged;
 
         DeepSeekKeyBox.PasswordChanged -= OnSettingChanged;
         GroqKeyBox.PasswordChanged -= OnSettingChanged;
@@ -2812,6 +2818,7 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(ocrOptions.Endpoint, _settings.OcrEndpoint)
             || !SameSetting(ocrOptions.Model, _settings.OcrModel)
             || !SameSetting(ocrOptions.SystemPrompt, _settings.OcrSystemPrompt)
+            || ocrOptions.EnableThinking != _settings.OcrEnableThinking
             || ProxyEnabledToggle.IsOn != _settings.ProxyEnabled
             || ProxyBypassLocalToggle.IsOn != _settings.ProxyBypassLocal
             || !SameSetting(ProxyUriBox.Text?.Trim() ?? "", _settings.ProxyUri)
@@ -3097,6 +3104,7 @@ public sealed partial class SettingsPage : Page
             OcrEndpointBox.Text = _settings.OcrEndpoint;
             OcrModelBox.Text = _settings.OcrModel;
             OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
+            OcrEnableThinkingToggle.IsOn = _settings.OcrEnableThinking;
             ApplyOcrEngineDefaultsIfNeeded(GetSelectedOcrEngine());
             UpdateOcrEngineUI();
 
@@ -3907,7 +3915,8 @@ public sealed partial class SettingsPage : Page
             OcrApiKeyBox.Password,
             OcrEndpointBox.Text,
             OcrModelBox.Text,
-            OcrSystemPromptBox.Text);
+            OcrSystemPromptBox.Text,
+            OcrEnableThinkingToggle.IsOn);
     }
 
     /// <summary>
@@ -4335,6 +4344,7 @@ public sealed partial class SettingsPage : Page
         _settings.OcrEndpoint = ocrOptions.Endpoint;
         _settings.OcrModel = ocrOptions.Model;
         _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
+        _settings.OcrEnableThinking = ocrOptions.EnableThinking;
 
         // Save Built-in AI settings
         _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");

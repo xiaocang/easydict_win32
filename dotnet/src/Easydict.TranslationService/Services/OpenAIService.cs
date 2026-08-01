@@ -94,7 +94,12 @@ public sealed class OpenAIService : BaseOpenAIService
         }
     }
 
-    internal static string? GetResponsesReasoningEffort(string model)
+    /// <summary>
+    /// Reasoning effort to send to the Responses API for the given model, or null
+    /// when the model has no reasoning control to set. <c>"none"</c> and
+    /// <c>"minimal"</c> are the closest the GPT-5 family gets to "don't think".
+    /// </summary>
+    public static string? GetResponsesReasoningEffort(string model)
     {
         if (SupportsNoneReasoningEffort(model))
             return "none";
@@ -120,6 +125,7 @@ public sealed class OpenAIService : BaseOpenAIService
         }
 
         return length > 0
+            && !suffix[length..].StartsWith("-pro", StringComparison.Ordinal)
             && int.TryParse(suffix[..length], out var minorVersion)
             && minorVersion >= 1;
     }

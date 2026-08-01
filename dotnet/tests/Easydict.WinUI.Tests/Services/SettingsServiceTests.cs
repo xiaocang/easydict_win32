@@ -950,6 +950,7 @@ public class SettingsServiceTests
         var originalEndpoint = _settings.OcrEndpoint;
         var originalModel = _settings.OcrModel;
         var originalPrompt = _settings.OcrSystemPrompt;
+        var originalEnableThinking = _settings.OcrEnableThinking;
 
         try
         {
@@ -957,12 +958,14 @@ public class SettingsServiceTests
             _settings.OcrEndpoint = "http://test.local/ocr";
             _settings.OcrModel = "test-model";
             _settings.OcrSystemPrompt = "Extract test text.";
+            _settings.OcrEnableThinking = true;
             _settings.Save();
 
             _settings.OcrEngine.Should().Be(OcrEngineType.Ollama);
             _settings.OcrEndpoint.Should().Be("http://test.local/ocr");
             _settings.OcrModel.Should().Be("test-model");
             _settings.OcrSystemPrompt.Should().Be("Extract test text.");
+            _settings.OcrEnableThinking.Should().BeTrue();
         }
         finally
         {
@@ -970,8 +973,29 @@ public class SettingsServiceTests
             _settings.OcrEndpoint = originalEndpoint;
             _settings.OcrModel = originalModel;
             _settings.OcrSystemPrompt = originalPrompt;
+            _settings.OcrEnableThinking = originalEnableThinking;
             _settings.Save();
         }
+    }
+
+    [Fact]
+    public void OcrEnableThinking_DefaultsToOff()
+    {
+        var current = AppDomain.CurrentDomain.BaseDirectory;
+        while (!string.IsNullOrEmpty(current) &&
+               !File.Exists(Path.Combine(current, "Easydict.Win32.sln")))
+        {
+            current = Path.GetDirectoryName(current);
+        }
+
+        current.Should().NotBeNullOrEmpty();
+        var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
+
+        // No initializer means false — thinking stays off so recognition stays fast.
+        source.Should().Contain("public bool OcrEnableThinking { get; set; }");
+        source.Should().NotContain("public bool OcrEnableThinking { get; set; } = true;");
+        source.Should().Contain("OcrEnableThinking = GetValue(nameof(OcrEnableThinking), false);");
+        source.Should().Contain("_settings[nameof(OcrEnableThinking)] = OcrEnableThinking;");
     }
 
     [Fact]

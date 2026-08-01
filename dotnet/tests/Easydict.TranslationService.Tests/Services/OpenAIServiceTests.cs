@@ -154,6 +154,22 @@ public class OpenAIServiceTests
     }
 
     [Fact]
+    public async Task TranslateStreamAsync_OmitsUnsupportedReasoning_ForGpt5Pro()
+    {
+        _service.Configure("sk-test", model: "gpt-5.4-pro", temperature: 0.3);
+        EnqueueResponsesStream("Hi");
+
+        await ConsumeAsync(_service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        }));
+
+        var body = _mockHandler.LastRequestBody!;
+        body.Should().NotContain("\"reasoning\":");
+    }
+
+    [Fact]
     public async Task TranslateStreamAsync_UsesCompatibleTemperature_WithLegacyGpt5ResponsesModel()
     {
         _service.Configure("sk-test", model: "gpt-5-mini", temperature: 0.3);

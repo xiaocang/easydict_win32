@@ -1149,11 +1149,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>システムプロンプト</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>モデルの思考を有効にする</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>思考に対応したモデルにのみ適用されます。オフにすると認識がかなり速くなります。</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>OCR 接続をテスト</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>テスト結果</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>文字を認識できませんでした。より鮮明な範囲を選択し、OCR の言語設定を確認してください。</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>選択した OCR エンジンは利用できません。Windows OCR を使用するには、互換性のある言語パックをインストールしてください。</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR に失敗しました。再試行するか、OCR の設定を確認してください。</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>削除</value>

@@ -1149,11 +1149,26 @@
   <data name="OcrSystemPrompt" xml:space="preserve">
     <value>시스템 프롬프트</value>
   </data>
+  <data name="OcrEnableThinking" xml:space="preserve">
+    <value>모델 사고 활성화</value>
+  </data>
+  <data name="OcrEnableThinkingDescription" xml:space="preserve">
+    <value>사고를 지원하는 모델에만 적용됩니다. 끄면 인식 속도가 훨씬 빨라집니다.</value>
+  </data>
   <data name="TestOcrConnection" xml:space="preserve">
     <value>OCR 연결 테스트</value>
   </data>
   <data name="OcrTestResult" xml:space="preserve">
     <value>테스트 결과</value>
+  </data>
+  <data name="OcrNoTextRecognized" xml:space="preserve">
+    <value>텍스트를 인식하지 못했습니다. 더 선명한 영역을 선택하고 OCR 언어 설정을 확인하세요.</value>
+  </data>
+  <data name="OcrEngineUnavailable" xml:space="preserve">
+    <value>선택한 OCR 엔진을 사용할 수 없습니다. Windows OCR을 사용하려면 호환되는 언어 팩을 설치하세요.</value>
+  </data>
+  <data name="OcrFailed" xml:space="preserve">
+    <value>OCR에 실패했습니다. 다시 시도하거나 OCR 설정을 확인하세요.</value>
   </data>
   <data name="DeleteOnnxModel" xml:space="preserve">
     <value>삭제</value>

@@ -31,8 +31,8 @@
 - [Installation](#installation)
 - [Tech Stack](#tech-stack)
 - [Translation Service Integration Tests](#translation-service-integration-tests)
-- [TODO](#todo)
 - [Comparison with macOS Version](#comparison-with-macos-version)
+- [Support the Project](#support-the-project)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
 
@@ -233,10 +233,10 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Gemini | Gemini API | ✅ | Custom SSE streaming |
 | Zhipu AI | OpenAI API | ✅ | |
 | Volcano Engine | REST | ✅ | HMAC-SHA256 signing |
-| Groq | OpenAI API | — | OpenAI-compatible, missing API key |
+| Groq | OpenAI API | ✅ | OpenAI-compatible |
 | GitHub Models | OpenAI API | — | OpenAI-compatible, missing API key |
 | Doubao | Custom SSE | — | Missing API key |
-| DeepL | REST | — | Missing API key |
+| DeepL | REST | ✅ | Free/Pro API |
 | Caiyun | REST | — | Missing API key |
 | NiuTrans | REST | ✅ | |
 | Linguee | REST | — | Unavailable: upstream sample API domain no longer resolves; integration tests are skipped by default |
@@ -252,41 +252,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
-## TODO
+## Support the Project
 
-### High Priority
-
-- [x] ~~**Doubao**~~ - ByteDance LLM service ✅ **Implemented**
-- [x] ~~**Caiyun**~~ - 彩云小译 ✅ **Implemented**
-- [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
-- [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented, currently unavailable**
-- [x] ~~**TTS (Text-to-Speech)**~~ - Windows Speech Synthesis API ✅ **Implemented**
-- [x] ~~**OCR Screenshot Translation**~~ - Snipaste-style screen capture with Windows OCR API ✅ **Implemented**
-
-### Medium Priority
-
-- [ ] **More Translation Services**
-  - [x] ~~Volcano Engine~~ (火山翻译, ByteDance) ✅ **Implemented**
-
-- [ ] **AI Tools**
-  - [ ] Text Polishing
-  - [ ] Text Summarization
-
-- [ ] **More Hotkeys**
-  - [ ] Polish and replace
-  - [ ] Translate and replace
-
-### Low Priority
-
-- [x] ~~**Dictionary Mode**~~ - Word definitions, pronunciation ✅ **Implemented**
-- [ ] **Smart Query** - Auto-select translation mode based on text type
-- [x] ~~**Multi-language UI**~~ - UI localization (15 languages) ✅ **Implemented**
-- [ ] **Auto Update** - Check and install updates
-
-### Distribution
-
-- [x] **Windows Store** - Published to Microsoft Store
-- [x] ~~**winget**~~ - Published to Windows Package Manager ✅
+If Easydict for Windows is useful to you, please [give the repository a star on GitHub](https://github.com/xiaocang/easydict_win32). Your support helps more people discover the project and motivates its continued development.
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 

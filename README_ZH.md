@@ -31,8 +31,8 @@
 - [安装](#安装)
 - [技术栈](#技术栈)
 - [翻译服务集成测试](#翻译服务集成测试)
-- [待办事项](#待办事项)
 - [与 macOS 版本对比](#与-macos-版本对比)
+- [支持项目](#支持项目)
 - [许可证](#许可证)
 - [致谢](#致谢)
 
@@ -233,10 +233,10 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Gemini | Gemini API | ✅ | 自定义 SSE 流式协议 |
 | 智谱 AI | OpenAI API | ✅ | |
 | 火山翻译 | REST | ✅ | HMAC-SHA256 签名 |
-| Groq | OpenAI API | — | OpenAI 兼容，缺少 API Key |
+| Groq | OpenAI API | ✅ | OpenAI 兼容 |
 | GitHub Models | OpenAI API | — | OpenAI 兼容，缺少 API Key |
 | 豆包 | Custom SSE | — | 缺少 API Key |
-| DeepL | REST | — | 缺少 API Key |
+| DeepL | REST | ✅ | 支持 Free/Pro API |
 | 彩云小译 | REST | — | 缺少 API Key |
 | 小牛翻译 | REST | ✅ | |
 | Linguee | REST | — | 不可用：上游示例 API 域名已无法解析；集成测试默认跳过 |
@@ -252,41 +252,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
-## 待办事项
+## 支持项目
 
-### 高优先级
-
-- [x] ~~**豆包**~~ - 字节跳动 LLM 服务 ✅ **已实现**
-- [x] ~~**彩云小译**~~ ✅ **已实现**
-- [x] ~~**小牛翻译**~~ - 450+ 语种 ✅ **已实现**
-- [x] ~~**Linguee 词典**~~ - 带上下文例句的词典 ✅ **已实现，当前不可用**
-- [x] ~~**TTS（文字转语音）**~~ - Windows Speech Synthesis API ✅ **已实现**
-- [x] ~~**OCR 截图翻译**~~ - 类似 Snipaste 的截图体验，使用 Windows OCR API ✅ **已实现**
-
-### 中优先级
-
-- [ ] **更多翻译服务**
-  - [x] ~~火山翻译~~（字节跳动）✅ **已实现**
-
-- [ ] **AI 工具**
-  - [ ] 文本润色
-  - [ ] 文本摘要
-
-- [ ] **更多快捷键**
-  - [ ] 润色并替换
-  - [ ] 翻译并替换
-
-### 低优先级
-
-- [x] ~~**词典模式**~~ - 单词释义、发音 ✅ **已实现**
-- [ ] **智能查询** - 根据文本类型自动选择翻译模式
-- [x] ~~**多语言界面**~~ - UI 本地化（15 种语言）✅ **已实现**
-- [ ] **自动更新** - 检查并安装更新
-
-### 分发
-
-- [x] **Windows 商店** - 已上架 Microsoft Store
-- [x] ~~**winget**~~ - 已发布到 Windows 包管理器 ✅
+如果 Easydict for Windows 对你有帮助，请[在 GitHub 上为本仓库点亮 Star](https://github.com/xiaocang/easydict_win32)。你的支持能帮助更多人发现这个项目，也会激励项目持续开发。
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

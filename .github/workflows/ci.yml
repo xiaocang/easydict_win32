@@ -39,7 +39,7 @@ jobs:
 
       - name: Build
         working-directory: dotnet
-        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore -p:Platform=x64 -p:BuildWorkerOutputs=false
+        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore --maxcpucount:1 -p:Platform=x64 -p:BuildWorkerOutputs=false
 
       - name: Run tests
         working-directory: dotnet

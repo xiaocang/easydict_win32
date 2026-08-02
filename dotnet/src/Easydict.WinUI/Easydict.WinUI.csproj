@@ -285,6 +285,14 @@
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
     </ItemGroup>
+    <!-- These flags affect only WinUI compilation. Removing them from child references
+         aligns shared test-dependency builds and avoids concurrent writes to obj outputs. -->
+    <ItemDefinitionGroup>
+      <ProjectReference>
+        <GlobalPropertiesToRemove>EnableGitHubUpdateCheck;EasydictUiTestBuild</GlobalPropertiesToRemove>
+      </ProjectReference>
+    </ItemDefinitionGroup>
+
     <ItemGroup>
       <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
       <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj"

@@ -21,6 +21,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.System;
 
 namespace Easydict.WinUI.Views;
 
@@ -158,6 +159,8 @@ public sealed partial class SettingsPage : Page
     private const int DeferredUnloadTeardownDelayMs = 250;
     private const string TtsVoicePreviewText = "This is a text-to-speech preview.";
 
+    private static readonly Uri _storeReviewUri = new("ms-windows-store://review/?ProductId=9P7NQVXF9DZJ");
+    private static readonly Uri _storeProductPageUri = new("https://apps.microsoft.com/detail/9P7NQVXF9DZJ");
     private static readonly Dictionary<string, int> PreferredServiceDisplayOrder = new(StringComparer.OrdinalIgnoreCase)
     {
         ["bing"] = 0,
@@ -924,6 +927,41 @@ public sealed partial class SettingsPage : Page
         await SelectSettingsTabAsync(tabId, resetScroll: true);
     }
 
+    private async void OnRateAppLinkClick(object sender, RoutedEventArgs e)
+    {
+        if (!await LaunchStoreRatingAsync(LaunchUriAsync))
+        {
+            Debug.WriteLine("[Settings] Could not open Microsoft Store rating page.");
+        }
+    }
+
+    internal static async Task<bool> LaunchStoreRatingAsync(Func<Uri, Task<bool>> launchAsync)
+    {
+        ArgumentNullException.ThrowIfNull(launchAsync);
+
+        if (await TryLaunchUriAsync(_storeReviewUri, launchAsync))
+        {
+            return true;
+        }
+
+        return await TryLaunchUriAsync(_storeProductPageUri, launchAsync);
+    }
+
+    private static Task<bool> LaunchUriAsync(Uri uri) => Launcher.LaunchUriAsync(uri).AsTask();
+
+    private static async Task<bool> TryLaunchUriAsync(Uri uri, Func<Uri, Task<bool>> launchAsync)
+    {
+        try
+        {
+            return await launchAsync(uri);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Settings] Could not launch URI: {ex.Message}");
+            return false;
+        }
+    }
+
     private void OnSettingsTabButtonLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || button.DataContext is not SettingsTabItem tab)
@@ -1522,6 +1560,14 @@ public sealed partial class SettingsPage : Page
             AboutHeaderText.Text = loc.GetString("About");
         if (IssueFeedbackLink != null)
             IssueFeedbackLink.Content = loc.GetString("IssueFeedback");
+        if (RateAppLink != null)
+        {
+            RateAppLink.Content = loc.GetString("RateApp");
+            RateAppLink.Visibility = EasydictConditions.CanRateApp
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
 
         // Save Settings button
         SaveButton.Content = loc.GetString("SaveSettings");
@@ -4517,7 +4563,8 @@ public sealed partial class SettingsPage : Page
 
         // Warn the user about any hotkeys that could not be registered
         // (e.g. reserved by Windows or in use by another app).
-        if (hotkeyFailures is { Count: > 0 })
+        if (EasydictConditions.ShouldShowHotkeyRegistrationWarnings &&
+            hotkeyFailures is { Count: > 0 })
         {
             var lines = hotkeyFailures
                 .Select(f => $"{loc.GetString(f.NameKey)}: {f.HotkeyString}")

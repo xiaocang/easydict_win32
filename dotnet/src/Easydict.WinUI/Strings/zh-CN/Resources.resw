@@ -497,6 +497,9 @@
   <data name="IssueFeedback" xml:space="preserve">
     <value>问题反馈</value>
   </data>
+  <data name="RateApp" xml:space="preserve">
+    <value>为应用评分</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>灵感来自</value>
   </data>
@@ -1415,4 +1418,6 @@
   <data name="Codex_UpdateRequired" xml:space="preserve">
     <value>必须更新 Codex CLI 后才能安全运行。请安装最新版本的 Codex CLI，然后重试。</value>
   </data>
+  <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>调试构建 · 最新版本 {0} · 查看更新 →</value></data>
+  <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>发现新版本 {0} · 查看更新 →</value></data>
 </root>

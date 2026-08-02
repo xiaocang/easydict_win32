@@ -497,6 +497,9 @@
   <data name="IssueFeedback" xml:space="preserve">
     <value>Issue Feedback</value>
   </data>
+  <data name="RateApp" xml:space="preserve">
+    <value>Rate this app</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>Inspired by</value>
   </data>
@@ -1415,4 +1418,6 @@
   <data name="Codex_UpdateRequired" xml:space="preserve">
     <value>Codex CLI must be updated before it can run safely. Install the latest Codex CLI and try again.</value>
   </data>
+  <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>Debug build · Latest release {0} · View update →</value></data>
+  <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>New version {0} available · View update →</value></data>
 </root>

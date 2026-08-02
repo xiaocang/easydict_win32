@@ -86,6 +86,14 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- Use custom Program.cs entry point (handles OCR translate from Shell context menu) -->
         <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+        <!-- Local Debug builds keep the update banner visible for UI verification, even when current. -->
+        <EnableGitHubUpdateCheck Condition="'$(EnableGitHubUpdateCheck)' == '' and '$(Configuration)' == 'Debug' and '$(CI)' != 'true'">true</EnableGitHubUpdateCheck>
+        <EnableGitHubUpdateCheck Condition="'$(EnableGitHubUpdateCheck)' == ''">false</EnableGitHubUpdateCheck>
+        <DefineConstants Condition="'$(EnableGitHubUpdateCheck)' == 'true'">$(DefineConstants);PORTABLE_UPDATE_CHECK</DefineConstants>
+        <!-- Unit and UI automation test app builds suppress global-hotkey conflict dialogs. -->
+        <DefineConstants Condition="'$(EasydictUiTestBuild)' == 'true'">$(DefineConstants);WINUI_TEST</DefineConstants>
+        <!-- Store submission builds opt into Microsoft Store-only UI such as rating. -->
+        <DefineConstants Condition="'$(EasydictStoreBuild)' == 'true'">$(DefineConstants);STORE_BUILD</DefineConstants>
 
         <!-- App Options -->
         <UseRidGraph>true</UseRidGraph>
@@ -277,6 +285,14 @@
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
     </ItemGroup>
+    <!-- These flags affect only WinUI compilation. Removing them from child references
+         aligns shared test-dependency builds and avoids concurrent writes to obj outputs. -->
+    <ItemDefinitionGroup>
+      <ProjectReference>
+        <GlobalPropertiesToRemove>EnableGitHubUpdateCheck;EasydictUiTestBuild</GlobalPropertiesToRemove>
+      </ProjectReference>
+    </ItemDefinitionGroup>
+
     <ItemGroup>
       <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
       <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj"

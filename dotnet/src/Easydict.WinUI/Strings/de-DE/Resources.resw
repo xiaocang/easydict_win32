@@ -482,6 +482,9 @@
   <data name="IssueFeedback" xml:space="preserve">
     <value>Problem melden</value>
   </data>
+  <data name="RateApp" xml:space="preserve">
+    <value>App bewerten</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>Inspiriert von</value>
   </data>
@@ -1418,4 +1421,6 @@
   <data name="Codex_UpdateRequired" xml:space="preserve">
     <value>Die Codex CLI muss aktualisiert werden, bevor sie sicher ausgeführt werden kann. Installieren Sie die neueste Codex CLI und versuchen Sie es erneut.</value>
   </data>
+  <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>Debugbuild · Neueste Version {0} · Update anzeigen →</value></data>
+  <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>Neue Version {0} verfügbar · Update anzeigen →</value></data>
 </root>

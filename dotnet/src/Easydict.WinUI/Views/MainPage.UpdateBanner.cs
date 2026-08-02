@@ -150,20 +150,12 @@ public partial class MainPage
             return;
         }
 
-        var language = LocalizationService.Instance.CurrentLanguage;
 #if DEBUG
-        _updateBannerText.Text = language.StartsWith("zh-TW", StringComparison.OrdinalIgnoreCase)
-            ? $"偵錯組建 · 最新版本 {release.TagName}  ·  查看更新 →"
-            : language.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
-                ? $"调试构建 · 最新版本 {release.TagName}  ·  查看更新 →"
-                : $"Debug build · Latest release {release.TagName}  ·  View update →";
+        const string resourceKey = "PortableUpdateBanner_Debug";
 #else
-        _updateBannerText.Text = language.StartsWith("zh-TW", StringComparison.OrdinalIgnoreCase)
-            ? $"發現新版本 {release.TagName}  ·  查看更新 →"
-            : language.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
-                ? $"发现新版本 {release.TagName}  ·  查看更新 →"
-                : $"New version {release.TagName} available  ·  View update →";
+        const string resourceKey = "PortableUpdateBanner_Available";
 #endif
+        _updateBannerText.Text = LocalizationService.Instance.GetString(resourceKey, release.TagName);
         AutomationProperties.SetName(_updateBannerButton, _updateBannerText.Text);
         RefreshPortableUpdateBannerTheme();
         _updateBannerButton.Visibility = Visibility.Visible;

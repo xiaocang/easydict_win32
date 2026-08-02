@@ -1421,4 +1421,6 @@
   <data name="Codex_UpdateRequired" xml:space="preserve">
     <value>Codex CLI を安全に実行するには更新が必要です。最新の Codex CLI をインストールして、もう一度お試しください。</value>
   </data>
+  <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>デバッグ ビルド · 最新リリース {0} · 更新を表示 →</value></data>
+  <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>新しいバージョン {0} を利用できます · 更新を表示 →</value></data>
 </root>

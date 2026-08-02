@@ -1408,4 +1408,6 @@
   <data name="Codex_UpdateRequired" xml:space="preserve">
     <value>La CLI Codex deve essere aggiornata prima di poter essere eseguita in sicurezza. Installa la versione più recente della CLI Codex e riprova.</value>
   </data>
+  <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>Build di debug · Ultima versione {0} · Visualizza aggiornamento →</value></data>
+  <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>Nuova versione {0} disponibile · Visualizza aggiornamento →</value></data>
 </root>

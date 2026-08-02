@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using FluentAssertions;
 using Xunit;
 
@@ -56,6 +57,50 @@ public class UpdateCheckPackagingTests
         msixBlock.Should().Contain("-p:EasydictStoreBuild=true");
         msixBlock.Should().Contain(
             "-p:WindowsAppSDKSelfContained=false `\n            -p:EasydictStoreBuild=true");
+    }
+
+    [Fact]
+    public void PortableUpdateBanner_UsesLocalizedResourcesForEverySupportedLanguage()
+    {
+        var updateBanner = File.ReadAllText(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "Views",
+            "MainPage.UpdateBanner.cs"));
+
+        updateBanner.Should().Contain(
+            "LocalizationService.Instance.GetString(resourceKey, release.TagName)");
+
+        var resourceFiles = Directory.EnumerateFiles(
+                Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Strings"),
+                "Resources.resw",
+                SearchOption.AllDirectories)
+            .ToList();
+
+        resourceFiles.Should().HaveCount(15);
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resourceData = XDocument.Load(resourceFile)
+                .Root!
+                .Elements("data")
+                .ToDictionary(
+                    data => data.Attribute("name")!.Value,
+                    data => data.Element("value")?.Value ?? string.Empty);
+
+            foreach (var key in new[]
+            {
+                "PortableUpdateBanner_Debug",
+                "PortableUpdateBanner_Available"
+            })
+            {
+                resourceData.TryGetValue(key, out var value).Should().BeTrue(
+                    $"{resourceFile} must define {key}");
+                value!.Should().NotBeNullOrWhiteSpace();
+                value.Should().Contain("{0}");
+            }
+        }
     }
 
     private static string FindProjectRoot()

@@ -9,6 +9,11 @@ namespace Polyglot.TextLayout.Preparation;
 /// </summary>
 public sealed class PreparedParagraph
 {
+    /// <summary>Source text used to create this prepared paragraph.</summary>
+    public required string SourceText { get; init; }
+
+    /// <summary>Whether preparation normalized collapsible whitespace.</summary>
+    public bool NormalizeWhitespace { get; init; } = true;
     /// <summary>Segment text values.</summary>
     public required string[] Segments { get; init; }
 

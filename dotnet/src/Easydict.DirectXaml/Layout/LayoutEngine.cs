@@ -21,6 +21,7 @@ public sealed class LayoutEngine(CompiledView view, ITextMeasurerFactory measure
     private readonly Size[] _desired = new Size[view.NodeCount];
     private readonly Rect[] _bounds = new Rect[view.NodeCount];
     private readonly Dictionary<int, TextLines> _textCache = new();
+    private readonly Dictionary<int, TextLayoutState> _textLayoutStates = new();
 
     public CompiledView View => view;
 
@@ -134,6 +135,7 @@ public sealed class LayoutEngine(CompiledView view, ITextMeasurerFactory measure
         NodeKind.Border => MeasureBorder(node, available),
         NodeKind.StackPanel => MeasureStack(node, available),
         NodeKind.Grid => MeasureGrid(node, available),
+        NodeKind.Button => MeasureButton(node, available),
         NodeKind.TextBlock => MeasureText(node, available),
         _ => Size.Empty,
     };
@@ -364,27 +366,87 @@ public sealed class LayoutEngine(CompiledView view, ITextMeasurerFactory measure
         return total;
     }
 
-    private Size MeasureText(int node, Size available)
+    private Size MeasureButton(int node, Size available) =>
+        MeasureTextValue(
+            node,
+            view.GetContent(node),
+            available,
+            TextWrapping.NoWrap);
+
+    private Size MeasureText(int node, Size available) =>
+        MeasureTextValue(
+            node,
+            view.GetText(node),
+            available,
+            view.GetEnum(node, PropertyNames.TextWrapping, TextWrapping.NoWrap));
+
+    private Size MeasureTextValue(
+        int node,
+        string text,
+        Size available,
+        TextWrapping wrapping)
     {
         Thickness insets = BorderInsets(node);
         Size inner = available.Deflate(insets);
 
-        string text = view.GetText(node);
         if (string.IsNullOrEmpty(text))
         {
+            _textLayoutStates.Remove(node);
             return Size.Empty;
         }
 
-        TextWrapping wrapping = view.GetEnum(node, PropertyNames.TextWrapping, TextWrapping.NoWrap);
         double wrapWidth = wrapping == TextWrapping.NoWrap ? Unbounded : Math.Max(1, inner.Width);
-
         FontSpec font = FontOf(node);
         ITextMeasurer measurer = measurers.Create(font);
-        PreparedParagraph prepared = TextLayoutEngine.Instance.Prepare(
-            new TextPrepareRequest { Text = text },
-            measurer);
+        TextLayoutEngine engine = TextLayoutEngine.Instance;
+        PreparedParagraph prepared;
+        LayoutLinesResult lines;
 
-        LayoutLinesResult lines = TextLayoutEngine.Instance.LayoutWithLines(prepared, wrapWidth);
+        if (_textLayoutStates.TryGetValue(node, out TextLayoutState? previous)
+            && previous.Font == font
+            && previous.Wrapping == wrapping)
+        {
+            if (string.Equals(previous.SourceText, text, StringComparison.Ordinal))
+            {
+                prepared = previous.Prepared;
+                lines = Math.Abs(previous.WrapWidth - wrapWidth) <= 0.01
+                    ? previous.Lines
+                    : engine.LayoutWithLines(prepared, wrapWidth);
+            }
+            else if (Math.Abs(previous.WrapWidth - wrapWidth) <= 0.01
+                && text.StartsWith(previous.SourceText, StringComparison.Ordinal)
+                && text.Length > previous.SourceText.Length
+                && engine.TryAppendLayout(
+                    previous.Prepared,
+                    previous.Lines,
+                    text[previous.SourceText.Length..],
+                    measurer,
+                    wrapWidth,
+                    out PreparedParagraph appendedPrepared,
+                    out LayoutLinesResult appendedLines))
+            {
+                prepared = appendedPrepared;
+                lines = appendedLines;
+            }
+            else
+            {
+                prepared = engine.Prepare(new TextPrepareRequest { Text = text }, measurer);
+                lines = engine.LayoutWithLines(prepared, wrapWidth);
+            }
+        }
+        else
+        {
+            prepared = engine.Prepare(new TextPrepareRequest { Text = text }, measurer);
+            lines = engine.LayoutWithLines(prepared, wrapWidth);
+        }
+
+        _textLayoutStates[node] = new TextLayoutState(
+            text,
+            font,
+            wrapping,
+            wrapWidth,
+            prepared,
+            lines);
         double lineHeight = measurers.GetLineHeight(font);
         _textCache[node] = new TextLines(lines.Lines, lineHeight, font);
 
@@ -562,6 +624,13 @@ public sealed class LayoutEngine(CompiledView view, ITextMeasurerFactory measure
         return node;
     }
 
+    private sealed record TextLayoutState(
+        string SourceText,
+        FontSpec Font,
+        TextWrapping Wrapping,
+        double WrapWidth,
+        PreparedParagraph Prepared,
+        LayoutLinesResult Lines);
     private sealed class GridTracks
     {
         public List<GridLengthValue> Lengths { get; } = new();
@@ -571,6 +640,7 @@ public sealed class LayoutEngine(CompiledView view, ITextMeasurerFactory measure
         public double Total => Sizes.Sum();
     }
 }
+
 
 /// <summary>Laid-out text for one node, carried from measure to paint.</summary>
 public sealed record TextLines(IReadOnlyList<LayoutLine> Lines, double LineHeight, FontSpec Font);

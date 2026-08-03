@@ -1,5 +1,7 @@
 using Codeuctivity.ImageSharpCompare;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace Easydict.UIAutomation.Tests.Infrastructure;
 
@@ -111,6 +113,74 @@ public static class VisualRegressionHelper
         {
             BaselinePath = baselinePath,
             ActualPath = screenshotPath,
+            DiffImagePath = diffImagePath,
+            PixelErrorPercent = pixelErrorPercent,
+            ThresholdPercent = thresholdPercent,
+            Passed = pixelErrorPercent <= thresholdPercent
+        };
+    }
+
+    /// <summary>
+    /// Compares two screenshots captured from equivalent renderer states.
+    /// A bounded physical-size delta is cropped from the trailing edge after callers
+    /// have separately asserted the corresponding logical layout tolerance.
+    /// </summary>
+    public static VisualComparisonResult ComparePairedScreenshots(
+        string actualPath,
+        string expectedPath,
+        string comparisonName,
+        double thresholdPercent,
+        int allowedSizeDeltaPixels)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(allowedSizeDeltaPixels);
+
+        using var actual = Image.Load<Rgb24>(actualPath);
+        using var expected = Image.Load<Rgb24>(expectedPath);
+
+        if (Math.Abs(actual.Width - expected.Width) > allowedSizeDeltaPixels ||
+            Math.Abs(actual.Height - expected.Height) > allowedSizeDeltaPixels)
+        {
+            return new VisualComparisonResult
+            {
+                BaselinePath = expectedPath,
+                ActualPath = actualPath,
+                PixelErrorPercent = 100,
+                ThresholdPercent = thresholdPercent,
+                Passed = false
+            };
+        }
+
+        var comparedBounds = new Rectangle(
+            0,
+            0,
+            Math.Min(actual.Width, expected.Width),
+            Math.Min(actual.Height, expected.Height));
+        using var actualCropped = actual.Clone(context => context.Crop(comparedBounds));
+        using var expectedCropped = expected.Clone(context => context.Crop(comparedBounds));
+
+        var diff = ImageSharpCompare.CalcDiff(
+            actualCropped,
+            expectedCropped,
+            ResizeOption.DontResize);
+        var pixelErrorPercent = diff.PixelErrorPercentage;
+
+        string? diffImagePath = null;
+        if (pixelErrorPercent > thresholdPercent)
+        {
+            var diffDir = Path.Combine(ScreenshotHelper.OutputDir, "visual-diffs");
+            Directory.CreateDirectory(diffDir);
+            diffImagePath = Path.Combine(diffDir, $"{comparisonName}_diff.png");
+            using var diffImage = ImageSharpCompare.CalcDiffMaskImage(
+                actualCropped,
+                expectedCropped,
+                ResizeOption.DontResize);
+            diffImage.Save(diffImagePath);
+        }
+
+        return new VisualComparisonResult
+        {
+            BaselinePath = expectedPath,
+            ActualPath = actualPath,
             DiffImagePath = diffImagePath,
             PixelErrorPercent = pixelErrorPercent,
             ThresholdPercent = thresholdPercent,

@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <DirectXamlToolsRoot Condition="'$(DirectXamlToolsRoot)' == ''">$(MSBuildThisFileDirectory)tools\</DirectXamlToolsRoot>
+    <DirectXamlGeneratedDir Condition="'$(DirectXamlGeneratedDir)' == ''">$(BaseIntermediateOutputPath)directxaml\</DirectXamlGeneratedDir>
+    <DirectXamlHostRid Condition="'$(DirectXamlHostRid)' == '' and '$(PROCESSOR_ARCHITECTURE)' == 'ARM64' and Exists('$(DirectXamlToolsRoot)win-arm64\dxamlc.exe')">win-arm64</DirectXamlHostRid>
+    <!-- Windows 11 ARM64 runs the packaged x64 compiler through built-in x64 emulation when a native tool is absent. -->
+    <DirectXamlHostRid Condition="'$(DirectXamlHostRid)' == ''">win-x64</DirectXamlHostRid>
+    <DirectXamlCompiler Condition="'$(DirectXamlCompiler)' == ''">$(DirectXamlToolsRoot)$(DirectXamlHostRid)\dxamlc.exe</DirectXamlCompiler>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <DirectXaml>
+      <LogicalName>$(RootNamespace).%(Filename).dxir.json</LogicalName>
+    </DirectXaml>
+  </ItemDefinitionGroup>
+</Project>

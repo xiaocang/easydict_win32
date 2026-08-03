@@ -1023,6 +1023,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>Erweitert</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>Rendering</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>Wählen Sie aus, wie Übersetzungsergebniskarten gerendert werden.</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>Direct-Renderer verwenden (experimentell)</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>Rendert Übersetzungsergebniskarten direkt mit Win2D, um den Mehraufwand der visuellen XAML-Struktur zu reduzieren. Starten Sie die App neu, um die Änderungen zu übernehmen.</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>Allgemein</value>
   </data>

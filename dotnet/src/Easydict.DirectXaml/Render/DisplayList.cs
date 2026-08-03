@@ -51,16 +51,60 @@ public sealed record PushOpacity(double Opacity) : DrawCommand;
 /// <summary>Ends the group opened by the most recent <see cref="PushOpacity"/>.</summary>
 public sealed record PopOpacity : DrawCommand;
 
+/// <summary>Which retained display-list partition a backend should replay.</summary>
+public enum DisplayListLayer
+{
+    All,
+    Static,
+    Dynamic,
+}
+
 /// <summary>An ordered list of drawing instructions for one frame.</summary>
-/// <param name="commands">Instructions in paint order. Push/pop pairs are balanced.</param>
-public sealed class DisplayList(IReadOnlyList<DrawCommand> commands)
+public sealed class DisplayList
 {
     /// <summary>A list that draws nothing.</summary>
     public static readonly DisplayList Empty = new(Array.Empty<DrawCommand>());
 
-    /// <summary>The instructions, in paint order.</summary>
-    public IReadOnlyList<DrawCommand> Commands { get; } = commands;
+    private readonly List<DrawCommand> _commands;
+    private readonly List<DrawCommand> _staticCommands;
+    private readonly List<DrawCommand> _dynamicCommands;
 
-    /// <summary>Number of instructions.</summary>
-    public int Count => Commands.Count;
+    public DisplayList(IReadOnlyList<DrawCommand> commands)
+        : this(commands, Array.Empty<DrawCommand>(), commands)
+    {
+    }
+
+    public DisplayList(
+        IReadOnlyList<DrawCommand> staticCommands,
+        IReadOnlyList<DrawCommand> dynamicCommands,
+        IReadOnlyList<DrawCommand>? commands = null)
+    {
+        _staticCommands = staticCommands.ToList();
+        _dynamicCommands = dynamicCommands.ToList();
+        _commands = (commands ?? staticCommands.Concat(dynamicCommands).ToArray()).ToList();
+    }
+
+    /// <summary>Full paint-order command stream, retained for compatibility and diagnostics.</summary>
+    public IReadOnlyList<DrawCommand> Commands => _commands;
+
+    /// <summary>Commands unaffected by named slot updates.</summary>
+    public IReadOnlyList<DrawCommand> StaticCommands => _staticCommands;
+
+    /// <summary>Commands owned by named runtime slots.</summary>
+    public IReadOnlyList<DrawCommand> DynamicCommands => _dynamicCommands;
+
+    public int Count => _commands.Count;
+
+    internal List<DrawCommand> StaticBuffer => _staticCommands;
+
+    internal List<DrawCommand> DynamicBuffer => _dynamicCommands;
+
+    internal List<DrawCommand> CommandBuffer => _commands;
+
+    internal void Reset()
+    {
+        _staticCommands.Clear();
+        _dynamicCommands.Clear();
+        _commands.Clear();
+    }
 }

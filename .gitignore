@@ -18,6 +18,8 @@ tmp/
 # Common build artifacts
 **/*.dll
 **/*.exe
+!dotnet/build/tools/win-x64/dxamlc.exe
+!dotnet/build/tools/win-arm64/dxamlc.exe
 **/*.pdb
 **/*.ilk
 **/*.obj

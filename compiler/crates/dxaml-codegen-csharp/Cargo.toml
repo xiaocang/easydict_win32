@@ -1,0 +1,11 @@
+[package]
+name = "dxaml-codegen-csharp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Typed C# slot accessor generation for Direct XAML."
+
+[dependencies]
+dxaml-ir.workspace = true

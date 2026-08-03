@@ -14,7 +14,12 @@ param(
     [string]$DiagnosticsToolVersion = "8.*",
     [switch]$SkipBuild,
     [switch]$SkipToolInstall,
-    [switch]$RunRealTranslation
+    [switch]$RunRealTranslation,
+    [switch]$MeasureRendererPerformance,
+    [ValidateRange(0, 300)]
+    [int]$RendererBenchmarkStreamingUpdateCount = 0,
+    [ValidateRange(10, 1000)]
+    [int]$RendererBenchmarkStreamingUpdateIntervalMilliseconds = 50
 )
 
 $ErrorActionPreference = "Stop"
@@ -507,6 +512,124 @@ function Get-RowDouble($Row, [string]$ColumnName) {
     return Convert-ToDouble $property.Value
 }
 
+function Get-Distribution([double[]]$Values) {
+    if ($Values.Count -eq 0) {
+        return $null
+    }
+
+    [double[]]$sorted = @($Values | Sort-Object)
+    $middle = [int][Math]::Floor($sorted.Count / 2)
+    $median = if (($sorted.Count % 2) -eq 1) {
+        $sorted[$middle]
+    }
+    else {
+        ($sorted[$middle - 1] + $sorted[$middle]) / 2.0
+    }
+
+    return [pscustomobject]@{
+        samples = $sorted.Count
+        median = $median
+        mean = ($sorted | Measure-Object -Average).Average
+        minimum = $sorted[0]
+        maximum = $sorted[$sorted.Count - 1]
+    }
+}
+
+function New-RendererBenchmarkFirstResult(
+    [bool]$Enabled,
+    [string]$SubmittedMarkerPath,
+    [string]$RenderedMarkerPath) {
+
+    if (-not $Enabled) {
+        return $null
+    }
+
+    if (-not (Test-Path -LiteralPath $SubmittedMarkerPath)) {
+        return [pscustomobject]@{ status = "submitted-marker-missing" }
+    }
+
+    if (-not (Test-Path -LiteralPath $RenderedMarkerPath)) {
+        return [pscustomobject]@{
+            status = "rendered-marker-missing"
+            submittedUtc = (Read-PhaseMarkerUtc $SubmittedMarkerPath).ToString("O")
+        }
+    }
+
+    $submittedUtc = Read-PhaseMarkerUtc $SubmittedMarkerPath
+    $renderedUtc = Read-PhaseMarkerUtc $RenderedMarkerPath
+    if ($renderedUtc -lt $submittedUtc) {
+        return [pscustomobject]@{
+            status = "invalid-marker-order"
+            submittedUtc = $submittedUtc.ToString("O")
+            renderedUtc = $renderedUtc.ToString("O")
+        }
+    }
+
+    return [pscustomobject]@{
+        status = "available"
+        submittedUtc = $submittedUtc.ToString("O")
+        renderedUtc = $renderedUtc.ToString("O")
+        renderLatencyMilliseconds = ($renderedUtc - $submittedUtc).TotalMilliseconds
+    }
+}
+
+function New-RendererBenchmarkCpuWindow(
+    [bool]$Enabled,
+    $Rows,
+    [string]$TimeColumn,
+    [string]$CpuColumn,
+    [string]$StartedMarkerPath,
+    [string]$CompletedMarkerPath) {
+
+    if (-not $Enabled) {
+        return $null
+    }
+
+    if (-not (Test-Path -LiteralPath $StartedMarkerPath)) {
+        return [pscustomobject]@{ status = "started-marker-missing" }
+    }
+
+    if (-not (Test-Path -LiteralPath $CompletedMarkerPath)) {
+        return [pscustomobject]@{ status = "completed-marker-missing" }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($CpuColumn)) {
+        return [pscustomobject]@{ status = "cpu-counter-missing" }
+    }
+
+    $startedUtc = Read-PhaseMarkerUtc $StartedMarkerPath
+    $completedUtc = Read-PhaseMarkerUtc $CompletedMarkerPath
+    if ($completedUtc -lt $startedUtc) {
+        return [pscustomobject]@{
+            status = "invalid-marker-order"
+            startedUtc = $startedUtc.ToString("O")
+            completedUtc = $completedUtc.ToString("O")
+        }
+    }
+
+    $values = New-Object System.Collections.Generic.List[double]
+    foreach ($row in $Rows) {
+        $sampleUtc = Convert-TypeperfTimestampToUtc $row.$TimeColumn
+        if ($null -eq $sampleUtc -or $sampleUtc -lt $startedUtc -or $sampleUtc -gt $completedUtc) {
+            continue
+        }
+
+        $value = Get-RowDouble $row $CpuColumn
+        if ($null -ne $value) {
+            $values.Add($value)
+        }
+    }
+
+    $distribution = Get-Distribution $values.ToArray()
+    return [pscustomobject]@{
+        status = if ($null -ne $distribution) { "available" } else { "no-samples" }
+        startedUtc = $startedUtc.ToString("O")
+        completedUtc = $completedUtc.ToString("O")
+        durationMilliseconds = ($completedUtc - $startedUtc).TotalMilliseconds
+        cpuPercent = $distribution
+    }
+}
+
 function Get-NearestTypeperfRowIndex($Rows, [string]$TimeColumn, [DateTimeOffset]$TargetUtc) {
     if ($Rows.Count -eq 0 -or [string]::IsNullOrWhiteSpace($TimeColumn)) {
         return $null
@@ -765,17 +888,48 @@ $baselineHeapstat = Join-Path $OutputDir "baseline.heapstat.txt"
 $finalGcdump = Join-Path $OutputDir "final.gcdump"
 $finalHeapstat = Join-Path $OutputDir "final.heapstat.txt"
 $phaseSnapshotsPath = Join-Path $OutputDir "phase-snapshots.json"
+$rendererBenchmarkMarkerDir = Join-Path $markerDir "renderer-benchmark"
+$rendererBenchmarkSubmittedMarker = Join-Path $rendererBenchmarkMarkerDir "first-result-submitted.marker"
+$rendererBenchmarkRenderedMarker = Join-Path $rendererBenchmarkMarkerDir "first-result-rendered.marker"
+$rendererBenchmarkStreamingStartedMarker = Join-Path $rendererBenchmarkMarkerDir "streaming-started.marker"
+$rendererBenchmarkStreamingCompletedMarker = Join-Path $rendererBenchmarkMarkerDir "streaming-completed.marker"
 $testOut = Join-Path $OutputDir "dotnet-test.out.log"
 $testErr = Join-Path $OutputDir "dotnet-test.err.log"
 New-Directory $markerDir
 New-Directory $phaseDir
+New-Directory $rendererBenchmarkMarkerDir
 Remove-Item -LiteralPath $processIdMarker, $closedMarker, $releaseMarker -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath @(
+    $rendererBenchmarkSubmittedMarker,
+    $rendererBenchmarkRenderedMarker,
+    $rendererBenchmarkStreamingStartedMarker,
+    $rendererBenchmarkStreamingCompletedMarker) -Force -ErrorAction SilentlyContinue
 Get-ChildItem -LiteralPath $phaseDir -Filter "*.marker" -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 $env:EASYDICT_MEMORY_GATE_PROCESS_ID_PATH = $processIdMarker
 $env:EASYDICT_MEMORY_GATE_CLOSED_MARKER_PATH = $closedMarker
 $env:EASYDICT_MEMORY_GATE_RELEASE_MARKER_PATH = $releaseMarker
 $env:EASYDICT_MEMORY_GATE_PHASE_DIR = $phaseDir
+
+if ($MeasureRendererPerformance) {
+    $env:EASYDICT_RENDERER_BENCHMARK = "1"
+    $env:EASYDICT_RENDERER_BENCHMARK_FIRST_RESULT_SUBMITTED_MARKER_PATH = $rendererBenchmarkSubmittedMarker
+    $env:EASYDICT_RENDERER_BENCHMARK_FIRST_RESULT_RENDERED_MARKER_PATH = $rendererBenchmarkRenderedMarker
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_STARTED_MARKER_PATH = $rendererBenchmarkStreamingStartedMarker
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_COMPLETED_MARKER_PATH = $rendererBenchmarkStreamingCompletedMarker
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_COUNT = [string]$RendererBenchmarkStreamingUpdateCount
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_INTERVAL_MILLISECONDS =
+        [string]$RendererBenchmarkStreamingUpdateIntervalMilliseconds
+}
+else {
+    $env:EASYDICT_RENDERER_BENCHMARK = "0"
+    $env:EASYDICT_RENDERER_BENCHMARK_FIRST_RESULT_SUBMITTED_MARKER_PATH = $null
+    $env:EASYDICT_RENDERER_BENCHMARK_FIRST_RESULT_RENDERED_MARKER_PATH = $null
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_STARTED_MARKER_PATH = $null
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_COMPLETED_MARKER_PATH = $null
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_COUNT = $null
+    $env:EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_INTERVAL_MILLISECONDS = $null
+}
 
 $testArgs = @(
     "test", $TestProject,
@@ -833,7 +987,8 @@ $typeperfCounters = @(
     "\Process($instance)\Private Bytes",
     "\Process($instance)\Handle Count",
     "\Process($instance)\Working Set",
-    "\Process($instance)\Thread Count"
+    "\Process($instance)\Thread Count",
+    "\Process($instance)\% Processor Time"
 )
 $typeperfJob = Start-TypeperfJob `
     -Counters $typeperfCounters `
@@ -929,6 +1084,7 @@ $privateColumn = Get-CsvColumn $rows "\Private Bytes"
 $handleColumn = Get-CsvColumn $rows "\Handle Count"
 $workingSetColumn = Get-CsvColumn $rows "\Working Set"
 $threadColumn = Get-CsvColumn $rows "\Thread Count"
+$cpuColumn = Get-CsvColumn $rows "\% Processor Time"
 if (-not $privateColumn -or -not $handleColumn) {
     Write-Host "::error title=PR Memory Gate::typeperf csv missing required Private Bytes / Handle Count columns"
     throw "typeperf output is missing Private Bytes or Handle Count columns."
@@ -979,7 +1135,52 @@ $phaseSnapshots = New-PhaseSnapshots `
 ConvertTo-Json -InputObject @($phaseSnapshots) -Depth 8 |
     Set-Content -LiteralPath $phaseSnapshotsPath -Encoding UTF8
 
+$rendererBenchmark = [pscustomobject]@{
+    enabled = [bool]$MeasureRendererPerformance
+    firstResult = New-RendererBenchmarkFirstResult `
+        $MeasureRendererPerformance `
+        $rendererBenchmarkSubmittedMarker `
+        $rendererBenchmarkRenderedMarker
+    streaming = New-RendererBenchmarkCpuWindow `
+        $MeasureRendererPerformance `
+        $rows `
+        $timeColumn `
+        $cpuColumn `
+        $rendererBenchmarkStreamingStartedMarker `
+        $rendererBenchmarkStreamingCompletedMarker
+    streamingConfiguration = [pscustomobject]@{
+        updateCount = $RendererBenchmarkStreamingUpdateCount
+        updateIntervalMilliseconds = $RendererBenchmarkStreamingUpdateIntervalMilliseconds
+    }
+    cpuSampling = [pscustomobject]@{
+        counterColumn = $cpuColumn
+        sampleIntervalMilliseconds = 1000
+        normalization = "Raw process percent processor time; it is not normalized to logical-core count."
+        scope = "Process percent processor time sampled only while the controlled streaming window was active."
+    }
+}
+
+$rendererBenchmarkFailures = New-Object System.Collections.Generic.List[string]
+if ($MeasureRendererPerformance -and $rendererBenchmark.firstResult.status -ne "available") {
+    $rendererBenchmarkFailures.Add(
+        "Renderer first-result benchmark telemetry unavailable: $($rendererBenchmark.firstResult.status)")
+}
+
+if ($MeasureRendererPerformance -and $RendererBenchmarkStreamingUpdateCount -gt 0) {
+    if ($rendererBenchmark.streaming.status -ne "available") {
+        $rendererBenchmarkFailures.Add(
+            "Renderer streaming CPU benchmark telemetry unavailable: $($rendererBenchmark.streaming.status)")
+    }
+    elseif ($rendererBenchmark.streaming.cpuPercent.samples -lt 2) {
+        $rendererBenchmarkFailures.Add(
+            "Renderer streaming CPU benchmark captured fewer than two process samples.")
+    }
+}
+
 $failures = New-Object System.Collections.Generic.List[string]
+foreach ($rendererBenchmarkFailure in $rendererBenchmarkFailures) {
+    $failures.Add($rendererBenchmarkFailure)
+}
 $privateRelativeLimit = $baselinePrivate * (1.0 + ($ThresholdPercent / 100.0))
 $privateAbsoluteLimit = $baselinePrivate + ($PrivateBytesAbsoluteAllowanceMB * 1MB)
 $privateLimit = [Math]::Max($privateRelativeLimit, $privateAbsoluteLimit)
@@ -1012,6 +1213,7 @@ else {
 }
 
 $summary = [pscustomobject]@{
+    schemaVersion = 2
     scenario = "pr-memory-gate"
     processId = $processId
     thresholdPercent = $ThresholdPercent
@@ -1053,6 +1255,7 @@ $summary = [pscustomobject]@{
         final = $finalManagedHeapBytes
         limit = $managedHeapLimit
     }
+    rendererBenchmark = $rendererBenchmark
     phaseSnapshots = $phaseSnapshots
     artifacts = [pscustomobject]@{
         typeperfCsv = $typeperfCsv
@@ -1062,6 +1265,10 @@ $summary = [pscustomobject]@{
         finalGcdump = $finalGcdump
         finalHeapstat = $finalHeapstat
         phaseSnapshots = $phaseSnapshotsPath
+        rendererBenchmarkSubmittedMarker = $rendererBenchmarkSubmittedMarker
+        rendererBenchmarkRenderedMarker = $rendererBenchmarkRenderedMarker
+        rendererBenchmarkStreamingStartedMarker = $rendererBenchmarkStreamingStartedMarker
+        rendererBenchmarkStreamingCompletedMarker = $rendererBenchmarkStreamingCompletedMarker
     }
     failures = $failures.ToArray()
 }

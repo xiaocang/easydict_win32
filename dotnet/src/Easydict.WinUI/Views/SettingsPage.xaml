@@ -2466,6 +2466,7 @@
                     <StackPanel x:Name="AdvancedTabContent"
                                 Spacing="24"
                                 Visibility="Collapsed">
+
                     <!-- OCR (Text Recognition) Settings -->
                     <StackPanel x:Name="OcrSettingsSection"
                             Spacing="12">
@@ -2835,6 +2836,33 @@
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Rendering -->
+                    <StackPanel x:Name="DirectRendererSection"
+                                Spacing="12">
+                        <TextBlock x:Name="DirectRendererHeaderText"
+                                   Text="Rendering"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock x:Name="DirectRendererDescriptionText"
+                                   Text="Choose how translation result cards are rendered."
+                                   FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="8">
+                                <ToggleSwitch x:Name="DirectRendererToggle"
+                                              AutomationProperties.AutomationId="DirectRendererToggle"
+                                              Header="Use Direct renderer (experimental)"/>
+                                <TextBlock x:Name="DirectRendererNoteText"
+                                           Text="Renders translation result cards directly with Win2D to reduce XAML visual-tree overhead. Restart the app to apply changes."
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

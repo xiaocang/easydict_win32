@@ -3,10 +3,10 @@
 //! Lowering is deterministic: the same HIR always produces byte-identical IR. Resource slots are
 //! interned in first-encounter order, and every table is emitted in node order.
 
-use dxaml_hir::{HirDocument, HirValue, LiteralValue, ResourceRef};
+use dxaml_hir::{HirBindingMode, HirDocument, HirValue, LiteralValue, ResourceRef};
 use dxaml_ir::{
-    features, IrAction, IrDocument, IrGridLength, IrLength, IrMutableProperty, IrNamedSlot, IrNode,
-    IrProperty, IrResource, IrSource, IrValue, IR_VERSION,
+    features, IrAction, IrBinding, IrBindingMode, IrDocument, IrGridLength, IrLength,
+    IrMutableProperty, IrNamedSlot, IrNode, IrProperty, IrResource, IrSource, IrValue, IR_VERSION,
 };
 use dxaml_schema as schema;
 
@@ -21,6 +21,25 @@ pub fn lower(
     let mut properties = Vec::new();
     let mut named_slots = Vec::new();
     let mut actions = Vec::new();
+    let bindings = hir
+        .bindings
+        .iter()
+        .map(|binding| IrBinding {
+            target_node: binding.target_node,
+            target_property: binding.target_property.clone(),
+            source_path: binding.source_path.clone(),
+            mode: match binding.mode {
+                HirBindingMode::OneTime => IrBindingMode::OneTime,
+                HirBindingMode::OneWay => IrBindingMode::OneWay,
+            },
+            invalidation: binding
+                .invalidation
+                .names()
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        })
+        .collect::<Vec<_>>();
 
     for (id, node) in hir.nodes.iter().enumerate() {
         nodes.push(IrNode {
@@ -73,6 +92,9 @@ pub fn lower(
     if !named_slots.is_empty() {
         feature_list.push(features::NAMED_SLOTS.to_string());
     }
+    if !bindings.is_empty() {
+        feature_list.push(features::BINDINGS.to_string());
+    }
     if !resources.is_empty() {
         feature_list.push(features::THEME_RESOURCES.to_string());
     }
@@ -88,10 +110,12 @@ pub fn lower(
             hash: format!("fnv1a64:{:016x}", fnv1a64(source.as_bytes())),
         },
         class_name: hir.class_name.clone(),
+        binding_context_type: hir.binding_context_type.clone(),
         features: feature_list,
         nodes,
         properties,
         named_slots,
+        bindings,
         resources,
         actions,
         // Automation metadata is supplied at runtime by ServiceResultViewHost in v0; the table
@@ -274,6 +298,33 @@ mod tests {
         assert!(!document
             .features
             .contains(&features::NAMED_SLOTS.to_string()));
+    }
+
+    #[test]
+    fn lowers_typed_bindings_with_context_and_invalidation() {
+        let source = format!(
+            "<UserControl {HEADER} x:DataType=\"Easydict.SampleContext\">\
+                <TextBlock Text=\"{{x:Bind ResultText, Mode=OneWay}}\"/>\
+            </UserControl>"
+        );
+        let (hir, diagnostics) = dxaml_hir::analyze(&source);
+        assert!(!diagnostics.has_errors(), "{:?}", diagnostics.sorted());
+        let hir = hir.expect("hir");
+
+        let document = lower(&hir, &source, "Sample.xaml", "0.1.0");
+
+        assert!(document.features.contains(&features::BINDINGS.to_string()));
+        assert_eq!(
+            document.binding_context_type.as_deref(),
+            Some("Easydict.SampleContext")
+        );
+        assert_eq!(document.bindings.len(), 1);
+        let binding = &document.bindings[0];
+        assert_eq!(binding.target_node, 1);
+        assert_eq!(binding.target_property, "Text");
+        assert_eq!(binding.source_path, vec!["ResultText"]);
+        assert_eq!(binding.mode, IrBindingMode::OneWay);
+        assert_eq!(binding.invalidation, vec!["measure", "paint"]);
     }
 
     #[test]

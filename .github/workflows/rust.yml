@@ -7,11 +7,15 @@ on:
     branches: [master, 'claude/**']
     paths:
       - 'compiler/**'
+      - 'dotnet/build/DirectXaml.*'
+      - 'dotnet/src/Easydict.WinUI/Views/Controls/MinimalServiceResultItem.xaml'
       - '.github/workflows/rust.yml'
   pull_request:
     branches: [master]
     paths:
       - 'compiler/**'
+      - 'dotnet/build/DirectXaml.*'
+      - 'dotnet/src/Easydict.WinUI/Views/Controls/MinimalServiceResultItem.xaml'
       - '.github/workflows/rust.yml'
   workflow_dispatch:
 
@@ -75,6 +79,7 @@ jobs:
           path: |
             compiler/crates/dxaml-cli/tests/fixtures/MinimalServiceResultItem.dxir.json
             compiler/out/MinimalServiceResultItem.dxir.json
+            compiler/out/MinimalServiceResultItem.bindings.g.cs
           if-no-files-found: warn
 
       # Drift check. `cargo test` creates the golden when it is absent, so an untracked file only
@@ -112,3 +117,57 @@ jobs:
             echo "::error::ServiceResultItem.xaml compiled under Direct XAML v0, which the spec says it must not."
             exit 1
           fi
+
+  compiler-tools:
+    name: compiler tool (${{ matrix.rid }})
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            rid: win-x64
+            vs_arch: x64
+          - target: aarch64-pc-windows-msvc
+            rid: win-arm64
+            vs_arch: arm64
+    defaults:
+      run:
+        working-directory: compiler
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust target
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add ${{ matrix.target }}
+
+      - name: Build compiler
+        # The runner's ordinary PATH can resolve Git for Windows' GNU `link.exe`.
+        # Enter the matching MSVC developer shell so cargo sees the actual linker and
+        # architecture-specific Windows SDK / CRT libraries.
+        shell: cmd
+        run: |
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -property installationPath`) do set "VSINSTALL=%%I"
+          if not defined VSINSTALL exit /b 1
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vs_arch }} -host_arch=x64 -no_logo
+          cargo build --release -p dxaml-cli --target ${{ matrix.target }}
+
+      - name: Stage compiler
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP '${{ matrix.rid }}'
+          New-Item -ItemType Directory -Force $destination | Out-Null
+          Copy-Item 'target/${{ matrix.target }}/release/dxamlc.exe' $destination
+
+      - name: Upload compiler
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-xaml-compiler-${{ matrix.rid }}
+          path: ${{ runner.temp }}/${{ matrix.rid }}/dxamlc.exe
+          if-no-files-found: error

@@ -1098,6 +1098,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>進階</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>轉譯</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>選擇翻譯結果卡片的轉譯方式。</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>使用 Direct 轉譯器（實驗性）</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>使用 Win2D 直接轉譯翻譯結果卡片，以減少 XAML 視覺化樹狀結構的額外負荷。重新啟動應用程式以套用變更。</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>一般</value>
   </data>

@@ -284,6 +284,8 @@ public enum NodeKind
     /// <summary>A single-axis container with uniform spacing.</summary>
     StackPanel,
 
+    Button,
+
     /// <summary>A run of text.</summary>
     TextBlock,
 

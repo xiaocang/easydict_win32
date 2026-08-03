@@ -81,6 +81,19 @@
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         FontSize="12"
                         Visibility="Collapsed"/>
+                    <Button
+                        x:Name="CopyButton"
+                        Command="{x:Bind CopyCommand}"
+                        Content="Copy"
+                        HorizontalAlignment="Right"
+                        Padding="4,2"
+                        Background="{ThemeResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Foreground="{ThemeResource QueryTextBrush}"
+                        FontSize="11"
+                        Visibility="Collapsed"/>
                 </StackPanel>
             </Border>
         </Grid>

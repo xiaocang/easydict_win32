@@ -112,6 +112,8 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
 
         return new PreparedParagraph
         {
+            SourceText = request.Text,
+            NormalizeWhitespace = request.NormalizeWhitespace,
             Segments = segments,
             Widths = widths,
             Kinds = kinds,
@@ -124,6 +126,184 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             HardBreakIndices = hardBreakIndices.ToArray(),
             DiscretionaryHyphenWidth = discretionaryHyphenWidth,
         };
+    }
+
+    /// <summary>
+    /// Appends a suffix whose first segment cannot merge with the previous word and re-lays out
+    /// only a small safety tail. The caller must retain the previous layout result.
+    /// </summary>
+    public bool TryAppendLayout(
+        PreparedParagraph previous,
+        LayoutLinesResult previousLayout,
+        string appendedText,
+        ITextMeasurer measurer,
+        double maxWidth,
+        out PreparedParagraph prepared,
+        out LayoutLinesResult layout)
+    {
+        prepared = previous;
+        layout = previousLayout;
+        if (string.IsNullOrEmpty(appendedText))
+        {
+            return false;
+        }
+
+        string suffixText = previous.NormalizeWhitespace
+            ? TextSegmenter.NormalizeWhitespace(appendedText)
+            : appendedText;
+        if (suffixText.Length == 0)
+        {
+            return false;
+        }
+
+        var (suffixSegments, suffixKinds) = TextSegmenter.Segment(suffixText, normalizeWhitespace: false);
+        if (suffixSegments.Length == 0)
+        {
+            return false;
+        }
+
+        if (previous.Count > 0)
+        {
+            SegmentKind firstKind = suffixKinds[0];
+            if (!IsSafeAppendBoundary(firstKind)
+                || (previous.Kinds[^1] == SegmentKind.Space
+                    && firstKind == SegmentKind.HardBreak))
+            {
+                return false;
+            }
+        }
+
+        PreparedParagraph suffix = Prepare(
+            new TextPrepareRequest
+            {
+                Text = suffixText,
+                NormalizeWhitespace = false,
+            },
+            measurer);
+        int skip = previous.Count > 0
+            && previous.Kinds[^1] == SegmentKind.Space
+            && suffix.Kinds[0] == SegmentKind.Space
+            ? 1
+            : 0;
+        if (skip >= suffix.Count)
+        {
+            return false;
+        }
+
+        prepared = AppendPrepared(previous, suffix, skip, appendedText);
+        layout = LayoutAppendedTail(previousLayout, prepared, maxWidth);
+        return true;
+    }
+
+    private static bool IsSafeAppendBoundary(SegmentKind kind) =>
+        kind is SegmentKind.Space
+            or SegmentKind.HardBreak
+            or SegmentKind.CjkGrapheme
+            or SegmentKind.OpenPunctuation
+            or SegmentKind.ClosePunctuation
+            or SegmentKind.SoftHyphen
+            or SegmentKind.FormulaPlaceholder;
+
+    private static PreparedParagraph AppendPrepared(
+        PreparedParagraph previous,
+        PreparedParagraph suffix,
+        int skip,
+        string appendedText)
+    {
+        int suffixCount = suffix.Count - skip;
+        int count = previous.Count + suffixCount;
+        var hardBreakIndices = new int[
+            previous.HardBreakIndices.Length + suffix.HardBreakIndices.Count(index => index >= skip)];
+        Array.Copy(previous.HardBreakIndices, hardBreakIndices, previous.HardBreakIndices.Length);
+        int hardBreakOffset = previous.HardBreakIndices.Length;
+        for (int index = skip; index < suffix.HardBreakIndices.Length; index++)
+        {
+            hardBreakIndices[hardBreakOffset++] =
+                previous.Count + suffix.HardBreakIndices[index] - skip;
+        }
+
+        return new PreparedParagraph
+        {
+            SourceText = previous.SourceText + appendedText,
+            NormalizeWhitespace = previous.NormalizeWhitespace,
+            Segments = AppendArray(previous.Segments, suffix.Segments, skip, count),
+            Widths = AppendArray(previous.Widths, suffix.Widths, skip, count),
+            Kinds = AppendArray(previous.Kinds, suffix.Kinds, skip, count),
+            LineEndFitAdvances = AppendArray(
+                previous.LineEndFitAdvances,
+                suffix.LineEndFitAdvances,
+                skip,
+                count),
+            GraphemeWidths = AppendArray(
+                previous.GraphemeWidths,
+                suffix.GraphemeWidths,
+                skip,
+                count),
+            GraphemePrefixSums = AppendArray(
+                previous.GraphemePrefixSums,
+                suffix.GraphemePrefixSums,
+                skip,
+                count),
+            Graphemes = AppendArray(previous.Graphemes, suffix.Graphemes, skip, count),
+            IsProhibitedLineStart = AppendArray(
+                previous.IsProhibitedLineStart,
+                suffix.IsProhibitedLineStart,
+                skip,
+                count),
+            IsProhibitedLineEnd = AppendArray(
+                previous.IsProhibitedLineEnd,
+                suffix.IsProhibitedLineEnd,
+                skip,
+                count),
+            HardBreakIndices = hardBreakIndices,
+            DiscretionaryHyphenWidth = previous.DiscretionaryHyphenWidth != 0
+                ? previous.DiscretionaryHyphenWidth
+                : suffix.DiscretionaryHyphenWidth,
+        };
+    }
+
+    private static T[] AppendArray<T>(T[] first, T[] second, int skip, int count)
+    {
+        var result = new T[count];
+        Array.Copy(first, result, first.Length);
+        Array.Copy(second, skip, result, first.Length, second.Length - skip);
+        return result;
+    }
+
+    private LayoutLinesResult LayoutAppendedTail(
+        LayoutLinesResult previousLayout,
+        PreparedParagraph prepared,
+        double maxWidth)
+    {
+        int prefixCount = Math.Max(0, previousLayout.Lines.Count - 2);
+        var lines = new List<LayoutLine>(previousLayout.Lines.Count + 4);
+        double maxLineWidth = 0;
+        for (int index = 0; index < prefixCount; index++)
+        {
+            LayoutLine line = previousLayout.Lines[index];
+            lines.Add(line);
+            maxLineWidth = Math.Max(maxLineWidth, line.Width);
+        }
+
+        LayoutCursor cursor = prefixCount < previousLayout.Lines.Count
+            ? new LayoutCursor(
+                previousLayout.Lines[prefixCount].StartSegment,
+                previousLayout.Lines[prefixCount].StartGrapheme)
+            : LayoutCursor.Start;
+        while (cursor.SegmentIndex < prepared.Count)
+        {
+            LayoutLine? line = LayoutNextLine(prepared, cursor, maxWidth);
+            if (line is null)
+            {
+                break;
+            }
+
+            lines.Add(line);
+            maxLineWidth = Math.Max(maxLineWidth, line.Width);
+            cursor = new LayoutCursor(line.EndSegment, line.EndGrapheme);
+        }
+
+        return new LayoutLinesResult(lines, maxLineWidth, HasOverflow: false);
     }
 
     /// <inheritdoc/>

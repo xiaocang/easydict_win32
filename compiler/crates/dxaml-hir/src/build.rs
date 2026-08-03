@@ -6,7 +6,8 @@
 use std::collections::HashSet;
 
 use dxaml_ast::{
-    AttributeValue, XamlChild, XamlDocument, XamlElement, XamlProperty, XamlPropertyElement,
+    AttributeValue, MarkupExtension, XamlChild, XamlDocument, XamlElement, XamlProperty,
+    XamlPropertyElement,
 };
 use dxaml_schema::{self as schema, ContentKind, ControlKind, Invalidation, ValueType};
 use dxaml_syntax::{codes, DiagnosticBag, Span};
@@ -21,8 +22,11 @@ pub type NodeId = usize;
 #[derive(Debug, Clone)]
 pub struct HirDocument {
     pub class_name: String,
+    /// Root `x:DataType`, resolved to a C# qualified type name when the document has x:Bind.
+    pub binding_context_type: Option<String>,
     pub root: NodeId,
     pub nodes: Vec<HirNode>,
+    pub bindings: Vec<HirBinding>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +49,23 @@ pub struct HirProperty {
     pub value: HirValue,
     pub invalidation: Invalidation,
     pub span: Span,
+}
+
+/// A string-valued `{x:Bind}` whose member access is emitted into generated C#.
+#[derive(Debug, Clone)]
+pub struct HirBinding {
+    pub target_node: NodeId,
+    pub target_property: String,
+    pub source_path: Vec<String>,
+    pub mode: HirBindingMode,
+    pub invalidation: Invalidation,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirBindingMode {
+    OneTime,
+    OneWay,
 }
 
 #[derive(Debug, Clone)]
@@ -81,28 +102,35 @@ pub fn build(document: &XamlDocument, diagnostics: &mut DiagnosticBag) -> Option
         }
     };
 
+    let binding_context_type = resolve_binding_context_type(root_element, diagnostics);
     let mut builder = Builder {
         nodes: Vec::new(),
+        bindings: Vec::new(),
+        binding_context_type: binding_context_type.clone(),
         diagnostics,
         names: HashSet::new(),
     };
 
     let root = builder.element(root_element, None, None)?;
     let nodes = builder.nodes;
+    let bindings = builder.bindings;
 
     Some(HirDocument {
         class_name,
+        binding_context_type,
         root,
         nodes,
+        bindings,
     })
 }
 
 struct Builder<'a> {
     nodes: Vec<HirNode>,
+    bindings: Vec<HirBinding>,
+    binding_context_type: Option<String>,
     diagnostics: &'a mut DiagnosticBag,
     names: HashSet<String>,
 }
-
 impl Builder<'_> {
     fn push_node(&mut self, kind: ControlKind, span: Span, parent: Option<NodeId>) -> NodeId {
         let id = self.nodes.len();
@@ -278,6 +306,12 @@ impl Builder<'_> {
                     self.names.insert(name.to_string());
                     self.nodes[id].name = Some(name.to_string());
                 }
+                "DataType" if is_root => {}
+                "DataType" => self.diagnostics.error(
+                    codes::UNSUPPORTED_DIRECTIVE,
+                    "x:DataType is only supported on the root element in Direct XAML v0",
+                    directive.name_span,
+                ),
                 other => self.diagnostics.error(
                     codes::UNSUPPORTED_DIRECTIVE,
                     format!("directive 'x:{other}' is not in the Direct XAML v0 subset"),
@@ -296,6 +330,11 @@ impl Builder<'_> {
     ) {
         if let Some(owner) = property.owner.as_deref() {
             self.attached_property(id, owner, parent_kind, property);
+            return;
+        }
+
+        if property.name == "Command" {
+            self.command(id, kind, property);
             return;
         }
 
@@ -324,6 +363,13 @@ impl Builder<'_> {
                 return;
             }
         };
+
+        if let AttributeValue::Markup(extension) = &property.value {
+            if extension.name == "x:Bind" {
+                self.binding(id, definition, extension, property);
+                return;
+            }
+        }
 
         if let Some(value) = self.value(&property.value, definition.value_type, property) {
             self.nodes[id].properties.push(HirProperty {
@@ -408,6 +454,110 @@ impl Builder<'_> {
         self.nodes[id].events.push(HirEvent {
             ir_event,
             handler: handler.to_string(),
+            span: property.span,
+        });
+    }
+
+    fn command(&mut self, id: NodeId, kind: ControlKind, property: &XamlProperty) {
+        if kind != ControlKind::Button {
+            self.diagnostics.error(
+                codes::PROPERTY_NOT_VALID_HERE,
+                format!("property 'Command' is not valid on '{}'", kind.name()),
+                property.name_span,
+            );
+            return;
+        }
+
+        let path = match &property.value {
+            AttributeValue::Markup(extension)
+                if extension.name == "x:Bind" && extension.arguments.len() == 1 =>
+            {
+                extension.arguments[0].trim()
+            }
+            _ => {
+                self.diagnostics.error(
+                    codes::BAD_VALUE,
+                    "Button.Command must be a simple {x:Bind CommandName} path",
+                    property.value_span,
+                );
+                return;
+            }
+        };
+
+        if !is_identifier(path) {
+            self.diagnostics.error(
+                codes::INVALID_IDENTIFIER,
+                format!("'{path}' is not a supported command path"),
+                property.value_span,
+            );
+            return;
+        }
+
+        // A command is an input action, not a runtime property read. Keeping it in the action
+        // table lets the managed host execute the existing ICommand without reflection.
+        self.nodes[id].events.push(HirEvent {
+            ir_event: "click",
+            handler: path.to_string(),
+            span: property.span,
+        });
+    }
+
+    fn binding(
+        &mut self,
+        id: NodeId,
+        definition: &schema::PropertyDef,
+        extension: &MarkupExtension,
+        property: &XamlProperty,
+    ) {
+        if !matches!(definition.value_type, ValueType::Str) {
+            self.diagnostics.error(
+                codes::UNSUPPORTED_MARKUP_EXTENSION,
+                format!(
+                    "{{x:Bind}} is only supported on string-valued properties; '{}.{}' is not one",
+                    self.nodes[id].kind.name(),
+                    property.name
+                ),
+                property.value_span,
+            );
+            return;
+        }
+
+        if self.binding_context_type.is_none() {
+            self.diagnostics.error(
+                codes::UNSUPPORTED_MARKUP_EXTENSION,
+                "{x:Bind} requires a valid root x:DataType in Direct XAML v0",
+                property.value_span,
+            );
+            return;
+        }
+
+        let (path, mode) = match parse_x_bind(extension) {
+            Ok(value) => value,
+            Err(message) => {
+                self.diagnostics.error(
+                    codes::UNSUPPORTED_MARKUP_EXTENSION,
+                    message,
+                    property.value_span,
+                );
+                return;
+            }
+        };
+
+        if !is_identifier(path) {
+            self.diagnostics.error(
+                codes::INVALID_IDENTIFIER,
+                format!("'{path}' is not a supported simple x:Bind property path"),
+                property.value_span,
+            );
+            return;
+        }
+
+        self.bindings.push(HirBinding {
+            target_node: id,
+            target_property: property.name.clone(),
+            source_path: vec![path.to_string()],
+            mode,
+            invalidation: definition.invalidation,
             span: property.span,
         });
     }
@@ -610,4 +760,101 @@ fn is_identifier(value: &str) -> bool {
         _ => return false,
     }
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn resolve_binding_context_type(
+    root: &XamlElement,
+    diagnostics: &mut DiagnosticBag,
+) -> Option<String> {
+    let directive = root.directive("DataType")?;
+    let raw = directive.value.trim();
+    if raw.is_empty() {
+        diagnostics.error(
+            codes::BAD_VALUE,
+            "x:DataType cannot be empty",
+            directive.value_span,
+        );
+        return None;
+    }
+
+    let resolved = match raw.split_once(':') {
+        Some((prefix, local)) => {
+            let Some(uri) = root.namespace_aliases.get(prefix) else {
+                diagnostics.error(
+                    codes::UNKNOWN_NAMESPACE,
+                    format!("x:DataType uses undeclared namespace prefix '{prefix}'"),
+                    directive.value_span,
+                );
+                return None;
+            };
+            let Some(namespace) = uri.strip_prefix("using:") else {
+                diagnostics.error(
+                    codes::BAD_VALUE,
+                    format!(
+                        "x:DataType namespace '{prefix}' must use a 'using:' URI in Direct XAML v0"
+                    ),
+                    directive.value_span,
+                );
+                return None;
+            };
+            format!("{namespace}.{local}")
+        }
+        None => raw.to_string(),
+    };
+
+    if !is_qualified_identifier(&resolved) {
+        diagnostics.error(
+            codes::INVALID_IDENTIFIER,
+            format!("'{raw}' is not a supported x:DataType name"),
+            directive.value_span,
+        );
+        return None;
+    }
+
+    Some(resolved)
+}
+
+fn parse_x_bind(extension: &MarkupExtension) -> Result<(&str, HirBindingMode), String> {
+    let mut path: Option<&str> = None;
+    let mut mode = HirBindingMode::OneTime;
+
+    for argument in &extension.arguments {
+        if let Some((key, value)) = argument.split_once('=') {
+            match key.trim() {
+                "Path" if path.is_none() => path = Some(value.trim()),
+                "Mode" => {
+                    mode = match value.trim() {
+                        "OneTime" => HirBindingMode::OneTime,
+                        "OneWay" => HirBindingMode::OneWay,
+                        other => {
+                            return Err(format!(
+                                "{{x:Bind}} mode '{other}' is not supported; Direct XAML v0 accepts OneTime or OneWay"
+                            ));
+                        }
+                    };
+                }
+                "Path" => return Err("{x:Bind} declares Path more than once".to_string()),
+                other => {
+                    return Err(format!(
+                        "{{x:Bind}} argument '{other}' is not in the Direct XAML v0 subset"
+                    ));
+                }
+            }
+        } else if path.is_none() {
+            path = Some(argument.trim());
+        } else {
+            return Err(
+                "{x:Bind} accepts one simple property path and an optional Mode".to_string(),
+            );
+        }
+    }
+
+    let Some(path) = path.filter(|value| !value.is_empty()) else {
+        return Err("{x:Bind} needs a simple property path".to_string());
+    };
+    Ok((path, mode))
+}
+
+fn is_qualified_identifier(value: &str) -> bool {
+    !value.is_empty() && value.split('.').all(is_identifier)
 }

@@ -899,6 +899,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>Avanzate</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>Rendering</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>Scegli come eseguire il rendering delle schede dei risultati di traduzione.</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>Usa renderer Direct (sperimentale)</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>Esegue il rendering delle schede dei risultati di traduzione direttamente con Win2D per ridurre il sovraccarico dell'albero visuale XAML. Riavvia l'app per applicare le modifiche.</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>Generale</value>
   </data>

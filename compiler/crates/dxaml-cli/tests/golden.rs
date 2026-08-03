@@ -66,7 +66,8 @@ fn compiles_the_shipping_minimal_card() {
     assert_eq!(count_of("columnDefinition"), 2);
     assert_eq!(count_of("stackPanel"), 1);
     assert_eq!(count_of("textBlock"), 5);
-    assert_eq!(document.nodes.len(), 16);
+    assert_eq!(count_of("button"), 1);
+    assert_eq!(document.nodes.len(), 17);
 }
 
 #[test]
@@ -91,6 +92,7 @@ fn exposes_every_named_element_as_a_slot() {
             "PendingQueryText",
             "ResultText",
             "ErrorText",
+            "CopyButton",
         ]
     );
 }
@@ -114,6 +116,8 @@ fn covers_everything_update_ui_writes() {
         ("ErrorText", "Text"),
         ("ErrorText", "Visibility"),
         ("ContentArea", "Visibility"),
+        ("CopyButton", "Content"),
+        ("CopyButton", "Visibility"),
         // Written by ApplyAppearance.
         ("ServiceNameText", "FontSize"),
         ("StatusText", "FontSize"),
@@ -182,13 +186,15 @@ fn interns_theme_resources_without_folding_them() {
         "TextFillColorTertiaryBrush",
         "QueryTextBrush",
         "SystemFillColorCriticalBrush",
+        "ControlFillColorDefaultBrush",
+        "ControlStrokeColorDefaultBrush",
     ]
     .into_iter()
     .collect();
     assert_eq!(keys, expected);
 
     // CardStrokeColorDefaultBrush is referenced twice but must be interned once.
-    assert_eq!(document.resources.len(), 10);
+    assert_eq!(document.resources.len(), 12);
 
     for resource in &document.resources {
         assert_eq!(resource.kind, "themeResource");
@@ -229,20 +235,40 @@ fn allows_resources_for_non_brush_properties() {
 }
 
 #[test]
-fn records_the_header_action() {
+fn records_header_and_copy_actions() {
     let document = minimal_card();
+    assert_eq!(document.actions.len(), 2);
 
-    assert_eq!(document.actions.len(), 1);
-    let action = &document.actions[0];
-    assert_eq!(action.event, "pointerPressed");
-    assert_eq!(action.handler, "OnHeaderPointerPressed");
-
+    let header_action = document
+        .actions
+        .iter()
+        .find(|action| action.handler == "OnHeaderPointerPressed")
+        .expect("header action");
+    assert_eq!(header_action.event, "pointerPressed");
     let header = document
         .named_slots
         .iter()
         .find(|slot| slot.name == "HeaderBar")
         .expect("HeaderBar");
-    assert_eq!(action.node, header.node);
+    assert_eq!(header_action.node, header.node);
+
+    let copy_action = document
+        .actions
+        .iter()
+        .find(|action| action.handler == "CopyCommand")
+        .expect("copy command");
+    assert_eq!(copy_action.event, "click");
+    let copy = document
+        .named_slots
+        .iter()
+        .find(|slot| slot.name == "CopyButton")
+        .expect("CopyButton");
+    assert_eq!(copy_action.node, copy.node);
+    assert!(document.properties.iter().any(|property| {
+        property.node == copy.node
+            && property.name == "Content"
+            && matches!(&property.value, IrValue::Str { value } if value == "Copy")
+    }));
 }
 
 #[test]

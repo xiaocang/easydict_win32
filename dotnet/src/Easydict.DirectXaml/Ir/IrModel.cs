@@ -23,6 +23,10 @@ public sealed record IrDocument
     [JsonPropertyName("class_name")]
     public string ClassName { get; init; } = string.Empty;
 
+    /// <summary>Resolved root <c>x:DataType</c>; required by the binding feature.</summary>
+    [JsonPropertyName("binding_context_type")]
+    public string? BindingContextType { get; init; }
+
     [JsonPropertyName("features")]
     public IReadOnlyList<string> Features { get; init; } = Array.Empty<string>();
 
@@ -34,6 +38,9 @@ public sealed record IrDocument
 
     [JsonPropertyName("named_slots")]
     public IReadOnlyList<IrNamedSlot> NamedSlots { get; init; } = Array.Empty<IrNamedSlot>();
+
+    [JsonPropertyName("bindings")]
+    public IReadOnlyList<IrBinding> Bindings { get; init; } = Array.Empty<IrBinding>();
 
     [JsonPropertyName("resources")]
     public IReadOnlyList<IrResource> Resources { get; init; } = Array.Empty<IrResource>();
@@ -104,6 +111,24 @@ public sealed record IrMutableProperty
 {
     [JsonPropertyName("property")]
     public string Property { get; init; } = string.Empty;
+
+    [JsonPropertyName("invalidation")]
+    public IReadOnlyList<string> Invalidation { get; init; } = Array.Empty<string>();
+}
+
+public sealed record IrBinding
+{
+    [JsonPropertyName("target_node")]
+    public int TargetNode { get; init; }
+
+    [JsonPropertyName("target_property")]
+    public string TargetProperty { get; init; } = string.Empty;
+
+    [JsonPropertyName("source_path")]
+    public IReadOnlyList<string> SourcePath { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("mode")]
+    public string Mode { get; init; } = string.Empty;
 
     [JsonPropertyName("invalidation")]
     public IReadOnlyList<string> Invalidation { get; init; } = Array.Empty<string>();

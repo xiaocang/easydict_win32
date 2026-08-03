@@ -15,17 +15,13 @@
     <UseWinUI>true</UseWinUI>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Project references otherwise arrive as AnyCPU; pick the app's default while preserving explicit x86/x64/ARM64 builds. -->
+    <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.*" />
-    <!--
-      Floating until the compatibility check in ci.yml reports what actually resolves against
-      WindowsAppSDK 2.0.*. Pin this to the exact resolved version once that is known — the repo
-      already does the same for Microsoft.Windows.AI.MachineLearning.
-    -->
-    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.*" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
   </ItemGroup>
 
   <ItemGroup>

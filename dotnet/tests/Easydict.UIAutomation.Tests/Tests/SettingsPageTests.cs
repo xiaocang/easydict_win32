@@ -537,6 +537,56 @@ public class SettingsPageTests : IDisposable
     }
 
     [Fact]
+    public void SettingsPage_Advanced_ShouldExposeDirectRendererToggle()
+    {
+        var window = _launcher.GetMainWindow();
+        window.SetForeground();
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on the main window");
+        ClickElementWithMouse(settingsButton!, "DirectRendererSetting.SettingsButton");
+
+        var scrollViewer = WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15));
+        scrollViewer.Should().NotBeNull("Settings content should open before selecting Advanced");
+
+        var advancedTab = Retry.WhileNull(
+                () => FindVisibleByAutomationId(window, "SettingsTab_Advanced"),
+                TimeSpan.FromSeconds(10))
+            .Result;
+        advancedTab.Should().NotBeNull("the Advanced settings tab should be available");
+        ClickElementWithMouse(advancedTab!, "DirectRendererSetting.AdvancedTab");
+
+        WaitForSelectedSettingsTab(
+                scrollViewer!,
+                "Advanced",
+                TimeSpan.FromSeconds(5),
+                out _)
+            .Should()
+            .NotBeNull("clicking Advanced should select the tab");
+
+        var toggle = ScrollHelper.ScrollToFind(
+            scrollViewer!,
+            startPercent: 100,
+            () => FindRenderedByAutomationId(window, "DirectRendererToggle", scrollViewer),
+            _output.WriteLine);
+        toggle.Should().NotBeNull("Advanced should expose the Direct renderer setting");
+        toggle!.Patterns.Toggle.IsSupported.Should().BeTrue();
+
+        var originalState = toggle.Patterns.Toggle.Pattern.ToggleState;
+        toggle.Patterns.Toggle.Pattern.Toggle();
+        toggle.Patterns.Toggle.Pattern.ToggleState.Should().NotBe(originalState);
+
+        Retry.WhileNull(
+                () => FindRenderedByAutomationId(window, "SaveButton"),
+                TimeSpan.FromSeconds(5))
+            .Result
+            .Should()
+            .NotBeNull("changing the Direct renderer setting should require saving");
+
+        toggle.Patterns.Toggle.Pattern.Toggle();
+    }
+
+    [Fact]
     public void SettingsPage_OpenBackLoop_ShouldSupportMemoryMarkerCollection()
     {
         var window = _launcher.GetMainWindow();

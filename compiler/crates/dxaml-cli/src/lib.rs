@@ -17,13 +17,22 @@ pub struct CompileResult {
 
 /// Compiles one document. `display_path` appears in diagnostics and in the IR header.
 pub fn compile_source(source: &str, display_path: &str) -> CompileResult {
+    compile_source_with_paths(source, display_path, display_path)
+}
+
+/// Compiles one document while keeping diagnostic and reproducible IR paths separate.
+pub fn compile_source_with_paths(
+    source: &str,
+    diagnostic_path: &str,
+    source_path: &str,
+) -> CompileResult {
     let index = LineIndex::new(source);
     let (hir, bag) = dxaml_hir::analyze(source);
 
     let mut diagnostics: Vec<String> = bag
         .sorted()
         .iter()
-        .map(|diagnostic| diagnostic.render(display_path, &index))
+        .map(|diagnostic| diagnostic.render(diagnostic_path, &index))
         .collect();
 
     let hir = match hir {
@@ -38,7 +47,7 @@ pub fn compile_source(source: &str, display_path: &str) -> CompileResult {
                         "compilation produced no document and no diagnostic; this is a compiler bug",
                         Span::empty(0),
                     )
-                    .render(display_path, &index),
+                    .render(diagnostic_path, &index),
                 );
             }
             return CompileResult {
@@ -49,14 +58,14 @@ pub fn compile_source(source: &str, display_path: &str) -> CompileResult {
         }
     };
 
-    let document = dxaml_lower::lower(&hir, source, display_path, COMPILER_VERSION);
+    let document = dxaml_lower::lower(&hir, source, source_path, COMPILER_VERSION);
 
     let problems = dxaml_ir::validate(&document);
     if !problems.is_empty() {
         for problem in problems {
             diagnostics.push(
                 Diagnostic::error(codes::IR_VALIDATION, problem, Span::empty(0))
-                    .render(display_path, &index),
+                    .render(diagnostic_path, &index),
             );
         }
         return CompileResult {
@@ -77,4 +86,9 @@ pub fn compile_source(source: &str, display_path: &str) -> CompileResult {
 /// The output file name for a given input stem: `Foo.xaml` becomes `Foo.dxir.json`.
 pub fn output_file_name(stem: &str) -> String {
     format!("{stem}.dxir.json")
+}
+
+/// The generated binding source name for a given input stem.
+pub fn bindings_output_file_name(stem: &str) -> String {
+    format!("{stem}.bindings.g.cs")
 }

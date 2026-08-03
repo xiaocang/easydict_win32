@@ -25,9 +25,8 @@ Two members of that interface are the whole compatibility question:
   `FrameworkElement` (the Win2D canvas host). The saving is the subtree beneath it, not the
   element itself.
 - `FrameworkElement HeaderPanel { get; }` — `UpdateStickyHeaders` sets `.Translation` on it per
-  scroll frame. A direct renderer has no per-node `FrameworkElement`, so sticky headers must be
-  reimplemented as a paint-time offset. Until then, a direct card must report
-  `ActionButtonsPanel => null`, which `UpdateStickyHeaders` already skips.
+  scroll frame. The Direct implementation exposes the canvas as this compatibility surface, so
+  scrolling moves the painted card without requiring a per-node `FrameworkElement`.
 
 ## Source compatibility
 
@@ -36,10 +35,9 @@ Two members of that interface are the whole compatibility question:
 `ServiceResultDemotionHelper`; `AppearanceService` snapshots; `ThemeResourceService` lookups; every
 `UiThreadHotspotDiagnostics.Measure` marker.
 
-**Ports mechanically.** `MinimalServiceResultItem.UpdateUI()` writes exactly six property kinds —
-`.Text`, `.Visibility`, `.Foreground`, `.Opacity`, and (via `ApplyAppearance`) `.FontSize`. Those
-are precisely the runtime-mutable set v0 defines, so the method body survives with each
-`Element.Property = value` becoming `slots.SetProperty(value)`.
+**Ports mechanically.** `MinimalServiceResultItem` writes `.Text`, `.Content`, `.Visibility`,
+`.Foreground`, `.Opacity`, and `.FontSize`. Those are precisely the runtime-mutable set v0
+defines, so each `Element.Property = value` becomes a generated typed slot write.
 
 **Does not survive.** Anything that treats a named element as a real WinUI control:
 
@@ -78,11 +76,11 @@ change, as `RefreshThemeChrome` already does for the XAML path.
 
 | | `MinimalServiceResultItem.xaml` | `ServiceResultItem.xaml` |
 |---|---|---|
-| Lines of XAML | 88 | 350 |
-| Code-behind | 288 | 2383 |
-| `x:Name` | 8 | 36 |
-| Bindings | 0 | 0 |
-| Elements outside v0 | none | `Button`, `FontIcon`, `Image`, `ProgressRing`, `ScrollViewer`, `HyperlinkButton` |
+| Lines of XAML | 100 | 350 |
+| Code-behind | 315 | 2383 |
+| `x:Name` | 9 | 36 |
+| Bindings | 1 constrained command x:Bind | 0 |
+| Elements outside v0 | none | `FontIcon`, `Image`, `ProgressRing`, `ScrollViewer`, `HyperlinkButton` |
 | Attached props outside v0 | none | `ToolTipService.ToolTip`, `AutomationProperties.*` |
 | Verdict | **compiles under v0** | **rejected by v0, by design** |
 
@@ -90,14 +88,46 @@ The minimal card is the whole v0 target. The full card defines the v0.1 backlog,
 code-behind — WebView2 dictionary rendering, phonetics, speech, per-service action buttons — is a
 much larger port than the markup suggests.
 
-## What this does not answer
+## Measurement gate
 
-Whether any of it is worth doing. That question is settled by measurement, not architecture, and
-the infrastructure already exists: `dotnet/scripts/memory/Invoke-PrMemoryGate.ps1` (PR gate,
-160 MB absolute allowance), `Easydict.UIAutomation.Tests/Tests/MemoryGateTests.cs`, and the
-`UiThreadHotspotDiagnostics.Measure("MinimalServiceResultItem.UpdateUI")` marker already wrapping
-the exact method a direct renderer would replace.
+The vertical slice remains intentionally confined to the minimal result card until measurement shows
+that the custom runtime pays for itself. A Direct result host contributes one shared root containing
+one `CanvasVirtualControl` and its automation layer; it does not create a `CanvasControl` per card.
+Each card keeps only compiled state, an automation proxy, and cached layout/display-list data.
+`DirectXamlBuildIntegrationTests` checks the shared-host shape when a desktop test window is
+available, while `DirectRendererTests` verifies painted-card resize, Copy hit testing, XAML fallback,
+and a twenty-card scroll/resize path in a real app process.
 
-The numbers to compare, before committing to the runtime work: `FrameworkElement` count per card,
-idle Private Bytes with N service results open, time to first paint of a result, and CPU during
-streaming token updates.
+Benchmark Direct and stock XAML under the same **Minimal** theme. Minimal chrome deliberately hides
+the mode selector, so the UI-hotspot and memory scenarios accept
+`EASYDICT_UI_HOTSPOT_SKIP_MODE_TRANSITIONS=1` and
+`EASYDICT_MEMORY_GATE_SKIP_MODE_TRANSITIONS=1` for a matched card-only path.
+
+A DEBUG-only deterministic result hook now records the missing critical-path signals. It writes a
+submission marker immediately before the result refresh; Direct completes it after the target
+Win2D card draw returns, while XAML completes it on the next `CompositionTarget.Rendering`
+callback. The same hook sends a paced 120-update, 50-ms streaming sequence and bounds
+per-process `\Process(...)\% Processor Time` samples between explicit start and completion
+markers.
+
+`Invoke-RendererComparison.ps1` retains the PR memory-gate assertions while alternating
+Direct/XAML scenarios, isolating settings, and collecting per-PID/LUID GPU Process Memory,
+first-result markers, and matched streaming CPU samples. The 2026-08-01 Debug/x64, one-card,
+three-runs-per-backend result produced three usable observations for every new metric:
+
+| Metric | Direct | Minimal XAML | Direct − XAML |
+|---|---:|---:|---:|
+| First renderer completion, median | 56.44 ms | 30.93 ms | +25.51 ms |
+| Streaming process CPU, median of per-run medians | 66.97% | 22.94% | +44.02 percentage points |
+| Controlled streaming duration, median | 7.38 s | 7.32 s | same 120 × 50-ms workload |
+
+`Total Committed` remains the primary app-GPU comparison; Dedicated, Shared, Local, Non Local,
+and Total Committed are overlapping counter views and must not be summed. DWM/compositor samples
+are recorded separately as context and must not be attributed to either backend.
+
+This closes the prior gap for first-renderer completion and matched streaming CPU, but it is not a
+compositor-present measurement. CPU is raw process `% Processor Time`, not normalized to logical
+cores; its one-second cadence cannot describe sub-second scheduler variation. The matched result is
+evidence against enabling Direct by default: it is slower at the observed renderer callback and
+consumes more process CPU for the same controlled stream. Keep the slice contained until broader
+hardware/workload trials and scroll-frame stability show a net benefit.

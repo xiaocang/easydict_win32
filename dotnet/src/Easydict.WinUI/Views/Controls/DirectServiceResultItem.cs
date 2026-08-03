@@ -1,16 +1,19 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Reflection;
 using Easydict.DirectXaml;
 using Easydict.DirectXaml.Ir;
 using Easydict.DirectXaml.Win2D;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 using DxColor = Easydict.DirectXaml.Color;
 using DxVisibility = Easydict.DirectXaml.Visibility;
+using WinHorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment;
+using WinVerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment;
 
 namespace Easydict.WinUI.Views.Controls;
 
@@ -33,41 +36,63 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
     private const string IrResourceName =
         "Easydict.WinUI.Views.Controls.MinimalServiceResultItem.dxir.json";
 
-    private const string SlotRoot = "RootBorder";
-    private const string SlotHeader = "HeaderBar";
-    private const string SlotServiceName = "ServiceNameText";
-    private const string SlotStatus = "StatusText";
-    private const string SlotContent = "ContentArea";
-    private const string SlotPending = "PendingQueryText";
-    private const string SlotResult = "ResultText";
-    private const string SlotError = "ErrorText";
+    private static readonly Lazy<IrDocument> _ir = new(
+        () => IrLoader.LoadFromResource(typeof(DirectServiceResultItem).Assembly, IrResourceName));
 
+    private readonly DirectXamlVirtualSurface _surface;
+    private readonly DirectXamlVirtualSurface.DirectXamlVirtualSurfaceItem _surfaceItem;
     private readonly Grid _root;
-    private readonly DirectXamlCanvas _canvas;
+    private readonly Border _header;
     private readonly CompiledView _view;
+    private readonly MinimalServiceResultItemDirectBindings _bindings;
     private readonly ThemeResourceResolver _resources;
 
     private ServiceQueryResult? _serviceResult;
     private bool _updatePending;
+    private bool _awaitingBenchmarkPaint;
     private bool _disposed;
 
-    public DirectServiceResultItem(FrameworkElement? themeRoot)
+    public DirectServiceResultItem(
+        DirectXamlVirtualSurface surface,
+        FrameworkElement? themeRoot)
     {
+        _surface = surface ?? throw new ArgumentNullException(nameof(surface));
         _resources = new ThemeResourceResolver(themeRoot);
+        _view = new CompiledView(_ir.Value, _resources);
+        _bindings = new MinimalServiceResultItemDirectBindings(_view);
 
-        IrDocument ir = IrLoader.LoadFromResource(typeof(DirectServiceResultItem).Assembly, IrResourceName);
-        _view = new CompiledView(ir, _resources);
-        _canvas = new DirectXamlCanvas(_view);
-        _canvas.ActionInvoked += OnActionInvoked;
-        _canvas.ThemeChanged += OnCanvasThemeChanged;
+        // The physical peers preserve existing AutomationId-based callers while the card itself
+        // is painted once by the shared virtual surface. They are transparent and do not receive
+        // input, so pointer routing remains in the Win2D surface.
+        _root = new Grid { IsHitTestVisible = false };
+        _header = new Border
+        {
+            HorizontalAlignment = WinHorizontalAlignment.Stretch,
+            VerticalAlignment = WinVerticalAlignment.Stretch,
+            IsHitTestVisible = false,
+        };
+        _root.Children.Add(_header);
+        AutomationProperties.SetAccessibilityView(_root, AccessibilityView.Control);
+        AutomationProperties.SetAccessibilityView(_header, AccessibilityView.Control);
 
-        // The canvas is wrapped so that Element and HeaderPanel stay distinct objects: the host
-        // stamps a different AutomationId on each, and existing UI automation locates cards by
-        // ServiceResultItem_<serviceId>.
-        _root = new Grid();
-        _root.Children.Add(_canvas.Element);
+        _surfaceItem = _surface.Add(_view, _root);
+        try
+        {
+            _surfaceItem.ActionInvoked += OnActionInvoked;
+            _surfaceItem.Drawn += OnSurfaceItemDrawn;
+            _surface.ThemeChanged += OnSurfaceThemeChanged;
 
-        _view.SetText(SlotPending, ServiceResultStatusTextProvider.GetPendingQueryHintText());
+            _bindings.SetPendingQueryTextText(ServiceResultStatusTextProvider.GetPendingQueryHintText());
+            _bindings.SetCopyButtonContent(LocalizationService.Instance.GetString("Copy"));
+        }
+        catch
+        {
+            _surfaceItem.ActionInvoked -= OnActionInvoked;
+            _surfaceItem.Drawn -= OnSurfaceItemDrawn;
+            _surface.ThemeChanged -= OnSurfaceThemeChanged;
+            _surfaceItem.Dispose();
+            throw;
+        }
     }
 
     /// <summary>True when the compiled IR is present and loadable in this build.</summary>
@@ -80,9 +105,13 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         }
     }
 
+    internal DirectXamlVirtualSurface Surface => _surface;
+
+    internal DirectXamlVirtualSurface.DirectXamlVirtualSurfaceItem SurfaceItem => _surfaceItem;
+
     public FrameworkElement Element => _root;
 
-    public FrameworkElement HeaderPanel => _canvas.Element;
+    public FrameworkElement HeaderPanel => _header;
 
     public FrameworkElement? ActionButtonsPanel => null;
 
@@ -94,7 +123,7 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         set
         {
             _resources.ThemeRoot = value;
-            _canvas.OnThemeResourcesChanged(_resources);
+            RefreshThemeResources();
         }
     }
 
@@ -133,14 +162,14 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
 
     public void RefreshDemotionState() => QueueUpdateUI();
 
-    public void RefreshThemeChrome() => _canvas.OnThemeResourcesChanged(_resources);
+    public void RefreshThemeChrome() => RefreshThemeResources();
 
     public void ApplyAppearance(AppearanceSettings settings)
     {
-        _view.SetFontSize(SlotServiceName, settings.ServiceNameFontSize);
-        _view.SetFontSize(SlotStatus, settings.StatusFontSize);
-        _view.SetFontSize(SlotResult, settings.ResultFontSize);
-        _canvas.Update();
+        _bindings.SetServiceNameTextFontSize(settings.ServiceNameFontSize);
+        _bindings.SetStatusTextFontSize(settings.StatusFontSize);
+        _bindings.SetResultTextFontSize(settings.ResultFontSize);
+        _surfaceItem.Update();
     }
 
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();
@@ -154,13 +183,16 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
 
         _serviceResult = null;
         _updatePending = false;
+        _awaitingBenchmarkPaint = false;
 
-        _view.SetText(SlotServiceName, string.Empty);
-        _view.SetText(SlotStatus, string.Empty);
-        _view.SetText(SlotResult, string.Empty);
-        _view.SetText(SlotError, string.Empty);
-        _view.SetVisibility(SlotContent, DxVisibility.Collapsed);
-        _canvas.Update();
+        _bindings.SetServiceNameTextText(string.Empty);
+        _bindings.SetStatusTextText(string.Empty);
+        _bindings.SetResultTextText(string.Empty);
+        _bindings.SetErrorTextText(string.Empty);
+        _bindings.SetContentAreaVisibility(DxVisibility.Collapsed);
+        _bindings.SetCopyButtonVisibility(DxVisibility.Collapsed);
+        UpdateLoadingIndicator();
+        _surfaceItem.Update();
     }
 
     private void OnServiceResultPropertyChanged(object? sender, PropertyChangedEventArgs e) =>
@@ -209,17 +241,17 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
             _serviceResult.IsExpanded = true;
         }
 
-        _view.SetOpacity(SlotRoot, demoted ? 0.5 : 1.0);
-        _view.SetText(SlotServiceName, _serviceResult.ServiceDisplayName);
+        _bindings.SetRootBorderOpacity(demoted ? 0.5 : 1.0);
+        _bindings.SetServiceNameTextText(_serviceResult.ServiceDisplayName);
 
         string status = ServiceResultStatusTextProvider.GetStatusText(_serviceResult);
-        _view.SetText(SlotStatus, status);
-        _view.SetVisibility(
-            SlotStatus,
+        _bindings.SetStatusTextText(status);
+        _bindings.SetStatusTextVisibility(
             string.IsNullOrWhiteSpace(status) ? DxVisibility.Collapsed : DxVisibility.Visible);
 
         bool showPendingHint = !demoted && _serviceResult.ShowPendingQueryHint;
-        _view.SetVisibility(SlotPending, showPendingHint ? DxVisibility.Visible : DxVisibility.Collapsed);
+        _bindings.SetPendingQueryTextVisibility(
+            showPendingHint ? DxVisibility.Visible : DxVisibility.Collapsed);
 
         var resultVisibility = DxVisibility.Collapsed;
         var errorVisibility = DxVisibility.Collapsed;
@@ -228,16 +260,14 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         {
             if (_serviceResult.HasError && !_serviceResult.IsLoading)
             {
-                _view.SetText(
-                    SlotError,
+                _bindings.SetErrorTextText(
                     _serviceResult.Error?.Message ?? ServiceResultStatusTextProvider.GetErrorFallbackText());
                 errorVisibility = DxVisibility.Visible;
             }
             else if (_serviceResult.IsStreaming)
             {
                 string displayText = _serviceResult.DisplayText;
-                _view.SetText(
-                    SlotResult,
+                _bindings.SetResultTextText(
                     string.IsNullOrWhiteSpace(displayText)
                         ? ServiceResultStatusTextProvider.GetWaitingForResponseText()
                         : displayText);
@@ -249,22 +279,44 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
                 string displayText = MinimalServiceResultItem.GetMinimalDisplayText(_serviceResult);
                 if (!string.IsNullOrWhiteSpace(displayText))
                 {
-                    _view.SetText(SlotResult, displayText);
+                    _bindings.SetResultTextText(displayText);
                     ApplyResultForeground(_serviceResult.IsInfoResult);
                     resultVisibility = DxVisibility.Visible;
                 }
             }
         }
 
-        _view.SetVisibility(SlotResult, resultVisibility);
-        _view.SetVisibility(SlotError, errorVisibility);
+        _bindings.SetResultTextVisibility(resultVisibility);
+        _bindings.SetErrorTextVisibility(errorVisibility);
+        _bindings.SetCopyButtonVisibility(resultVisibility);
 
         bool hasVisibleContent = showPendingHint
             || resultVisibility == DxVisibility.Visible
             || errorVisibility == DxVisibility.Visible;
-        _view.SetVisibility(SlotContent, hasVisibleContent ? DxVisibility.Visible : DxVisibility.Collapsed);
+        _bindings.SetContentAreaVisibility(
+            hasVisibleContent ? DxVisibility.Visible : DxVisibility.Collapsed);
 
-        _canvas.Update();
+        if (resultVisibility == DxVisibility.Visible
+            && RendererBenchmarkTelemetry.IsFirstResultPending)
+        {
+            _awaitingBenchmarkPaint = true;
+        }
+
+        UpdateLoadingIndicator();
+        _surfaceItem.Update(_serviceResult.HasError);
+    }
+
+    private void UpdateLoadingIndicator()
+    {
+        DxColor color = _resources.TryGetColor(
+            "ServiceResultHeaderSecondaryForegroundBrush",
+            out DxColor resolvedColor)
+            ? resolvedColor
+            : new DxColor(255, 128, 128, 128);
+        _surfaceItem.SetLoadingIndicator(
+            _serviceResult?.IsLoading == true,
+            MinimalServiceResultItemDirectBindings.StatusTextNode,
+            color);
     }
 
     private void ApplyResultForeground(bool isInfoResult)
@@ -272,15 +324,44 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         string key = isInfoResult ? "TextFillColorSecondaryBrush" : "QueryTextBrush";
         if (_resources.TryGetColor(key, out DxColor color))
         {
-            _view.SetForeground(SlotResult, color);
+            _bindings.SetResultTextForeground(color);
         }
     }
 
-    private void OnCanvasThemeChanged(object? sender, EventArgs e) =>
-        _canvas.OnThemeResourcesChanged(_resources);
+    private void OnSurfaceThemeChanged(object? sender, EventArgs e) => RefreshThemeResources();
+
+    private void RefreshThemeResources()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _resources.Invalidate();
+        _view.OnThemeChanged(_resources);
+        UpdateLoadingIndicator();
+        _surfaceItem.Update();
+    }
+
+    private void OnSurfaceItemDrawn(object? sender, EventArgs e)
+    {
+        if (!_awaitingBenchmarkPaint)
+        {
+            return;
+        }
+
+        _awaitingBenchmarkPaint = false;
+        RendererBenchmarkTelemetry.ReportDirectFirstResultDrawn();
+    }
 
     private void OnActionInvoked(object? sender, DirectXamlActionEventArgs e)
     {
+        if (e.Handler == "CopyCommand")
+        {
+            MinimalServiceResultItem.CopyResultToClipboard(_serviceResult);
+            return;
+        }
+
         if (e.Handler != "OnHeaderPointerPressed")
         {
             return;
@@ -310,9 +391,9 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         }
 
         _disposed = true;
-        _canvas.ActionInvoked -= OnActionInvoked;
-        _canvas.ThemeChanged -= OnCanvasThemeChanged;
-        _canvas.Dispose();
-        Debug.WriteLine("[DirectServiceResultItem] disposed");
+        _surfaceItem.ActionInvoked -= OnActionInvoked;
+        _surfaceItem.Drawn -= OnSurfaceItemDrawn;
+        _surface.ThemeChanged -= OnSurfaceThemeChanged;
+        _surfaceItem.Dispose();
     }
 }

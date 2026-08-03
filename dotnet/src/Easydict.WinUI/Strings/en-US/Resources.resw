@@ -1143,6 +1143,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>Advanced</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>Rendering</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>Choose how translation result cards are rendered.</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>Use Direct renderer (experimental)</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>Renders translation result cards directly with Win2D to reduce XAML visual-tree overhead. Restart the app to apply changes.</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>General</value>
   </data>

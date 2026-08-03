@@ -9,20 +9,22 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use dxaml_cli::{compile_source, output_file_name, COMPILER_VERSION};
+use dxaml_cli::{
+    bindings_output_file_name, compile_source_with_paths, output_file_name, COMPILER_VERSION,
+};
 
 const USAGE: &str = "\
 dxamlc — the Direct XAML compiler
 
 USAGE:
-    dxamlc compile --input <file.xaml> [--output <dir>] [--check]
+    dxamlc compile --input <file.xaml> [--output <dir>] [--source-root <dir>] [--check]
     dxamlc --version
     dxamlc --help
 
 OPTIONS:
     --input <file>    XAML document to compile. Required.
-    --output <dir>    Directory to write <name>.dxir.json into. Defaults to the input's
-                      directory. Ignored with --check.
+    --output <dir>    Directory for generated IR and C# files. Defaults to the input directory.
+    --source-root     Root removed from the source path recorded in IR, for reproducible builds.
     --check           Report diagnostics without writing anything.
 
 Diagnostics are written to stderr in MSBuild's format. The exit status is 0 only when the
@@ -67,6 +69,7 @@ fn run(arguments: &[String]) -> Result<bool, String> {
 fn compile(arguments: &[String]) -> Result<bool, String> {
     let mut input: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
+    let mut source_root: Option<PathBuf> = None;
     let mut check_only = false;
 
     let mut index = 0usize;
@@ -86,6 +89,13 @@ fn compile(arguments: &[String]) -> Result<bool, String> {
                     .ok_or_else(|| "--output needs a path".to_string())?;
                 output = Some(PathBuf::from(value));
             }
+            "--source-root" => {
+                index += 1;
+                let value = arguments
+                    .get(index)
+                    .ok_or_else(|| "--source-root needs a path".to_string())?;
+                source_root = Some(PathBuf::from(value));
+            }
             "--check" => check_only = true,
             other => return Err(format!("unknown option '{other}'")),
         }
@@ -98,7 +108,8 @@ fn compile(arguments: &[String]) -> Result<bool, String> {
         .map_err(|error| format!("cannot read {}: {error}", input.display()))?;
 
     let display_path = input.display().to_string();
-    let result = compile_source(&source, &display_path);
+    let source_path = reproducible_source_path(&input, source_root.as_deref());
+    let result = compile_source_with_paths(&source, &display_path, &source_path);
 
     for diagnostic in &result.diagnostics {
         eprintln!("{diagnostic}");
@@ -125,14 +136,40 @@ fn compile(arguments: &[String]) -> Result<bool, String> {
     std::fs::create_dir_all(&directory)
         .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
 
-    let destination = directory.join(output_file_name(stem));
+    let ir_destination = directory.join(output_file_name(stem));
     let json = document
         .to_json()
         .map_err(|error| format!("cannot serialize IR: {error}"))?;
+    write_if_changed(&ir_destination, json.as_bytes())?;
 
-    std::fs::write(&destination, json)
-        .map_err(|error| format!("cannot write {}: {error}", destination.display()))?;
+    let bindings = match dxaml_codegen_csharp::generate(&document) {
+        Ok(bindings) => bindings,
+        Err(error) => {
+            eprintln!("{display_path}(1,1): error DX4001: {error}");
+            return Ok(false);
+        }
+    };
+    let bindings_destination = directory.join(bindings_output_file_name(stem));
+    write_if_changed(&bindings_destination, bindings.as_bytes())?;
 
-    println!("{}", destination.display());
+    println!("{}", ir_destination.display());
+    println!("{}", bindings_destination.display());
     Ok(true)
+}
+
+fn reproducible_source_path(input: &Path, source_root: Option<&Path>) -> String {
+    let relative = source_root
+        .and_then(|root| input.strip_prefix(root).ok())
+        .or_else(|| input.file_name().map(Path::new))
+        .unwrap_or(input);
+    relative.to_string_lossy().replace('\\', "/")
+}
+
+fn write_if_changed(destination: &Path, content: &[u8]) -> Result<(), String> {
+    if std::fs::read(destination).is_ok_and(|existing| existing == content) {
+        return Ok(());
+    }
+
+    std::fs::write(destination, content)
+        .map_err(|error| format!("cannot write {}: {error}", destination.display()))
 }

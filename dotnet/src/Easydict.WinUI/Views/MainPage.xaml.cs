@@ -222,6 +222,38 @@ namespace Easydict.WinUI.Views
 #endif
         }
 
+        private static int GetDebugEnvironmentInt(
+            string name,
+            int defaultValue,
+            int minimum,
+            int maximum)
+        {
+#if DEBUG
+            return int.TryParse(Environment.GetEnvironmentVariable(name), out int value)
+                && value >= minimum
+                && value <= maximum
+                ? value
+                : defaultValue;
+#else
+            return defaultValue;
+#endif
+        }
+
+        private static int GetRendererBenchmarkEnvironmentInt(
+            string name,
+            int defaultValue,
+            int minimum,
+            int maximum)
+        {
+            return int.TryParse(
+                    Environment.GetEnvironmentVariable(name),
+                    out int value)
+                && value >= minimum
+                && value <= maximum
+                ? value
+                : defaultValue;
+        }
+
         private static bool IsMainPageResultRebuildDisabledForDebug()
             => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_DISABLE_MAINPAGE_RESULT_REBUILD");
 
@@ -239,6 +271,99 @@ namespace Easydict.WinUI.Views
                 $"[MainPage][Objects] {label} | serviceResults={_serviceResults.Count} | resultControls={_resultControls.Count} | resultsPanel={resultsPanelCount} | longDocCombo={longDocComboCount} | longDocFiles={_longDocFileItems.Count} | longDocHistory={_longDocHistoryItems.Count} | mode={_currentMode} | abMode={(_useMemoryAbVariantB ? "B" : "A")} | cacheMode={NavigationCacheMode} | resultRebuildDisabled={IsMainPageResultRebuildDisabledForDebug()} | historyBound={historyListSourceBound}");
         }
 #endif
+
+        private bool TryApplyDirectRendererUiTestResult()
+        {
+            var text = Environment.GetEnvironmentVariable("EASYDICT_UIA_DIRECT_RESULT_TEXT");
+            bool showLoading = string.Equals(
+                Environment.GetEnvironmentVariable("EASYDICT_UIA_DIRECT_LOADING"),
+                "1",
+                StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(text) && !showLoading)
+            {
+                return false;
+            }
+
+            var result = _serviceResults.FirstOrDefault(item => item.EnabledQuery)
+                ?? _serviceResults.FirstOrDefault();
+            if (result is null)
+            {
+                return false;
+            }
+
+            // ponytail: deterministic Direct-renderer pointer and loading smoke tests are enabled
+            // only when the benchmark driver supplies explicit environment markers.
+            result.Reset();
+            result.MarkQueried();
+            if (showLoading)
+            {
+                result.IsLoading = true;
+                RefreshServiceResultView(result);
+                return true;
+            }
+
+            int streamUpdateCount = GetRendererBenchmarkEnvironmentInt(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_COUNT",
+                defaultValue: 0,
+                minimum: 1,
+                maximum: 1_000);
+            int streamIntervalMilliseconds = GetRendererBenchmarkEnvironmentInt(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_INTERVAL_MILLISECONDS",
+                defaultValue: 50,
+                minimum: 10,
+                maximum: 1_000);
+
+            RendererBenchmarkTelemetry.BeginFirstResult();
+            result.IsStreaming = true;
+            result.StreamingText = text!;
+            RefreshServiceResultView(result);
+
+            if (streamUpdateCount > 0 && RendererBenchmarkTelemetry.BeginStreaming())
+            {
+                _ = RunRendererBenchmarkStreamAsync(
+                    result,
+                    text!,
+                    streamUpdateCount,
+                    streamIntervalMilliseconds);
+            }
+
+            return true;
+        }
+
+        private async Task RunRendererBenchmarkStreamAsync(
+            ServiceQueryResult result,
+            string initialText,
+            int updateCount,
+            int updateIntervalMilliseconds)
+        {
+            if (_streamingCoalescer is null)
+            {
+                Debug.WriteLine("[RendererBenchmark] Streaming coalescer was unavailable.");
+                return;
+            }
+
+            const string StreamFragment = " incremental renderer benchmark";
+            var text = new StringBuilder(initialText);
+            try
+            {
+                for (int index = 0; index < updateCount; index++)
+                {
+                    await Task.Delay(updateIntervalMilliseconds).ConfigureAwait(false);
+                    text.Append(StreamFragment);
+                    string snapshot = text.ToString();
+                    Action? onApplied = index == updateCount - 1
+                        ? RendererBenchmarkTelemetry.QueueStreamingCompletionFrame
+                        : null;
+                    _streamingCoalescer.Update(result, snapshot, onApplied);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RendererBenchmark] Controlled stream failed: {ex.Message}");
+            }
+        }
+
+
 
         private static void SyncComboSelection(ComboBox source, ComboBox target)
         {
@@ -2636,6 +2761,11 @@ namespace Easydict.WinUI.Views
 
                 // Hide placeholder
                 PlaceholderText.Visibility = Visibility.Collapsed;
+
+                if (TryApplyDirectRendererUiTestResult())
+                {
+                    return;
+                }
 
                 // Route based on effective quick-query mode
                 if (resolution.EffectiveMode == QueryMode.GrammarCorrection)

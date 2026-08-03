@@ -27,6 +27,7 @@ pub enum ControlKind {
     Border,
     Grid,
     StackPanel,
+    Button,
     TextBlock,
     RowDefinition,
     ColumnDefinition,
@@ -40,6 +41,7 @@ impl ControlKind {
             "Grid" => Self::Grid,
             "StackPanel" => Self::StackPanel,
             "TextBlock" => Self::TextBlock,
+            "Button" => Self::Button,
             "RowDefinition" => Self::RowDefinition,
             "ColumnDefinition" => Self::ColumnDefinition,
             _ => return None,
@@ -53,6 +55,7 @@ impl ControlKind {
             Self::Grid => "Grid",
             Self::StackPanel => "StackPanel",
             Self::TextBlock => "TextBlock",
+            Self::Button => "Button",
             Self::RowDefinition => "RowDefinition",
             Self::ColumnDefinition => "ColumnDefinition",
         }
@@ -66,6 +69,7 @@ impl ControlKind {
             Self::Grid => "grid",
             Self::StackPanel => "stackPanel",
             Self::TextBlock => "textBlock",
+            Self::Button => "button",
             Self::RowDefinition => "rowDefinition",
             Self::ColumnDefinition => "columnDefinition",
         }
@@ -76,7 +80,7 @@ impl ControlKind {
             Self::UserControl | Self::Border => ContentKind::Single,
             Self::Grid | Self::StackPanel => ContentKind::Many,
             Self::TextBlock => ContentKind::Text,
-            Self::RowDefinition | Self::ColumnDefinition => ContentKind::None,
+            Self::Button | Self::RowDefinition | Self::ColumnDefinition => ContentKind::None,
         }
     }
 
@@ -91,6 +95,7 @@ impl ControlKind {
         ControlKind::Grid,
         ControlKind::StackPanel,
         ControlKind::TextBlock,
+        ControlKind::Button,
         ControlKind::RowDefinition,
         ControlKind::ColumnDefinition,
     ];
@@ -243,18 +248,22 @@ pub struct PropertyDef {
     pub mutable: bool,
 }
 
-const BORDER: &[ControlKind] = &[ControlKind::Border];
+const BORDER: &[ControlKind] = &[ControlKind::Border, ControlKind::Button];
+const BUTTON: &[ControlKind] = &[ControlKind::Button];
 const STACK: &[ControlKind] = &[ControlKind::StackPanel];
 const TEXT: &[ControlKind] = &[ControlKind::TextBlock];
+const TEXTUAL: &[ControlKind] = &[ControlKind::TextBlock, ControlKind::Button];
 const ROW: &[ControlKind] = &[ControlKind::RowDefinition];
 const COLUMN: &[ControlKind] = &[ControlKind::ColumnDefinition];
 const PANELS: &[ControlKind] = &[
     ControlKind::Border,
+    ControlKind::Button,
     ControlKind::Grid,
     ControlKind::StackPanel,
 ];
 const PADDABLE: &[ControlKind] = &[
     ControlKind::Border,
+    ControlKind::Button,
     ControlKind::Grid,
     ControlKind::StackPanel,
     ControlKind::TextBlock,
@@ -404,6 +413,13 @@ static PROPERTIES: &[PropertyDef] = &[
         mutable: false,
     },
     PropertyDef {
+        name: "Content",
+        value_type: ValueType::Str,
+        applies: Applies::Only(BUTTON),
+        invalidation: Invalidation::MEASURE_PAINT_SEMANTICS,
+        mutable: true,
+    },
+    PropertyDef {
         name: "Text",
         value_type: ValueType::Str,
         applies: Applies::Only(TEXT),
@@ -413,21 +429,21 @@ static PROPERTIES: &[PropertyDef] = &[
     PropertyDef {
         name: "FontSize",
         value_type: ValueType::Double,
-        applies: Applies::Only(TEXT),
+        applies: Applies::Only(TEXTUAL),
         invalidation: Invalidation::MEASURE_PAINT,
         mutable: true,
     },
     PropertyDef {
         name: "FontWeight",
         value_type: ValueType::Enumeration(EnumKind::FontWeight),
-        applies: Applies::Only(TEXT),
+        applies: Applies::Only(TEXTUAL),
         invalidation: Invalidation::MEASURE_PAINT,
         mutable: false,
     },
     PropertyDef {
         name: "Foreground",
         value_type: ValueType::Brush,
-        applies: Applies::Only(TEXT),
+        applies: Applies::Only(TEXTUAL),
         invalidation: Invalidation::PAINT,
         mutable: true,
     },
@@ -549,6 +565,7 @@ pub fn lookup_property_element(owner: ControlKind, name: &str) -> Option<Propert
 /// Routed events v0 compiles into actions, paired with their IR spelling.
 static EVENTS: &[(&str, &str)] = &[
     ("PointerPressed", "pointerPressed"),
+    ("Click", "click"),
     ("PointerEntered", "pointerEntered"),
     ("PointerExited", "pointerExited"),
     ("Tapped", "tapped"),
@@ -563,6 +580,11 @@ pub fn lookup_event(name: &str) -> Option<&'static str> {
 
 pub fn event_names() -> Vec<&'static str> {
     EVENTS.iter().map(|(xaml, _)| *xaml).collect()
+}
+
+/// XAML directives accepted by the v0 compiler.
+pub fn is_supported_directive(name: &str) -> bool {
+    matches!(name, "Class" | "Name" | "DataType")
 }
 
 /// The markup extensions v0 accepts.

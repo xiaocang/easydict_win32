@@ -39,9 +39,14 @@ public sealed class UiThreadHotspotProbeTests : IDisposable
         Thread.Sleep(500);
 
         ExerciseQuickTranslate(window, runTranslation: ResolveFlag("EASYDICT_UI_HOTSPOT_RUN_TRANSLATION", defaultValue: true));
-        SwitchToLongDocMode(window);
-        ExerciseLongDocControls(window);
-        SwitchToQuickTranslateMode(window);
+        // ponytail: Minimal chrome hides the mode menu; retain a matched card-only probe path.
+        if (!ResolveFlag("EASYDICT_UI_HOTSPOT_SKIP_MODE_TRANSITIONS", defaultValue: false))
+        {
+            SwitchToLongDocMode(window);
+            ExerciseLongDocControls(window);
+            SwitchToQuickTranslateMode(window);
+        }
+
         OpenSettingsExerciseTabsAndReturn(window);
         ExerciseFloatingWindows(window);
         ExerciseQuickTranslate(window, runTranslation: false);

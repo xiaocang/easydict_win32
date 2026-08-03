@@ -493,6 +493,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>उन्नत</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>रेंडरिंग</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>चुनें कि अनुवाद परिणाम कार्ड कैसे रेंडर किए जाएँ।</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>Direct रेंडरर का उपयोग करें (प्रायोगिक)</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>XAML विज़ुअल ट्री का अतिरिक्त भार कम करने के लिए अनुवाद परिणाम कार्ड को Win2D से सीधे रेंडर करता है। बदलाव लागू करने के लिए ऐप को फिर से शुरू करें।</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>सामान्य</value>
   </data>

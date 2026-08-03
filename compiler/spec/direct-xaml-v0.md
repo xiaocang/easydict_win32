@@ -41,6 +41,7 @@ dropped before analysis. Any *other* prefix is `DX2003` (unknown namespace).
 | `Border` | 0..1 child | |
 | `Grid` | 0..n children | plus `Grid.RowDefinitions` / `Grid.ColumnDefinitions` |
 | `StackPanel` | 0..n children | |
+| `Button` | none | string `Content`; simple command binding |
 | `TextBlock` | text only | no inlines (`Run`, `Bold`, `Hyperlink`) in v0 |
 | `RowDefinition` | none | only inside `Grid.RowDefinitions` |
 | `ColumnDefinition` | none | only inside `Grid.ColumnDefinitions` |
@@ -48,9 +49,8 @@ dropped before analysis. Any *other* prefix is `DX2003` (unknown namespace).
 `Grid.RowDefinitions` and `Grid.ColumnDefinitions` are the only property elements v0 accepts. Any
 other `Owner.Property` element is `DX3003`.
 
-Any element not in this table is `DX3001`. In particular `Button`, `FontIcon`, `Image`,
-`ProgressRing`, `ScrollViewer` and `HyperlinkButton` — all used by `ServiceResultItem.xaml` — are
-deliberately out of v0 and are the v0.1 backlog.
+Any element not in this table is `DX3001`. `FontIcon`, `Image`, `ProgressRing`, `ScrollViewer`
+and `HyperlinkButton` — used by `ServiceResultItem.xaml` — remain outside the vertical slice.
 
 ## Supported properties
 
@@ -66,17 +66,19 @@ cards do use that way.
 |---|---|---|---|
 | `Width`, `Height`, `MinWidth`, `MinHeight`, `MaxWidth`, `MaxHeight` | `Len` | all | Measure \| Paint |
 | `Margin` | `Thk` | all | Measure \| Paint |
-| `Padding` | `Thk` | `Border`, `Grid`, `StackPanel`, `TextBlock` | Measure \| Paint |
-| `Background` | `Brs` | `Border`, `Grid`, `StackPanel` | Paint |
-| `BorderBrush` | `Brs` | `Border` | Paint |
-| `BorderThickness` | `Thk` | `Border` | Measure \| Paint |
-| `CornerRadius` | `Cnr` | `Border` | Paint |
+| `Padding` | `Thk` | `Border`, `Button`, `Grid`, `StackPanel`, `TextBlock` | Measure \| Paint |
+| `Background` | `Brs` | `Border`, `Button`, `Grid`, `StackPanel` | Paint |
+| `BorderBrush` | `Brs` | `Border`, `Button` | Paint |
+| `BorderThickness` | `Thk` | `Border`, `Button` | Measure \| Paint |
+| `CornerRadius` | `Cnr` | `Border`, `Button` | Paint |
 | `Spacing` | `Dbl` | `StackPanel` | Measure \| Paint |
 | `Orientation` | `Enum` | `StackPanel` | Measure \| Paint |
+| `Content` | `Str` | `Button` | Measure \| Paint \| Semantics |
+| `Command` | simple `{x:Bind CommandName}` | `Button` | Semantics |
 | `Text` | `Str` | `TextBlock` | Measure \| Paint |
-| `FontSize` | `Dbl` | `TextBlock` | Measure \| Paint |
-| `FontWeight` | `Enum` | `TextBlock` | Measure \| Paint |
-| `Foreground` | `Brs` | `TextBlock` | Paint |
+| `FontSize` | `Dbl` | `TextBlock`, `Button` | Measure \| Paint |
+| `FontWeight` | `Enum` | `TextBlock`, `Button` | Measure \| Paint |
+| `Foreground` | `Brs` | `TextBlock`, `Button` | Paint |
 | `TextWrapping` | `Enum` | `TextBlock` | Measure \| Paint |
 | `TextTrimming` | `Enum` | `TextBlock` | Measure \| Paint |
 | `IsTextSelectionEnabled` | `Bool` | `TextBlock` | Semantics |
@@ -113,7 +115,7 @@ An unrecognised variant is `DX2005`, and the diagnostic lists the accepted value
 
 ## Markup extensions
 
-Exactly two are supported:
+Resource properties accept exactly two extensions:
 
 - `{ThemeResource Key}` — compiled to a **runtime theme slot**, never folded to a literal colour.
   Light / Dark / HighContrast must remain switchable at runtime, and the C# side resolves the key
@@ -121,33 +123,44 @@ Exactly two are supported:
 - `{StaticResource Key}` — same slot mechanism; the distinction is preserved in the IR so the
   runtime may cache static lookups.
 
-`{Binding}`, `{x:Bind}`, `{RelativeSource}`, `{TemplateBinding}`, `{x:Null}` and any other
-extension are `DX3004`. The `{}` escape prefix (a literal value beginning with `{`) is honoured.
+`Button.Command` accepts one constrained form: `{x:Bind CommandName}`. For `TextBlock.Text` and
+`Button.Content`, v0 also accepts `{x:Bind PropertyName}` or `{x:Bind Path=PropertyName,
+Mode=OneTime|OneWay}`. These string bindings require a valid root `x:DataType`; the compiler
+resolves a `using:Namespace` prefix and emits the binding context type into the IR. `OneTime` is
+applied when the generated binding context is set; `OneWay` additionally subscribes to
+`INotifyPropertyChanged` and marshals updates to the owning UI dispatcher. All paths are single
+identifiers and all bound targets carry the property's normal invalidation class. `{Binding}`,
+`{RelativeSource}`, `{TemplateBinding}`, `{x:Null}` and other extensions are `DX3004`.
 
 Resource keys are **not** resolved at compile time. The compiler records the key; a missing key is
 a runtime concern, because the app merges theme dictionaries dynamically
 (`MinimalThemeService.ApplyResources`).
-
 ## Directives
 
 | Directive | Effect |
 |---|---|
 | `x:Class` | recorded in the IR header; the generated accessor type is derived from it |
 | `x:Name` | creates a **named slot** — see below |
+| `x:DataType` | declares the root binding context type for typed `{x:Bind}` |
+
+`x:DataType` is valid only on the root `UserControl`. A value may be a qualified C# type name or
+an alias-qualified name whose alias maps to a `using:Namespace` declaration. The resolved name is
+stored as `binding_context_type`; it is required whenever the IR contains typed bindings.
 
 `x:Key`, `x:Uid`, `x:Load`, `x:DeferLoadStrategy`, `x:Phase` and `x:FieldModifier` are `DX3005`.
 
-## Named slots — the v0 binding model
+## Named slots and the v0 binding model
 
-This codebase contains **no `x:Bind`**: all 12 XAML files use `x:Name` plus imperative mutation in
-code-behind. v0 therefore compiles `x:Name` into a *named slot* rather than implementing a binding
-pipeline.
+The shipping view primarily uses `x:Name` plus imperative code-behind. v0 compiles each `x:Name`
+into a *named slot* and generates typed C# setters. Typed string bindings are compiled separately:
+`TextBlock.Text` and `Button.Content` become binding targets, while
+`Button.Command="{x:Bind CopyCommand}"` lowers directly to a `click` action.
 
 A named slot records the node it addresses and the set of properties that may be mutated at
 runtime, each with its invalidation class. A slot's mutable set is the intersection of the
 properties supported on that element type and the properties v0 declares runtime-mutable:
 
-`Text`, `Visibility`, `Foreground`, `Background`, `FontSize`, `Opacity`
+`Text`, `Content`, `Visibility`, `Foreground`, `Background`, `FontSize`, `Opacity`
 
 That set is exactly what `MinimalServiceResultItem.UpdateUI()` writes, which is the point: the
 existing method ports onto the direct backend without being rewritten.
@@ -158,12 +171,12 @@ Slot names must be unique within a document (`DX2006` otherwise) and must be val
 ## Events
 
 An attribute whose name matches a known routed event compiles to an **action**: the event name
-plus the handler method name, recorded for later codegen. v0 recognises `PointerPressed`,
-`PointerEntered`, `PointerExited` and `Tapped`.
+plus the handler method name, recorded for later codegen. v0 recognises `PointerPressed`, `Click`,
+`PointerEntered`, `PointerExited` and `Tapped`. A simple `Button.Command` x:Bind also becomes a
+`click` action whose handler is the command-property name.
 
-The compiler does not verify that the handler exists — it cannot see the C# side. That check
-belongs to the generated partial class, which will fail to compile if the handler is missing.
-`Click` is *not* in v0 because `Button` is not.
+The compiler cannot see the C# member and therefore cannot verify it; generated/accessing C# code
+provides the compile-time contract, while the Direct host maps the action to the existing command.
 
 ## Text content
 

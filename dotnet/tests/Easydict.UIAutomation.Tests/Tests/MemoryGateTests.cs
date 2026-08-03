@@ -41,6 +41,8 @@ public sealed class MemoryGateTests : IDisposable
         var initialIdle = ResolveDelaySeconds("EASYDICT_MEMORY_GATE_INITIAL_IDLE_SECONDS", 30);
         var postCloseIdle = ResolveDelaySeconds("EASYDICT_MEMORY_GATE_POST_CLOSE_IDLE_SECONDS", 15);
         var runRealTranslation = ResolveFlag("EASYDICT_MEMORY_GATE_RUN_TRANSLATION");
+        var skipModeTransitions = ResolveFlag("EASYDICT_MEMORY_GATE_SKIP_MODE_TRANSITIONS");
+        var measureRendererPerformance = ResolveFlag("EASYDICT_RENDERER_BENCHMARK");
 
         var window = _launcher.GetMainWindow(TimeSpan.FromSeconds(60));
         window.Should().NotBeNull("main window must be available for the memory gate scenario");
@@ -73,17 +75,28 @@ public sealed class MemoryGateTests : IDisposable
         {
             _output.WriteLine("[MemoryGate] EASYDICT_MEMORY_GATE_RUN_TRANSLATION enabled; pressing Enter.");
             Keyboard.Type(VirtualKeyShort.ENTER);
-            Thread.Sleep(TimeSpan.FromSeconds(5));
             WritePhaseMarker("07-translation-submitted");
+            if (measureRendererPerformance)
+            {
+                WaitForRendererBenchmarkMarkers();
+            }
+            else
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5));
+            }
         }
         else
         {
             WritePhaseMarker("07-translation-submit-skipped");
         }
 
-        SwitchToLongDocMode(window);
-        ExerciseLongDocControls(window);
-        SwitchToQuickTranslateMode(window);
+        // ponytail: Minimal chrome hides the mode menu; retain a matched card-only memory path.
+        if (!skipModeTransitions)
+        {
+            SwitchToLongDocMode(window);
+            ExerciseLongDocControls(window);
+            SwitchToQuickTranslateMode(window);
+        }
         OpenSettingsExerciseTabsAndReturn(window);
         ExerciseFloatingWindows(window);
 
@@ -199,6 +212,47 @@ public sealed class MemoryGateTests : IDisposable
         }
 
         File.WriteAllText(path, content);
+    }
+
+    private void WaitForRendererBenchmarkMarkers()
+    {
+        WaitForMarker(
+            "EASYDICT_RENDERER_BENCHMARK_FIRST_RESULT_RENDERED_MARKER_PATH",
+            TimeSpan.FromSeconds(30));
+
+        if (ResolveDelaySeconds(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_COUNT",
+                defaultValue: 0) > 0)
+        {
+            WaitForMarker(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_COMPLETED_MARKER_PATH",
+                TimeSpan.FromSeconds(60));
+        }
+    }
+
+    private void WaitForMarker(string environmentVariable, TimeSpan timeout)
+    {
+        var path = Environment.GetEnvironmentVariable(environmentVariable);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException(
+                $"Renderer benchmark marker variable '{environmentVariable}' was not configured.");
+        }
+
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(path))
+            {
+                _output.WriteLine($"[MemoryGate] Renderer benchmark marker observed: {path}");
+                return;
+            }
+
+            Thread.Sleep(25);
+        }
+
+        throw new TimeoutException(
+            $"Timed out waiting for renderer benchmark marker '{environmentVariable}' at '{path}'.");
     }
 
     private void WritePhaseMarker(string phaseName)

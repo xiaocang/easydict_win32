@@ -78,4 +78,60 @@ public class IncrementalLayoutTests
         line2.Should().NotBeNull();
         line2!.Text.Should().Be("world");
     }
+    [Fact]
+    public void TryAppendLayout_MatchesFullLayoutAcrossEnglishAndCjk()
+    {
+        const string prefixText = "The quick brown fox";
+        const string suffixText = " jumps over the dog。追加された中文文本";
+
+        var prefix = _engine.Prepare(
+            new TextPrepareRequest { Text = prefixText },
+            _measurer);
+        var prefixLayout = _engine.LayoutWithLines(prefix, 42);
+
+        _engine.TryAppendLayout(
+                prefix,
+                prefixLayout,
+                suffixText,
+                _measurer,
+                42,
+                out PreparedParagraph appended,
+                out LayoutLinesResult incremental)
+            .Should()
+            .BeTrue();
+
+        var full = _engine.Prepare(
+            new TextPrepareRequest { Text = prefixText + suffixText },
+            _measurer);
+        LayoutLinesResult expected = _engine.LayoutWithLines(full, 42);
+
+        incremental.Lines.Select(line => line.Text)
+            .Should()
+            .Equal(expected.Lines.Select(line => line.Text));
+        incremental.Lines.Select(line => line.Width)
+            .Should()
+            .Equal(expected.Lines.Select(line => line.Width));
+        appended.SourceText.Should().Be(prefixText + suffixText);
+    }
+
+    [Fact]
+    public void TryAppendLayout_RejectsWordBoundaryThatNeedsResegmentation()
+    {
+        var prefix = _engine.Prepare(
+            new TextPrepareRequest { Text = "Hello" },
+            _measurer);
+        var prefixLayout = _engine.LayoutWithLines(prefix, 100);
+
+        _engine.TryAppendLayout(
+                prefix,
+                prefixLayout,
+                "World",
+                _measurer,
+                100,
+                out _,
+                out _)
+            .Should()
+            .BeFalse();
+    }
+
 }

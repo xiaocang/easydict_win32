@@ -1,3 +1,4 @@
+using System.Numerics;
 using Easydict.DirectXaml.Render;
 using Microsoft.Graphics.Canvas;
 
@@ -20,16 +21,52 @@ public static class DisplayListExecutor
     public static void Execute(
         CanvasDrawingSession session,
         DisplayList displayList,
-        Win2DTextMeasurerFactory formats)
+        Win2DTextMeasurerFactory formats) =>
+        Execute(
+            session,
+            displayList,
+            formats,
+            Vector2.Zero,
+            DisplayListLayer.All,
+            null);
+
+    /// <summary>Replays a card-local display-list partition at <paramref name="offset"/>.</summary>
+    public static void Execute(
+        CanvasDrawingSession session,
+        DisplayList displayList,
+        Win2DTextMeasurerFactory formats,
+        Vector2 offset,
+        DisplayListLayer layer = DisplayListLayer.All,
+        WinRect? clipRegion = null)
     {
+        IReadOnlyList<DrawCommand> commands = layer switch
+        {
+            DisplayListLayer.Static => displayList.StaticCommands,
+            DisplayListLayer.Dynamic => displayList.DynamicCommands,
+            _ => displayList.Commands,
+        };
+        using DirectRendererTelemetry.Scope telemetry =
+            DirectRendererTelemetry.Measure("draw", commands.Count);
+        Matrix3x2 originalTransform = session.Transform;
+        session.Transform = Matrix3x2.CreateTranslation(offset) * originalTransform;
         // Both clips and opacity groups map onto Win2D layers, so one stack serves both. The
         // display list is emitted balanced; an unbalanced list would leak a layer, so the finally
         // block unwinds whatever is left.
         var layers = new Stack<CanvasActiveLayer>();
+        if (clipRegion is WinRect region)
+        {
+            layers.Push(session.CreateLayer(
+                1f,
+                new WinRect(
+                    region.X - offset.X,
+                    region.Y - offset.Y,
+                    region.Width,
+                    region.Height)));
+        }
 
         try
         {
-            foreach (DrawCommand command in displayList.Commands)
+            foreach (DrawCommand command in commands)
             {
                 switch (command)
                 {
@@ -47,12 +84,13 @@ public static class DisplayListExecutor
                         break;
 
                     case DrawTextLine text:
-                        session.DrawText(
+                        formats.DrawTextLayout(
+                            session,
                             text.Text,
-                            (float)text.X,
-                            (float)text.Y,
-                            ToWinColor(text.Color),
-                            formats.GetFormat(text.Font));
+                            text.X,
+                            text.Y,
+                            text.Font,
+                            ToWinColor(text.Color));
                         break;
 
                     case PushClip clip:
@@ -80,6 +118,7 @@ public static class DisplayListExecutor
             {
                 layers.Pop().Dispose();
             }
+            session.Transform = originalTransform;
         }
     }
 

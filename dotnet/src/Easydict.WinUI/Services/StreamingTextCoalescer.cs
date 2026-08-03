@@ -32,9 +32,11 @@ internal sealed class StreamingTextCoalescer : IDisposable
 {
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherQueueTimer _timer;
-    private readonly Dictionary<ServiceQueryResult, string> _pending = new();
+    private readonly Dictionary<ServiceQueryResult, PendingUpdate> _pending = new();
     private readonly object _lock = new();
     private bool _disposed;
+
+    private readonly record struct PendingUpdate(string Snapshot, Action? Applied);
 
     public StreamingTextCoalescer(DispatcherQueue dispatcher, int intervalMs = 16)
     {
@@ -52,7 +54,15 @@ internal sealed class StreamingTextCoalescer : IDisposable
     /// snapshot for the same target — the coalescer guarantees the UI sees the
     /// final snapshot per frame, never an intermediate one.
     /// </summary>
-    public void Update(ServiceQueryResult target, string snapshot)
+    public void Update(ServiceQueryResult target, string snapshot) =>
+        Update(target, snapshot, onApplied: null);
+
+    /// <summary>
+    /// Queues one snapshot and, if it survives coalescing, invokes <paramref name="onApplied"/>
+    /// after the UI-thread assignment. Internal benchmark code uses this to delimit a measured
+    /// stream without adding a second dispatcher callback.
+    /// </summary>
+    internal void Update(ServiceQueryResult target, string snapshot, Action? onApplied)
     {
         if (_disposed) return;
 
@@ -60,7 +70,7 @@ internal sealed class StreamingTextCoalescer : IDisposable
         lock (_lock)
         {
             startTimer = _pending.Count == 0;
-            _pending[target] = snapshot;
+            _pending[target] = new PendingUpdate(snapshot, onApplied);
         }
 
         if (startTimer)
@@ -101,7 +111,7 @@ internal sealed class StreamingTextCoalescer : IDisposable
         // Snapshot under lock, then release before doing any UI work — the only
         // potentially expensive thing is the property assignment, which is on
         // this same dispatcher thread anyway.
-        KeyValuePair<ServiceQueryResult, string>[] toApply;
+        KeyValuePair<ServiceQueryResult, PendingUpdate>[] toApply;
         lock (_lock)
         {
             if (_pending.Count == 0)
@@ -113,7 +123,7 @@ internal sealed class StreamingTextCoalescer : IDisposable
                 return;
             }
 
-            toApply = new KeyValuePair<ServiceQueryResult, string>[_pending.Count];
+            toApply = new KeyValuePair<ServiceQueryResult, PendingUpdate>[_pending.Count];
             int i = 0;
             foreach (var kvp in _pending)
             {
@@ -124,14 +134,15 @@ internal sealed class StreamingTextCoalescer : IDisposable
 
         UiThreadHotspotDiagnostics.LogCounter("StreamingTextCoalescer.Drain", toApply.Length);
 
-        foreach (var (target, snapshot) in toApply)
+        foreach (var (target, pending) in toApply)
         {
             // The streaming-complete lambda may have flipped IsStreaming to false
             // between the Update call and this tick. Drop the stale snapshot so
-            // it can't overwrite the final committed result.
+            // it can't overwrite the final committed result with stale streaming text.
             if (target.IsStreaming)
             {
-                target.StreamingText = snapshot;
+                target.StreamingText = pending.Snapshot;
+                pending.Applied?.Invoke();
             }
         }
     }

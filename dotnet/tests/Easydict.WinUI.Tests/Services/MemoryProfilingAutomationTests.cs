@@ -82,6 +82,15 @@ public sealed class MemoryProfilingAutomationTests
         script.Should().Contain("HandleCountPostCloseGrowthAllowance");
         script.Should().Contain("postCloseGrowthAllowance");
         script.Should().Contain("Handle Count is still growing after close");
+        script.Should().Contain("MeasureRendererPerformance");
+        script.Should().Contain("EASYDICT_RENDERER_BENCHMARK_FIRST_RESULT_SUBMITTED_MARKER_PATH");
+        script.Should().Contain("EASYDICT_RENDERER_BENCHMARK_FIRST_RESULT_RENDERED_MARKER_PATH");
+        script.Should().Contain("EASYDICT_RENDERER_BENCHMARK_STREAMING_STARTED_MARKER_PATH");
+        script.Should().Contain("EASYDICT_RENDERER_BENCHMARK_STREAMING_COMPLETED_MARKER_PATH");
+        script.Should().Contain("\\% Processor Time");
+        script.Should().Contain("New-RendererBenchmarkFirstResult");
+        script.Should().Contain("New-RendererBenchmarkCpuWindow");
+        script.Should().Contain("rendererBenchmark");
         script.Should().Contain("Keep final gcdump out of typeperf/dotnet-counters tail metrics.");
         script.IndexOf("Keep final gcdump out of typeperf/dotnet-counters tail metrics.", StringComparison.Ordinal)
             .Should()
@@ -91,6 +100,31 @@ public sealed class MemoryProfilingAutomationTests
         script.Should().Contain("WaitForExit(5000) | Out-Null");
         script.Should().Contain("catch");
         script.Should().Contain("throw");
+    }
+
+    [Fact]
+    public void RendererComparisonScript_PreservesPerPidGpuArtifacts()
+    {
+        var scriptPath = Path.Combine(ProjectRoot, "scripts", "memory", "Invoke-RendererComparison.ps1");
+        var script = File.ReadAllText(scriptPath);
+
+        script.Should().Contain("Invoke-PrMemoryGate.ps1");
+        script.Should().Contain("GPU Process Memory");
+        script.Should().Contain("Dedicated Usage");
+        script.Should().Contain("Shared Usage");
+        script.Should().Contain("Total Committed");
+        script.Should().Contain("appInstanceCount");
+        script.Should().Contain("dwmInstanceCount");
+        script.Should().Contain("gpu-process-memory.csv");
+        script.Should().Contain("gpu-phase-snapshots.json");
+        script.Should().Contain("comparison-summary.json");
+        script.Should().Contain("EASYDICT_MEMORY_GATE_SKIP_MODE_TRANSITIONS");
+        script.Should().Contain("DWM is a shared system compositor");
+        script.Should().Contain("-ThresholdPercent");
+        script.Should().Contain("-MeasureRendererPerformance");
+        script.Should().Contain("RendererBenchmarkStreamingUpdateCount");
+        script.Should().Contain("firstResultRenderLatencyMilliseconds");
+        script.Should().Contain("streamingCpuPercent");
     }
 
     [Fact]

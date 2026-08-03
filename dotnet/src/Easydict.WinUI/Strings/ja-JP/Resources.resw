@@ -1065,6 +1065,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>Advanced</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>レンダリング</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>翻訳結果カードのレンダリング方法を選択します。</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>Direct レンダラーを使用する（試験的）</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>Win2D で翻訳結果カードを直接レンダリングし、XAML ビジュアル ツリーのオーバーヘッドを軽減します。変更を適用するには、アプリを再起動してください。</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>General</value>
   </data>

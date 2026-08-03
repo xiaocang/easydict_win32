@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Easydict.TranslationService.Models;
+using Easydict.DirectXaml.Win2D;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -10,14 +12,16 @@ namespace Easydict.WinUI.Views.Controls;
 
 internal static class ServiceResultViewHost
 {
+    private static readonly ConditionalWeakTable<ItemsControl, DirectXamlVirtualSurface> _directSurfaces = new();
     public static IServiceResultView Create(
         ServiceQueryResult result,
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
         FrameworkElement? themeRoot = null,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        DirectXamlVirtualSurface? directSurface = null)
     {
-        IServiceResultView control = CreateRenderer(themeRoot);
+        IServiceResultView control = CreateRenderer(themeRoot, directSurface);
 
         control.ThemeRoot = themeRoot;
         control.CollapseToggled += collapseToggled;
@@ -42,25 +46,46 @@ internal static class ServiceResultViewHost
         FrameworkElement? themeRoot = null,
         EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
+        DirectXamlVirtualSurface? directSurface = GetOrCreateDirectSurface(resultsPanel);
         var control = Create(
             result,
             collapseToggled,
             queryRequested,
             themeRoot ?? resultsPanel,
-            foundryLocalStartRequested);
+            foundryLocalStartRequested,
+            directSurface);
         controls.Add(control);
-        resultsPanel.Items.Add(control.Element);
+
+        if (control is DirectServiceResultItem direct)
+        {
+            if (resultsPanel.Items.IndexOf(direct.Surface.Element) < 0)
+            {
+                resultsPanel.Items.Add(direct.Surface.Element);
+            }
+        }
+        else
+        {
+            if (directSurface is not null && directSurface.CardCount == 0)
+            {
+                RemoveDirectSurface(resultsPanel, directSurface);
+            }
+
+            resultsPanel.Items.Add(control.Element);
+        }
+
         control.RefreshThemeChrome();
         return control;
     }
 
-    private static IServiceResultView CreateRenderer(FrameworkElement? themeRoot)
+    private static IServiceResultView CreateRenderer(
+        FrameworkElement? themeRoot,
+        DirectXamlVirtualSurface? directSurface)
     {
-        if (SettingsService.Instance.DirectRenderer && DirectServiceResultItem.IsAvailable)
+        if (directSurface is not null)
         {
             try
             {
-                return new DirectServiceResultItem(themeRoot);
+                return new DirectServiceResultItem(directSurface, themeRoot);
             }
             catch (Exception ex)
             {
@@ -76,6 +101,50 @@ internal static class ServiceResultViewHost
         return MinimalThemeService.IsActive
             ? new MinimalServiceResultItem()
             : new ServiceResultItem();
+    }
+
+    private static DirectXamlVirtualSurface? GetOrCreateDirectSurface(ItemsControl resultsPanel)
+    {
+        // ponytail: The compiled card mirrors MinimalServiceResultItem. Fluent has result-card
+        // features outside that IR, so retain its proven XAML renderer until a Fluent template
+        // has complete bindings and visual-parity coverage.
+        if (!SettingsService.Instance.DirectRenderer ||
+            !MinimalThemeService.IsActive ||
+            !DirectServiceResultItem.IsAvailable)
+        {
+            return null;
+        }
+
+        if (_directSurfaces.TryGetValue(resultsPanel, out DirectXamlVirtualSurface? existing))
+        {
+            return existing;
+        }
+
+        try
+        {
+            var surface = new DirectXamlVirtualSurface();
+            _directSurfaces.Add(resultsPanel, surface);
+            return surface;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(
+                $"[ServiceResultViewHost] direct surface unavailable, falling back to XAML: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static bool TryGetDirectSurface(
+        ItemsControl resultsPanel,
+        out DirectXamlVirtualSurface? surface) =>
+        _directSurfaces.TryGetValue(resultsPanel, out surface);
+
+    private static void RemoveDirectSurface(
+        ItemsControl resultsPanel,
+        DirectXamlVirtualSurface surface)
+    {
+        _directSurfaces.Remove(resultsPanel);
+        surface.Dispose();
     }
 
     private static void ApplyAutomationProperties(IServiceResultView control, ServiceQueryResult result)
@@ -152,6 +221,11 @@ internal static class ServiceResultViewHost
 
         controls.Clear();
         resultsPanel.Items.Clear();
+        if (TryGetDirectSurface(resultsPanel, out DirectXamlVirtualSurface? surface)
+            && surface is not null)
+        {
+            RemoveDirectSurface(resultsPanel, surface);
+        }
     }
 
     public static void Reorder(
@@ -170,6 +244,15 @@ internal static class ServiceResultViewHost
 
         var order = ServiceResultDemotionHelper.StablePartitionIndices(
             results, hideEmptySetting, pinGrammarCapable);
+        if (TryGetDirectSurface(resultsPanel, out DirectXamlVirtualSurface? surface)
+            && surface is not null
+            && controls.All(control => control is DirectServiceResultItem))
+        {
+            surface.Reorder(
+                order.Select(index => ((DirectServiceResultItem)controls[index]).SurfaceItem).ToArray());
+            return;
+        }
+
 
         var orderMatches = resultsPanel.Items.Count == controls.Count;
         for (int i = 0; orderMatches && i < order.Count; i++)

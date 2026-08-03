@@ -1,6 +1,6 @@
 {
   "$comment": "Machine-readable mirror of spec/direct-xaml-v0.md. The authoritative tables live in crates/dxaml-schema/src/lib.rs; a golden test asserts the two agree. Consumed by editor tooling that wants to know the accepted surface without linking the compiler.",
-  "subset_version": "0.1.0",
+  "subset_version": "0.2.0",
   "namespaces": {
     "presentation": "http://schemas.microsoft.com/winfx/2006/xaml/presentation",
     "directives": "http://schemas.microsoft.com/winfx/2006/xaml",
@@ -15,6 +15,7 @@
     "Border": { "content": "single" },
     "Grid": { "content": "many", "property_elements": ["RowDefinitions", "ColumnDefinitions"] },
     "StackPanel": { "content": "many" },
+    "Button": { "content": "none" },
     "TextBlock": { "content": "text" },
     "RowDefinition": { "content": "none", "parent": "Grid.RowDefinitions" },
     "ColumnDefinition": { "content": "none", "parent": "Grid.ColumnDefinitions" }
@@ -32,20 +33,22 @@
     { "name": "HorizontalAlignment", "type": "enum:HorizontalAlignment", "applies": "all", "invalidation": ["arrange", "paint"] },
     { "name": "VerticalAlignment", "type": "enum:VerticalAlignment", "applies": "all", "invalidation": ["arrange", "paint"] },
 
-    { "name": "Padding", "type": "thickness", "applies": ["Border", "Grid", "StackPanel", "TextBlock"], "invalidation": ["measure", "paint"] },
-    { "name": "Background", "type": "brush", "applies": ["Border", "Grid", "StackPanel"], "invalidation": ["paint"], "mutable": true },
+    { "name": "Padding", "type": "thickness", "applies": ["Border", "Button", "Grid", "StackPanel", "TextBlock"], "invalidation": ["measure", "paint"] },
+    { "name": "Background", "type": "brush", "applies": ["Border", "Button", "Grid", "StackPanel"], "invalidation": ["paint"], "mutable": true },
 
-    { "name": "BorderBrush", "type": "brush", "applies": ["Border"], "invalidation": ["paint"] },
-    { "name": "BorderThickness", "type": "thickness", "applies": ["Border"], "invalidation": ["measure", "paint"] },
-    { "name": "CornerRadius", "type": "cornerRadius", "applies": ["Border"], "invalidation": ["paint"] },
+    { "name": "BorderBrush", "type": "brush", "applies": ["Border", "Button"], "invalidation": ["paint"] },
+    { "name": "BorderThickness", "type": "thickness", "applies": ["Border", "Button"], "invalidation": ["measure", "paint"] },
+    { "name": "CornerRadius", "type": "cornerRadius", "applies": ["Border", "Button"], "invalidation": ["paint"] },
 
     { "name": "Spacing", "type": "double", "applies": ["StackPanel"], "invalidation": ["measure", "paint"] },
     { "name": "Orientation", "type": "enum:Orientation", "applies": ["StackPanel"], "invalidation": ["measure", "paint"] },
 
+    { "name": "Content", "type": "string", "applies": ["Button"], "invalidation": ["measure", "paint", "semantics"], "mutable": true },
+    { "name": "Command", "type": "simpleXBindCommand", "applies": ["Button"], "invalidation": ["semantics"] },
     { "name": "Text", "type": "string", "applies": ["TextBlock"], "invalidation": ["measure", "paint"], "mutable": true },
-    { "name": "FontSize", "type": "double", "applies": ["TextBlock"], "invalidation": ["measure", "paint"], "mutable": true },
-    { "name": "FontWeight", "type": "enum:FontWeight", "applies": ["TextBlock"], "invalidation": ["measure", "paint"] },
-    { "name": "Foreground", "type": "brush", "applies": ["TextBlock"], "invalidation": ["paint"], "mutable": true },
+    { "name": "FontSize", "type": "double", "applies": ["TextBlock", "Button"], "invalidation": ["measure", "paint"], "mutable": true },
+    { "name": "FontWeight", "type": "enum:FontWeight", "applies": ["TextBlock", "Button"], "invalidation": ["measure", "paint"] },
+    { "name": "Foreground", "type": "brush", "applies": ["TextBlock", "Button"], "invalidation": ["paint"], "mutable": true },
     { "name": "TextWrapping", "type": "enum:TextWrapping", "applies": ["TextBlock"], "invalidation": ["measure", "paint"] },
     { "name": "TextTrimming", "type": "enum:TextTrimming", "applies": ["TextBlock"], "invalidation": ["measure", "paint"] },
     { "name": "IsTextSelectionEnabled", "type": "bool", "applies": ["TextBlock"], "invalidation": ["semantics"] },
@@ -60,8 +63,9 @@
     { "name": "Grid.ColumnSpan", "type": "int", "parent": "Grid", "invalidation": ["measure", "arrange", "paint"] }
   ],
   "markup_extensions": ["ThemeResource", "StaticResource"],
-  "directives": ["x:Class", "x:Name"],
-  "events": ["PointerPressed", "PointerEntered", "PointerExited", "Tapped"],
+  "binding_extensions": ["x:Bind"],
+  "directives": ["x:Class", "x:Name", "x:DataType"],
+  "events": ["PointerPressed", "Click", "PointerEntered", "PointerExited", "Tapped"],
   "enums": {
     "Visibility": ["Visible", "Collapsed"],
     "Orientation": ["Horizontal", "Vertical"],

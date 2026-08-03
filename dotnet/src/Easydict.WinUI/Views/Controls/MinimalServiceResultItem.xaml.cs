@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using System.Windows.Input;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace Easydict.WinUI.Views.Controls;
 
@@ -13,10 +15,14 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     private int _updateUIRequestVersion;
     private int _renderedUpdateUIVersion;
 
+    public ICommand CopyCommand { get; }
+
     public MinimalServiceResultItem()
     {
+        CopyCommand = new RelayCommand(CopyCurrentResult);
         InitializeComponent();
         PendingQueryText.Text = ServiceResultStatusTextProvider.GetPendingQueryHintText();
+        CopyButton.Content = LocalizationService.Instance.GetString("Copy");
     }
 
     public FrameworkElement Element => this;
@@ -89,6 +95,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         StatusText.Text = string.Empty;
         ResultText.Text = string.Empty;
         ErrorText.Text = string.Empty;
+        CopyButton.Visibility = Visibility.Collapsed;
         ContentArea.Visibility = Visibility.Collapsed;
     }
 
@@ -158,6 +165,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
         ResultText.Visibility = Visibility.Collapsed;
         ErrorText.Visibility = Visibility.Collapsed;
+        CopyButton.Visibility = Visibility.Collapsed;
 
         if (!demoted)
         {
@@ -191,10 +199,38 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
             }
         }
 
+        CopyButton.Visibility = ResultText.Visibility;
+
         var hasVisibleContent = showPendingHint
             || ResultText.Visibility == Visibility.Visible
             || ErrorText.Visibility == Visibility.Visible;
         ContentArea.Visibility = hasVisibleContent ? Visibility.Visible : Visibility.Collapsed;
+
+        if (ResultText.Visibility == Visibility.Visible
+            && RendererBenchmarkTelemetry.IsFirstResultPending)
+        {
+            RendererBenchmarkTelemetry.QueueXamlFirstResultFrame();
+        }
+    }
+
+    private void CopyCurrentResult() => CopyResultToClipboard(_serviceResult);
+
+    internal static void CopyResultToClipboard(ServiceQueryResult? serviceResult)
+    {
+        if (serviceResult is null)
+        {
+            return;
+        }
+
+        string text = GetMinimalDisplayText(serviceResult);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var package = new DataPackage();
+        package.SetText(text);
+        Clipboard.SetContent(package);
     }
 
     private static string GetStatusText(ServiceQueryResult serviceResult) =>

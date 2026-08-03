@@ -9,7 +9,7 @@
   "properties": {
     "ir_version": {
       "type": "string",
-      "const": "0.1.0",
+      "const": "0.2.0",
       "description": "Schema version. A runtime must refuse IR whose major/minor it does not implement."
     },
     "compiler_version": { "type": "string" },
@@ -30,6 +30,11 @@
       "type": "string",
       "description": "Fully-qualified type from x:Class. The generated accessor type is derived from it."
     },
+    "binding_context_type": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+      "description": "C# type resolved from root x:DataType. Required when bindings are present."
+    },
     "features": {
       "type": "array",
       "items": { "type": "string" },
@@ -46,7 +51,7 @@
           "id": { "type": "integer", "minimum": 0 },
           "kind": {
             "type": "string",
-            "enum": ["userControl", "border", "grid", "stackPanel", "textBlock", "rowDefinition", "columnDefinition"]
+            "enum": ["userControl", "border", "grid", "stackPanel", "button", "textBlock", "rowDefinition", "columnDefinition"]
           },
           "parent": { "type": ["integer", "null"], "minimum": 0 },
           "children": {
@@ -104,6 +109,32 @@
         }
       }
     },
+    "bindings": {
+      "type": "array",
+      "description": "Compile-time typed bindings. Empty for named-slot code-behind views.",
+      "items": {
+        "type": "object",
+        "required": ["target_node", "target_property", "source_path", "mode", "invalidation"],
+        "additionalProperties": false,
+        "properties": {
+          "target_node": { "type": "integer", "minimum": 0 },
+          "target_property": { "type": "string" },
+          "source_path": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+          },
+          "mode": { "type": "string", "enum": ["oneTime", "oneWay"] },
+          "invalidation": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "enum": ["measure", "arrange", "paint", "semantics"] }
+          }
+        }
+      }
+    },
     "resources": {
       "type": "array",
       "description": "Theme and static resource references, kept as runtime slots so Light/Dark/HighContrast stay switchable.",
@@ -126,7 +157,7 @@
         "additionalProperties": false,
         "properties": {
           "node": { "type": "integer", "minimum": 0 },
-          "event": { "type": "string", "enum": ["pointerPressed", "pointerEntered", "pointerExited", "tapped"] },
+          "event": { "type": "string", "enum": ["pointerPressed", "click", "pointerEntered", "pointerExited", "tapped"] },
           "handler": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
         }
       }
@@ -146,6 +177,22 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["bindings"],
+        "properties": {
+          "bindings": { "minItems": 1 }
+        }
+      },
+      "then": {
+        "required": ["binding_context_type", "features"],
+        "properties": {
+          "features": { "contains": { "const": "bindings" } }
+        }
+      }
+    }
+  ],
   "$defs": {
     "value": {
       "oneOf": [

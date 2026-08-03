@@ -7,6 +7,7 @@ members = [
     "crates/dxaml-hir",
     "crates/dxaml-lower",
     "crates/dxaml-ir",
+    "crates/dxaml-codegen-csharp",
     "crates/dxaml-cli",
 ]
 
@@ -24,6 +25,7 @@ dxaml-schema = { path = "crates/dxaml-schema" }
 dxaml-hir = { path = "crates/dxaml-hir" }
 dxaml-lower = { path = "crates/dxaml-lower" }
 dxaml-ir = { path = "crates/dxaml-ir" }
+dxaml-codegen-csharp = { path = "crates/dxaml-codegen-csharp" }
 
 # quick-xml is used ONLY by dxaml-syntax/src/lexer.rs. It breaks API across minor
 # versions, so the blast radius of a version bump is deliberately one file.

@@ -1487,6 +1487,13 @@ public sealed partial class SettingsPage : Page
         if (FormulaDetectionNoteText != null)
             FormulaDetectionNoteText.Text = loc.GetString("FormulaDetection_Note");
 
+        // Rendering section
+        DirectRendererHeaderText.Text = loc.GetString("DirectRenderer_Title");
+        DirectRendererDescriptionText.Text = loc.GetString("DirectRenderer_Description");
+        DirectRendererToggle.Header = loc.GetString("DirectRenderer_Toggle");
+        DirectRendererNoteText.Text = loc.GetString("DirectRenderer_Note");
+        AutomationProperties.SetHelpText(DirectRendererToggle, DirectRendererNoteText.Text);
+
         // Translation Cache section
         if (TranslationCacheHeaderText != null)
             TranslationCacheHeaderText.Text = loc.GetString("TranslationCache_Title");
@@ -1521,6 +1528,8 @@ public sealed partial class SettingsPage : Page
         AutoSelectTargetToggle.OffContent = toggleOff;
         EnableInternationalServicesToggle.OnContent = toggleOn;
         EnableInternationalServicesToggle.OffContent = toggleOff;
+        DirectRendererToggle.OnContent = toggleOn;
+        DirectRendererToggle.OffContent = toggleOff;
         ProxyEnabledToggle.OnContent = toggleOn;
         ProxyEnabledToggle.OffContent = toggleOff;
         ProxyBypassLocalToggle.OnContent = toggleOn;
@@ -2275,6 +2284,7 @@ public sealed partial class SettingsPage : Page
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled += OnSettingChanged;
         EnableLocalDictionarySuggestionsToggle.Toggled += OnSettingChanged;
+        DirectRendererToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
         TtsSpeedSlider.ValueChanged += OnSettingChanged;
@@ -2394,6 +2404,7 @@ public sealed partial class SettingsPage : Page
         ShowPinButtonToggle.Toggled -= OnSettingChanged;
         ShowSourcePlayButtonToggle.Toggled -= OnSettingChanged;
         ShowSwapButtonToggle.Toggled -= OnSettingChanged;
+        DirectRendererToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
         TtsSpeedSlider.ValueChanged -= OnSettingChanged;
@@ -2865,6 +2876,7 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(ocrOptions.Model, _settings.OcrModel)
             || !SameSetting(ocrOptions.SystemPrompt, _settings.OcrSystemPrompt)
             || ocrOptions.EnableThinking != _settings.OcrEnableThinking
+            || DirectRendererToggle.IsOn != _settings.DirectRenderer
             || ProxyEnabledToggle.IsOn != _settings.ProxyEnabled
             || ProxyBypassLocalToggle.IsOn != _settings.ProxyBypassLocal
             || !SameSetting(ProxyUriBox.Text?.Trim() ?? "", _settings.ProxyUri)
@@ -3153,6 +3165,9 @@ public sealed partial class SettingsPage : Page
             OcrEnableThinkingToggle.IsOn = _settings.OcrEnableThinking;
             ApplyOcrEngineDefaultsIfNeeded(GetSelectedOcrEngine());
             UpdateOcrEngineUI();
+
+            // Result card renderer
+            DirectRendererToggle.IsOn = _settings.DirectRenderer;
 
             // HTTP Proxy settings
             ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
@@ -4447,6 +4462,9 @@ public sealed partial class SettingsPage : Page
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;
         _settings.ProxyBypassLocal = ProxyBypassLocalToggle.IsOn;
         _settings.ProxyUri = proxyUri;
+
+        // Save result card renderer. Existing cards keep their current backend until restart.
+        _settings.DirectRenderer = DirectRendererToggle.IsOn;
 
         // Save behavior settings
         _settings.MinimizeToTray = MinimizeToTrayToggle.IsOn;

@@ -861,6 +861,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>ขั้นสูง</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>การเรนเดอร์</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>เลือกวิธีเรนเดอร์การ์ดผลลัพธ์การแปล</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>ใช้ตัวเรนเดอร์ Direct (รุ่นทดลอง)</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>เรนเดอร์การ์ดผลลัพธ์การแปลโดยตรงด้วย Win2D เพื่อลดโอเวอร์เฮดของโครงสร้างภาพ XAML เริ่มแอปใหม่เพื่อใช้การเปลี่ยนแปลง</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>ทั่วไป</value>
   </data>

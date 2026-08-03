@@ -1065,6 +1065,18 @@
   <data name="SettingsTab_Advanced" xml:space="preserve">
     <value>Advanced</value>
   </data>
+  <data name="DirectRenderer_Title" xml:space="preserve">
+    <value>렌더링</value>
+  </data>
+  <data name="DirectRenderer_Description" xml:space="preserve">
+    <value>번역 결과 카드를 렌더링하는 방식을 선택합니다.</value>
+  </data>
+  <data name="DirectRenderer_Toggle" xml:space="preserve">
+    <value>Direct 렌더러 사용(실험적)</value>
+  </data>
+  <data name="DirectRenderer_Note" xml:space="preserve">
+    <value>Win2D로 번역 결과 카드를 직접 렌더링하여 XAML 시각적 트리의 오버헤드를 줄입니다. 변경 사항을 적용하려면 앱을 다시 시작하세요.</value>
+  </data>
   <data name="SettingsTab_General" xml:space="preserve">
     <value>General</value>
   </data>

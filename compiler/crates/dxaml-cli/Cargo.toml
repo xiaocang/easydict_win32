@@ -16,7 +16,17 @@ name = "dxamlc"
 path = "src/main.rs"
 
 [dependencies]
+dxaml-codegen-csharp.workspace = true
 dxaml-hir.workspace = true
 dxaml-ir.workspace = true
 dxaml-lower.workspace = true
 dxaml-syntax.workspace = true
+
+[dev-dependencies]
+# ponytail: jsonschema's broad URL/UUID ranges otherwise resolve current releases above the
+# workspace MSRV, so keep its validation-only dependency tree Rust 1.75-compatible.
+jsonschema = { version = "0.17", default-features = false, features = ["draft202012"] }
+serde_json.workspace = true
+time = "=0.3.36"
+url = "=2.4.1"
+uuid = "=1.6.1"

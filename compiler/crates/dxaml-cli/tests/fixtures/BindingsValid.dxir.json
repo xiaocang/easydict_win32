@@ -1,0 +1,55 @@
+{
+  "ir_version": "0.2.0",
+  "compiler_version": "test",
+  "source": {
+    "path": "TypedBindingFixture.xaml",
+    "hash": "fnv1a64:0123456789abcdef"
+  },
+  "class_name": "Tests.TypedBindingCard",
+  "binding_context_type": "Tests.TypedBindingContext",
+  "features": ["bindings"],
+  "nodes": [
+    {
+      "id": 0,
+      "kind": "userControl",
+      "parent": null,
+      "children": [1, 2],
+      "text": null
+    },
+    {
+      "id": 1,
+      "kind": "textBlock",
+      "parent": 0,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 2,
+      "kind": "button",
+      "parent": 0,
+      "children": [],
+      "text": null
+    }
+  ],
+  "properties": [],
+  "named_slots": [],
+  "bindings": [
+    {
+      "target_node": 1,
+      "target_property": "Text",
+      "source_path": ["ResultText"],
+      "mode": "oneTime",
+      "invalidation": ["measure", "paint"]
+    },
+    {
+      "target_node": 2,
+      "target_property": "Content",
+      "source_path": ["Status"],
+      "mode": "oneWay",
+      "invalidation": ["measure", "paint", "semantics"]
+    }
+  ],
+  "resources": [],
+  "actions": [],
+  "semantics": []
+}

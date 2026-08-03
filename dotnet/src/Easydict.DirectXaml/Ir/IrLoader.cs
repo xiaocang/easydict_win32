@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Easydict.DirectXaml.Ir;
 
@@ -24,11 +25,12 @@ public sealed class IrLoadException : Exception
 /// </summary>
 public static class IrLoader
 {
-    public const string SupportedIrVersion = "0.1.0";
+    public const string SupportedIrVersion = "0.2.0";
 
     private static readonly HashSet<string> KnownFeatures = new(StringComparer.Ordinal)
     {
         "named-slots",
+        "bindings",
         "theme-resources",
         "actions",
     };
@@ -39,6 +41,7 @@ public static class IrLoader
         PropertyNameCaseInsensitive = false,
         AllowTrailingCommas = false,
         ReadCommentHandling = JsonCommentHandling.Disallow,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
     public static IrDocument Load(string json)
@@ -84,6 +87,7 @@ public static class IrLoader
         "border" => NodeKind.Border,
         "grid" => NodeKind.Grid,
         "stackPanel" => NodeKind.StackPanel,
+        "button" => NodeKind.Button,
         "textBlock" => NodeKind.TextBlock,
         "rowDefinition" => NodeKind.RowDefinition,
         "columnDefinition" => NodeKind.ColumnDefinition,
@@ -181,6 +185,57 @@ public static class IrLoader
             }
         }
 
+        if (document.Bindings.Count > 0)
+        {
+            if (string.IsNullOrWhiteSpace(document.BindingContextType))
+            {
+                throw new IrLoadException("IR bindings require binding_context_type");
+            }
+            if (!document.Features.Contains("bindings", StringComparer.Ordinal))
+            {
+                throw new IrLoadException("IR contains bindings but does not declare the bindings feature");
+            }
+
+            var seenBindingTargets = new HashSet<(int Node, string Property)>();
+            foreach (IrBinding binding in document.Bindings)
+            {
+                RequireNode(document, binding.TargetNode, $"binding for '{binding.TargetProperty}'");
+                if (!seenBindingTargets.Add((binding.TargetNode, binding.TargetProperty)))
+                {
+                    throw new IrLoadException(
+                        $"binding target '{binding.TargetNode}.{binding.TargetProperty}' is declared twice");
+                }
+                if (binding.SourcePath.Count != 1 || !IsIdentifier(binding.SourcePath[0]))
+                {
+                    throw new IrLoadException(
+                        $"binding target '{binding.TargetNode}.{binding.TargetProperty}' has an unsupported source path");
+                }
+                if (binding.Mode is not ("oneTime" or "oneWay"))
+                {
+                    throw new IrLoadException(
+                        $"binding target '{binding.TargetNode}.{binding.TargetProperty}' has unsupported mode '{binding.Mode}'");
+                }
+                if (ParseInvalidation(binding.Invalidation) == Invalidation.None)
+                {
+                    throw new IrLoadException(
+                        $"binding target '{binding.TargetNode}.{binding.TargetProperty}' declares no invalidation");
+                }
+
+                NodeKind kind = ParseNodeKind(document.Nodes[binding.TargetNode].Kind);
+                bool supportedTarget = binding.TargetProperty switch
+                {
+                    "Text" => kind == NodeKind.TextBlock,
+                    "Content" => kind == NodeKind.Button,
+                    _ => false,
+                };
+                if (!supportedTarget)
+                {
+                    throw new IrLoadException(
+                        $"binding target '{binding.TargetNode}.{binding.TargetProperty}' is not supported");
+                }
+            }
+        }
+
         for (int index = 0; index < document.Resources.Count; index++)
         {
             if (document.Resources[index].Id != index)
@@ -213,6 +268,29 @@ public static class IrLoader
         {
             RequireNode(document, semantics.Node, "semantics entry");
         }
+    }
+
+    private static bool IsIdentifier(string value)
+    {
+        if (string.IsNullOrEmpty(value)
+            || !((value[0] is >= 'A' and <= 'Z') || (value[0] is >= 'a' and <= 'z') || value[0] == '_'))
+        {
+            return false;
+        }
+
+        for (int index = 1; index < value.Length; index++)
+        {
+            char character = value[index];
+            if (!((character is >= 'A' and <= 'Z')
+                || (character is >= 'a' and <= 'z')
+                || (character is >= '0' and <= '9')
+                || character == '_'))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void RequireNode(IrDocument document, int node, string what)

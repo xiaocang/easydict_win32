@@ -7,13 +7,16 @@
 //!
 //! `../../schemas/dxir-v0.schema.json` is the normative schema for this format.
 
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
-pub const IR_VERSION: &str = "0.1.0";
+pub const IR_VERSION: &str = "0.2.0";
 
 /// Capability names a runtime must understand before it may load the document.
 pub mod features {
     pub const NAMED_SLOTS: &str = "named-slots";
+    pub const BINDINGS: &str = "bindings";
     pub const THEME_RESOURCES: &str = "theme-resources";
     pub const ACTIONS: &str = "actions";
 }
@@ -24,10 +27,14 @@ pub struct IrDocument {
     pub compiler_version: String,
     pub source: IrSource,
     pub class_name: String,
+    /// C# type resolved from root `x:DataType`; required when `bindings` is non-empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binding_context_type: Option<String>,
     pub features: Vec<String>,
     pub nodes: Vec<IrNode>,
     pub properties: Vec<IrProperty>,
     pub named_slots: Vec<IrNamedSlot>,
+    pub bindings: Vec<IrBinding>,
     pub resources: Vec<IrResource>,
     pub actions: Vec<IrAction>,
     pub semantics: Vec<IrSemantics>,
@@ -131,6 +138,23 @@ pub struct IrNamedSlot {
 pub struct IrMutableProperty {
     pub property: String,
     pub invalidation: Vec<String>,
+}
+
+/// A compile-time binding. v0 emits an empty table for views that use named-slot code-behind.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IrBinding {
+    pub target_node: usize,
+    pub target_property: String,
+    pub source_path: Vec<String>,
+    pub mode: IrBindingMode,
+    pub invalidation: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IrBindingMode {
+    OneTime,
+    OneWay,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -238,6 +262,52 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
         }
     }
 
+    let has_binding_context_type = matches!(
+        document.binding_context_type.as_deref(),
+        Some(value) if !value.is_empty()
+    );
+    if !document.bindings.is_empty() && !has_binding_context_type {
+        problems.push("bindings require a non-empty binding_context_type".to_string());
+    }
+    if !document.bindings.is_empty()
+        && !document
+            .features
+            .iter()
+            .any(|feature| feature == features::BINDINGS)
+    {
+        problems.push("bindings require the bindings feature".to_string());
+    }
+
+    let mut seen_binding_targets = HashSet::new();
+    for binding in &document.bindings {
+        if binding.target_node >= document.nodes.len() {
+            problems.push(format!(
+                "binding for '{}' references unknown node {}",
+                binding.target_property, binding.target_node
+            ));
+        }
+        if binding.source_path.len() != 1
+            || !binding.source_path.iter().all(|part| is_identifier(part))
+        {
+            problems.push(format!(
+                "binding for '{}.{}' has an invalid source path",
+                binding.target_node, binding.target_property
+            ));
+        }
+        if binding.invalidation.is_empty() {
+            problems.push(format!(
+                "binding for '{}.{}' declares no invalidation",
+                binding.target_node, binding.target_property
+            ));
+        }
+        if !seen_binding_targets.insert((binding.target_node, binding.target_property.clone())) {
+            problems.push(format!(
+                "binding target '{}.{}' is declared more than once",
+                binding.target_node, binding.target_property
+            ));
+        }
+    }
+
     for (index, resource) in document.resources.iter().enumerate() {
         if resource.id != index {
             problems.push(format!(
@@ -282,6 +352,12 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
     problems
 }
 
+fn is_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some('A'..='Z' | 'a'..='z' | '_'))
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,6 +371,7 @@ mod tests {
                 hash: "fnv1a64:0123456789abcdef".to_string(),
             },
             class_name: "A.B".to_string(),
+            binding_context_type: None,
             features: vec![features::NAMED_SLOTS.to_string()],
             nodes: vec![
                 IrNode {
@@ -307,6 +384,7 @@ mod tests {
                 IrNode {
                     id: 1,
                     kind: "textBlock".into(),
+
                     parent: Some(0),
                     children: vec![],
                     text: Some("hi".into()),
@@ -325,6 +403,7 @@ mod tests {
                     invalidation: vec!["measure".to_string(), "paint".to_string()],
                 }],
             }],
+            bindings: vec![],
             resources: vec![IrResource {
                 id: 0,
                 kind: "themeResource".to_string(),
@@ -426,6 +505,22 @@ mod tests {
         document.resources.clear();
         let problems = validate(&document);
         assert!(problems.iter().any(|p| p.contains("unknown resource")));
+    }
+
+    #[test]
+    fn detects_dangling_binding_targets() {
+        let mut document = sample();
+        document.bindings.push(IrBinding {
+            target_node: 99,
+            target_property: "Text".into(),
+            source_path: vec!["ResultText".into()],
+            mode: IrBindingMode::OneWay,
+            invalidation: vec!["measure".into(), "paint".into()],
+        });
+        let problems = validate(&document);
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("binding for 'Text' references unknown node 99")));
     }
 
     #[test]

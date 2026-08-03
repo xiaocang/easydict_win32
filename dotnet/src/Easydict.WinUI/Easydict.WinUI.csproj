@@ -170,6 +170,7 @@
         <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
         <BypassFrameworkInstallChecks>true</BypassFrameworkInstallChecks>
     </PropertyGroup>
+    <Import Project="..\..\build\DirectXaml.props" />
 
     <PropertyGroup>
         <!-- Local-only debug CLI:
@@ -302,13 +303,12 @@
       <ProjectReference Include="..\Easydict.DirectXaml.Win2D\Easydict.DirectXaml.Win2D.csproj" />
     </ItemGroup>
 
-    <!-- Compiled Direct XAML IR for the experimental direct renderer.
-         Conditional because the file is produced by `dxamlc` and checked in separately; until it
-         is, DirectServiceResultItem.IsAvailable reports false and the host keeps using the XAML
-         renderers. This is what decouples "does the rendering work" from "is the build wired up". -->
+    <!-- The same XAML remains a normal WinUI Page and is also compiled to backend-neutral Direct XAML IR. -->
     <ItemGroup>
-      <EmbeddedResource Include="Views\Controls\MinimalServiceResultItem.dxir.json"
-                        Condition="Exists('Views\Controls\MinimalServiceResultItem.dxir.json')" />
+      <DirectXaml Include="Views\Controls\MinimalServiceResultItem.xaml"
+                  LogicalName="Easydict.WinUI.Views.Controls.MinimalServiceResultItem.dxir.json" />
+    </ItemGroup>
+    <ItemGroup>
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
       <!-- Windows AI APIs / Phi Silica provider (windows-local-ai). Compile-only;
            runtime availability is checked dynamically and the service degrades gracefully
@@ -412,4 +412,5 @@
     <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
     </PropertyGroup>
+    <Import Project="..\..\build\DirectXaml.targets" />
 </Project>

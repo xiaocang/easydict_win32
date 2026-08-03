@@ -24,7 +24,7 @@ public class DirectXamlTests
     /// </summary>
     private const string CardJson = """
     {
-      "ir_version": "0.1.0",
+      "ir_version": "0.2.0",
       "compiler_version": "test",
       "source": { "path": "Card.xaml", "hash": "fnv1a64:0000000000000000" },
       "class_name": "Test.Card",
@@ -58,11 +58,56 @@ public class DirectXamlTests
           ]
         }
       ],
+      "bindings": [],
       "resources": [ { "id": 0, "kind": "themeResource", "key": "CardBrush" } ],
       "actions": [ { "node": 1, "event": "pointerPressed", "handler": "OnPressed" } ],
       "semantics": []
     }
     """;
+    private const string OverlapJson = """
+    {
+      "ir_version": "0.2.0",
+      "compiler_version": "test",
+      "source": { "path": "Overlap.xaml", "hash": "fnv1a64:0000000000000000" },
+      "class_name": "Test.Overlap",
+      "features": ["named-slots"],
+      "nodes": [
+        { "id": 0, "kind": "userControl", "parent": null, "children": [1], "text": null },
+        { "id": 1, "kind": "grid", "parent": 0, "children": [2, 4], "text": null },
+        { "id": 2, "kind": "border", "parent": 1, "children": [3], "text": null },
+        { "id": 3, "kind": "textBlock", "parent": 2, "children": [], "text": null },
+        { "id": 4, "kind": "border", "parent": 1, "children": [5], "text": null },
+        { "id": 5, "kind": "textBlock", "parent": 4, "children": [], "text": null }
+      ],
+      "properties": [
+        { "node": 2, "name": "Width", "value": { "type": "length", "value": { "kind": "dip", "value": 100 } } },
+        { "node": 2, "name": "Height", "value": { "type": "length", "value": { "kind": "dip", "value": 32 } } },
+        { "node": 2, "name": "Background", "value": { "type": "color", "argb": "#FFFF0000" } },
+        { "node": 3, "name": "Text", "value": { "type": "string", "value": "dynamic" } },
+        { "node": 4, "name": "Width", "value": { "type": "length", "value": { "kind": "dip", "value": 100 } } },
+        { "node": 4, "name": "Height", "value": { "type": "length", "value": { "kind": "dip", "value": 32 } } },
+        { "node": 4, "name": "Background", "value": { "type": "color", "argb": "#FF0000FF" } },
+        { "node": 5, "name": "Text", "value": { "type": "string", "value": "static" } }
+      ],
+      "named_slots": [
+        {
+          "name": "DynamicPanel",
+          "node": 2,
+          "mutable": [
+            { "property": "Background", "invalidation": ["paint"] }
+          ]
+        }
+      ],
+      "bindings": [],
+      "resources": [],
+      "actions": [],
+      "semantics": []
+    }
+    """;
+
+    private static readonly Color OverlapDynamicColor = new(255, 255, 0, 0);
+    private static readonly Color OverlapStaticColor = new(255, 0, 0, 255);
+
 
     private static readonly Color CardColor = new(255, 1, 2, 3);
 
@@ -70,6 +115,28 @@ public class DirectXamlTests
         new DictionaryResourceResolver().Add("CardBrush", CardColor);
 
     private static CompiledView LoadCard() => new(IrLoader.Load(CardJson), Resources());
+    private static string BindingCardJson() =>
+        CardJson
+            .Replace(
+                "\"features\": [\"named-slots\", \"theme-resources\"]",
+                "\"features\": [\"named-slots\", \"bindings\", \"theme-resources\"], \"binding_context_type\": \"Test.CardContext\"")
+            .Replace(
+                "\"bindings\": []",
+                """
+                "bindings": [
+                  {
+                    "target_node": 3,
+                    "target_property": "Text",
+                    "source_path": ["ResultText"],
+                    "mode": "oneWay",
+                    "invalidation": ["measure", "paint"]
+                  }
+                ]
+                """);
+
+    private static CompiledView LoadBindingCard() =>
+        new(IrLoader.Load(BindingCardJson()), Resources());
+    private static CompiledView LoadOverlap() => new(IrLoader.Load(OverlapJson), Resources());
 
     private static LayoutEngine LayoutCard(out CompiledView view, double width = 200)
     {
@@ -94,9 +161,69 @@ public class DirectXamlTests
     }
 
     [Fact]
+    public void Load_AcceptsValidBindings()
+    {
+        string json = BindingCardJson();
+
+        IrDocument document = IrLoader.Load(json);
+
+        document.BindingContextType.Should().Be("Test.CardContext");
+        document.Bindings.Should().ContainSingle();
+        document.Bindings[0].TargetNode.Should().Be(3);
+    }
+
+    [Fact]
+    public void BoundStringWrite_AppliesDeclaredInvalidationAndValue()
+    {
+        CompiledView view = LoadBindingCard();
+        view.MarkClean();
+
+        view.SetBoundString(3, "Text", "updated");
+
+        view.GetString(3, "Text").Should().Be("updated");
+        view.Dirty.Should().Be(Invalidation.Measure | Invalidation.Paint);
+        view.DirtyOf(2).Should().Be(Invalidation.Measure | Invalidation.Arrange);
+    }
+
+    [Fact]
+    public void BindingDispatch_QueuesOffThreadAndStopsAfterTeardown()
+    {
+        CompiledView view = LoadBindingCard();
+        var queued = new List<Action>();
+        bool ran = false;
+
+        view.ConfigureUiDispatcher(action =>
+        {
+            queued.Add(action);
+            return true;
+        });
+
+        bool queuedResult = Task.Run(() => view.TryDispatch(() => ran = true))
+            .GetAwaiter()
+            .GetResult();
+
+        queuedResult.Should().BeTrue();
+        ran.Should().BeFalse();
+        queued.Should().ContainSingle();
+
+        queued[0]();
+        ran.Should().BeTrue();
+
+        view.ClearUiDispatcher();
+        bool afterTeardown = Task.Run(() => view.TryDispatch(() => ran = false))
+            .GetAwaiter()
+            .GetResult();
+
+        afterTeardown.Should().BeFalse();
+        ran.Should().BeTrue();
+        Action configureAgain = () => view.ConfigureUiDispatcher(_ => true);
+        configureAgain.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public void Load_RejectsAnUnsupportedIrVersion()
     {
-        string json = CardJson.Replace("\"ir_version\": \"0.1.0\"", "\"ir_version\": \"9.9.9\"");
+        string json = CardJson.Replace("\"ir_version\": \"0.2.0\"", "\"ir_version\": \"9.9.9\"");
 
         Action load = () => IrLoader.Load(json);
 
@@ -111,6 +238,18 @@ public class DirectXamlTests
         Action load = () => IrLoader.Load(json);
 
         load.Should().Throw<IrLoadException>().WithMessage("*time-travel*");
+    }
+
+    [Fact]
+    public void Load_RejectsUnknownDocumentFields()
+    {
+        string json = CardJson.Replace(
+            "\"semantics\": []",
+            "\"semantics\": [], \"silent_semantic_downgrade\": true");
+
+        Action load = () => IrLoader.Load(json);
+
+        load.Should().Throw<IrLoadException>().WithMessage("*not valid JSON*");
     }
 
     [Fact]
@@ -148,6 +287,33 @@ public class DirectXamlTests
         view.SetText("Body", "something longer");
 
         view.Dirty.Should().Be(Invalidation.Measure | Invalidation.Paint);
+    }
+
+    [Fact]
+    public void SlotWrite_TracksNodeAndAncestorLayoutInvalidation()
+    {
+        CompiledView view = LoadCard();
+        view.MarkClean();
+
+        view.SetText("Body", "something longer");
+
+        view.DirtyOf(3).Should().Be(Invalidation.Measure | Invalidation.Paint);
+        view.DirtyOf(2).Should().Be(Invalidation.Measure | Invalidation.Arrange);
+        view.DirtyOf(1).Should().Be(Invalidation.Measure | Invalidation.Arrange);
+        view.DirtyOf(0).Should().Be(Invalidation.Measure | Invalidation.Arrange);
+    }
+
+    [Fact]
+    public void MarkLayoutClean_PreservesPaintAndSemanticWork()
+    {
+        CompiledView view = LoadCard();
+        view.MarkClean();
+        view.Invalidate(
+            Invalidation.Measure | Invalidation.Arrange | Invalidation.Paint | Invalidation.Semantics);
+
+        view.MarkLayoutClean();
+
+        view.Dirty.Should().Be(Invalidation.Paint | Invalidation.Semantics);
     }
 
     [Fact]
@@ -235,6 +401,26 @@ public class DirectXamlTests
     }
 
     [Fact]
+    public void Layout_AppendingAfterAWidthChangeRebuildsThePrefix()
+    {
+        CompiledView view = LoadCard();
+        var engine = new LayoutEngine(view, new FixedAdvanceTextMeasurerFactory());
+        engine.Layout(Size.FromWidth(200));
+
+        view.SetText("Body", "AB");
+        engine.Layout(Size.FromWidth(200));
+        view.SetText("Body", "AB CDEF");
+        engine.Layout(Size.FromWidth(68));
+
+        CompiledView expectedView = LoadCard();
+        expectedView.SetText("Body", "AB CDEF");
+        var expectedEngine = new LayoutEngine(expectedView, new FixedAdvanceTextMeasurerFactory());
+        expectedEngine.Layout(Size.FromWidth(68));
+
+        engine.TextLinesOf(3)!.Lines.Should().Equal(expectedEngine.TextLinesOf(3)!.Lines);
+    }
+
+    [Fact]
     public void HitTest_ReturnsTheDeepestNode()
     {
         LayoutEngine engine = LayoutCard(out _);
@@ -262,6 +448,55 @@ public class DirectXamlTests
         view.ParentOf(3).Should().Be(2);
     }
 
+    [Fact]
+    public void Button_ContentAndClickActionParticipateInLayoutAndPaint()
+    {
+        string json = CardJson
+            .Replace(
+                "{ \"id\": 4, \"kind\": \"textBlock\", \"parent\": 2, \"children\": [], \"text\": null }",
+                "{ \"id\": 4, \"kind\": \"button\", \"parent\": 2, \"children\": [], \"text\": null }")
+            .Replace(
+                "{ \"node\": 4, \"name\": \"Text\", \"value\": { \"type\": \"string\", \"value\": \"CD\" } }",
+                "{ \"node\": 4, \"name\": \"Content\", \"value\": { \"type\": \"string\", \"value\": \"Copy\" } }")
+            .Replace(
+                "\"actions\": [ { \"node\": 1, \"event\": \"pointerPressed\", \"handler\": \"OnPressed\" } ]",
+                "\"actions\": [ { \"node\": 1, \"event\": \"pointerPressed\", \"handler\": \"OnPressed\" }, { \"node\": 4, \"event\": \"click\", \"handler\": \"CopyCommand\" } ]");
+        var view = new CompiledView(IrLoader.Load(json), Resources());
+        var engine = new LayoutEngine(view, new FixedAdvanceTextMeasurerFactory());
+
+        engine.Layout(Size.FromWidth(200));
+        DisplayList list = DisplayListBuilder.Build(engine);
+
+        view.KindOf(4).Should().Be(NodeKind.Button);
+        view.FindActionHandler(4, "click").Should().Be("CopyCommand");
+        engine.BoundsOf(4).Height.Should().BeGreaterThan(0);
+        var bounds = engine.BoundsOf(4);
+        var router = new PointerActionRouter(view);
+        int invocationCount = 0;
+        int invokedNode = -1;
+        string? invokedHandler = null;
+        router.ActionInvoked += (node, handler) =>
+        {
+            invocationCount++;
+            invokedNode = node;
+            invokedHandler = handler;
+        };
+
+        double centerX = bounds.X + (bounds.Width / 2);
+        double centerY = bounds.Y + (bounds.Height / 2);
+        router.Press(engine, centerX, centerY).Should().BeTrue();
+        invocationCount.Should().Be(0, "click waits for pointer release");
+        router.Release(engine, centerX, centerY).Should().BeTrue();
+        invocationCount.Should().Be(1);
+        invokedNode.Should().Be(4);
+        invokedHandler.Should().Be("CopyCommand");
+        router.Release(engine, centerX, centerY).Should().BeFalse();
+        invocationCount.Should().Be(1, "one press/release gesture executes once");
+        list.Commands.OfType<DrawTextLine>()
+            .Select(line => line.Text)
+            .Should().Contain("Copy");
+    }
+
     // ---- display list ------------------------------------------------------------------------
 
     [Fact]
@@ -274,6 +509,34 @@ public class DirectXamlTests
         list.Commands.OfType<FillRectangle>()
             .Should().Contain(fill => fill.Color == CardColor);
     }
+
+    [Fact]
+    public void DisplayList_PartitionsOverlappingNamedSlotSubtreeInPaintOrder()
+    {
+        CompiledView view = LoadOverlap();
+        var engine = new LayoutEngine(view, new FixedAdvanceTextMeasurerFactory());
+        engine.Layout(Size.FromWidth(100));
+
+        DisplayList list = DisplayListBuilder.Build(engine);
+
+        list.DynamicCommands.OfType<DrawTextLine>()
+            .Select(line => line.Text)
+            .Should()
+            .Equal("dynamic");
+        list.StaticCommands.OfType<DrawTextLine>()
+            .Select(line => line.Text)
+            .Should()
+            .Equal("static");
+        list.Commands.OfType<FillRectangle>()
+            .Select(fill => fill.Color)
+            .Should()
+            .Equal(OverlapDynamicColor, OverlapStaticColor);
+        list.Commands.OfType<DrawTextLine>()
+            .Select(line => line.Text)
+            .Should()
+            .Equal("dynamic", "static");
+    }
+
 
     [Fact]
     public void DisplayList_DrawsAnAsymmetricBorderAsSingleEdges()
@@ -335,4 +598,22 @@ public class DirectXamlTests
         list.Commands.OfType<PushOpacity>().Should().ContainSingle();
         list.Commands.OfType<PopOpacity>().Should().ContainSingle();
     }
+
+    [Fact]
+    public void LoadingSpinner_AdvancesTheLeadingDotAcrossFrames()
+    {
+        var bounds = new Rect(10, 20, 8, 8);
+
+        SpinnerDot firstFrameLead = LoadingSpinnerGeometry.GetDot(bounds, frame: 0, segment: 0);
+        SpinnerDot nextFrameLead = LoadingSpinnerGeometry.GetDot(bounds, frame: 1, segment: 1);
+        SpinnerDot firstFrameTrailing = LoadingSpinnerGeometry.GetDot(bounds, frame: 0, segment: 7);
+
+        firstFrameLead.X.Should().BeApproximately(17, 0.001);
+        firstFrameLead.Y.Should().BeApproximately(24, 0.001);
+        firstFrameLead.Opacity.Should().Be(1);
+        nextFrameLead.Opacity.Should().Be(1);
+        firstFrameTrailing.Opacity.Should().Be(0.875);
+        firstFrameLead.Radius.Should().BeApproximately(0.96, 0.001);
+    }
+
 }

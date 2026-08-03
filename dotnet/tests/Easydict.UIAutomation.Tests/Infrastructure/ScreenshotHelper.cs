@@ -133,14 +133,30 @@ public static class ScreenshotHelper
     public static bool TrySetWindowPhysicalBounds(Window window, Rectangle bounds)
     {
         var hwnd = window.Properties.NativeWindowHandle.Value;
-        return hwnd != IntPtr.Zero && SetWindowPos(
-            hwnd,
-            IntPtr.Zero,
-            bounds.Left,
-            bounds.Top,
-            bounds.Width,
-            bounds.Height,
-            SetWindowPosNoZOrder | SetWindowPosNoActivate);
+        if (hwnd == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var previousContext = SetThreadDpiAwarenessContext(DpiAwarenessContextPerMonitorAwareV2);
+        try
+        {
+            return SetWindowPos(
+                hwnd,
+                IntPtr.Zero,
+                bounds.Left,
+                bounds.Top,
+                bounds.Width,
+                bounds.Height,
+                SetWindowPosNoZOrder | SetWindowPosNoActivate);
+        }
+        finally
+        {
+            if (previousContext != IntPtr.Zero)
+            {
+                _ = SetThreadDpiAwarenessContext(previousContext);
+            }
+        }
     }
 
     public static double GetWindowDpiScale(Window window)
@@ -166,6 +182,42 @@ public static class ScreenshotHelper
         return path;
     }
 
+    public static Rectangle GetElementPhysicalBounds(
+        Window window,
+        AutomationElement element)
+    {
+        var physicalWindow = GetWindowPhysicalBounds(window);
+        var uiWindow = window.BoundingRectangle;
+        var uiElement = element.BoundingRectangle;
+        double uiWindowWidth = Convert.ToDouble(uiWindow.Width);
+        double uiWindowHeight = Convert.ToDouble(uiWindow.Height);
+        if (physicalWindow.Width <= 1
+            || physicalWindow.Height <= 1
+            || uiWindowWidth <= 1
+            || uiWindowHeight <= 1)
+        {
+            return Rectangle.FromLTRB(
+                (int)Math.Floor(Convert.ToDouble(uiElement.Left)),
+                (int)Math.Floor(Convert.ToDouble(uiElement.Top)),
+                (int)Math.Ceiling(Convert.ToDouble(uiElement.Right)),
+                (int)Math.Ceiling(Convert.ToDouble(uiElement.Bottom)));
+        }
+
+        double scaleX = physicalWindow.Width / uiWindowWidth;
+        double scaleY = physicalWindow.Height / uiWindowHeight;
+        double windowLeft = Convert.ToDouble(uiWindow.Left);
+        double windowTop = Convert.ToDouble(uiWindow.Top);
+        return Rectangle.FromLTRB(
+            physicalWindow.Left + (int)Math.Floor(
+                (Convert.ToDouble(uiElement.Left) - windowLeft) * scaleX),
+            physicalWindow.Top + (int)Math.Floor(
+                (Convert.ToDouble(uiElement.Top) - windowTop) * scaleY),
+            physicalWindow.Left + (int)Math.Ceiling(
+                (Convert.ToDouble(uiElement.Right) - windowLeft) * scaleX),
+            physicalWindow.Top + (int)Math.Ceiling(
+                (Convert.ToDouble(uiElement.Bottom) - windowTop) * scaleY));
+    }
+
     /// <summary>
     /// Capture a padded region around elements after the test has moved their
     /// window to the primary monitor's physical origin.
@@ -176,6 +228,8 @@ public static class ScreenshotHelper
         int padding,
         params AutomationElement[] elements)
     {
+        EnsureWindowReadyForCapture(window, name);
+
         if (elements.Length == 0)
         {
             throw new ArgumentException("At least one element is required.", nameof(elements));
@@ -187,22 +241,19 @@ public static class ScreenshotHelper
         var bottom = double.MinValue;
         foreach (var element in elements)
         {
-            var bounds = element.BoundingRectangle;
-            left = Math.Min(left, Convert.ToDouble(bounds.Left));
-            top = Math.Min(top, Convert.ToDouble(bounds.Top));
-            right = Math.Max(right, Convert.ToDouble(bounds.Right));
-            bottom = Math.Max(bottom, Convert.ToDouble(bounds.Bottom));
+            var bounds = GetElementPhysicalBounds(window, element);
+            left = Math.Min(left, bounds.Left);
+            top = Math.Min(top, bounds.Top);
+            right = Math.Max(right, bounds.Right);
+            bottom = Math.Max(bottom, bounds.Bottom);
         }
 
-        var dpiScale = GetWindowDpiScale(window);
         var captureBounds = Rectangle.FromLTRB(
-            (int)Math.Floor(left * dpiScale),
-            (int)Math.Floor(top * dpiScale),
-            (int)Math.Ceiling(right * dpiScale),
-            (int)Math.Ceiling(bottom * dpiScale));
-        captureBounds.Inflate(
-            (int)Math.Ceiling(padding * dpiScale),
-            (int)Math.Ceiling(padding * dpiScale));
+            (int)Math.Floor(left),
+            (int)Math.Floor(top),
+            (int)Math.Ceiling(right),
+            (int)Math.Ceiling(bottom));
+        captureBounds.Inflate(padding, padding);
         captureBounds = IntersectWithVirtualScreen(captureBounds);
 
         using var bitmap = new Bitmap(
@@ -467,6 +518,9 @@ public static class ScreenshotHelper
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+
     [DllImport("user32.dll")]
     private static extern bool IsIconic(IntPtr hWnd);
 
@@ -492,6 +546,7 @@ public static class ScreenshotHelper
     private const int ShowWindowRestore = 9;
     private static readonly IntPtr HwndTopMost = new(-1);
     private static readonly IntPtr HwndNoTopMost = new(-2);
+    private static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct WindowRect

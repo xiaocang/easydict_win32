@@ -33,6 +33,9 @@ pub struct XamlElement {
     pub children: Vec<XamlChild>,
     pub text: String,
     pub text_span: Option<Span>,
+    /// Namespace aliases in scope on this element. `x:DataType` uses these to turn
+    /// `prefix:Type` into a C# type name without making the XML parser understand CLR types.
+    pub namespace_aliases: HashMap<String, String>,
 }
 
 impl XamlElement {
@@ -257,6 +260,7 @@ fn build_element(
         children,
         text: source.text.clone(),
         text_span: source.text_span,
+        namespace_aliases: namespaces.by_prefix.clone(),
     })
 }
 

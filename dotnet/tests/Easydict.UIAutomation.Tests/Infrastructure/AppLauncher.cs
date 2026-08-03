@@ -297,23 +297,26 @@ public sealed class AppLauncher : IDisposable
 
     private void TryCloseApplication()
     {
+        var application = _application;
+        _application = null;
+
+        if (application == null)
+        {
+            return;
+        }
+
         try
         {
-            _application?.Close();
-            if (_application != null && !_application.HasExited)
-            {
-                Thread.Sleep(2000);
-                if (!_application.HasExited)
-                {
-                    _application.Kill();
-                }
-            }
+            // Easydict's normal close path keeps the app alive in the tray. FlaUI's Close()
+            // therefore waits for its timeout and emits a false teardown warning before killing
+            // the process anyway. UI tests require deterministic process cleanup, not that user
+            // interaction, so terminate the launched process directly.
+            application.Kill();
         }
         catch
         {
-            // Ignore close errors
+            // The app may already have exited between test completion and cleanup.
         }
-        _application = null;
     }
 
     public void Dispose()

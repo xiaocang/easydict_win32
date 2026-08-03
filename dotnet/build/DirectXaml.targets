@@ -1,0 +1,42 @@
+<Project>
+  <Target Name="ValidateDirectXamlCompiler"
+          BeforeTargets="CompileDirectXaml"
+          Condition="'@(DirectXaml)' != ''">
+    <Error Condition="'$(DirectXamlHostRid)' != 'win-x64' and '$(DirectXamlHostRid)' != 'win-arm64'"
+           Text="Direct XAML supports win-x64 and win-arm64 build hosts; got '$(DirectXamlHostRid)'." />
+    <Error Condition="!Exists('$(DirectXamlCompiler)')"
+           Text="Direct XAML compiler not found at '$(DirectXamlCompiler)'. Restore the build tools for $(DirectXamlHostRid)." />
+  </Target>
+
+  <Target Name="CompileDirectXaml"
+          BeforeTargets="MarkupCompilePass1;DesignTimeMarkupCompilationCT;CoreCompile"
+          DependsOnTargets="ValidateDirectXamlCompiler"
+          Condition="'@(DirectXaml)' != ''"
+          Inputs="%(DirectXaml.FullPath);$(DirectXamlCompiler);$(MSBuildThisFileFullPath)"
+          Outputs="$(DirectXamlGeneratedDir)%(DirectXaml.Filename).dxir.json;$(DirectXamlGeneratedDir)%(DirectXaml.Filename).bindings.g.cs">
+    <MakeDir Directories="$(DirectXamlGeneratedDir)" />
+    <Exec Command="&quot;$(DirectXamlCompiler)&quot; compile --input &quot;%(DirectXaml.FullPath)&quot; --output &quot;$(DirectXamlGeneratedDir).&quot; --source-root &quot;$(MSBuildProjectDirectory)&quot;" />
+  </Target>
+
+  <Target Name="IncludeDirectXamlOutputs"
+          BeforeTargets="AssignTargetPaths;SplitResourcesByCulture;_GenerateCompileInputs;PrepareResourceNames;MarkupCompilePass1;DesignTimeMarkupCompilationCT;CoreCompile"
+          DependsOnTargets="CompileDirectXaml"
+          Condition="'@(DirectXaml)' != ''">
+    <ItemGroup>
+      <_DirectXamlGeneratedSource Include="@(DirectXaml->'$(DirectXamlGeneratedDir)%(Filename).bindings.g.cs')" />
+      <_DirectXamlGeneratedIr Include="@(DirectXaml->'$(DirectXamlGeneratedDir)%(Filename).dxir.json')" />
+      <Compile Remove="@(_DirectXamlGeneratedSource)" />
+      <Compile Include="@(_DirectXamlGeneratedSource)" AutoGen="true" DesignTime="true" Visible="false" />
+      <EmbeddedResource Remove="@(_DirectXamlGeneratedIr)" />
+      <EmbeddedResource Include="@(_DirectXamlGeneratedIr)"
+                        LogicalName="%(_DirectXamlGeneratedIr.LogicalName)"
+                        Type="Non-Resx"
+                        WithCulture="false"
+                        Visible="false" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CleanDirectXaml" AfterTargets="Clean" Condition="Exists('$(DirectXamlGeneratedDir)')">
+    <RemoveDir Directories="$(DirectXamlGeneratedDir)" />
+  </Target>
+</Project>

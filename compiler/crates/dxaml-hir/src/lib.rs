@@ -3,7 +3,9 @@
 pub mod build;
 pub mod value;
 
-pub use build::{build, HirDocument, HirEvent, HirNode, HirProperty, NodeId};
+pub use build::{
+    build, HirBinding, HirBindingMode, HirDocument, HirEvent, HirNode, HirProperty, NodeId,
+};
 pub use value::{
     Color, CornerRadius, GridLength, HirValue, Length, LiteralValue, ResourceKind, ResourceRef,
     Thickness,
@@ -158,6 +160,33 @@ mod tests {
     fn rejects_bindings() {
         let (_, diagnostics) =
             analyze_body(r#"<TextBlock Text="{Binding ResultText, Mode=OneWay}"/>"#);
+        assert!(codes_of(&diagnostics).contains(&codes::UNSUPPORTED_MARKUP_EXTENSION));
+    }
+
+    #[test]
+    fn lowers_typed_one_way_x_bind() {
+        let source = format!(
+            r#"<UserControl xmlns="{}" xmlns:x="{}" xmlns:local="using:Easydict.Models" x:Class="Easydict.Sample" x:DataType="local:CardContext"><TextBlock Text="{{x:Bind ResultText, Mode=OneWay}}"/></UserControl>"#,
+            dxaml_schema::NS_PRESENTATION,
+            dxaml_schema::NS_DIRECTIVES
+        );
+        let (hir, diagnostics) = analyze(&source);
+        assert!(!diagnostics.has_errors(), "{:?}", diagnostics.sorted());
+
+        let hir = hir.expect("hir");
+        assert_eq!(
+            hir.binding_context_type.as_deref(),
+            Some("Easydict.Models.CardContext")
+        );
+        assert_eq!(hir.bindings.len(), 1);
+        assert_eq!(hir.bindings[0].target_property, "Text");
+        assert_eq!(hir.bindings[0].source_path, ["ResultText"]);
+        assert_eq!(hir.bindings[0].mode, HirBindingMode::OneWay);
+    }
+
+    #[test]
+    fn rejects_x_bind_without_a_root_data_type() {
+        let (_, diagnostics) = analyze_body(r#"<TextBlock Text="{x:Bind ResultText}"/>"#);
         assert!(codes_of(&diagnostics).contains(&codes::UNSUPPORTED_MARKUP_EXTENSION));
     }
 

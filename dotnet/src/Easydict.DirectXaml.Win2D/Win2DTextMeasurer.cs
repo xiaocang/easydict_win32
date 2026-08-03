@@ -23,6 +23,8 @@ public sealed class Win2DTextMeasurerFactory : ITextMeasurerFactory, IDisposable
     private readonly Dictionary<FontSpec, CanvasTextFormat> _formats = new();
     private readonly Dictionary<FontSpec, double> _lineHeights = new();
     private readonly Dictionary<FontSpec, Win2DTextMeasurer> _measurers = new();
+    private readonly Dictionary<TextLayoutKey, CanvasTextLayout> _textLayouts = new();
+    private const int TextLayoutCacheLimit = 512;
     private bool _disposed;
 
     public Win2DTextMeasurerFactory(ICanvasResourceCreator resourceCreator, string fontFamily = "Segoe UI")
@@ -40,6 +42,20 @@ public sealed class Win2DTextMeasurerFactory : ITextMeasurerFactory, IDisposable
         }
 
         return measurer;
+    }
+
+    /// <summary>Warms the default text resources after the first visible card has painted.</summary>
+    internal void Prewarm()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        FontSpec font = FontSpec.Default;
+        _ = GetFormat(font);
+        _ = GetLineHeight(font);
+        _ = Create(font).MeasureSegment("Ag");
     }
 
     public double GetLineHeight(FontSpec font)
@@ -72,8 +88,69 @@ public sealed class Win2DTextMeasurerFactory : ITextMeasurerFactory, IDisposable
 
         _formats.Clear();
         _lineHeights.Clear();
+        foreach (CanvasTextLayout layout in _textLayouts.Values)
+        {
+            layout.Dispose();
+        }
+
+        _textLayouts.Clear();
         _measurers.Clear();
     }
+
+    internal void DrawTextLayout(
+        CanvasDrawingSession session,
+        string text,
+        double x,
+        double y,
+        FontSpec font,
+        Windows.UI.Color color)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        double width = Create(font).MeasureSegment(text);
+        double height = GetLineHeight(font);
+        CanvasTextLayout layout = GetTextLayout(text, font, width, height);
+        session.DrawTextLayout(layout, (float)x, (float)y, color);
+    }
+
+    private CanvasTextLayout GetTextLayout(string text, FontSpec font, double width, double height)
+    {
+        float layoutWidth = (float)Math.Max(1, width);
+        float layoutHeight = (float)Math.Max(1, height);
+        var key = new TextLayoutKey(text, font, layoutWidth, layoutHeight);
+        if (_textLayouts.TryGetValue(key, out CanvasTextLayout? cached))
+        {
+            return cached;
+        }
+
+        if (_textLayouts.Count >= TextLayoutCacheLimit)
+        {
+            foreach (CanvasTextLayout layout in _textLayouts.Values)
+            {
+                layout.Dispose();
+            }
+
+            _textLayouts.Clear();
+        }
+
+        var created = new CanvasTextLayout(
+            _resourceCreator,
+            text,
+            GetFormat(font),
+            layoutWidth,
+            layoutHeight);
+        _textLayouts[key] = created;
+        return created;
+    }
+
+    private readonly record struct TextLayoutKey(
+        string Text,
+        FontSpec Font,
+        float Width,
+        float Height);
 
     internal CanvasTextFormat GetFormat(FontSpec font)
     {

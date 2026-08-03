@@ -1,0 +1,1049 @@
+{
+  "ir_version": "0.2.0",
+  "compiler_version": "<version>",
+  "source": {
+    "path": "MinimalServiceResultItem.xaml",
+    "hash": "fnv1a64:6018525132c6fcb6"
+  },
+  "class_name": "Easydict.WinUI.Views.Controls.MinimalServiceResultItem",
+  "features": [
+    "named-slots",
+    "theme-resources",
+    "actions"
+  ],
+  "nodes": [
+    {
+      "id": 0,
+      "kind": "userControl",
+      "parent": null,
+      "children": [
+        1
+      ],
+      "text": null
+    },
+    {
+      "id": 1,
+      "kind": "border",
+      "parent": 0,
+      "children": [
+        2
+      ],
+      "text": null
+    },
+    {
+      "id": 2,
+      "kind": "grid",
+      "parent": 1,
+      "children": [
+        3,
+        4,
+        5,
+        11
+      ],
+      "text": null
+    },
+    {
+      "id": 3,
+      "kind": "rowDefinition",
+      "parent": 2,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 4,
+      "kind": "rowDefinition",
+      "parent": 2,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 5,
+      "kind": "border",
+      "parent": 2,
+      "children": [
+        6
+      ],
+      "text": null
+    },
+    {
+      "id": 6,
+      "kind": "grid",
+      "parent": 5,
+      "children": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "text": null
+    },
+    {
+      "id": 7,
+      "kind": "columnDefinition",
+      "parent": 6,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 8,
+      "kind": "columnDefinition",
+      "parent": 6,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 9,
+      "kind": "textBlock",
+      "parent": 6,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 10,
+      "kind": "textBlock",
+      "parent": 6,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 11,
+      "kind": "border",
+      "parent": 2,
+      "children": [
+        12
+      ],
+      "text": null
+    },
+    {
+      "id": 12,
+      "kind": "stackPanel",
+      "parent": 11,
+      "children": [
+        13,
+        14,
+        15,
+        16
+      ],
+      "text": null
+    },
+    {
+      "id": 13,
+      "kind": "textBlock",
+      "parent": 12,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 14,
+      "kind": "textBlock",
+      "parent": 12,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 15,
+      "kind": "textBlock",
+      "parent": 12,
+      "children": [],
+      "text": null
+    },
+    {
+      "id": 16,
+      "kind": "button",
+      "parent": 12,
+      "children": [],
+      "text": null
+    }
+  ],
+  "properties": [
+    {
+      "node": 1,
+      "name": "Background",
+      "value": {
+        "type": "resource",
+        "resource": 0
+      }
+    },
+    {
+      "node": 1,
+      "name": "BorderBrush",
+      "value": {
+        "type": "resource",
+        "resource": 1
+      }
+    },
+    {
+      "node": 1,
+      "name": "BorderThickness",
+      "value": {
+        "type": "resource",
+        "resource": 2
+      }
+    },
+    {
+      "node": 1,
+      "name": "CornerRadius",
+      "value": {
+        "type": "resource",
+        "resource": 3
+      }
+    },
+    {
+      "node": 1,
+      "name": "Margin",
+      "value": {
+        "type": "thickness",
+        "value": [
+          0.0,
+          0.0,
+          0.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "node": 3,
+      "name": "Height",
+      "value": {
+        "type": "gridLength",
+        "value": {
+          "kind": "auto"
+        }
+      }
+    },
+    {
+      "node": 4,
+      "name": "Height",
+      "value": {
+        "type": "gridLength",
+        "value": {
+          "kind": "auto"
+        }
+      }
+    },
+    {
+      "node": 5,
+      "name": "Grid.Row",
+      "value": {
+        "type": "int",
+        "value": 0
+      }
+    },
+    {
+      "node": 5,
+      "name": "Background",
+      "value": {
+        "type": "resource",
+        "resource": 4
+      }
+    },
+    {
+      "node": 5,
+      "name": "BorderBrush",
+      "value": {
+        "type": "resource",
+        "resource": 1
+      }
+    },
+    {
+      "node": 5,
+      "name": "BorderThickness",
+      "value": {
+        "type": "thickness",
+        "value": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "node": 5,
+      "name": "Padding",
+      "value": {
+        "type": "thickness",
+        "value": [
+          6.0,
+          4.0,
+          6.0,
+          4.0
+        ]
+      }
+    },
+    {
+      "node": 7,
+      "name": "Width",
+      "value": {
+        "type": "gridLength",
+        "value": {
+          "kind": "star",
+          "value": 1.0
+        }
+      }
+    },
+    {
+      "node": 8,
+      "name": "Width",
+      "value": {
+        "type": "gridLength",
+        "value": {
+          "kind": "auto"
+        }
+      }
+    },
+    {
+      "node": 9,
+      "name": "Grid.Column",
+      "value": {
+        "type": "int",
+        "value": 0
+      }
+    },
+    {
+      "node": 9,
+      "name": "FontSize",
+      "value": {
+        "type": "double",
+        "value": 12.0
+      }
+    },
+    {
+      "node": 9,
+      "name": "FontWeight",
+      "value": {
+        "type": "enum",
+        "enum": "FontWeight",
+        "value": "SemiBold"
+      }
+    },
+    {
+      "node": 9,
+      "name": "Foreground",
+      "value": {
+        "type": "resource",
+        "resource": 5
+      }
+    },
+    {
+      "node": 9,
+      "name": "TextTrimming",
+      "value": {
+        "type": "enum",
+        "enum": "TextTrimming",
+        "value": "CharacterEllipsis"
+      }
+    },
+    {
+      "node": 9,
+      "name": "VerticalAlignment",
+      "value": {
+        "type": "enum",
+        "enum": "VerticalAlignment",
+        "value": "Center"
+      }
+    },
+    {
+      "node": 10,
+      "name": "Grid.Column",
+      "value": {
+        "type": "int",
+        "value": 1
+      }
+    },
+    {
+      "node": 10,
+      "name": "FontSize",
+      "value": {
+        "type": "double",
+        "value": 10.0
+      }
+    },
+    {
+      "node": 10,
+      "name": "Foreground",
+      "value": {
+        "type": "resource",
+        "resource": 6
+      }
+    },
+    {
+      "node": 10,
+      "name": "Margin",
+      "value": {
+        "type": "thickness",
+        "value": [
+          8.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "node": 10,
+      "name": "Visibility",
+      "value": {
+        "type": "enum",
+        "enum": "Visibility",
+        "value": "Collapsed"
+      }
+    },
+    {
+      "node": 10,
+      "name": "VerticalAlignment",
+      "value": {
+        "type": "enum",
+        "enum": "VerticalAlignment",
+        "value": "Center"
+      }
+    },
+    {
+      "node": 11,
+      "name": "Grid.Row",
+      "value": {
+        "type": "int",
+        "value": 1
+      }
+    },
+    {
+      "node": 11,
+      "name": "Padding",
+      "value": {
+        "type": "thickness",
+        "value": [
+          8.0,
+          6.0,
+          8.0,
+          8.0
+        ]
+      }
+    },
+    {
+      "node": 11,
+      "name": "Visibility",
+      "value": {
+        "type": "enum",
+        "enum": "Visibility",
+        "value": "Collapsed"
+      }
+    },
+    {
+      "node": 12,
+      "name": "Spacing",
+      "value": {
+        "type": "double",
+        "value": 4.0
+      }
+    },
+    {
+      "node": 13,
+      "name": "FontSize",
+      "value": {
+        "type": "double",
+        "value": 12.0
+      }
+    },
+    {
+      "node": 13,
+      "name": "Foreground",
+      "value": {
+        "type": "resource",
+        "resource": 7
+      }
+    },
+    {
+      "node": 13,
+      "name": "Visibility",
+      "value": {
+        "type": "enum",
+        "enum": "Visibility",
+        "value": "Collapsed"
+      }
+    },
+    {
+      "node": 14,
+      "name": "TextWrapping",
+      "value": {
+        "type": "enum",
+        "enum": "TextWrapping",
+        "value": "Wrap"
+      }
+    },
+    {
+      "node": 14,
+      "name": "IsTextSelectionEnabled",
+      "value": {
+        "type": "bool",
+        "value": true
+      }
+    },
+    {
+      "node": 14,
+      "name": "Foreground",
+      "value": {
+        "type": "resource",
+        "resource": 8
+      }
+    },
+    {
+      "node": 14,
+      "name": "FontSize",
+      "value": {
+        "type": "double",
+        "value": 13.0
+      }
+    },
+    {
+      "node": 14,
+      "name": "Visibility",
+      "value": {
+        "type": "enum",
+        "enum": "Visibility",
+        "value": "Collapsed"
+      }
+    },
+    {
+      "node": 15,
+      "name": "TextWrapping",
+      "value": {
+        "type": "enum",
+        "enum": "TextWrapping",
+        "value": "Wrap"
+      }
+    },
+    {
+      "node": 15,
+      "name": "IsTextSelectionEnabled",
+      "value": {
+        "type": "bool",
+        "value": true
+      }
+    },
+    {
+      "node": 15,
+      "name": "Foreground",
+      "value": {
+        "type": "resource",
+        "resource": 9
+      }
+    },
+    {
+      "node": 15,
+      "name": "FontSize",
+      "value": {
+        "type": "double",
+        "value": 12.0
+      }
+    },
+    {
+      "node": 15,
+      "name": "Visibility",
+      "value": {
+        "type": "enum",
+        "enum": "Visibility",
+        "value": "Collapsed"
+      }
+    },
+    {
+      "node": 16,
+      "name": "Content",
+      "value": {
+        "type": "string",
+        "value": "Copy"
+      }
+    },
+    {
+      "node": 16,
+      "name": "HorizontalAlignment",
+      "value": {
+        "type": "enum",
+        "enum": "HorizontalAlignment",
+        "value": "Right"
+      }
+    },
+    {
+      "node": 16,
+      "name": "Padding",
+      "value": {
+        "type": "thickness",
+        "value": [
+          4.0,
+          2.0,
+          4.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "node": 16,
+      "name": "Background",
+      "value": {
+        "type": "resource",
+        "resource": 10
+      }
+    },
+    {
+      "node": 16,
+      "name": "BorderBrush",
+      "value": {
+        "type": "resource",
+        "resource": 11
+      }
+    },
+    {
+      "node": 16,
+      "name": "BorderThickness",
+      "value": {
+        "type": "thickness",
+        "value": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "node": 16,
+      "name": "CornerRadius",
+      "value": {
+        "type": "cornerRadius",
+        "value": [
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ]
+      }
+    },
+    {
+      "node": 16,
+      "name": "Foreground",
+      "value": {
+        "type": "resource",
+        "resource": 8
+      }
+    },
+    {
+      "node": 16,
+      "name": "FontSize",
+      "value": {
+        "type": "double",
+        "value": 11.0
+      }
+    },
+    {
+      "node": 16,
+      "name": "Visibility",
+      "value": {
+        "type": "enum",
+        "enum": "Visibility",
+        "value": "Collapsed"
+      }
+    }
+  ],
+  "named_slots": [
+    {
+      "name": "RootBorder",
+      "node": 1,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Background",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "HeaderBar",
+      "node": 5,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Background",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ServiceNameText",
+      "node": 9,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Text",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "FontSize",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "Foreground",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "StatusText",
+      "node": 10,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Text",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "FontSize",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "Foreground",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ContentArea",
+      "node": 11,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Background",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PendingQueryText",
+      "node": 13,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Text",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "FontSize",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "Foreground",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ResultText",
+      "node": 14,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Text",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "FontSize",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "Foreground",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ErrorText",
+      "node": 15,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Text",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "FontSize",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "Foreground",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CopyButton",
+      "node": 16,
+      "mutable": [
+        {
+          "property": "Opacity",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Visibility",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "Background",
+          "invalidation": [
+            "paint"
+          ]
+        },
+        {
+          "property": "Content",
+          "invalidation": [
+            "measure",
+            "paint",
+            "semantics"
+          ]
+        },
+        {
+          "property": "FontSize",
+          "invalidation": [
+            "measure",
+            "paint"
+          ]
+        },
+        {
+          "property": "Foreground",
+          "invalidation": [
+            "paint"
+          ]
+        }
+      ]
+    }
+  ],
+  "bindings": [],
+  "resources": [
+    {
+      "id": 0,
+      "kind": "themeResource",
+      "key": "ResultViewBackgroundBrush"
+    },
+    {
+      "id": 1,
+      "kind": "themeResource",
+      "key": "CardStrokeColorDefaultBrush"
+    },
+    {
+      "id": 2,
+      "kind": "themeResource",
+      "key": "EasydictCardBorderThickness"
+    },
+    {
+      "id": 3,
+      "kind": "themeResource",
+      "key": "EasydictCardCornerRadius"
+    },
+    {
+      "id": 4,
+      "kind": "themeResource",
+      "key": "ServiceResultHeaderBackgroundBrush"
+    },
+    {
+      "id": 5,
+      "kind": "themeResource",
+      "key": "ServiceResultHeaderForegroundBrush"
+    },
+    {
+      "id": 6,
+      "kind": "themeResource",
+      "key": "ServiceResultHeaderSecondaryForegroundBrush"
+    },
+    {
+      "id": 7,
+      "kind": "themeResource",
+      "key": "TextFillColorTertiaryBrush"
+    },
+    {
+      "id": 8,
+      "kind": "themeResource",
+      "key": "QueryTextBrush"
+    },
+    {
+      "id": 9,
+      "kind": "themeResource",
+      "key": "SystemFillColorCriticalBrush"
+    },
+    {
+      "id": 10,
+      "kind": "themeResource",
+      "key": "ControlFillColorDefaultBrush"
+    },
+    {
+      "id": 11,
+      "kind": "themeResource",
+      "key": "ControlStrokeColorDefaultBrush"
+    }
+  ],
+  "actions": [
+    {
+      "node": 5,
+      "event": "pointerPressed",
+      "handler": "OnHeaderPointerPressed"
+    },
+    {
+      "node": 16,
+      "event": "click",
+      "handler": "CopyCommand"
+    }
+  ],
+  "semantics": []
+}

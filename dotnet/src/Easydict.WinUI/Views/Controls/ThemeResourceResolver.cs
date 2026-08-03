@@ -21,50 +21,112 @@ namespace Easydict.WinUI.Views.Controls;
 /// <c>BorderThickness</c> and <c>CornerRadius</c> that way — so a colour-only resolver would
 /// silently flatten the card's border and corners to zero.
 /// </summary>
-internal sealed class ThemeResourceResolver(FrameworkElement? themeRoot) : IResourceResolver
+internal sealed class ThemeResourceResolver : IResourceResolver
 {
-    public FrameworkElement? ThemeRoot { get; set; } = themeRoot;
+    private readonly Dictionary<string, DxColor?> _colors = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DxThickness?> _thicknesses = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DxCornerRadius?> _cornerRadii = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double?> _doubles = new(StringComparer.Ordinal);
+    private FrameworkElement? _themeRoot;
+
+    public ThemeResourceResolver(FrameworkElement? themeRoot)
+    {
+        _themeRoot = themeRoot;
+    }
+
+    public FrameworkElement? ThemeRoot
+    {
+        get => _themeRoot;
+        set
+        {
+            _themeRoot = value;
+            Invalidate();
+        }
+    }
+
+    public void Invalidate()
+    {
+        _colors.Clear();
+        _thicknesses.Clear();
+        _cornerRadii.Clear();
+        _doubles.Clear();
+    }
 
     public bool TryGetColor(string key, out DxColor color)
     {
-        color = default;
-
-        if (ThemeResourceService.GetBrush(key, ThemeRoot) is not SolidColorBrush brush)
+        if (_colors.TryGetValue(key, out DxColor? cached))
         {
-            return false;
+            color = cached.GetValueOrDefault();
+            return cached.HasValue;
         }
 
-        Windows.UI.Color value = brush.Color;
-        color = new DxColor(value.A, value.R, value.G, value.B);
-        return true;
+        DxColor? resolved = null;
+        if (ThemeResourceService.GetBrush(key, _themeRoot) is SolidColorBrush brush)
+        {
+            Windows.UI.Color value = brush.Color;
+            resolved = new DxColor(value.A, value.R, value.G, value.B);
+        }
+
+        _colors[key] = resolved;
+        color = resolved.GetValueOrDefault();
+        return resolved.HasValue;
     }
 
     public bool TryGetThickness(string key, out DxThickness thickness)
     {
-        thickness = default;
-
-        if (!ThemeResourceService.TryGetResource(key, ThemeRoot, out Thickness value))
+        if (_thicknesses.TryGetValue(key, out DxThickness? cached))
         {
-            return false;
+            thickness = cached.GetValueOrDefault();
+            return cached.HasValue;
         }
 
-        thickness = new DxThickness(value.Left, value.Top, value.Right, value.Bottom);
-        return true;
+        DxThickness? resolved = null;
+        if (ThemeResourceService.TryGetResource(key, _themeRoot, out Thickness value))
+        {
+            resolved = new DxThickness(value.Left, value.Top, value.Right, value.Bottom);
+        }
+
+        _thicknesses[key] = resolved;
+        thickness = resolved.GetValueOrDefault();
+        return resolved.HasValue;
     }
 
     public bool TryGetCornerRadius(string key, out DxCornerRadius radius)
     {
-        radius = default;
-
-        if (!ThemeResourceService.TryGetResource(key, ThemeRoot, out CornerRadius value))
+        if (_cornerRadii.TryGetValue(key, out DxCornerRadius? cached))
         {
-            return false;
+            radius = cached.GetValueOrDefault();
+            return cached.HasValue;
         }
 
-        radius = new DxCornerRadius(value.TopLeft, value.TopRight, value.BottomRight, value.BottomLeft);
-        return true;
+        DxCornerRadius? resolved = null;
+        if (ThemeResourceService.TryGetResource(key, _themeRoot, out CornerRadius value))
+        {
+            resolved = new DxCornerRadius(
+                value.TopLeft,
+                value.TopRight,
+                value.BottomRight,
+                value.BottomLeft);
+        }
+
+        _cornerRadii[key] = resolved;
+        radius = resolved.GetValueOrDefault();
+        return resolved.HasValue;
     }
 
-    public bool TryGetDouble(string key, out double value) =>
-        ThemeResourceService.TryGetResource(key, ThemeRoot, out value);
+    public bool TryGetDouble(string key, out double value)
+    {
+        if (_doubles.TryGetValue(key, out double? cached))
+        {
+            value = cached.GetValueOrDefault();
+            return cached.HasValue;
+        }
+
+        double? resolved = ThemeResourceService.TryGetResource(key, _themeRoot, out double resource)
+            ? resource
+            : null;
+        _doubles[key] = resolved;
+        value = resolved.GetValueOrDefault();
+        return resolved.HasValue;
+    }
 }

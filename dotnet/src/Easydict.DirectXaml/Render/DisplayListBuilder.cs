@@ -238,6 +238,7 @@ public static class DisplayListBuilder
                     x,
                     y + (index * lines.LineHeight),
                     line.Text,
+                    line.Width,
                     lines.Font,
                     foreground));
         }

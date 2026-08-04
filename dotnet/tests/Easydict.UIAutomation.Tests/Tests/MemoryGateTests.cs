@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.AutomationElements;
@@ -52,7 +53,14 @@ public sealed class MemoryGateTests : IDisposable
         Thread.Sleep(TimeSpan.FromSeconds(initialIdle));
         WritePhaseMarker("02-initial-idle-complete");
 
-        window.SetForeground();
+        if (measureRendererPerformance)
+        {
+            window = FocusRendererBenchmarkWindow(window);
+        }
+        else
+        {
+            window.SetForeground();
+        }
         Thread.Sleep(500);
         WritePhaseMarker("03-main-window-focused");
 
@@ -70,6 +78,8 @@ public sealed class MemoryGateTests : IDisposable
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
         Thread.Sleep(300);
         WritePhaseMarker("06-input-text-selected");
+        WaitForOptionalRendererSnapshotRelease(
+            "EASYDICT_RENDERER_BENCHMARK_PRE_SUBMIT_RELEASE_MARKER_PATH");
 
         if (runRealTranslation)
         {
@@ -79,6 +89,9 @@ public sealed class MemoryGateTests : IDisposable
             if (measureRendererPerformance)
             {
                 WaitForRendererBenchmarkMarkers();
+                WritePhaseMarker("08-renderer-streaming-completed");
+                WaitForOptionalRendererSnapshotRelease(
+                    "EASYDICT_RENDERER_BENCHMARK_POST_STREAM_RELEASE_MARKER_PATH");
             }
             else
             {
@@ -90,15 +103,19 @@ public sealed class MemoryGateTests : IDisposable
             WritePhaseMarker("07-translation-submit-skipped");
         }
 
-        // ponytail: Minimal chrome hides the mode menu; retain a matched card-only memory path.
-        if (!skipModeTransitions)
+        if (!measureRendererPerformance)
         {
-            SwitchToLongDocMode(window);
-            ExerciseLongDocControls(window);
-            SwitchToQuickTranslateMode(window);
+            // ponytail: Minimal chrome hides the mode menu; retain a matched card-only memory path.
+            if (!skipModeTransitions)
+            {
+                SwitchToLongDocMode(window);
+                ExerciseLongDocControls(window);
+                SwitchToQuickTranslateMode(window);
+            }
+
+            OpenSettingsExerciseTabsAndReturn(window);
+            ExerciseFloatingWindows(window);
         }
-        OpenSettingsExerciseTabsAndReturn(window);
-        ExerciseFloatingWindows(window);
 
         _output.WriteLine("[MemoryGate] Closing main window");
         window.Close();
@@ -230,6 +247,23 @@ public sealed class MemoryGateTests : IDisposable
         }
     }
 
+    private Window FocusRendererBenchmarkWindow(Window window)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                window.SetForeground();
+                return window;
+            }
+            catch (COMException) when (attempt < 2)
+            {
+                window = _launcher.GetMainWindow(TimeSpan.FromSeconds(15));
+                window.Should().NotBeNull("main window must remain available after initial idle");
+            }
+        }
+    }
+
     private void WaitForMarker(string environmentVariable, TimeSpan timeout)
     {
         var path = Environment.GetEnvironmentVariable(environmentVariable);
@@ -279,6 +313,18 @@ public sealed class MemoryGateTests : IDisposable
         {
             // The script still has process-name fallback if FlaUI cannot expose the PID.
         }
+    }
+
+    private void WaitForOptionalRendererSnapshotRelease(string environmentVariable)
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(environmentVariable)))
+        {
+            return;
+        }
+
+        // ponytail: Native-memory experiments need a stable same-process snapshot on each side
+        // of renderer creation; ordinary memory-gate runs never configure these marker paths.
+        WaitForMarker(environmentVariable, TimeSpan.FromMinutes(3));
     }
 
     private static void WaitForReleaseOrIdle(int seconds)

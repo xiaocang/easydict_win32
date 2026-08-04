@@ -257,9 +257,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     }
 
     /// <summary>
-    /// Coalesce multiple PropertyChanged events into a single UpdateUI call.
-    /// Setting StreamingText fires 3 PropertyChanged events (StreamingText, DisplayText,
-    /// ContentVisibility) — without coalescing, each enqueues a redundant full UpdateUI().
+    /// Coalesce property changes into a single <c>UpdateUI</c> call.
+    /// The first non-empty streaming snapshot also changes <c>ContentVisibility</c>; subsequent
+    /// snapshots only change the text properties and use the fast path below.
     /// </summary>
     private bool _updateUIPending;
     private int _updateUIRequestVersion;

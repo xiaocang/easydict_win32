@@ -115,10 +115,14 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         get => _streamingText;
         set
         {
+            bool wasContentVisible = ContentVisibility;
             if (SetField(ref _streamingText, value))
             {
                 OnPropertyChanged(nameof(DisplayText));
-                OnPropertyChanged(nameof(ContentVisibility));
+                if (wasContentVisible != ContentVisibility)
+                {
+                    OnPropertyChanged(nameof(ContentVisibility));
+                }
             }
         }
     }

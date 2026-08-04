@@ -52,7 +52,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
     private bool _updateQueued;
     private bool _deferredLayoutQueued;
     private bool _hasDrawnFirstCard;
-    private bool _prewarmQueued;
+    private bool _resourcePrewarmStarted;
     private bool _isCanvasLoaded;
     private bool _disposed;
     private DirectXamlVirtualSurfaceItem? _pressedItem;
@@ -199,20 +199,30 @@ public sealed class DirectXamlVirtualSurface : IDisposable
 
     private void RequestUpdateCore()
     {
+
         if (_updateQueued)
         {
             return;
         }
 
         _updateQueued = true;
-        if (_canvas.DispatcherQueue?.TryEnqueue(() =>
+        try
+        {
+            if (_canvas.DispatcherQueue?.TryEnqueue(
+                    DispatcherQueuePriority.Normal,
+                    () =>
+                    {
+                        _updateQueued = false;
+                        LayoutAndInvalidate();
+                    }) != true)
             {
                 _updateQueued = false;
-                LayoutAndInvalidate();
-            }) != true)
+            }
+        }
+        catch (COMException)
         {
+            // The DispatcherQueue can be released while a WinUI window is tearing down.
             _updateQueued = false;
-            LayoutAndInvalidate();
         }
     }
 
@@ -222,7 +232,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
         _measurers = new Win2DTextMeasurerFactory(sender);
         _laidOutWidth = -1;
         _hasDrawnFirstCard = false;
-        _prewarmQueued = false;
+        _resourcePrewarmStarted = false;
         StopLoadingAnimation();
         _priorityItem = FindFirstVisibleItem();
 
@@ -232,6 +242,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
         }
 
         RequestUpdate();
+        QueueResourcePrewarm();
     }
 
     private void OnCanvasLoaded(object sender, RoutedEventArgs e)
@@ -240,6 +251,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
         _invalidateEntireSurface = true;
         RequestUpdateCore();
         UpdateLoadingAnimation();
+        QueueResourcePrewarm();
     }
 
     private void OnCanvasUnloaded(object sender, RoutedEventArgs e)
@@ -247,6 +259,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
         _isCanvasLoaded = false;
         StopLoadingAnimation();
     }
+
 
 
     private void OnRegionsInvalidated(
@@ -283,24 +296,28 @@ public sealed class DirectXamlVirtualSurface : IDisposable
 
     private void QueueResourcePrewarm()
     {
-        if (_prewarmQueued || _measurers is null || !_isCanvasLoaded)
+        if (_resourcePrewarmStarted || _measurers is null || !_isCanvasLoaded)
         {
             return;
         }
 
-        _prewarmQueued = true;
+        _resourcePrewarmStarted = true;
         if (_canvas.DispatcherQueue?.TryEnqueue(
                 Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
                 () =>
                 {
-                    _prewarmQueued = false;
-                    if (!_disposed)
+                    if (_disposed || _measurers is not { } measurers)
                     {
-                        _measurers?.Prewarm();
+                        return;
+                    }
+
+                    foreach (DirectXamlVirtualSurfaceItem item in _items)
+                    {
+                        item.PrewarmTextResources(measurers);
                     }
                 }) != true)
         {
-            _prewarmQueued = false;
+            _resourcePrewarmStarted = false;
         }
     }
 
@@ -434,6 +451,8 @@ public sealed class DirectXamlVirtualSurface : IDisposable
         // Keep its tiled draw extent and the automation overlay aligned with the arranged host.
         _canvas.Width = width;
         _automationLayer.Width = width;
+        _laidOutWidth = -1;
+        RequestUpdate();
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args) =>
@@ -484,6 +503,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
 
         QueueDeferredLayout();
     }
+
 
     private void InvalidateTail(double top, double previousContentHeight)
     {
@@ -596,9 +616,10 @@ public sealed class DirectXamlVirtualSurface : IDisposable
             }
         }
 
+
         foreach (DirectXamlVirtualSurfaceItem item in _items)
         {
-            if (!IsVisible(item) && item.RequiresLayout(width, widthChanged))
+            if (item.RequiresLayout(width, widthChanged))
             {
                 return item;
             }
@@ -905,6 +926,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
         private readonly DirectXamlVirtualSurface _owner;
         private readonly PointerActionRouter _actions;
         private DisplayList? _displayList;
+        private bool _displayListNeedsRebuild;
         private double _laidOutWidth = -1;
         private double _invalidatedTop;
         private long _invalidationGeneration;
@@ -962,6 +984,7 @@ public sealed class DirectXamlVirtualSurface : IDisposable
                 _owner.RequestUpdate(this, isUrgent);
             }
         }
+
         /// <summary>Sets the animated loading indicator anchored beside a compiled status node.</summary>
         public void SetLoadingIndicator(bool isVisible, int anchorNode, DxColor color)
         {
@@ -980,6 +1003,21 @@ public sealed class DirectXamlVirtualSurface : IDisposable
             _owner.OnLoadingIndicatorChanged();
         }
 
+
+        internal void PrewarmTextResources(Win2DTextMeasurerFactory measurers)
+        {
+            for (int node = 0; node < View.NodeCount; node++)
+            {
+                if (View.KindOf(node) is not (NodeKind.TextBlock or NodeKind.Button))
+                {
+                    continue;
+                }
+
+                measurers.Prewarm(new FontSpec(
+                    View.GetDouble(node, PropertyNames.FontSize, LayoutEngine.DefaultFontSize),
+                    View.GetEnum(node, PropertyNames.FontWeight, FontWeight.Normal)));
+            }
+        }
 
         internal void ResetDeviceResources(Win2DTextMeasurerFactory measurers)
         {
@@ -1011,6 +1049,8 @@ public sealed class DirectXamlVirtualSurface : IDisposable
             using DirectRendererTelemetry.Scope telemetry =
                 DirectRendererTelemetry.Measure("layout", View.NodeCount);
             DxSize size = Layout.Layout(DxSize.FromWidth(width));
+            // Display-list geometry is derived from layout bounds, including width-only relayouts.
+            _displayListNeedsRebuild = true;
 
             _laidOutWidth = width;
             Width = width;
@@ -1026,11 +1066,14 @@ public sealed class DirectXamlVirtualSurface : IDisposable
                 return null;
             }
 
-            if (_displayList is null || (View.Dirty & Invalidation.Paint) != Invalidation.None)
+            if (_displayList is null
+                || _displayListNeedsRebuild
+                || (View.Dirty & Invalidation.Paint) != Invalidation.None)
             {
                 using DirectRendererTelemetry.Scope telemetry =
                     DirectRendererTelemetry.Measure("display-list", View.NodeCount);
                 _displayList = DisplayListBuilder.Build(Layout, _displayList);
+                _displayListNeedsRebuild = false;
             }
 
             return _displayList;
@@ -1112,6 +1155,8 @@ public sealed class DirectXamlVirtualSurface : IDisposable
 
         private void OnActionInvoked(int node, string handler) =>
             ActionInvoked?.Invoke(this, new DirectXamlActionEventArgs(handler, node));
+
+
 
         private bool EnqueueOnUiThread(Action action)
         {

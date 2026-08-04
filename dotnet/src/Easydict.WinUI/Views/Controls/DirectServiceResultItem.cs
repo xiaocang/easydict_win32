@@ -49,6 +49,7 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
 
     private ServiceQueryResult? _serviceResult;
     private bool _updatePending;
+    private bool _streamingFastPathPending;
     private bool _awaitingBenchmarkPaint;
     private bool _disposed;
 
@@ -183,6 +184,7 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
 
         _serviceResult = null;
         _updatePending = false;
+        _streamingFastPathPending = false;
         _awaitingBenchmarkPaint = false;
 
         _bindings.SetServiceNameTextText(string.Empty);
@@ -195,8 +197,19 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         _surfaceItem.Update();
     }
 
-    private void OnServiceResultPropertyChanged(object? sender, PropertyChangedEventArgs e) =>
+    private void OnServiceResultPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+
+        if (_serviceResult?.IsStreaming == true
+            && (e.PropertyName == nameof(ServiceQueryResult.StreamingText)
+                || e.PropertyName == nameof(ServiceQueryResult.DisplayText)))
+        {
+            QueueStreamingTextUpdate();
+            return;
+        }
+
         QueueUpdateUI();
+    }
 
     private void QueueUpdateUI()
     {
@@ -214,6 +227,40 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         {
             _updatePending = false;
         }
+    }
+
+
+    private void QueueStreamingTextUpdate()
+    {
+        if (_streamingFastPathPending)
+        {
+            return;
+        }
+
+        _streamingFastPathPending = true;
+        if (!_root.DispatcherQueue.TryEnqueue(() =>
+            {
+                _streamingFastPathPending = false;
+                UpdateStreamingTextOnly();
+            }))
+        {
+            _streamingFastPathPending = false;
+        }
+    }
+
+    private void UpdateStreamingTextOnly()
+    {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("DirectServiceResultItem.UpdateStreamingTextOnly");
+        if (_serviceResult is null || !_serviceResult.IsStreaming)
+        {
+            return;
+        }
+
+        _bindings.SetResultTextText(
+            string.IsNullOrWhiteSpace(_serviceResult.StreamingText)
+                ? ServiceResultStatusTextProvider.GetWaitingForResponseText()
+                : _serviceResult.StreamingText);
+        _surfaceItem.Update();
     }
 
     /// <summary>
@@ -240,6 +287,8 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
         {
             _serviceResult.IsExpanded = true;
         }
+
+
 
         _bindings.SetRootBorderOpacity(demoted ? 0.5 : 1.0);
         _bindings.SetServiceNameTextText(_serviceResult.ServiceDisplayName);
@@ -285,6 +334,8 @@ internal sealed partial class DirectServiceResultItem : IServiceResultView, IDis
                 }
             }
         }
+
+
 
         _bindings.SetResultTextVisibility(resultVisibility);
         _bindings.SetErrorTextVisibility(errorVisibility);

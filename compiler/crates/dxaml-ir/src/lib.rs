@@ -209,6 +209,8 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
         problems.push("document has no nodes".to_string());
     }
 
+    let mut root_count = 0;
+    let mut root_node = None;
     for (index, node) in document.nodes.iter().enumerate() {
         if node.id != index {
             problems.push(format!(
@@ -225,8 +227,18 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
                     node.id
                 ));
             }
+        } else {
+            root_count += 1;
+            root_node = Some(index);
         }
-        for &child in &node.children {
+        for (child_index, &child) in node.children.iter().enumerate() {
+            if node.children[..child_index].contains(&child) {
+                problems.push(format!(
+                    "node {} lists child {child} more than once",
+                    node.id
+                ));
+            }
+
             match document.nodes.get(child) {
                 None => problems.push(format!("node {} has out-of-range child {child}", node.id)),
                 Some(child_node) if child_node.parent != Some(node.id) => problems.push(format!(
@@ -238,11 +250,12 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
         }
     }
 
-    let root_count = document.nodes.iter().filter(|n| n.parent.is_none()).count();
     if !document.nodes.is_empty() && root_count != 1 {
         problems.push(format!(
             "expected exactly one root node, found {root_count}"
         ));
+    } else if let Some(root) = root_node {
+        validate_connected_tree(document, root, &mut problems);
     }
 
     for property in &document.properties {
@@ -350,6 +363,33 @@ pub fn validate(document: &IrDocument) -> Vec<String> {
     }
 
     problems
+}
+
+fn validate_connected_tree(document: &IrDocument, root_node: usize, problems: &mut Vec<String>) {
+    let mut visited = vec![false; document.nodes.len()];
+    let mut pending = vec![root_node];
+
+    while let Some(node) = pending.pop() {
+        if visited[node] {
+            problems.push(format!(
+                "node {node} is reachable from root node {root_node} more than once"
+            ));
+            continue;
+        }
+
+        visited[node] = true;
+        for &child in &document.nodes[node].children {
+            if child < document.nodes.len() {
+                pending.push(child);
+            }
+        }
+    }
+
+    if let Some(unreachable_node) = visited.iter().position(|seen| !seen) {
+        problems.push(format!(
+            "node {unreachable_node} is not reachable from root node {root_node}"
+        ));
+    }
 }
 
 fn is_identifier(value: &str) -> bool {
@@ -530,5 +570,31 @@ mod tests {
         document.nodes[0].children.clear();
         let problems = validate(&document);
         assert!(problems.iter().any(|p| p.contains("exactly one root")));
+    }
+
+    #[test]
+    fn detects_duplicate_children() {
+        let mut document = sample();
+        document.nodes[0].children.push(1);
+
+        let problems = validate(&document);
+
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("lists child 1 more than once")));
+    }
+
+    #[test]
+    fn detects_disconnected_cycles() {
+        let mut document = sample();
+        document.nodes[0].children.clear();
+        document.nodes[1].parent = Some(1);
+        document.nodes[1].children = vec![1];
+
+        let problems = validate(&document);
+
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("not reachable from root node 0")));
     }
 }

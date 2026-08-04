@@ -41,11 +41,13 @@ function Get-FullPath([string]$Path, [string]$BasePath) {
 }
 
 function Find-AppExecutable([string]$DotnetRoot, [string]$BuildConfiguration) {
-    $outputRoot = Join-Path $DotnetRoot (Join-Path "src\Easydict.WinUI\bin" $BuildConfiguration)
+    # This script builds x64 below, so keep discovery in the matching output subtree.
+    # Searching bin\<configuration> can select an older AnyCPU executable instead.
+    $outputRoot = Join-Path $DotnetRoot (Join-Path "src\Easydict.WinUI\bin\x64" $BuildConfiguration)
     $matches = @(Get-ChildItem -LiteralPath $outputRoot -Filter "Easydict.WinUI.exe" -File -Recurse -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTimeUtc -Descending)
     if ($matches.Count -eq 0) {
-        throw "Could not find Easydict.WinUI.exe below '$outputRoot'. Build the UI application or pass -AppExePath."
+        throw "Could not find x64 Easydict.WinUI.exe below '$outputRoot'. Build the UI application or pass -AppExePath."
     }
 
     return $matches[0].FullName
@@ -108,6 +110,16 @@ function Get-Distribution([object[]]$Candidates) {
         minimum = ($numbers | Measure-Object -Minimum).Minimum
         maximum = ($numbers | Measure-Object -Maximum).Maximum
     }
+}
+
+function Get-NumericDelta([object]$EndValue, [object]$StartValue) {
+    $endNumber = Convert-ToDouble $EndValue
+    $startNumber = Convert-ToDouble $StartValue
+    if ($null -eq $endNumber -or $null -eq $startNumber) {
+        return $null
+    }
+
+    return $endNumber - $startNumber
 }
 
 function Read-StageSamples([string]$Path) {
@@ -303,6 +315,8 @@ function Start-GpuProcessMemoryCapture(
             return $null
         }
 
+        $sampleClock = [System.Diagnostics.Stopwatch]::StartNew()
+        $nextSampleAtMilliseconds = 0.0
         while ($true) {
             $appTotals = New-Totals
             $dwmTotals = New-Totals
@@ -359,7 +373,16 @@ function Start-GpuProcessMemoryCapture(
                 dwmTotalCommittedBytes = $dwmTotals.totalCommittedBytes
             } | Export-Csv -LiteralPath $CsvPath -NoTypeInformation -Append -Encoding UTF8
 
-            Start-Sleep -Milliseconds $SampleIntervalMilliseconds
+            $nextSampleAtMilliseconds += $SampleIntervalMilliseconds
+            $remainingMilliseconds = [int][Math]::Ceiling(
+                $nextSampleAtMilliseconds - $sampleClock.Elapsed.TotalMilliseconds)
+            if ($remainingMilliseconds -gt 0) {
+                Start-Sleep -Milliseconds $remainingMilliseconds
+            }
+            else {
+                $nextSampleAtMilliseconds = $sampleClock.Elapsed.TotalMilliseconds
+            }
+
         }
     } -ArgumentList $AppProcessId, $DwmProcessId, $CsvPath, $SampleIntervalMilliseconds
 }
@@ -398,6 +421,83 @@ function Convert-GpuTimestampToUtc([object]$Value) {
 
     return $null
 }
+function Convert-TypeperfTimestampToUtc([object]$Value) {
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
+    foreach ($format in @(
+        "MM/dd/yyyy HH:mm:ss.fff",
+        "M/d/yyyy H:mm:ss.fff",
+        "MM/dd/yyyy HH:mm:ss",
+        "M/d/yyyy H:mm:ss")) {
+        $dateTime = [DateTime]::MinValue
+        if ([DateTime]::TryParseExact($text, $format, $culture, $styles, [ref]$dateTime)) {
+            return ([DateTimeOffset]$dateTime).ToUniversalTime()
+        }
+    }
+
+    return $null
+}
+
+function Get-CsvColumnName($Row, [string]$Suffix) {
+    return @($Row.PSObject.Properties.Name |
+        Where-Object { $_.EndsWith($Suffix, [StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1)[0]
+}
+
+function New-ProcessSnapshot($Rows, [DateTimeOffset]$TargetUtc, [string]$Phase) {
+    if ($Rows.Count -eq 0) {
+        return $null
+    }
+
+    $timeColumn = @($Rows[0].PSObject.Properties.Name)[0]
+    $privateColumn = Get-CsvColumnName $Rows[0] "\Private Bytes"
+    $workingSetColumn = Get-CsvColumnName $Rows[0] "\Working Set"
+    $handleColumn = Get-CsvColumnName $Rows[0] "\Handle Count"
+    $threadColumn = Get-CsvColumnName $Rows[0] "\Thread Count"
+    if ([string]::IsNullOrWhiteSpace($timeColumn) -or [string]::IsNullOrWhiteSpace($privateColumn)) {
+        return $null
+    }
+
+    $bestRow = $null
+    $bestIndex = $null
+    $bestUtc = $null
+    $bestDelta = [double]::MaxValue
+    for ($index = 0; $index -lt $Rows.Count; $index++) {
+        $sampleUtc = Convert-TypeperfTimestampToUtc $Rows[$index].$timeColumn
+        if ($null -eq $sampleUtc) {
+            continue
+        }
+
+        $delta = [Math]::Abs(($sampleUtc.UtcDateTime - $TargetUtc.UtcDateTime).TotalMilliseconds)
+        if ($delta -lt $bestDelta) {
+            $bestRow = $Rows[$index]
+            $bestIndex = $index
+            $bestUtc = $sampleUtc
+            $bestDelta = $delta
+        }
+    }
+
+    if ($null -eq $bestRow) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        phase = $Phase
+        markerUtc = $TargetUtc.ToString("O")
+        sampleIndex = $bestIndex
+        sampleUtc = $bestUtc.ToString("O")
+        sampleDeltaMilliseconds = $bestDelta
+        privateBytes = Convert-ToDouble $bestRow.$privateColumn
+        workingSet = Convert-ToDouble $bestRow.$workingSetColumn
+        handleCount = Convert-ToDouble $bestRow.$handleColumn
+        threadCount = Convert-ToDouble $bestRow.$threadColumn
+    }
+}
 
 function Get-NearestGpuSample($Rows, [DateTimeOffset]$TargetUtc) {
     $bestRow = $null
@@ -416,6 +516,39 @@ function Get-NearestGpuSample($Rows, [DateTimeOffset]$TargetUtc) {
     }
 
     return $bestRow
+}
+function New-GpuSnapshot($Rows, [DateTimeOffset]$TargetUtc, [string]$Phase) {
+    $row = Get-NearestGpuSample $Rows $TargetUtc
+    if ($null -eq $row) {
+        return $null
+    }
+
+    $sampleUtc = Convert-GpuTimestampToUtc $row.timestampUtc
+    return [pscustomobject]@{
+        phase = $Phase
+        markerUtc = $TargetUtc.ToString("O")
+        sampleUtc = $row.timestampUtc
+        sampleDeltaMilliseconds = [Math]::Abs(
+            ($sampleUtc.UtcDateTime - $TargetUtc.UtcDateTime).TotalMilliseconds)
+        app = [pscustomobject]@{
+            instanceCount = Convert-ToDouble $row.appInstanceCount
+            dedicatedBytes = Convert-ToDouble $row.appDedicatedBytes
+            sharedBytes = Convert-ToDouble $row.appSharedBytes
+            localBytes = Convert-ToDouble $row.appLocalBytes
+            nonLocalBytes = Convert-ToDouble $row.appNonLocalBytes
+            totalCommittedBytes = Convert-ToDouble $row.appTotalCommittedBytes
+        }
+        # ponytail: DWM is shared system telemetry and must stay separate from per-app GPU values.
+        dwm = [pscustomobject]@{
+            processId = Convert-ToDouble $row.dwmProcessId
+            instanceCount = Convert-ToDouble $row.dwmInstanceCount
+            dedicatedBytes = Convert-ToDouble $row.dwmDedicatedBytes
+            sharedBytes = Convert-ToDouble $row.dwmSharedBytes
+            localBytes = Convert-ToDouble $row.dwmLocalBytes
+            nonLocalBytes = Convert-ToDouble $row.dwmNonLocalBytes
+            totalCommittedBytes = Convert-ToDouble $row.dwmTotalCommittedBytes
+        }
+    }
 }
 
 function New-GpuPhaseSnapshots([string]$PhaseDir, [string]$CsvPath) {
@@ -516,6 +649,15 @@ function Get-RunMetricSummary($Runs, [string]$Backend) {
         appGpuLocalAtResult = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtResult.app.localBytes })
         appGpuNonLocalAtResult = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtResult.app.nonLocalBytes })
         appGpuTotalCommittedAtResult = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtResult.app.totalCommittedBytes })
+        privateBytesAtStreamingCompleted = Get-Distribution @($backendRuns | ForEach-Object { $_.memoryAtStreamingCompleted.privateBytes })
+        workingSetAtStreamingCompleted = Get-Distribution @($backendRuns | ForEach-Object { $_.memoryAtStreamingCompleted.workingSet })
+        streamingPrivateBytesDelta = Get-Distribution @($backendRuns | ForEach-Object { $_.streamingPrivateBytesDelta })
+        appGpuDedicatedAtStreamingCompleted = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtStreamingCompleted.app.dedicatedBytes })
+        appGpuSharedAtStreamingCompleted = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtStreamingCompleted.app.sharedBytes })
+        appGpuLocalAtStreamingCompleted = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtStreamingCompleted.app.localBytes })
+        appGpuNonLocalAtStreamingCompleted = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtStreamingCompleted.app.nonLocalBytes })
+        appGpuTotalCommittedAtStreamingCompleted = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtStreamingCompleted.app.totalCommittedBytes })
+        streamingGpuTotalCommittedDelta = Get-Distribution @($backendRuns | ForEach-Object { $_.streamingGpuTotalCommittedDelta })
         dwmGpuDedicatedAtResult = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtResult.dwm.dedicatedBytes })
         dwmGpuSharedAtResult = Get-Distribution @($backendRuns | ForEach-Object { $_.gpuAtResult.dwm.sharedBytes })
         firstResultRenderLatencyMilliseconds = Get-Distribution @(
@@ -594,7 +736,7 @@ function Invoke-RendererRun(
     $stageSamplesPath = Join-Path $runDirectory "renderer-stage-samples.json"
 
     $runMetadata = [ordered]@{
-        schemaVersion = 2
+        schemaVersion = 4
         sequence = $Sequence
         iteration = $Iteration
         backend = $Backend
@@ -714,6 +856,31 @@ function Invoke-RendererRun(
         @()
     }
 
+    $typeperfRows = @(
+        Import-Csv -LiteralPath $memorySummary.artifacts.typeperfCsv)
+    $firstResultRenderedUtc = Convert-GpuTimestampToUtc `
+        $memorySummary.rendererBenchmark.firstResult.renderedUtc
+    $streamingCompletedUtc = Convert-GpuTimestampToUtc `
+        $memorySummary.rendererBenchmark.streaming.completedUtc
+    if ($null -eq $firstResultRenderedUtc -or $null -eq $streamingCompletedUtc) {
+        throw "Renderer benchmark completed without valid result/stream timestamps."
+    }
+
+    $memoryAtResult = New-ProcessSnapshot `
+        $typeperfRows $firstResultRenderedUtc "renderer-first-result-rendered"
+    $memoryAtStreamingCompleted = New-ProcessSnapshot `
+        $typeperfRows $streamingCompletedUtc "renderer-streaming-completed"
+    $gpuAtResult = New-GpuSnapshot `
+        $gpuRows $firstResultRenderedUtc "renderer-first-result-rendered"
+    $gpuAtStreamingCompleted = New-GpuSnapshot `
+        $gpuRows $streamingCompletedUtc "renderer-streaming-completed"
+    $streamingPrivateBytesDelta = Get-NumericDelta `
+        $memoryAtStreamingCompleted.privateBytes `
+        $memoryAtResult.privateBytes
+    $streamingGpuTotalCommittedDelta = Get-NumericDelta `
+        $gpuAtStreamingCompleted.app.totalCommittedBytes `
+        $gpuAtResult.app.totalCommittedBytes
+
     $runMetadata.gpuSampleStatus = if ($gpuRows.Count -gt 0) { "available" } elseif ($GpuCountersAvailable) { "no-valid-samples" } else { "unavailable" }
     $runMetadata.gpuSampleCount = $gpuRows.Count
     $runMetadata.rendererBenchmark |
@@ -721,11 +888,15 @@ function Invoke-RendererRun(
     $stageSamples = Read-StageSamples $stageSamplesPath
     $runMetadata.rendererBenchmark |
         Add-Member -NotePropertyName stageSamples -NotePropertyValue $stageSamples -Force
+    $runMetadata | Add-Member -NotePropertyName memoryAtResult -NotePropertyValue $memoryAtResult -Force
+    $runMetadata | Add-Member -NotePropertyName memoryAtStreamingCompleted -NotePropertyValue $memoryAtStreamingCompleted -Force
+    $runMetadata | Add-Member -NotePropertyName gpuAtResult -NotePropertyValue $gpuAtResult -Force
+    $runMetadata | Add-Member -NotePropertyName gpuAtStreamingCompleted -NotePropertyValue $gpuAtStreamingCompleted -Force
+    $runMetadata | Add-Member -NotePropertyName streamingPrivateBytesDelta -NotePropertyValue $streamingPrivateBytesDelta -Force
+    $runMetadata | Add-Member -NotePropertyName streamingGpuTotalCommittedDelta -NotePropertyValue $streamingGpuTotalCommittedDelta -Force
     $runMetadata.completedUtc = [DateTimeOffset]::UtcNow.ToString("O")
     $runMetadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $runMetadataPath -Encoding UTF8
 
-    $memoryAtResult = Get-PhaseSnapshot $memorySummary.phaseSnapshots "07-translation-submitted"
-    $gpuAtResult = Get-PhaseSnapshot $gpuPhaseSnapshots "07-translation-submitted"
     return [pscustomobject]@{
         sequence = $Sequence
         iteration = $Iteration
@@ -740,7 +911,11 @@ function Invoke-RendererRun(
         runMetadataPath = $runMetadataPath
         gpuSampleStatus = $runMetadata.gpuSampleStatus
         memoryAtResult = $memoryAtResult
+        memoryAtStreamingCompleted = $memoryAtStreamingCompleted
         gpuAtResult = $gpuAtResult
+        gpuAtStreamingCompleted = $gpuAtStreamingCompleted
+        streamingPrivateBytesDelta = $streamingPrivateBytesDelta
+        streamingGpuTotalCommittedDelta = $streamingGpuTotalCommittedDelta
         rendererBenchmark = $memorySummary.rendererBenchmark
     }
 }
@@ -832,7 +1007,7 @@ for ($iteration = 1; $iteration -le $RunsPerBackend; $iteration++) {
 }
 
 $comparison = [pscustomobject]@{
-    schemaVersion = 2
+    schemaVersion = 4
     capturedUtc = [DateTimeOffset]::UtcNow.ToString("O")
     configuration = $Configuration
     appExePath = $AppExePath
@@ -880,7 +1055,8 @@ $comparison = [pscustomobject]@{
         "DWM is a shared system compositor. Its separately observed counters are contextual telemetry, not attributable per-app GPU totals.",
         "The deterministic result hook is a DEBUG-only UIAutomation path and avoids live translation services.",
         "First-result telemetry measures each backend's first renderer callback, not a Windows compositor-present timestamp.",
-        "Streaming CPU is app-process percent processor time at one-second typeperf cadence; it excludes system-wide CPU and may not capture sub-second scheduler variation."
+        "Streaming CPU is app-process percent processor time at one-second typeperf cadence; it excludes system-wide CPU and may not capture sub-second scheduler variation.",
+        "Process and GPU result/stream values are nearest samples to the renderer callback timestamps, not exact callback-time readings."
     )
 }
 

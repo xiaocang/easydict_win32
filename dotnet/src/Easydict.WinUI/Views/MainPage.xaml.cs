@@ -312,6 +312,9 @@ namespace Easydict.WinUI.Views
                 defaultValue: 50,
                 minimum: 10,
                 maximum: 1_000);
+            // UI automation can hold the deterministic stream until its viewport is ready.
+            string? streamReleaseMarkerPath = Environment.GetEnvironmentVariable(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_RELEASE_MARKER_PATH");
 
             RendererBenchmarkTelemetry.BeginFirstResult();
             result.IsStreaming = true;
@@ -324,7 +327,8 @@ namespace Easydict.WinUI.Views
                     result,
                     text!,
                     streamUpdateCount,
-                    streamIntervalMilliseconds);
+                    streamIntervalMilliseconds,
+                    streamReleaseMarkerPath);
             }
 
             return true;
@@ -334,12 +338,32 @@ namespace Easydict.WinUI.Views
             ServiceQueryResult result,
             string initialText,
             int updateCount,
-            int updateIntervalMilliseconds)
+            int updateIntervalMilliseconds,
+            string? releaseMarkerPath)
         {
             if (_streamingCoalescer is null)
             {
                 Debug.WriteLine("[RendererBenchmark] Streaming coalescer was unavailable.");
                 return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(releaseMarkerPath))
+            {
+                const int ReleaseTimeoutMilliseconds = 30_000;
+                const int ReleasePollMilliseconds = 25;
+                int elapsedMilliseconds = 0;
+                while (!File.Exists(releaseMarkerPath)
+                       && elapsedMilliseconds < ReleaseTimeoutMilliseconds)
+                {
+                    await Task.Delay(ReleasePollMilliseconds).ConfigureAwait(false);
+                    elapsedMilliseconds += ReleasePollMilliseconds;
+                }
+
+                if (!File.Exists(releaseMarkerPath))
+                {
+                    Debug.WriteLine("[RendererBenchmark] Timed out waiting for stream release marker.");
+                    return;
+                }
             }
 
             const string StreamFragment = " incremental renderer benchmark";

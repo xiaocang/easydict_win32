@@ -21,6 +21,7 @@ public sealed class DirectRendererTests : IDisposable
     private const string DirectResultText = "Copied direct result";
     private readonly ITestOutputHelper _output;
     private readonly AppLauncher _launcher = new();
+    private string? _streamingMarkerDirectory;
 
 
     private readonly record struct CardCapture(
@@ -81,6 +82,9 @@ public sealed class DirectRendererTests : IDisposable
             .Should()
             .BeTrue();
         Thread.Sleep(1000);
+
+        window = _launcher.GetMainWindow(TimeSpan.FromSeconds(5));
+        window.Should().NotBeNull("the resized main window must remain available");
         window.FindFirstDescendant(condition => condition.ByName("Unexpected Error"))
             .Should()
             .BeNull("resizing the Win2D surface must not raise an app-level error");
@@ -93,11 +97,18 @@ public sealed class DirectRendererTests : IDisposable
         string? elementScreenshotPath = Retry.WhileNull(
             () =>
             {
+                var currentHeader = window.FindFirstDescendant(
+                    condition => condition.ByAutomationId("ServiceResultHeader_bing"));
+                if (currentHeader is null)
+                {
+                    return null;
+                }
+
                 string candidate = ScreenshotHelper.CaptureElementsPhysical(
                     window,
                     "direct-renderer-result-card-resized",
                     padding: 0,
-                    resizedHeader);
+                    currentHeader);
                 return IsRightCardBorderPainted(candidate) ? candidate : null;
             },
             TimeSpan.FromSeconds(5)).Result;
@@ -111,6 +122,137 @@ public sealed class DirectRendererTests : IDisposable
         _output.WriteLine(elementScreenshotPath!);
         _output.WriteLine(
             ScreenshotHelper.CaptureWindow(window, "direct-renderer-result-cards-resized"));
+    }
+
+    [Fact]
+    public void StreamingResult_UsesStableTextOnlyCadenceAndKeepsLeadingTextAnchored()
+    {
+        const int StreamUpdateCount = 100;
+        const int StreamUpdateIntervalMilliseconds = 25;
+        string markerDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "Easydict.UIAutomation",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(markerDirectory);
+        string streamingStartedMarker = Path.Combine(markerDirectory, "streaming-started.marker");
+        string streamingCompletedMarker = Path.Combine(markerDirectory, "streaming-completed.marker");
+        string streamingReleaseMarker = Path.Combine(markerDirectory, "streaming-release.marker");
+        string hotspotLogPath = Path.Combine(markerDirectory, "ui-hotspot.log");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_COUNT",
+                StreamUpdateCount.ToString());
+            Environment.SetEnvironmentVariable(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_INTERVAL_MILLISECONDS",
+                StreamUpdateIntervalMilliseconds.ToString());
+            Environment.SetEnvironmentVariable(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_STARTED_MARKER_PATH",
+                streamingStartedMarker);
+            Environment.SetEnvironmentVariable(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_COMPLETED_MARKER_PATH",
+                streamingCompletedMarker);
+            Environment.SetEnvironmentVariable(
+                "EASYDICT_RENDERER_BENCHMARK_STREAMING_RELEASE_MARKER_PATH",
+                streamingReleaseMarker);
+            Environment.SetEnvironmentVariable("EASYDICT_DEBUG_UI_THREAD_HOTSPOTS", "1");
+            Environment.SetEnvironmentVariable("EASYDICT_DEBUG_UI_THREAD_HOTSPOT_THRESHOLD_MS", "0");
+            Environment.SetEnvironmentVariable("EASYDICT_UI_THREAD_HOTSPOT_LOG_PATH", hotspotLogPath);
+            _streamingMarkerDirectory = markerDirectory;
+
+            var window = StartQuery(directRenderer: true, submitQuery: false);
+            ScreenshotHelper.TrySetWindowPhysicalBounds(
+                    window,
+                    new Rectangle(40, 40, 700, 700))
+                .Should()
+                .BeTrue("the streaming stability check needs deterministic window bounds");
+            SubmitQuery(window);
+            WaitForFile(streamingStartedMarker, TimeSpan.FromSeconds(10));
+
+            var header = Retry.WhileNull(
+                () =>
+                {
+                    var element = window.FindFirstDescendant(
+                        condition => condition.ByAutomationId("ServiceResultHeader_bing"));
+                    return element?.BoundingRectangle.Height > 60 ? element : null;
+                },
+                TimeSpan.FromSeconds(5)).Result;
+            header.Should().NotBeNull("the streaming card must render its initial text before release");
+
+            var framePaths = new List<string>();
+            var headerTops = new List<double> { header!.BoundingRectangle.Top };
+            string initialFramePath = ScreenshotHelper.CaptureElementsPhysical(
+                window,
+                "direct-renderer-streaming-frame-0",
+                padding: 0,
+                header);
+            framePaths.Add(initialFramePath);
+            _output.WriteLine(initialFramePath);
+
+            File.WriteAllText(streamingReleaseMarker, DateTimeOffset.UtcNow.ToString("O"));
+            for (int index = 1; index < 4; index++)
+            {
+                Thread.Sleep(150);
+                header = Retry.WhileNull(
+                    () => window.FindFirstDescendant(
+                        condition => condition.ByAutomationId("ServiceResultHeader_bing")),
+                    TimeSpan.FromSeconds(5)).Result;
+                header.Should().NotBeNull("the streaming card must remain available");
+                headerTops.Add(header!.BoundingRectangle.Top);
+                string framePath = ScreenshotHelper.CaptureElementsPhysical(
+                    window,
+                    $"direct-renderer-streaming-frame-{index}",
+                    padding: 0,
+                    header);
+                framePaths.Add(framePath);
+                _output.WriteLine(framePath);
+            }
+
+            WaitForFile(streamingCompletedMarker, TimeSpan.FromSeconds(10));
+
+            Thread.Sleep(250);
+            string[] hotspotLog = File.Exists(hotspotLogPath)
+                ? ReadAllLinesShared(hotspotLogPath)
+                : Array.Empty<string>();
+            _output.WriteLine(hotspotLogPath);
+            int fullCardUpdates = CountHotspotOperation(
+                hotspotLog,
+                "DirectServiceResultItem.UpdateUI");
+            int textOnlyUpdates = CountHotspotOperation(
+                hotspotLog,
+                "DirectServiceResultItem.UpdateStreamingTextOnly");
+            _output.WriteLine(
+                $"fullCardUpdates={fullCardUpdates}, textOnlyUpdates={textOnlyUpdates}");
+            fullCardUpdates.Should().BeLessThan(
+                textOnlyUpdates,
+                "subsequent streamed snapshots must avoid full-card updates whenever the text-only path can render them");
+            textOnlyUpdates.Should().BeGreaterThan(
+                0,
+                "the controlled stream must render at least one coalesced text snapshot");
+            textOnlyUpdates.Should().BeLessThan(
+                StreamUpdateCount / 2,
+                "the stable cadence must collapse bursty snapshots before they repeatedly reflow text");
+
+            double firstHeaderTop = headerTops[0];
+            headerTops.Should().OnlyContain(
+                top => Math.Abs(top - firstHeaderTop) <= 1,
+                "growing streamed text must not move its card");
+
+            var leadingTextRows = framePaths.Select(FindLeadingResultTextRow).ToArray();
+            int firstLeadingTextRow = leadingTextRows[0];
+            leadingTextRows.Should().OnlyContain(
+                row => Math.Abs(row - firstLeadingTextRow) <= 1,
+                "the leading streamed text must keep a stable baseline");
+
+            CountPixelChanges(framePaths[0], framePaths[^1])
+                .Should()
+                .BeGreaterThan(8, "the captured frames must exercise visible streamed updates");
+        }
+        finally
+        {
+            ClearStreamingBenchmarkEnvironment();
+        }
     }
 
 
@@ -328,6 +470,15 @@ public sealed class DirectRendererTests : IDisposable
             .BeTrue();
         Thread.Sleep(1000);
 
+        window = _launcher.GetMainWindow(TimeSpan.FromSeconds(5));
+        window.Should().NotBeNull("the resized main window must remain available");
+
+        scrollViewer = Retry.WhileNull(
+            () => window.FindFirstDescendant(
+                condition => condition.ByAutomationId("QuickTranslateContent")),
+            TimeSpan.FromSeconds(5)).Result;
+        scrollViewer.Should().NotBeNull("the resized results host must remain available");
+
         ScrollHelper.TryGetVerticalScrollPercent(scrollViewer!, out double afterResize)
             .Should()
             .BeTrue();
@@ -397,15 +548,20 @@ public sealed class DirectRendererTests : IDisposable
             },
             TimeSpan.FromSeconds(20)).Result;
 
-    private Window StartQuery(bool directRenderer, int cardCount = 1, bool loading = false) =>
-        StartQuery(_launcher, directRenderer, cardCount, loading);
+    private Window StartQuery(
+        bool directRenderer,
+        int cardCount = 1,
+        bool loading = false,
+        bool submitQuery = true) =>
+        StartQuery(_launcher, directRenderer, cardCount, loading, submitQuery: submitQuery);
 
     private static Window StartQuery(
         AppLauncher launcher,
         bool directRenderer,
         int cardCount = 1,
         bool loading = false,
-        string appTheme = "Minimal")
+        string appTheme = "Minimal",
+        bool submitQuery = true)
     {
         var settingsPath = UiaSettingsIsolation.TryGetSettingsFilePath();
         settingsPath.Should().NotBeNull("UI automation must use an isolated settings directory");
@@ -428,15 +584,126 @@ public sealed class DirectRendererTests : IDisposable
             "EASYDICT_UIA_DIRECT_LOADING",
             loading ? "1" : null);
 
+
         launcher.LaunchAuto(TimeSpan.FromSeconds(45));
         var window = launcher.GetMainWindow();
+        if (submitQuery)
+        {
+            SubmitQuery(window);
+        }
+        return window;
+    }
+
+    private static void SubmitQuery(Window window)
+    {
         var input = UITestHelper.FindInputTextBox(window, TimeSpan.FromSeconds(15));
         input.Should().NotBeNull();
         input!.Click();
         input.Text = "Direct renderer smoke test";
         Keyboard.Type(VirtualKeyShort.ENTER);
-        return window;
     }
+
+    private static string[] ReadAllLinesShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private static void WaitForFile(string path, TimeSpan timeout)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (!File.Exists(path) && stopwatch.Elapsed < timeout)
+        {
+            Thread.Sleep(50);
+        }
+
+        File.Exists(path).Should().BeTrue($"the controlled streaming marker '{path}' must be written");
+    }
+
+    private static void ClearStreamingBenchmarkEnvironment()
+    {
+        Environment.SetEnvironmentVariable("EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_COUNT", null);
+        Environment.SetEnvironmentVariable("EASYDICT_RENDERER_BENCHMARK_STREAMING_UPDATE_INTERVAL_MILLISECONDS", null);
+        Environment.SetEnvironmentVariable("EASYDICT_RENDERER_BENCHMARK_STREAMING_STARTED_MARKER_PATH", null);
+        Environment.SetEnvironmentVariable("EASYDICT_RENDERER_BENCHMARK_STREAMING_COMPLETED_MARKER_PATH", null);
+        Environment.SetEnvironmentVariable("EASYDICT_RENDERER_BENCHMARK_STREAMING_RELEASE_MARKER_PATH", null);
+        Environment.SetEnvironmentVariable("EASYDICT_DEBUG_UI_THREAD_HOTSPOTS", null);
+        Environment.SetEnvironmentVariable("EASYDICT_DEBUG_UI_THREAD_HOTSPOT_THRESHOLD_MS", null);
+        Environment.SetEnvironmentVariable("EASYDICT_UI_THREAD_HOTSPOT_LOG_PATH", null);
+    }
+
+    private static int FindLeadingResultTextRow(string screenshotPath)
+    {
+        using var bitmap = new Bitmap(screenshotPath);
+        bool foundFirstTextRun = false;
+        int emptyRowsAfterFirstTextRun = 0;
+        for (int y = 0; y < bitmap.Height; y++)
+        {
+            bool hasDarkPixels = false;
+            for (int x = 5; x < bitmap.Width - 5; x++)
+            {
+                var color = bitmap.GetPixel(x, y);
+                if (color.R < 96 && color.G < 96 && color.B < 96)
+                {
+                    hasDarkPixels = true;
+                    break;
+                }
+            }
+
+            if (!foundFirstTextRun)
+            {
+                foundFirstTextRun = hasDarkPixels;
+                continue;
+            }
+
+            if (!hasDarkPixels)
+            {
+                emptyRowsAfterFirstTextRun++;
+                continue;
+            }
+
+            if (emptyRowsAfterFirstTextRun >= 8)
+            {
+                return y;
+            }
+
+            emptyRowsAfterFirstTextRun = 0;
+        }
+
+        throw new InvalidOperationException(
+            $"Could not locate the leading result text row in '{screenshotPath}'.");
+    }
+
+    private static int CountPixelChanges(string firstPath, string secondPath)
+    {
+        using var first = new Bitmap(firstPath);
+        using var second = new Bitmap(secondPath);
+        int changedPixels = 0;
+        int width = Math.Min(first.Width, second.Width);
+        int height = Math.Min(first.Height, second.Height);
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                var before = first.GetPixel(x, y);
+                var after = second.GetPixel(x, y);
+                if (Math.Abs(before.R - after.R) > 12
+                    || Math.Abs(before.G - after.G) > 12
+                    || Math.Abs(before.B - after.B) > 12)
+                {
+                    changedPixels++;
+                }
+            }
+        }
+
+        return changedPixels;
+    }
+
+    private static int CountHotspotOperation(IEnumerable<string> logLines, string operation) =>
+        logLines.Count(line =>
+            line.Contains("kind=duration", StringComparison.Ordinal)
+            && line.Contains($"op={operation} ", StringComparison.Ordinal));
 
 
     private static bool IsRightCardBorderPainted(string screenshotPath)
@@ -608,7 +875,12 @@ public sealed class DirectRendererTests : IDisposable
     {
         Environment.SetEnvironmentVariable("EASYDICT_UIA_DIRECT_RESULT_TEXT", null);
         Environment.SetEnvironmentVariable("EASYDICT_UIA_DIRECT_LOADING", null);
+        ClearStreamingBenchmarkEnvironment();
         _launcher.Dispose();
+        if (_streamingMarkerDirectory is not null && Directory.Exists(_streamingMarkerDirectory))
+        {
+            Directory.Delete(_streamingMarkerDirectory, recursive: true);
+        }
     }
 
 }

@@ -135,6 +135,7 @@ public static class IrLoader
         }
 
         int rootCount = 0;
+        int rootNode = -1;
         for (int index = 0; index < document.Nodes.Count; index++)
         {
             IrNode node = document.Nodes[index];
@@ -149,14 +150,29 @@ public static class IrLoader
             if (node.Parent is null)
             {
                 rootCount++;
+                rootNode = node.Id;
             }
             else if (node.Parent.Value < 0 || node.Parent.Value >= document.Nodes.Count)
             {
                 throw new IrLoadException($"node {node.Id} has out-of-range parent {node.Parent.Value}");
             }
-
-            foreach (int child in node.Children)
+            else if (!document.Nodes[node.Parent.Value].Children.Contains(node.Id))
             {
+                throw new IrLoadException(
+                    $"node {node.Id} claims parent {node.Parent.Value}, which does not list it as a child");
+            }
+
+            for (int childIndex = 0; childIndex < node.Children.Count; childIndex++)
+            {
+                int child = node.Children[childIndex];
+                for (int previousChildIndex = 0; previousChildIndex < childIndex; previousChildIndex++)
+                {
+                    if (node.Children[previousChildIndex] == child)
+                    {
+                        throw new IrLoadException($"node {node.Id} lists child {child} more than once");
+                    }
+                }
+
                 if (child < 0 || child >= document.Nodes.Count)
                 {
                     throw new IrLoadException($"node {node.Id} has out-of-range child {child}");
@@ -173,6 +189,8 @@ public static class IrLoader
         {
             throw new IrLoadException($"expected exactly one root node, found {rootCount}");
         }
+
+        ValidateConnectedTree(document, rootNode);
 
         foreach (IrProperty property in document.Properties)
         {
@@ -267,6 +285,34 @@ public static class IrLoader
         foreach (IrSemantics semantics in document.Semantics)
         {
             RequireNode(document, semantics.Node, "semantics entry");
+        }
+    }
+
+    private static void ValidateConnectedTree(IrDocument document, int rootNode)
+    {
+        var visited = new bool[document.Nodes.Count];
+        var pending = new Stack<int>();
+        pending.Push(rootNode);
+
+        while (pending.TryPop(out int node))
+        {
+            if (visited[node])
+            {
+                throw new IrLoadException($"node {node} is reachable from root node {rootNode} more than once");
+            }
+
+            visited[node] = true;
+            foreach (int child in document.Nodes[node].Children)
+            {
+                pending.Push(child);
+            }
+        }
+
+        int unreachableNode = Array.FindIndex(visited, static seen => !seen);
+        if (unreachableNode >= 0)
+        {
+            throw new IrLoadException(
+                $"node {unreachableNode} is not reachable from root node {rootNode}");
         }
     }
 

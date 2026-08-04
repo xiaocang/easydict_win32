@@ -6,7 +6,7 @@ using Microsoft.UI.Dispatching;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
-/// Frame-rate-coalesced applicator for streaming translation snapshots.
+/// Stable-cadence applicator for streaming translation snapshots.
 ///
 /// Why this exists: each translation service streams chunks on a background thread,
 /// and the natural pattern is to <c>DispatcherQueue.TryEnqueue</c> a "set
@@ -19,9 +19,9 @@ namespace Easydict.WinUI.Services;
 ///
 /// The fix: services push snapshots into this coalescer from any thread; a single
 /// <see cref="DispatcherQueueTimer"/> on the owning window's UI thread drains the
-/// pending set at frame rate (~60 Hz). All N services collapse to at most N
-/// property assignments per frame regardless of stream rate, and the layout pass
-/// measures dirty TextBlocks exactly once per frame.
+/// pending set at a stable 10 Hz cadence. The latest snapshot is visible within 100 ms,
+/// while bursts from one or many services collapse before they can repeatedly reflow text.
+/// </summary>
 ///
 /// Lifecycle: instantiate on the UI thread (the dispatcher's timer is thread-
 /// affine), dispose during teardown. Stale snapshots arriving after the streaming
@@ -35,10 +35,13 @@ internal sealed class StreamingTextCoalescer : IDisposable
     private readonly Dictionary<ServiceQueryResult, PendingUpdate> _pending = new();
     private readonly object _lock = new();
     private bool _disposed;
+    private const int DefaultIntervalMilliseconds = 100;
 
     private readonly record struct PendingUpdate(string Snapshot, Action? Applied);
 
-    public StreamingTextCoalescer(DispatcherQueue dispatcher, int intervalMs = 16)
+    public StreamingTextCoalescer(
+        DispatcherQueue dispatcher,
+        int intervalMs = DefaultIntervalMilliseconds)
     {
         ArgumentNullException.ThrowIfNull(dispatcher);
         _dispatcher = dispatcher;
@@ -50,9 +53,9 @@ internal sealed class StreamingTextCoalescer : IDisposable
 
     /// <summary>
     /// Queue a streaming text snapshot for <paramref name="target"/>. Safe to call
-    /// from any thread. Multiple calls before the next tick collapse to the latest
+    /// from any thread. Multiple calls before the next cadence tick collapse to the latest
     /// snapshot for the same target — the coalescer guarantees the UI sees the
-    /// final snapshot per frame, never an intermediate one.
+    /// final snapshot, never an intermediate one.
     /// </summary>
     public void Update(ServiceQueryResult target, string snapshot) =>
         Update(target, snapshot, onApplied: null);
@@ -116,9 +119,8 @@ internal sealed class StreamingTextCoalescer : IDisposable
         {
             if (_pending.Count == 0)
             {
-                // No work this tick. Stop the timer to avoid spinning at 60 Hz
-                // when no streams are active; Update() will restart it on the
-                // next push.
+                // No work this tick. Stop the timer to avoid spinning between active streams;
+                // Update() will restart it on the next push.
                 sender.Stop();
                 return;
             }

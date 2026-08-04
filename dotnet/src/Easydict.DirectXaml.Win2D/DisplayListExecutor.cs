@@ -87,6 +87,7 @@ public static class DisplayListExecutor
                         formats.DrawTextLayout(
                             session,
                             text.Text,
+                            text.Width,
                             text.X,
                             text.Y,
                             text.Font,

@@ -186,7 +186,7 @@ public class DirectXamlTests
     }
 
     [Fact]
-    public void BindingDispatch_QueuesOffThreadAndStopsAfterTeardown()
+    public async Task BindingDispatch_QueuesOffThreadAndStopsAfterTeardown()
     {
         CompiledView view = LoadBindingCard();
         var queued = new List<Action>();
@@ -198,9 +198,7 @@ public class DirectXamlTests
             return true;
         });
 
-        bool queuedResult = Task.Run(() => view.TryDispatch(() => ran = true))
-            .GetAwaiter()
-            .GetResult();
+        bool queuedResult = await Task.Run(() => view.TryDispatch(() => ran = true));
 
         queuedResult.Should().BeTrue();
         ran.Should().BeFalse();
@@ -210,9 +208,7 @@ public class DirectXamlTests
         ran.Should().BeTrue();
 
         view.ClearUiDispatcher();
-        bool afterTeardown = Task.Run(() => view.TryDispatch(() => ran = false))
-            .GetAwaiter()
-            .GetResult();
+        bool afterTeardown = await Task.Run(() => view.TryDispatch(() => ran = false));
 
         afterTeardown.Should().BeFalse();
         ran.Should().BeTrue();
@@ -262,6 +258,55 @@ public class DirectXamlTests
         Action load = () => IrLoader.Load(json);
 
         load.Should().Throw<IrLoadException>();
+    }
+
+    [Fact]
+    public void Load_RejectsNodeWhoseParentDoesNotListItAsChild()
+    {
+        string json = CardJson.Replace(
+            "\"children\": [3, 4]",
+            "\"children\": [4]");
+
+        Action load = () => IrLoader.Load(json);
+
+        load.Should()
+            .Throw<IrLoadException>()
+            .WithMessage("*node 3 claims parent 2, which does not list it as a child*");
+    }
+
+    [Fact]
+    public void Load_RejectsDuplicateChildren()
+    {
+        string json = CardJson.Replace(
+            "\"children\": [3, 4]",
+            "\"children\": [3, 3, 4]");
+
+        Action load = () => IrLoader.Load(json);
+
+        load.Should()
+            .Throw<IrLoadException>()
+            .WithMessage("*node 2 lists child 3 more than once*");
+    }
+
+    [Fact]
+    public void Load_RejectsDisconnectedCycles()
+    {
+        string json = CardJson
+            .Replace(
+                "{ \"id\": 2, \"kind\": \"stackPanel\", \"parent\": 1, \"children\": [3, 4], \"text\": null },",
+                "{ \"id\": 2, \"kind\": \"stackPanel\", \"parent\": 1, \"children\": [], \"text\": null },")
+            .Replace(
+                "{ \"id\": 3, \"kind\": \"textBlock\", \"parent\": 2, \"children\": [], \"text\": null },",
+                "{ \"id\": 3, \"kind\": \"textBlock\", \"parent\": 4, \"children\": [4], \"text\": null },")
+            .Replace(
+                "{ \"id\": 4, \"kind\": \"textBlock\", \"parent\": 2, \"children\": [], \"text\": null }",
+                "{ \"id\": 4, \"kind\": \"textBlock\", \"parent\": 3, \"children\": [3], \"text\": null }");
+
+        Action load = () => IrLoader.Load(json);
+
+        load.Should()
+            .Throw<IrLoadException>()
+            .WithMessage("*node 3 is not reachable from root node 0*");
     }
 
     // ---- slots and invalidation --------------------------------------------------------------
@@ -565,9 +610,9 @@ public class DirectXamlTests
 
         DisplayList list = DisplayListBuilder.Build(engine);
 
-        list.Commands.OfType<DrawTextLine>()
-            .Select(line => line.Text)
-            .Should().Equal("AB", "CD");
+        DrawTextLine[] lines = list.Commands.OfType<DrawTextLine>().ToArray();
+        lines.Select(line => line.Text).Should().Equal("AB", "CD");
+        lines.Select(line => line.Width).Should().Equal(16, 16);
     }
 
     [Fact]

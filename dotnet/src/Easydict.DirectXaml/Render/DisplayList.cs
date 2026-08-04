@@ -32,9 +32,11 @@ public sealed record StrokeRectangle(Rect Bounds, CornerRadius Radius, double Th
 /// <param name="X">Left edge in view coordinates.</param>
 /// <param name="Y">Top edge in view coordinates.</param>
 /// <param name="Text">The line's text, already broken by the layout engine.</param>
+/// <param name="Width">Measured line width from layout, so the executor need not re-measure.</param>
 /// <param name="Font">Font to draw with; the executor maps it onto a platform text format.</param>
 /// <param name="Color">Foreground colour.</param>
-public sealed record DrawTextLine(double X, double Y, string Text, FontSpec Font, Color Color)
+public sealed record DrawTextLine(
+    double X, double Y, string Text, double Width, FontSpec Font, Color Color)
     : DrawCommand;
 
 /// <summary>Restricts subsequent drawing to a rectangle until the matching <see cref="PopClip"/>.</summary>

@@ -209,6 +209,36 @@ public class ServiceQueryResultTests
     }
 
     [Fact]
+    public void StreamingText_NotifiesContentVisibilityOnlyWhenTheValueChanges()
+    {
+        // Arrange
+        var result = new ServiceQueryResult
+        {
+            IsExpanded = true,
+            IsStreaming = true
+        };
+        var changedProperties = new List<string>();
+        result.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is not null)
+            {
+                changedProperties.Add(e.PropertyName);
+            }
+        };
+
+        // Act
+        result.StreamingText = "First streamed fragment";
+        changedProperties.Should().Contain(nameof(ServiceQueryResult.ContentVisibility));
+        changedProperties.Clear();
+        result.StreamingText = "First streamed fragment with more text";
+
+        // Assert
+        changedProperties.Should().Contain(nameof(ServiceQueryResult.StreamingText));
+        changedProperties.Should().Contain(nameof(ServiceQueryResult.DisplayText));
+        changedProperties.Should().NotContain(nameof(ServiceQueryResult.ContentVisibility));
+    }
+
+    [Fact]
     public void ContentVisibility_WhenCollapsed_ReturnsFalse()
     {
         // Arrange

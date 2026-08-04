@@ -125,6 +125,19 @@ public sealed class MemoryProfilingAutomationTests
         script.Should().Contain("RendererBenchmarkStreamingUpdateCount");
         script.Should().Contain("firstResultRenderLatencyMilliseconds");
         script.Should().Contain("streamingCpuPercent");
+        script.Should().Contain("renderer-streaming-completed");
+        script.Should().Contain("memoryAtStreamingCompleted");
+        script.Should().Contain("gpuAtStreamingCompleted");
+        script.Should().Contain("streamingPrivateBytesDelta");
+        script.Should().Contain("streamingGpuTotalCommittedDelta");
+        script.Should().Contain("rendererBenchmark.firstResult.renderedUtc");
+        script.Should().Contain("New-ProcessSnapshot");
+        script.Should().Contain("New-GpuSnapshot");
+        script.Should().Contain("sampleDeltaMilliseconds");
+        script.Should().Contain("nextSampleAtMilliseconds");
+        script.Should().Contain("schemaVersion = 4");
+        script.Should().Contain("src\\Easydict.WinUI\\bin\\x64");
+        script.Should().Contain("nearest samples to the renderer callback timestamps");
     }
 
     [Fact]
@@ -185,6 +198,7 @@ public sealed class MemoryProfilingAutomationTests
         test.Should().Contain("17f-fixed-window-opened");
         test.Should().Contain("UITestHelper.SendHotkey");
         test.Should().Contain("18-main-window-closed");
+        test.Should().Contain("08-renderer-streaming-completed");
     }
 
     [Fact]

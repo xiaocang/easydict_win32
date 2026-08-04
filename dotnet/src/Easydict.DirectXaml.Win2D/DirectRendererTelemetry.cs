@@ -130,7 +130,8 @@ public static class DirectRendererTelemetry
                 elapsedTicks * 1000.0 / Stopwatch.Frequency,
                 Math.Max(0, allocatedBytes),
                 _itemCount,
-                Environment.CurrentManagedThreadId));
+                Environment.CurrentManagedThreadId,
+                DateTimeOffset.UtcNow));
         }
     }
 
@@ -139,5 +140,6 @@ public static class DirectRendererTelemetry
         double ElapsedMilliseconds,
         long AllocatedBytes,
         int ItemCount,
-        int ManagedThreadId);
+        int ManagedThreadId,
+        DateTimeOffset CompletedUtc);
 }

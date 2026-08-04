@@ -44,18 +44,16 @@ public sealed class Win2DTextMeasurerFactory : ITextMeasurerFactory, IDisposable
         return measurer;
     }
 
-    /// <summary>Warms the default text resources after the first visible card has painted.</summary>
-    internal void Prewarm()
+    /// <summary>Warms one compiled text style before the first visible card is queried.</summary>
+    internal void Prewarm(FontSpec font)
     {
         if (_disposed)
         {
             return;
         }
 
-        FontSpec font = FontSpec.Default;
-        _ = GetFormat(font);
         _ = GetLineHeight(font);
-        _ = Create(font).MeasureSegment("Ag");
+        _ = Create(font);
     }
 
     public double GetLineHeight(FontSpec font)
@@ -100,6 +98,7 @@ public sealed class Win2DTextMeasurerFactory : ITextMeasurerFactory, IDisposable
     internal void DrawTextLayout(
         CanvasDrawingSession session,
         string text,
+        double width,
         double x,
         double y,
         FontSpec font,
@@ -110,7 +109,6 @@ public sealed class Win2DTextMeasurerFactory : ITextMeasurerFactory, IDisposable
             return;
         }
 
-        double width = Create(font).MeasureSegment(text);
         double height = GetLineHeight(font);
         CanvasTextLayout layout = GetTextLayout(text, font, width, height);
         session.DrawTextLayout(layout, (float)x, (float)y, color);
@@ -206,28 +204,27 @@ public sealed class Win2DTextMeasurerFactory : ITextMeasurerFactory, IDisposable
 internal sealed class Win2DTextMeasurer(ICanvasResourceCreator resourceCreator, CanvasTextFormat format)
     : ITextMeasurer
 {
-    private readonly Dictionary<string, double> _segmentWidths = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, double> _graphemeWidths = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _widths = new(StringComparer.Ordinal);
 
-    public double MeasureSegment(string text) => Measure(text, _segmentWidths);
+    public double MeasureSegment(string text) => Measure(text);
 
-    public double MeasureGrapheme(string grapheme) => Measure(grapheme, _graphemeWidths);
+    public double MeasureGrapheme(string grapheme) => Measure(grapheme);
 
-    private double Measure(string text, Dictionary<string, double> cache)
+    private double Measure(string text)
     {
         if (string.IsNullOrEmpty(text))
         {
             return 0;
         }
 
-        if (cache.TryGetValue(text, out double cached))
+        if (_widths.TryGetValue(text, out double cached))
         {
             return cached;
         }
 
         using var layout = new CanvasTextLayout(resourceCreator, text, format, 0f, 0f);
         double width = layout.LayoutBounds.Width;
-        cache[text] = width;
+        _widths[text] = width;
         return width;
     }
 }

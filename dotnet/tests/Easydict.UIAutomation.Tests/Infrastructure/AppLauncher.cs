@@ -312,6 +312,9 @@ public sealed class AppLauncher : IDisposable
             // the process anyway. UI tests require deterministic process cleanup, not that user
             // interaction, so terminate the launched process directly.
             application.Kill();
+            _ = SpinWait.SpinUntil(
+                () => HasLaunchedApplicationExited(application, out _),
+                TimeSpan.FromSeconds(5));
         }
         catch
         {

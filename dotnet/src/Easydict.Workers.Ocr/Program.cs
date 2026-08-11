@@ -112,6 +112,12 @@ internal static class Program
             await WriteErrorAsync(request.Id, WorkerErrorCodes.Cancelled, $"Request {request.Id} cancelled");
             return true;
         }
+        catch (PpOcrV6ModelException ex)
+        {
+            Trace.WriteLine($"[OcrWorker] PP-OCRv6 error ({ex.Code}): {ex.Message}");
+            await WriteErrorAsync(request.Id, ex.Code, ex.Message);
+            return true;
+        }
         catch (Exception ex)
         {
             Trace.WriteLine($"[OcrWorker] Unhandled exception in {request.Method}: {ex}");
@@ -135,31 +141,51 @@ internal static class Program
 
     private static async Task<OcrResultDto> RecognizeAsync(OcrRecognizeParams parameters)
     {
-        if (parameters.PixelWidth <= 0 || parameters.PixelHeight <= 0)
+        if (string.Equals(parameters.Engine, OcrEngines.PpOcrV6, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentOutOfRangeException(nameof(parameters), "OCR image dimensions must be positive.");
+            if (string.IsNullOrWhiteSpace(parameters.ModelId))
+            {
+                throw new PpOcrV6ModelException("invalid_params", "PP-OCRv6 modelId is required.");
+            }
+
+            if (!PpOcrV6ModelCatalog.TryGet(parameters.ModelId, out _))
+            {
+                throw new PpOcrV6ModelException(
+                    "model_invalid",
+                    $"Unknown PP-OCRv6 model '{parameters.ModelId}'.");
+            }
+
+            if (!PpOcrV6ModelCatalog.SupportsLanguage(parameters.ModelId, parameters.PreferredLanguageTag))
+            {
+                throw new PpOcrV6ModelException(
+                    "unsupported_language",
+                    $"PP-OCRv6 model '{parameters.ModelId}' does not support '{parameters.PreferredLanguageTag}'.");
+            }
+
+            var pixelData = await ReadPixelDataAsync(parameters).ConfigureAwait(false);
+            using var pipeline = new PpOcrV6Pipeline(
+                parameters.ModelId,
+                parameters.ThreadCount ?? Environment.ProcessorCount,
+                parameters.UseGpu);
+            return await pipeline.RecognizeAsync(
+                pixelData,
+                parameters.PixelWidth,
+                parameters.PixelHeight).ConfigureAwait(false);
         }
 
-        var expectedLength = checked(parameters.PixelWidth * parameters.PixelHeight * 4);
-        var pixelData = await File.ReadAllBytesAsync(parameters.PixelDataPath);
-        if (pixelData.Length < expectedLength)
-        {
-            throw new ArgumentException(
-                $"pixel data length ({pixelData.Length}) is less than expected ({expectedLength})");
-        }
-
+        var nativePixelData = await ReadPixelDataAsync(parameters).ConfigureAwait(false);
         using var bitmap = new SoftwareBitmap(
             BitmapPixelFormat.Bgra8,
             parameters.PixelWidth,
             parameters.PixelHeight,
             BitmapAlphaMode.Ignore);
-        bitmap.CopyFromBuffer(pixelData.AsBuffer());
-        Array.Clear(pixelData);
+        bitmap.CopyFromBuffer(nativePixelData.AsBuffer());
+        Array.Clear(nativePixelData);
 
         var engine = CreateEngine(parameters.PreferredLanguageTag);
         if (engine is null)
         {
-            return new OcrResultDto();
+            return new OcrResultDto { Engine = OcrEngines.WindowsNative };
         }
 
         var winResult = await engine.RecognizeAsync(bitmap).AsTask();
@@ -171,7 +197,26 @@ internal static class Program
             Lines = lines,
             TextAngle = winResult.TextAngle,
             DetectedLanguage = ConvertLanguage(engine),
+            Engine = OcrEngines.WindowsNative,
         };
+    }
+
+    private static async Task<byte[]> ReadPixelDataAsync(OcrRecognizeParams parameters)
+    {
+        if (parameters.PixelWidth <= 0 || parameters.PixelHeight <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(parameters), "OCR image dimensions must be positive.");
+        }
+
+        var expectedLength = checked(parameters.PixelWidth * parameters.PixelHeight * 4);
+        var pixelData = await File.ReadAllBytesAsync(parameters.PixelDataPath).ConfigureAwait(false);
+        if (pixelData.Length < expectedLength)
+        {
+            throw new ArgumentException(
+                $"pixel data length ({pixelData.Length}) is less than expected ({expectedLength})");
+        }
+
+        return pixelData;
     }
 
     private static WinOcr.OcrEngine? CreateEngine(string? preferredLanguageTag)

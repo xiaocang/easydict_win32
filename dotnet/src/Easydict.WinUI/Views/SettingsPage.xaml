@@ -2488,7 +2488,67 @@
                                     <ComboBoxItem x:Name="OcrEngineCustomApiItem"
                                             Content="Custom API"
                                             Tag="CustomApi"/>
+                                    <ComboBoxItem x:Name="OcrEnginePpOcrV6Item"
+                                            Content="PP-OCRv6 (Local)"
+                                            Tag="PpOcrV6"/>
                                 </ComboBox>
+
+                                <StackPanel x:Name="PpOcrV6Panel"
+                                        Spacing="12"
+                                        Visibility="Collapsed">
+                                    <ComboBox x:Name="PpOcrV6ModelCombo"
+                                            Header="PP-OCRv6 Model"
+                                            Width="350"
+                                            SelectionChanged="OnPpOcrV6ModelChanged"/>
+                                    <TextBlock x:Name="PpOcrV6DownloadSizeText"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock x:Name="PpOcrV6LanguagesText"
+                                            FontSize="12"
+                                            MaxWidth="450"
+                                            TextWrapping="Wrap"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock x:Name="PpOcrV6ModelStatusText"
+                                            FontSize="13"/>
+                                    <Button x:Name="PpOcrV6DownloadButton"
+                                            Content="Download"
+                                            HorizontalAlignment="Left"
+                                            Click="OnDownloadPpOcrV6ModelClick"/>
+                                    <ProgressBar x:Name="PpOcrV6DownloadProgress"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            Visibility="Collapsed"
+                                            Width="350"/>
+                                    <TextBlock x:Name="PpOcrV6DownloadProgressText"
+                                            Visibility="Collapsed"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <NumberBox x:Name="PpOcrV6ThreadCountBox"
+                                            Header="CPU Threads"
+                                            Minimum="1"
+                                            Maximum="16"
+                                            SpinButtonPlacementMode="Inline"
+                                            ValueChanged="OnPpOcrV6ThreadCountChanged"
+                                            Width="180"/>
+                                    <ToggleSwitch x:Name="PpOcrV6GpuToggle"
+                                            Header="Use GPU (DirectML)"
+                                            Toggled="OnPpOcrV6GpuToggled"/>
+                                    <ToggleSwitch x:Name="PpOcrV6FallbackToggle"
+                                            Header="Fallback to Windows OCR"
+                                            Toggled="OnPpOcrV6FallbackToggled"/>
+                                    <Button x:Name="PpOcrV6TestButton"
+                                            Content="Test PP-OCRv6"
+                                            HorizontalAlignment="Left"
+                                            Click="OnTestPpOcrV6Click"/>
+                                    <TextBox x:Name="PpOcrV6TestStatusBox"
+                                            Header="Test Result"
+                                            IsReadOnly="True"
+                                            Width="350"
+                                            MinHeight="32"
+                                            AcceptsReturn="True"
+                                            TextWrapping="Wrap"
+                                            HorizontalAlignment="Left"/>
+                                </StackPanel>
 
                                 <!-- Advanced OCR Settings -->
                                 <StackPanel x:Name="AdvancedOcrPanel"

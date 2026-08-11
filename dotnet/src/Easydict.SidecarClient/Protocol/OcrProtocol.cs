@@ -7,6 +7,12 @@ public static class OcrMethods
     public const string Recognize = "recognize";
 }
 
+public static class OcrEngines
+{
+    public const string WindowsNative = "windowsNative";
+    public const string PpOcrV6 = "ppOcrV6";
+}
+
 public sealed class OcrRecognizeParams
 {
     [JsonPropertyName("pixelDataPath")]
@@ -20,6 +26,18 @@ public sealed class OcrRecognizeParams
 
     [JsonPropertyName("preferredLanguageTag")]
     public string? PreferredLanguageTag { get; init; }
+
+    [JsonPropertyName("engine")]
+    public string? Engine { get; init; }
+
+    [JsonPropertyName("modelId")]
+    public string? ModelId { get; init; }
+
+    [JsonPropertyName("threadCount")]
+    public int? ThreadCount { get; init; }
+
+    [JsonPropertyName("useGpu")]
+    public bool UseGpu { get; init; }
 }
 
 public sealed class OcrResultDto
@@ -35,12 +53,21 @@ public sealed class OcrResultDto
 
     [JsonPropertyName("textAngle")]
     public double? TextAngle { get; init; }
+
+    [JsonPropertyName("engine")]
+    public string? Engine { get; init; }
+
+    [JsonPropertyName("modelId")]
+    public string? ModelId { get; init; }
 }
 
 public sealed class OcrLineDto
 {
     [JsonPropertyName("text")]
     public string Text { get; init; } = string.Empty;
+
+    [JsonPropertyName("confidence")]
+    public float? Confidence { get; init; }
 
     /// <summary>
     /// Individual recognized words for this line. Sent so the host can apply the same

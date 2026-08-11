@@ -1,4 +1,5 @@
 using Easydict.TranslationService.Services;
+using Easydict.SidecarClient.Protocol;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.Workers;
@@ -23,6 +24,7 @@ public class OcrServiceFactoryTests
     [InlineData(OcrEngineType.WindowsNative, typeof(OcrWorkerClient))]
     [InlineData(OcrEngineType.Ollama, typeof(OllamaOcrService))]
     [InlineData(OcrEngineType.CustomApi, typeof(CustomApiOcrService))]
+    [InlineData(OcrEngineType.PpOcrV6, typeof(OcrWorkerClient))]
     public void Create_ReturnsImplementationMatchingSelectedEngine(
         OcrEngineType engine, System.Type expected)
     {
@@ -87,6 +89,7 @@ public class OcrServiceFactoryTests
     [InlineData(OcrEngineType.WindowsNative, typeof(OcrWorkerClient))]
     [InlineData(OcrEngineType.Ollama, typeof(OllamaOcrService))]
     [InlineData(OcrEngineType.CustomApi, typeof(CustomApiOcrService))]
+    [InlineData(OcrEngineType.PpOcrV6, typeof(OcrWorkerClient))]
     public void Create_WithOptions_UsesProvidedEngineIndependentOfSavedSetting(
         OcrEngineType engine, System.Type expected)
     {
@@ -135,6 +138,25 @@ public class OcrServiceFactoryTests
 
         options.Endpoint.Should().Be(OpenAIService.DefaultEndpoint);
         options.Model.Should().Be(OpenAIService.DefaultModel);
+    }
+
+    [Fact]
+    public void OcrServiceOptions_DefaultsToSmallPpOcrV6Model()
+    {
+        var options = new OcrServiceOptions(OcrEngineType.PpOcrV6, null, null, null, null);
+
+        options.Endpoint.Should().BeEmpty();
+        options.Model.Should().Be(PpOcrV6ModelCatalog.SmallId);
+    }
+
+    [Fact]
+    public void PpOcrV6Catalog_ContainsOfficialTiersAndSizes()
+    {
+        PpOcrV6ModelCatalog.Models.Should().ContainSingle(model => model.Id == PpOcrV6ModelCatalog.TinyId);
+        PpOcrV6ModelCatalog.Models.Should().ContainSingle(model => model.Id == PpOcrV6ModelCatalog.SmallId);
+        PpOcrV6ModelCatalog.Models.Should().ContainSingle(model => model.Id == PpOcrV6ModelCatalog.MediumId);
+        PpOcrV6ModelCatalog.Get(PpOcrV6ModelCatalog.MediumId).DownloadSizeBytes.Should().Be(138_739_282);
+        PpOcrV6ModelCatalog.Get(PpOcrV6ModelCatalog.TinyId).Languages.Should().NotContain("ja");
     }
 
     [Fact]

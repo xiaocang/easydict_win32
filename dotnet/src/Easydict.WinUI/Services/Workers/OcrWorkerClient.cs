@@ -12,30 +12,67 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
     private readonly SettingsService _settings;
     private readonly IOcrService _fallback;
+    private readonly OcrEngineType _engine;
+    private readonly string? _modelId;
+    private readonly int _threadCount;
+    private readonly bool _useGpu;
+    private readonly PpOcrV6ModelStore _modelStore;
     private readonly WorkerSpawner _spawner = new();
     private readonly Func<CancellationToken, Task<SidecarClient.SidecarClient>>? _spawnOverride;
+    private readonly bool _allowFallback;
     private bool _disposed;
 
-    public OcrWorkerClient(SettingsService settings, IOcrService fallback)
+    public OcrWorkerClient(
+        SettingsService settings,
+        IOcrService fallback,
+        OcrEngineType engine = OcrEngineType.WindowsNative,
+        string? modelId = null,
+        int? threadCount = null,
+        bool? allowFallback = null,
+        bool? useGpu = null)
     {
         _settings = settings;
         _fallback = fallback;
+        _engine = engine;
+        _modelId = engine == OcrEngineType.PpOcrV6 ? modelId ?? settings.OcrModel : null;
+        _threadCount = Math.Clamp(threadCount ?? settings.PpOcrV6ThreadCount, 1, 16);
+        _allowFallback = allowFallback ?? settings.PpOcrV6AllowFallback;
+        _useGpu = useGpu ?? settings.PpOcrV6UseGpu;
+        _modelStore = new PpOcrV6ModelStore();
     }
 
     internal OcrWorkerClient(
         SettingsService settings,
         IOcrService fallback,
         Func<CancellationToken, Task<SidecarClient.SidecarClient>> spawnOverride)
-        : this(settings, fallback)
+        : this(settings, fallback, OcrEngineType.WindowsNative)
     {
         _spawnOverride = spawnOverride;
     }
 
-    public string ServiceId => "windows_ocr_worker";
-    public string DisplayName => "Windows OCR Worker";
-    public bool IsAvailable => _fallback.IsAvailable;
+    public string ServiceId => _engine == OcrEngineType.PpOcrV6 ? "pp_ocrv6" : "windows_ocr_worker";
+    public string DisplayName => _engine == OcrEngineType.PpOcrV6 ? "PP-OCRv6" : "Windows OCR Worker";
+    public bool IsAvailable => _engine == OcrEngineType.PpOcrV6
+        ? IsPpOcrV6ModelInstalled() || (_allowFallback && _fallback.IsAvailable)
+        : _fallback.IsAvailable;
 
-    public IReadOnlyList<OcrLanguage> GetAvailableLanguages() => _fallback.GetAvailableLanguages();
+    public IReadOnlyList<OcrLanguage> GetAvailableLanguages()
+    {
+        if (_engine != OcrEngineType.PpOcrV6)
+        {
+            return _fallback.GetAvailableLanguages();
+        }
+
+        return PpOcrV6ModelCatalog.TryGet(_modelId, out var model)
+            ? model!.Languages.Select(tag => new OcrLanguage { Tag = tag, DisplayName = tag }).ToList()
+            : [];
+    }
+
+    private bool IsPpOcrV6ModelInstalled()
+    {
+        return PpOcrV6ModelCatalog.TryGet(_modelId, out var model)
+            && _modelStore.GetStateByPresence(model!.Id) == PpOcrV6ModelState.Installed;
+    }
 
     public async Task<OcrResult> RecognizeAsync(
         ReadOnlyMemory<byte> pixelData,
@@ -73,7 +110,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
             {
                 client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (CanFallbackToInProc(ex))
+            catch (Exception ex) when (CanFallback(ex))
             {
                 Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR: {ex.Message}");
                 return await _fallback.RecognizeAsync(
@@ -95,15 +132,31 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                         PixelWidth = pixelWidth,
                         PixelHeight = pixelHeight,
                         PreferredLanguageTag = preferredLanguageTag,
+                        Engine = _engine == OcrEngineType.PpOcrV6
+                            ? OcrEngines.PpOcrV6
+                            : OcrEngines.WindowsNative,
+                        ModelId = _engine == OcrEngineType.PpOcrV6 ? _modelId : null,
+                        ThreadCount = _engine == OcrEngineType.PpOcrV6 ? _threadCount : null,
+                        UseGpu = _engine == OcrEngineType.PpOcrV6 && _useGpu,
                     },
                     timeoutMs: 0,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return MapResult(dto);
             }
-            catch (SidecarProcessExitedException ex) when (CanFallbackToInProc(ex))
+            catch (SidecarProcessExitedException ex) when (CanFallback(ex))
             {
                 Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker exit: {ex.Message}");
+                return await _fallback.RecognizeAsync(
+                    pixelData,
+                    pixelWidth,
+                    pixelHeight,
+                    preferredLanguageTag,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (SidecarErrorException ex) when (CanFallback(ex))
+            {
+                Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker error: {ex.Message}");
                 return await _fallback.RecognizeAsync(
                     pixelData,
                     pixelWidth,
@@ -156,6 +209,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
             Text = line.Words is { Count: > 0 }
                 ? OcrTextMerger.MergeWords(line.Words)
                 : line.Text,
+            Confidence = line.Confidence,
             BoundingRect = new OcrRect(
                 line.BoundingRect.X,
                 line.BoundingRect.Y,
@@ -209,6 +263,31 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
     internal static bool CanFallbackToInProc(Exception ex)
     {
+        return ex is WorkerStartFailedException
+            or WorkerVersionMismatchException
+            or FileNotFoundException
+            or SidecarProcessExitedException;
+    }
+
+    internal bool CanFallback(Exception ex)
+    {
+        if (_engine == OcrEngineType.PpOcrV6 && !_allowFallback)
+        {
+            return false;
+        }
+
+        if (ex is SidecarErrorException sidecarError)
+        {
+            return sidecarError.Error.Code is
+                "model_missing" or
+                "model_invalid" or
+                "runtime_missing" or
+                "gpu_unavailable" or
+                "inference_error" or
+                "service_error" or
+                "internal_error";
+        }
+
         return ex is WorkerStartFailedException
             or WorkerVersionMismatchException
             or FileNotFoundException

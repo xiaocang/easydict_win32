@@ -339,6 +339,10 @@ public sealed class SettingsService
     /// </summary>
     public bool OcrEnableThinking { get; set; }
 
+    public int PpOcrV6ThreadCount { get; set; } = 4;
+    public bool PpOcrV6UseGpu { get; set; }
+    public bool PpOcrV6AllowFallback { get; set; } = true;
+
     // Layout detection settings (long document translation)
 
     /// <summary>
@@ -813,6 +817,9 @@ public sealed class SettingsService
         OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
         OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
         OcrEnableThinking = GetValue(nameof(OcrEnableThinking), false);
+        PpOcrV6ThreadCount = Math.Clamp(GetValue(nameof(PpOcrV6ThreadCount), 4), 1, 16);
+        PpOcrV6UseGpu = GetValue(nameof(PpOcrV6UseGpu), false);
+        PpOcrV6AllowFallback = GetValue(nameof(PpOcrV6AllowFallback), true);
 
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
         TtsSpeed = GetValue(nameof(TtsSpeed), 1.0);
@@ -1074,6 +1081,9 @@ public sealed class SettingsService
         _settings[nameof(OcrModel)] = OcrModel;
         _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
         _settings[nameof(OcrEnableThinking)] = OcrEnableThinking;
+        _settings[nameof(PpOcrV6ThreadCount)] = Math.Clamp(PpOcrV6ThreadCount, 1, 16);
+        _settings[nameof(PpOcrV6UseGpu)] = PpOcrV6UseGpu;
+        _settings[nameof(PpOcrV6AllowFallback)] = PpOcrV6AllowFallback;
 
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
         _settings[nameof(TtsSpeed)] = TtsSpeed;

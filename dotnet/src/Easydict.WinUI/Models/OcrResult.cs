@@ -34,6 +34,8 @@ public record OcrLine
 {
     public string Text { get; init; } = string.Empty;
 
+    public float? Confidence { get; init; }
+
     /// <summary>
     /// Bounding rectangle in physical pixels relative to the source image.
     /// </summary>

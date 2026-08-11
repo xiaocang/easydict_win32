@@ -89,12 +89,14 @@ public sealed record OcrServiceOptions
     public static string GetDefaultEndpoint(OcrEngineType engine) => engine switch
     {
         OcrEngineType.CustomApi => DefaultCustomApiEndpoint,
+        OcrEngineType.PpOcrV6 => string.Empty,
         _ => DefaultOllamaEndpoint,
     };
 
     public static string GetDefaultModel(OcrEngineType engine) => engine switch
     {
         OcrEngineType.CustomApi => DefaultCustomApiModel,
+        OcrEngineType.PpOcrV6 => Easydict.SidecarClient.Protocol.PpOcrV6ModelCatalog.SmallId,
         _ => DefaultOllamaModel,
     };
 
@@ -111,7 +113,10 @@ public sealed record OcrServiceOptions
         var normalized = model?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ||
                string.Equals(normalized, DefaultOllamaModel, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(normalized, DefaultCustomApiModel, StringComparison.OrdinalIgnoreCase);
+               string.Equals(normalized, DefaultCustomApiModel, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(normalized, Easydict.SidecarClient.Protocol.PpOcrV6ModelCatalog.TinyId, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(normalized, Easydict.SidecarClient.Protocol.PpOcrV6ModelCatalog.SmallId, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(normalized, Easydict.SidecarClient.Protocol.PpOcrV6ModelCatalog.MediumId, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? NormalizeOptional(string? value)

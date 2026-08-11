@@ -1672,6 +1672,7 @@ public sealed partial class SettingsPage : Page
         OcrEngineCombo.Header = loc.GetString("OcrEngine");
         OcrEngineNativeItem.Content = loc.GetString("OcrEngineNative");
         OcrEngineCustomApiItem.Content = loc.GetString("OcrEngineCustomApi");
+        OcrEnginePpOcrV6Item.Content = "PP-OCRv6 (Local)";
         OcrApiKeyHeaderText.Text = loc.GetString("OcrApiKey");
         OcrEndpointBox.Header = loc.GetString("OcrEndpoint");
         OcrModelBox.Header = loc.GetString("OcrModel");
@@ -2865,6 +2866,7 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(ocrOptions.Model, _settings.OcrModel)
             || !SameSetting(ocrOptions.SystemPrompt, _settings.OcrSystemPrompt)
             || ocrOptions.EnableThinking != _settings.OcrEnableThinking
+            || PpOcrV6SettingsDifferFromSettings()
             || ProxyEnabledToggle.IsOn != _settings.ProxyEnabled
             || ProxyBypassLocalToggle.IsOn != _settings.ProxyBypassLocal
             || !SameSetting(ProxyUriBox.Text?.Trim() ?? "", _settings.ProxyUri)
@@ -3151,6 +3153,7 @@ public sealed partial class SettingsPage : Page
             OcrModelBox.Text = _settings.OcrModel;
             OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
             OcrEnableThinkingToggle.IsOn = _settings.OcrEnableThinking;
+            InitializePpOcrV6Settings();
             ApplyOcrEngineDefaultsIfNeeded(GetSelectedOcrEngine());
             UpdateOcrEngineUI();
 
@@ -4391,6 +4394,7 @@ public sealed partial class SettingsPage : Page
         _settings.OcrModel = ocrOptions.Model;
         _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
         _settings.OcrEnableThinking = ocrOptions.EnableThinking;
+        SavePpOcrV6Settings();
 
         // Save Built-in AI settings
         _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
@@ -4688,6 +4692,13 @@ public sealed partial class SettingsPage : Page
         AdvancedOcrPanel.Visibility = isAdvanced ? Visibility.Visible : Visibility.Collapsed;
         OcrEndpointBox.PlaceholderText = OcrServiceOptions.GetDefaultEndpoint(engine);
         OcrModelBox.PlaceholderText = OcrServiceOptions.GetDefaultModel(engine);
+        PpOcrV6Panel.Visibility = engine == OcrEngineType.PpOcrV6
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (engine == OcrEngineType.PpOcrV6 && !_ppOcrV6UiLoading)
+        {
+            UpdatePpOcrV6ModelUi();
+        }
     }
 
     private void OnPasswordRevealButtonClick(object sender, RoutedEventArgs e)

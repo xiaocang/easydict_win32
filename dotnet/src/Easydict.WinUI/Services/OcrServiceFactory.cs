@@ -32,11 +32,17 @@ public static class OcrServiceFactory
         var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);
         var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
 
-        if (SettingsService.Instance.UseOcrWorker && resolved.Engine == OcrEngineType.WindowsNative)
+        if (resolved.Engine == OcrEngineType.PpOcrV6
+            || (SettingsService.Instance.UseOcrWorker && resolved.Engine == OcrEngineType.WindowsNative))
         {
             return new Workers.OcrWorkerClient(
                 SettingsService.Instance,
-                CreateInProc(resolved, client));
+                new WindowsOcrService(),
+                resolved.Engine,
+                resolved.Model,
+                SettingsService.Instance.PpOcrV6ThreadCount,
+                SettingsService.Instance.PpOcrV6AllowFallback,
+                SettingsService.Instance.PpOcrV6UseGpu);
         }
 
         return CreateInProc(resolved, client);

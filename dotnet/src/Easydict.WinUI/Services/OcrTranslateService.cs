@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Easydict.WinUI.Models;
+using Easydict.WinUI.Services.Workers;
 using Microsoft.UI.Dispatching;
 
 namespace Easydict.WinUI.Services;
@@ -22,6 +24,9 @@ public sealed class OcrTranslateService
     private readonly ScreenCaptureService _captureService = new();
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Action<OcrFailureReason>? _failureReporter;
+    private OcrWorkerClient? _ppOcrV6Client;
+    private PpOcrV6ClientKey? _ppOcrV6ClientKey;
+    private readonly SemaphoreSlim _ocrPipelineLock = new(1, 1);
     // Concurrency guard: only one OCR operation can run at a time.
     // Owned by RunOcrPipelineAsync — only that method creates and disposes.
     // Other code may Cancel() but must NOT Dispose().
@@ -94,6 +99,7 @@ public sealed class OcrTranslateService
     {
         using var cts = new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentCts, cts);
+        var pipelineLockAcquired = false;
         try
         {
             CancelPreviousOperation(previousCts);
@@ -101,12 +107,14 @@ public sealed class OcrTranslateService
             if (capture is null) return null;
 
             cts.Token.ThrowIfCancellationRequested();
+            await _ocrPipelineLock.WaitAsync(cts.Token).ConfigureAwait(false);
+            pipelineLockAcquired = true;
 
             using (capture)
             {
                 var ocrOptions = OcrServiceOptions.FromSettings(SettingsService.Instance);
                 LogOcrDiagnostics(label, ocrOptions);
-                var ocrEngine = OcrServiceFactory.Create(ocrOptions);
+                var ocrEngine = GetOcrEngine(ocrOptions);
                 if (!ocrEngine.IsAvailable)
                 {
                     var message = $"[OcrTranslate] {label} OCR engine unavailable";
@@ -164,9 +172,63 @@ public sealed class OcrTranslateService
         }
         finally
         {
+            if (pipelineLockAcquired)
+            {
+                _ocrPipelineLock.Release();
+            }
             Interlocked.CompareExchange(ref _currentCts, null, cts);
         }
     }
+
+    private IOcrService GetOcrEngine(OcrServiceOptions options)
+    {
+        if (options.Engine != OcrEngineType.PpOcrV6)
+        {
+            DisposePpOcrV6Client();
+            return OcrServiceFactory.Create(options);
+        }
+
+        var settings = SettingsService.Instance;
+        var key = new PpOcrV6ClientKey(
+            options.Model,
+            Math.Clamp(settings.PpOcrV6ThreadCount, 1, 16),
+            settings.PpOcrV6UseGpu,
+            settings.PpOcrV6AllowFallback);
+        if (_ppOcrV6Client is null || _ppOcrV6ClientKey != key)
+        {
+            DisposePpOcrV6Client();
+            _ppOcrV6Client = new OcrWorkerClient(
+                settings,
+                new WindowsOcrService(),
+                OcrEngineType.PpOcrV6,
+                options.Model,
+                key.ThreadCount,
+                key.AllowFallback,
+                key.UseGpu);
+            _ppOcrV6ClientKey = key;
+        }
+
+        return _ppOcrV6Client;
+    }
+
+    private void DisposePpOcrV6Client()
+    {
+        _ppOcrV6Client?.Dispose();
+        _ppOcrV6Client = null;
+        _ppOcrV6ClientKey = null;
+    }
+
+    public void Dispose()
+    {
+        DisposePpOcrV6Client();
+        _ocrPipelineLock.Dispose();
+    }
+
+    private readonly record struct PpOcrV6ClientKey(
+        string ModelId,
+        int ThreadCount,
+        bool UseGpu,
+        bool AllowFallback);
 
     internal static void CancelPreviousOperation(CancellationTokenSource? previousCts)
     {

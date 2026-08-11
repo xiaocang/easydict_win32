@@ -1264,6 +1264,8 @@ namespace Easydict.WinUI
             app._clipboardService?.Dispose();
             app._hotkeyService?.Dispose();
             app._trayIconService?.Dispose();
+            app._ocrTranslateService?.Dispose();
+            app._ocrTranslateService = null;
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
             TextToSpeechService.StopIfInitialized();

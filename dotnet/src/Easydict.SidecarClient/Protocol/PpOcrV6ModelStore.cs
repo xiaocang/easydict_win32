@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 
 namespace Easydict.SidecarClient.Protocol;
 
@@ -64,36 +63,6 @@ public sealed class PpOcrV6ModelStore
         return PpOcrV6ModelState.Installed;
     }
 
-    public PpOcrV6ModelState Validate(string modelId)
-    {
-        var presence = GetStateByPresence(modelId);
-        if (presence != PpOcrV6ModelState.Installed)
-        {
-            return presence;
-        }
-
-        var paths = GetPaths(modelId);
-        foreach (var artifact in PpOcrV6ModelCatalog.Get(modelId).Artifacts)
-        {
-            var path = Path.Combine(paths.Directory, artifact.FileName);
-            var info = new FileInfo(path);
-            if (info.Length != artifact.SizeBytes)
-            {
-                return PpOcrV6ModelState.Invalid;
-            }
-
-            using var stream = File.OpenRead(path);
-            using var sha = SHA256.Create();
-            var hash = Convert.ToHexString(sha.ComputeHash(stream)).ToLowerInvariant();
-            if (!string.Equals(hash, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
-            {
-                return PpOcrV6ModelState.Invalid;
-            }
-        }
-
-        return PpOcrV6ModelState.Installed;
-    }
-
     public async Task<PpOcrV6ModelState> ValidateAsync(
         string modelId,
         CancellationToken cancellationToken = default)
@@ -146,13 +115,4 @@ public sealed class PpOcrV6ModelStore
         }
     }
 
-    public void Complete(string modelId)
-    {
-        var paths = GetPaths(modelId);
-        Directory.CreateDirectory(paths.Directory);
-        File.WriteAllText(
-            paths.CompletionSentinel,
-            $"{modelId}{Environment.NewLine}{DateTimeOffset.UtcNow:O}",
-            new UTF8Encoding(false));
-    }
 }

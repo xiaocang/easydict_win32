@@ -50,7 +50,7 @@ public static class PpOcrV6ModelCatalog
             883,
             55_571,
             "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
-            "9ef676d6ed3c88256d2a92c640c44f25b0c40947e111b14b8be8f594091563e6",
+            "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6",
             "3ac018be6f97499a08faa3bbdeb33640968d9307f6736d152902747a9f259593",
             "66170210bad538e83fff3c4a3867e547d6bf20b50d64b20347c4b913f3034ea1"),
         CreateModel(

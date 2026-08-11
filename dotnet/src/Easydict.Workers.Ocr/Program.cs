@@ -16,6 +16,8 @@ internal static class Program
     };
 
     private static bool _configured;
+    private static PpOcrV6Pipeline? _ppOcrV6Pipeline;
+    private static PpOcrV6PipelineKey? _ppOcrV6PipelineKey;
 
     public static async Task<int> Main(string[] args)
     {
@@ -38,23 +40,29 @@ internal static class Program
             ],
         });
 
-        using var reader = new StreamReader(Console.OpenStandardInput());
-        string? line;
-        while ((line = await reader.ReadLineAsync()) is not null)
+        try
         {
-            if (string.IsNullOrWhiteSpace(line))
+            using var reader = new StreamReader(Console.OpenStandardInput());
+            string? line;
+            while ((line = await reader.ReadLineAsync()) is not null)
             {
-                continue;
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                if (await DispatchAsync(line))
+                {
+                    break;
+                }
             }
 
-            var shouldExit = await DispatchAsync(line);
-            if (shouldExit)
-            {
-                break;
-            }
+            return 0;
         }
-
-        return 0;
+        finally
+        {
+            DisposePpOcrV6Pipeline();
+        }
     }
 
     private static async Task<bool> DispatchAsync(string jsonLine)
@@ -87,6 +95,7 @@ internal static class Program
 
                 case WorkerMethods.Shutdown:
                     await WriteResponseAsync(request.Id, new { ok = true });
+                    DisposePpOcrV6Pipeline();
                     return true;
 
                 case OcrMethods.Recognize:
@@ -97,9 +106,10 @@ internal static class Program
                         return false;
                     }
 
-                    var result = await RecognizeAsync(ParseParams<OcrRecognizeParams>(request.Params));
+                    var parameters = ParseParams<OcrRecognizeParams>(request.Params);
+                    var result = await RecognizeAsync(parameters);
                     await WriteResponseAsync(request.Id, result);
-                    return true;
+                    return !string.Equals(parameters.Engine, OcrEngines.PpOcrV6, StringComparison.OrdinalIgnoreCase);
 
                 default:
                     await WriteErrorAsync(request.Id, IpcErrorCodes.MethodNotFound,
@@ -163,14 +173,22 @@ internal static class Program
             }
 
             var pixelData = await ReadPixelDataAsync(parameters).ConfigureAwait(false);
-            using var pipeline = new PpOcrV6Pipeline(
-                parameters.ModelId,
-                parameters.ThreadCount ?? Environment.ProcessorCount,
-                parameters.UseGpu);
-            return await pipeline.RecognizeAsync(
-                pixelData,
-                parameters.PixelWidth,
-                parameters.PixelHeight).ConfigureAwait(false);
+            var pipeline = GetPpOcrV6Pipeline(parameters);
+            try
+            {
+                return await pipeline.RecognizeAsync(
+                    pixelData,
+                    parameters.PixelWidth,
+                    parameters.PixelHeight).ConfigureAwait(false);
+            }
+            catch
+            {
+                if (ReferenceEquals(_ppOcrV6Pipeline, pipeline))
+                {
+                    DisposePpOcrV6Pipeline();
+                }
+                throw;
+            }
         }
 
         var nativePixelData = await ReadPixelDataAsync(parameters).ConfigureAwait(false);
@@ -199,6 +217,29 @@ internal static class Program
             DetectedLanguage = ConvertLanguage(engine),
             Engine = OcrEngines.WindowsNative,
         };
+    }
+
+    private static PpOcrV6Pipeline GetPpOcrV6Pipeline(OcrRecognizeParams parameters)
+    {
+        var modelId = parameters.ModelId!;
+        var threadCount = Math.Clamp(parameters.ThreadCount ?? Environment.ProcessorCount, 1, 16);
+        var key = new PpOcrV6PipelineKey(modelId, threadCount, parameters.UseGpu);
+        if (_ppOcrV6Pipeline is not null && _ppOcrV6PipelineKey == key)
+        {
+            return _ppOcrV6Pipeline;
+        }
+
+        _ppOcrV6Pipeline?.Dispose();
+        _ppOcrV6Pipeline = new PpOcrV6Pipeline(modelId, threadCount, parameters.UseGpu);
+        _ppOcrV6PipelineKey = key;
+        return _ppOcrV6Pipeline;
+    }
+
+    private static void DisposePpOcrV6Pipeline()
+    {
+        _ppOcrV6Pipeline?.Dispose();
+        _ppOcrV6Pipeline = null;
+        _ppOcrV6PipelineKey = null;
     }
 
     private static async Task<byte[]> ReadPixelDataAsync(OcrRecognizeParams parameters)
@@ -285,33 +326,20 @@ internal static class Program
             : new OcrLanguageDto { Tag = language.LanguageTag, DisplayName = language.DisplayName };
     }
 
-    private static async Task WriteEventAsync(string eventName, object data)
-    {
-        await Console.Out.WriteLineAsync(JsonLineSerializer.Serialize(new
-        {
-            @event = eventName,
-            data,
-        }));
-        await Console.Out.FlushAsync();
-    }
+    private static Task WriteEventAsync(string eventName, object data) =>
+        WriteLineAsync(new { @event = eventName, data });
 
-    private static async Task WriteResponseAsync(string id, object result)
-    {
-        await Console.Out.WriteLineAsync(JsonLineSerializer.Serialize(new
-        {
-            id,
-            result,
-        }));
-        await Console.Out.FlushAsync();
-    }
+    private static Task WriteResponseAsync(string id, object result) =>
+        WriteLineAsync(new { id, result });
 
-    private static async Task WriteErrorAsync(string id, string code, string message)
+    private static Task WriteErrorAsync(string id, string code, string message) =>
+        WriteLineAsync(new { id, error = new { code, message } });
+
+    private readonly record struct PpOcrV6PipelineKey(string ModelId, int ThreadCount, bool UseGpu);
+
+    private static async Task WriteLineAsync(object value)
     {
-        await Console.Out.WriteLineAsync(JsonLineSerializer.Serialize(new
-        {
-            id,
-            error = new { code, message },
-        }));
+        await Console.Out.WriteLineAsync(JsonLineSerializer.Serialize(value));
         await Console.Out.FlushAsync();
     }
 }

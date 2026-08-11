@@ -20,6 +20,8 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
     private readonly WorkerSpawner _spawner = new();
     private readonly Func<CancellationToken, Task<SidecarClient.SidecarClient>>? _spawnOverride;
     private readonly bool _allowFallback;
+    private readonly SemaphoreSlim _recognizeLock = new(1, 1);
+    private SidecarClient.SidecarClient? _client;
     private bool _disposed;
 
     public OcrWorkerClient(
@@ -105,13 +107,79 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                 await stream.WriteAsync(pixelData, cancellationToken).ConfigureAwait(false);
             }
 
-            SidecarClient.SidecarClient client;
+            await _recognizeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+                var client = await GetClientAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    var dto = await client.SendRequestAsync<OcrResultDto>(
+                        OcrMethods.Recognize,
+                        new OcrRecognizeParams
+                        {
+                            PixelDataPath = tempPath,
+                            PixelWidth = pixelWidth,
+                            PixelHeight = pixelHeight,
+                            PreferredLanguageTag = preferredLanguageTag,
+                            Engine = _engine == OcrEngineType.PpOcrV6
+                                ? OcrEngines.PpOcrV6
+                                : OcrEngines.WindowsNative,
+                            ModelId = _engine == OcrEngineType.PpOcrV6 ? _modelId : null,
+                            ThreadCount = _engine == OcrEngineType.PpOcrV6 ? _threadCount : null,
+                            UseGpu = _engine == OcrEngineType.PpOcrV6 && _useGpu,
+                        },
+                        timeoutMs: 0,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                    var result = MapResult(dto);
+                    if (_engine != OcrEngineType.PpOcrV6)
+                    {
+                        await InvalidateClientAsync().ConfigureAwait(false);
+                    }
+
+                    return result;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    await InvalidateClientAsync().ConfigureAwait(false);
+                    throw;
+                }
+                catch (SidecarProcessExitedException ex)
+                {
+                    await InvalidateClientAsync().ConfigureAwait(false);
+                    if (CanFallback(ex))
+                    {
+                        Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker exit: {ex.Message}");
+                        return await _fallback.RecognizeAsync(
+                            pixelData,
+                            pixelWidth,
+                            pixelHeight,
+                            preferredLanguageTag,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+
+                    throw new InvalidOperationException($"OCR worker exited unexpectedly (code={ex.ExitCode})", ex);
+                }
+                catch (SidecarErrorException ex)
+                {
+                    await InvalidateClientAsync().ConfigureAwait(false);
+                    if (CanFallback(ex))
+                    {
+                        Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker error: {ex.Message}");
+                        return await _fallback.RecognizeAsync(
+                            pixelData,
+                            pixelWidth,
+                            pixelHeight,
+                            preferredLanguageTag,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+
+                    throw;
+                }
             }
             catch (Exception ex) when (CanFallback(ex))
             {
+                await InvalidateClientAsync().ConfigureAwait(false);
                 Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR: {ex.Message}");
                 return await _fallback.RecognizeAsync(
                     pixelData,
@@ -120,58 +188,41 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                     preferredLanguageTag,
                     cancellationToken).ConfigureAwait(false);
             }
-
-            await using var clientLease = client.ConfigureAwait(false);
-            try
+            finally
             {
-                var dto = await client.SendRequestAsync<OcrResultDto>(
-                    OcrMethods.Recognize,
-                    new OcrRecognizeParams
-                    {
-                        PixelDataPath = tempPath,
-                        PixelWidth = pixelWidth,
-                        PixelHeight = pixelHeight,
-                        PreferredLanguageTag = preferredLanguageTag,
-                        Engine = _engine == OcrEngineType.PpOcrV6
-                            ? OcrEngines.PpOcrV6
-                            : OcrEngines.WindowsNative,
-                        ModelId = _engine == OcrEngineType.PpOcrV6 ? _modelId : null,
-                        ThreadCount = _engine == OcrEngineType.PpOcrV6 ? _threadCount : null,
-                        UseGpu = _engine == OcrEngineType.PpOcrV6 && _useGpu,
-                    },
-                    timeoutMs: 0,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                return MapResult(dto);
-            }
-            catch (SidecarProcessExitedException ex) when (CanFallback(ex))
-            {
-                Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker exit: {ex.Message}");
-                return await _fallback.RecognizeAsync(
-                    pixelData,
-                    pixelWidth,
-                    pixelHeight,
-                    preferredLanguageTag,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (SidecarErrorException ex) when (CanFallback(ex))
-            {
-                Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker error: {ex.Message}");
-                return await _fallback.RecognizeAsync(
-                    pixelData,
-                    pixelWidth,
-                    pixelHeight,
-                    preferredLanguageTag,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (SidecarProcessExitedException ex)
-            {
-                throw new InvalidOperationException($"OCR worker exited unexpectedly (code={ex.ExitCode})", ex);
+                _recognizeLock.Release();
             }
         }
         finally
         {
             TryDelete(tempPath);
+        }
+    }
+
+    private async Task<SidecarClient.SidecarClient> GetClientAsync(CancellationToken cancellationToken)
+    {
+        if (_client is { IsRunning: true })
+        {
+            return _client;
+        }
+
+        if (_client is not null)
+        {
+            _client.Dispose();
+            _client = null;
+        }
+
+        _client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        return _client;
+    }
+
+    private async Task InvalidateClientAsync()
+    {
+        var client = _client;
+        _client = null;
+        if (client is not null)
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -288,14 +339,19 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                 "internal_error";
         }
 
-        return ex is WorkerStartFailedException
-            or WorkerVersionMismatchException
-            or FileNotFoundException
-            or SidecarProcessExitedException;
+        return CanFallbackToInProc(ex);
     }
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
+        _client?.Dispose();
+        _client = null;
+        _recognizeLock.Dispose();
     }
 }

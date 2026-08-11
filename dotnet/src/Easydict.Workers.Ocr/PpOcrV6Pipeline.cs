@@ -167,12 +167,12 @@ internal sealed class PpOcrV6Pipeline : IDisposable
         }
         catch (PpOcrV6ModelException)
         {
-            DisposeSessions();
+            Dispose();
             throw;
         }
         catch (Exception ex)
         {
-            DisposeSessions();
+            Dispose();
             throw new PpOcrV6ModelException("runtime_missing", $"Unable to load PP-OCRv6 ONNX sessions: {ex.Message}");
         }
     }
@@ -397,10 +397,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
             }
         }
 
-        return boxes
-            .OrderBy(box => box.Y)
-            .ThenBy(box => box.X)
-            .ToList();
+        return boxes;
     }
 
     private static ImageCrop ExtractCrop(byte[] pixels, int imageWidth, int imageHeight, PpBox box)
@@ -526,22 +523,18 @@ internal sealed class PpOcrV6Pipeline : IDisposable
         return (text.ToString(), confidenceCount == 0 ? 0f : confidenceSum / confidenceCount);
     }
 
-    private void DisposeSessions()
-    {
-        _detector?.Dispose();
-        _recognizer?.Dispose();
-        _detector = null;
-        _recognizer = null;
-    }
-
     public void Dispose()
     {
         if (_disposed)
         {
             return;
         }
+
         _disposed = true;
-        DisposeSessions();
+        _detector?.Dispose();
+        _recognizer?.Dispose();
+        _detector = null;
+        _recognizer = null;
     }
 
     private sealed record DetectionInput(float[] Data, int[] Shape, int InputWidth, int InputHeight);

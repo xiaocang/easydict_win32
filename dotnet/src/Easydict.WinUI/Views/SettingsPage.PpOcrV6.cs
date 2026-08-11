@@ -125,34 +125,12 @@ public sealed partial class SettingsPage
         OnSettingChanged(sender, e);
     }
 
-    private void OnPpOcrV6ThreadCountChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    private void OnPpOcrV6SettingChanged(object sender, object e)
     {
-        if (_ppOcrV6UiLoading)
+        if (!_ppOcrV6UiLoading)
         {
-            return;
+            OnSettingChanged(sender, e);
         }
-
-        OnSettingChanged(sender, args);
-    }
-
-    private void OnPpOcrV6GpuToggled(object sender, RoutedEventArgs e)
-    {
-        if (_ppOcrV6UiLoading)
-        {
-            return;
-        }
-
-        OnSettingChanged(sender, e);
-    }
-
-    private void OnPpOcrV6FallbackToggled(object sender, RoutedEventArgs e)
-    {
-        if (_ppOcrV6UiLoading)
-        {
-            return;
-        }
-
-        OnSettingChanged(sender, e);
     }
 
     private async void OnDownloadPpOcrV6ModelClick(object sender, RoutedEventArgs e)

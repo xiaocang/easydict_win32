@@ -217,6 +217,36 @@ public sealed class OcrTranslateService : IDisposable
         return _ppOcrV6Client;
     }
 
+    internal async Task ReleasePpOcrV6ModelAsync(string modelId)
+    {
+        if (_ppOcrV6ClientKey?.ModelId != modelId)
+        {
+            return;
+        }
+
+        try
+        {
+            _currentCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        if (!await _ocrPipelineLock.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false))
+        {
+            throw new IOException("PP-OCRv6 is busy and could not be released safely.");
+        }
+
+        try
+        {
+            DisposePpOcrV6Client();
+        }
+        finally
+        {
+            _ocrPipelineLock.Release();
+        }
+    }
+
     private void DisposePpOcrV6Client()
     {
         _ppOcrV6Client?.Dispose();

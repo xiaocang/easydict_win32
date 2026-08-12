@@ -2192,6 +2192,7 @@ public sealed partial class SettingsPage : Page
 
         try
         {
+            _ppOcrV6DownloadCts?.Cancel();
             _lifetimeCts.Cancel();
         }
         catch (ObjectDisposedException)

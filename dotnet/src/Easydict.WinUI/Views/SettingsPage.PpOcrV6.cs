@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Easydict.SidecarClient.Protocol;
+using Easydict.WinUI;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.Workers;
@@ -12,6 +13,7 @@ public sealed partial class SettingsPage
 {
     private bool _ppOcrV6UiLoading;
     private int _ppOcrV6StatusVersion;
+    private CancellationTokenSource? _ppOcrV6DownloadCts;
 
     private void InitializePpOcrV6Settings()
     {
@@ -87,7 +89,9 @@ public sealed partial class SettingsPage
 
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (version != _ppOcrV6StatusVersion || GetSelectedPpOcrV6ModelId() != modelId)
+            if (_ppOcrV6DownloadCts is not null
+                || version != _ppOcrV6StatusVersion
+                || GetSelectedPpOcrV6ModelId() != modelId)
             {
                 return;
             }
@@ -96,7 +100,8 @@ public sealed partial class SettingsPage
             {
                 case PpOcrV6ModelState.Installed:
                     PpOcrV6ModelStatusText.Text = "Downloaded";
-                    PpOcrV6DownloadButton.Visibility = Visibility.Collapsed;
+                    PpOcrV6DownloadButton.Content = "Remove";
+                    PpOcrV6DownloadButton.Visibility = Visibility.Visible;
                     break;
                 case PpOcrV6ModelState.Invalid:
                     PpOcrV6ModelStatusText.Text = "Model invalid — repair required";
@@ -133,8 +138,27 @@ public sealed partial class SettingsPage
 
     private async void OnDownloadPpOcrV6ModelClick(object sender, RoutedEventArgs e)
     {
+        if (_ppOcrV6DownloadCts is not null)
+        {
+            _ppOcrV6DownloadCts.Cancel();
+            return;
+        }
+
         var modelId = GetSelectedPpOcrV6ModelId();
-        PpOcrV6DownloadButton.IsEnabled = false;
+        if (new PpOcrV6ModelStore().GetStateBySize(modelId) == PpOcrV6ModelState.Installed)
+        {
+            await RemovePpOcrV6ModelAsync(modelId);
+            return;
+        }
+
+        await DownloadPpOcrV6ModelAsync(modelId, sender, e);
+    }
+
+    private async Task DownloadPpOcrV6ModelAsync(string modelId, object sender, object e)
+    {
+        _ppOcrV6DownloadCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+        PpOcrV6DownloadButton.Content = "Cancel";
+        PpOcrV6DownloadButton.IsEnabled = true;
         PpOcrV6ModelCombo.IsEnabled = false;
         PpOcrV6DownloadProgress.Visibility = Visibility.Visible;
         PpOcrV6DownloadProgressText.Visibility = Visibility.Visible;
@@ -152,6 +176,11 @@ public sealed partial class SettingsPage
             {
                 DispatcherQueue.TryEnqueue(() =>
                 {
+                    if (_ppOcrV6DownloadCts?.IsCancellationRequested != false || _isUnloaded)
+                    {
+                        return;
+                    }
+
                     PpOcrV6DownloadProgress.IsIndeterminate = value.Percentage < 0;
                     if (value.Percentage >= 0)
                     {
@@ -162,7 +191,7 @@ public sealed partial class SettingsPage
                 });
             });
 
-            var state = await service.DownloadAsync(modelId, progress, _lifetimeCts.Token);
+            var state = await service.DownloadAsync(modelId, progress, _ppOcrV6DownloadCts.Token);
             if (state != PpOcrV6ModelState.Installed)
             {
                 throw new InvalidDataException("PP-OCRv6 model did not pass final integrity validation.");
@@ -174,12 +203,11 @@ public sealed partial class SettingsPage
             }
             OnSettingChanged(sender, e);
         }
-        catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
         }
         catch (Exception ex)
         {
-            UpdatePpOcrV6ModelUi();
             var dialog = new ContentDialog
             {
                 Title = "PP-OCRv6 download failed",
@@ -191,10 +219,61 @@ public sealed partial class SettingsPage
         }
         finally
         {
-            PpOcrV6DownloadButton.IsEnabled = true;
+            _ppOcrV6DownloadCts.Dispose();
+            _ppOcrV6DownloadCts = null;
             PpOcrV6ModelCombo.IsEnabled = true;
             PpOcrV6DownloadProgress.Visibility = Visibility.Collapsed;
             PpOcrV6DownloadProgressText.Visibility = Visibility.Collapsed;
+            UpdatePpOcrV6ModelUi();
+        }
+    }
+
+    private async Task RemovePpOcrV6ModelAsync(string modelId)
+    {
+        var confirmDialog = new ContentDialog
+        {
+            Title = "Remove PP-OCRv6 model",
+            Content = $"Remove the downloaded model '{modelId}'?",
+            PrimaryButtonText = "Remove",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await ShowDialogAsync(confirmDialog) != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        PpOcrV6DownloadButton.IsEnabled = false;
+        try
+        {
+            await App.ReleasePpOcrV6ModelAsync(modelId).ConfigureAwait(true);
+            using var httpClient = OcrServiceFactory.CreateProxyAwareHttpClient(
+                _settings.ProxyEnabled,
+                _settings.ProxyUri,
+                _settings.ProxyBypassLocal,
+                TimeSpan.FromMinutes(30));
+            using var service = new PpOcrV6ModelDownloadService(httpClient);
+            await service.RemoveAsync(modelId, _lifetimeCts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "PP-OCRv6 remove failed",
+                Content = ex.Message,
+                CloseButtonText = "OK",
+                XamlRoot = XamlRoot,
+            };
+            await ShowDialogAsync(dialog);
+        }
+        finally
+        {
+            PpOcrV6DownloadButton.IsEnabled = true;
+            UpdatePpOcrV6ModelUi();
         }
     }
 

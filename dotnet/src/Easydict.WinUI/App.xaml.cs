@@ -664,6 +664,15 @@ namespace Easydict.WinUI
         // OcrTranslateService captures DispatcherQueue. Called from all OCR entry points
         // (hotkeys, tray menu, shell context menu signal, browser extension signal,
         // protocol activation).
+        internal static async Task ReleasePpOcrV6ModelAsync(string modelId)
+        {
+            var service = Instance._ocrTranslateService;
+            if (service is not null)
+            {
+                await service.ReleasePpOcrV6ModelAsync(modelId).ConfigureAwait(false);
+            }
+        }
+
         private OcrTranslateService? EnsureOcrTranslateService()
         {
             if (_ocrTranslateService != null) return _ocrTranslateService;

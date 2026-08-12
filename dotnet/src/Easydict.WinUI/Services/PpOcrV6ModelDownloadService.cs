@@ -147,6 +147,30 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
         }
     }
 
+    public async Task RemoveAsync(
+        string modelId,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var model = PpOcrV6ModelCatalog.Get(modelId);
+        var lockKey = Path.Combine(_store.RootDirectory, model.Id);
+        var downloadLock = DownloadLocks.GetOrAdd(lockKey, static _ => new SemaphoreSlim(1, 1));
+        await downloadLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var paths = _store.GetPaths(model.Id);
+            if (Directory.Exists(paths.Directory))
+            {
+                Directory.Delete(paths.Directory, recursive: true);
+            }
+        }
+        finally
+        {
+            downloadLock.Release();
+        }
+    }
+
     private static async Task ValidateArtifactAsync(
         PpOcrV6Artifact artifact,
         string path,

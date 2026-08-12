@@ -278,4 +278,58 @@ public class OcrServiceFactoryTests
 
         handler.Proxy.Should().BeNull();
     }
+
+    [Fact]
+    public async Task PpOcrV6ModelDownloadService_RemoveAsync_RemovesModelDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "Easydict", "ppocrv6-remove-tests", Guid.NewGuid().ToString("N"));
+        var store = new PpOcrV6ModelStore(root);
+        var paths = store.GetPaths(PpOcrV6ModelCatalog.TinyId);
+        try
+        {
+            Directory.CreateDirectory(paths.Directory);
+            File.WriteAllText(paths.CompletionSentinel, PpOcrV6ModelCatalog.TinyId);
+            using var service = new PpOcrV6ModelDownloadService(
+                new HttpClient(new RecordingHttpMessageHandler()), store);
+
+            await service.RemoveAsync(PpOcrV6ModelCatalog.TinyId);
+
+            Directory.Exists(paths.Directory).Should().BeFalse();
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PpOcrV6ModelDownloadService_RemoveAsync_HonorsCancellation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "Easydict", "ppocrv6-remove-tests", Guid.NewGuid().ToString("N"));
+        var store = new PpOcrV6ModelStore(root);
+        var paths = store.GetPaths(PpOcrV6ModelCatalog.TinyId);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        try
+        {
+            Directory.CreateDirectory(paths.Directory);
+            using var service = new PpOcrV6ModelDownloadService(
+                new HttpClient(new RecordingHttpMessageHandler()), store);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                service.RemoveAsync(PpOcrV6ModelCatalog.TinyId, cts.Token));
+
+            Directory.Exists(paths.Directory).Should().BeTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
 }

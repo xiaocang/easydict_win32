@@ -3,6 +3,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json;
 using Easydict.SidecarClient;
 using Easydict.SidecarClient.Protocol;
+using Microsoft.ML.OnnxRuntime;
 using Windows.Graphics.Imaging;
 using WinOcr = Windows.Media.Ocr;
 
@@ -120,13 +121,13 @@ internal static class Program
         catch (OperationCanceledException)
         {
             await WriteErrorAsync(request.Id, WorkerErrorCodes.Cancelled, $"Request {request.Id} cancelled");
-            return true;
+            return false;
         }
         catch (PpOcrV6ModelException ex)
         {
             Trace.WriteLine($"[OcrWorker] PP-OCRv6 error ({ex.Code}): {ex.Message}");
             await WriteErrorAsync(request.Id, ex.Code, ex.Message);
-            return true;
+            return false;
         }
         catch (Exception ex)
         {
@@ -155,20 +156,20 @@ internal static class Program
         {
             if (string.IsNullOrWhiteSpace(parameters.ModelId))
             {
-                throw new PpOcrV6ModelException("invalid_params", "PP-OCRv6 modelId is required.");
+                throw new PpOcrV6ModelException(WorkerErrorCodes.InvalidParams, "PP-OCRv6 modelId is required.");
             }
 
             if (!PpOcrV6ModelCatalog.TryGet(parameters.ModelId, out _))
             {
                 throw new PpOcrV6ModelException(
-                    "model_invalid",
+                    WorkerErrorCodes.ModelInvalid,
                     $"Unknown PP-OCRv6 model '{parameters.ModelId}'.");
             }
 
             if (!PpOcrV6ModelCatalog.SupportsLanguage(parameters.ModelId, parameters.PreferredLanguageTag))
             {
                 throw new PpOcrV6ModelException(
-                    "unsupported_language",
+                    WorkerErrorCodes.UnsupportedLanguage,
                     $"PP-OCRv6 model '{parameters.ModelId}' does not support '{parameters.PreferredLanguageTag}'.");
             }
 
@@ -181,7 +182,11 @@ internal static class Program
                     parameters.PixelWidth,
                     parameters.PixelHeight).ConfigureAwait(false);
             }
-            catch
+            catch (PpOcrV6ModelException)
+            {
+                throw;
+            }
+            catch (OnnxRuntimeException)
             {
                 if (ReferenceEquals(_ppOcrV6Pipeline, pipeline))
                 {
@@ -222,7 +227,10 @@ internal static class Program
     private static PpOcrV6Pipeline GetPpOcrV6Pipeline(OcrRecognizeParams parameters)
     {
         var modelId = parameters.ModelId!;
-        var threadCount = Math.Clamp(parameters.ThreadCount ?? Environment.ProcessorCount, 1, 16);
+        var threadCount = Math.Clamp(
+            parameters.ThreadCount ?? Environment.ProcessorCount,
+            PpOcrV6ModelCatalog.MinThreadCount,
+            PpOcrV6ModelCatalog.MaxThreadCount);
         var key = new PpOcrV6PipelineKey(modelId, threadCount, parameters.UseGpu);
         if (_ppOcrV6Pipeline is not null && _ppOcrV6PipelineKey == key)
         {

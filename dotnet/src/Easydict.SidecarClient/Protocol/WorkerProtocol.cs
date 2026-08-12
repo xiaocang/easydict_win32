@@ -48,6 +48,11 @@ public static class WorkerErrorCodes
     public const string ServiceError = "service_error";
     public const string Internal = "internal_error";
     public const string VersionMismatch = "version_mismatch";
+    public const string ModelInvalid = "model_invalid";
+    public const string RuntimeMissing = "runtime_missing";
+    public const string GpuUnavailable = "gpu_unavailable";
+    public const string InferenceError = "inference_error";
+    public const string UnsupportedLanguage = "unsupported_language";
 }
 
 /// <summary>

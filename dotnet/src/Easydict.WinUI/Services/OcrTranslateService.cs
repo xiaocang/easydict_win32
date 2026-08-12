@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.SidecarClient.Protocol;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services.Workers;
 using Microsoft.UI.Dispatching;
@@ -19,8 +20,9 @@ internal enum OcrFailureReason
 /// Orchestrates the OCR translation flow: Screenshot → OCR → Translate.
 /// All operations are asynchronous and non-blocking to the UI thread.
 /// </summary>
-public sealed class OcrTranslateService
+public sealed class OcrTranslateService : IDisposable
 {
+    private bool _disposed;
     private readonly ScreenCaptureService _captureService = new();
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Action<OcrFailureReason>? _failureReporter;
@@ -182,6 +184,7 @@ public sealed class OcrTranslateService
 
     private IOcrService GetOcrEngine(OcrServiceOptions options)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (options.Engine != OcrEngineType.PpOcrV6)
         {
             DisposePpOcrV6Client();
@@ -191,7 +194,10 @@ public sealed class OcrTranslateService
         var settings = SettingsService.Instance;
         var key = new PpOcrV6ClientKey(
             options.Model,
-            Math.Clamp(settings.PpOcrV6ThreadCount, 1, 16),
+            Math.Clamp(
+                settings.PpOcrV6ThreadCount,
+                PpOcrV6ModelCatalog.MinThreadCount,
+                PpOcrV6ModelCatalog.MaxThreadCount),
             settings.PpOcrV6UseGpu,
             settings.PpOcrV6AllowFallback);
         if (_ppOcrV6Client is null || _ppOcrV6ClientKey != key)
@@ -220,8 +226,37 @@ public sealed class OcrTranslateService
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        var cts = Interlocked.Exchange(ref _currentCts, null);
+        try
+        {
+            cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        if (_ocrPipelineLock.Wait(TimeSpan.FromSeconds(5)))
+        {
+            try
+            {
+                DisposePpOcrV6Client();
+            }
+            finally
+            {
+                _ocrPipelineLock.Release();
+                _ocrPipelineLock.Dispose();
+            }
+
+            return;
+        }
+
         DisposePpOcrV6Client();
-        _ocrPipelineLock.Dispose();
     }
 
     private readonly record struct PpOcrV6ClientKey(
@@ -270,7 +305,15 @@ public sealed class OcrTranslateService
     /// </summary>
     public IReadOnlyList<Models.OcrLanguage> GetAvailableLanguages()
     {
-        return OcrServiceFactory.Create().GetAvailableLanguages();
+        var service = OcrServiceFactory.Create();
+        try
+        {
+            return service.GetAvailableLanguages();
+        }
+        finally
+        {
+            (service as IDisposable)?.Dispose();
+        }
     }
 
     private static string? GetPreferredOcrLanguage()

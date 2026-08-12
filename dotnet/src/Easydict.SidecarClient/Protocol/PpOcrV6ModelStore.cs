@@ -21,6 +21,10 @@ public sealed class PpOcrV6ModelStore
 {
     public const string ModelsDirectoryName = "PpOcrV6";
     public const string CompletionSentinelName = ".complete";
+    public const string DetectorModelFileName = "det.onnx";
+    public const string DetectorConfigFileName = "det.yml";
+    public const string RecognizerModelFileName = "rec.onnx";
+    public const string RecognizerConfigFileName = "rec.yml";
 
     public PpOcrV6ModelStore(string? rootDirectory = null)
     {
@@ -39,10 +43,10 @@ public sealed class PpOcrV6ModelStore
         var directory = Path.Combine(RootDirectory, model.Id);
         return new PpOcrV6ModelPaths(
             directory,
-            Path.Combine(directory, "det.onnx"),
-            Path.Combine(directory, "det.yml"),
-            Path.Combine(directory, "rec.onnx"),
-            Path.Combine(directory, "rec.yml"),
+            Path.Combine(directory, DetectorModelFileName),
+            Path.Combine(directory, DetectorConfigFileName),
+            Path.Combine(directory, RecognizerModelFileName),
+            Path.Combine(directory, RecognizerConfigFileName),
             Path.Combine(directory, CompletionSentinelName));
     }
 
@@ -58,6 +62,27 @@ public sealed class PpOcrV6ModelStore
         if (artifacts.Any(artifact => !File.Exists(Path.Combine(paths.Directory, artifact.FileName))))
         {
             return PpOcrV6ModelState.Invalid;
+        }
+
+        return PpOcrV6ModelState.Installed;
+    }
+
+    public PpOcrV6ModelState GetStateBySize(string modelId)
+    {
+        var presence = GetStateByPresence(modelId);
+        if (presence != PpOcrV6ModelState.Installed)
+        {
+            return presence;
+        }
+
+        var paths = GetPaths(modelId);
+        foreach (var artifact in PpOcrV6ModelCatalog.Get(modelId).Artifacts)
+        {
+            var path = Path.Combine(paths.Directory, artifact.FileName);
+            if (!File.Exists(path) || new FileInfo(path).Length != artifact.SizeBytes)
+            {
+                return PpOcrV6ModelState.Invalid;
+            }
         }
 
         return PpOcrV6ModelState.Installed;

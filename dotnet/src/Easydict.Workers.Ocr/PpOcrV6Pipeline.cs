@@ -43,7 +43,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
         PpOcrV6ModelStore? store = null)
     {
         _modelId = modelId;
-        _threadCount = Math.Clamp(threadCount, 1, 16);
+        _threadCount = Math.Clamp(threadCount, PpOcrV6ModelCatalog.MinThreadCount, PpOcrV6ModelCatalog.MaxThreadCount);
         _useGpu = useGpu;
         _store = store ?? new PpOcrV6ModelStore();
     }
@@ -108,7 +108,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
         {
             Text = string.Join(Environment.NewLine, ordered.Select(line => line.Text)),
             Lines = ordered,
-            Engine = "ppOcrV6",
+            Engine = OcrEngines.PpOcrV6,
             ModelId = _modelId,
         };
     }
@@ -120,14 +120,14 @@ internal sealed class PpOcrV6Pipeline : IDisposable
             return;
         }
 
-        var state = await _store.ValidateAsync(_modelId, cancellationToken).ConfigureAwait(false);
+        var state = _store.GetStateBySize(_modelId);
         if (state == PpOcrV6ModelState.Missing)
         {
-            throw new PpOcrV6ModelException("model_missing", $"PP-OCRv6 model '{_modelId}' is not installed.");
+            throw new PpOcrV6ModelException(WorkerErrorCodes.ModelMissing, $"PP-OCRv6 model '{_modelId}' is not installed.");
         }
         if (state != PpOcrV6ModelState.Installed)
         {
-            throw new PpOcrV6ModelException("model_invalid", $"PP-OCRv6 model '{_modelId}' failed integrity validation.");
+            throw new PpOcrV6ModelException(WorkerErrorCodes.ModelInvalid, $"PP-OCRv6 model '{_modelId}' failed integrity validation.");
         }
 
         var paths = _store.GetPaths(_modelId);
@@ -135,7 +135,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
             .ConfigureAwait(false);
         if (_characters.Count == 0)
         {
-            throw new PpOcrV6ModelException("model_invalid", "PP-OCRv6 recognition dictionary is empty.");
+            throw new PpOcrV6ModelException(WorkerErrorCodes.ModelInvalid, "PP-OCRv6 recognition dictionary is empty.");
         }
 
         using var options = new SessionOptions
@@ -154,7 +154,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
             catch (Exception ex)
             {
                 throw new PpOcrV6ModelException(
-                    "gpu_unavailable",
+                    WorkerErrorCodes.GpuUnavailable,
                     $"DirectML GPU provider is unavailable: {ex.Message}");
             }
         }
@@ -164,30 +164,51 @@ internal sealed class PpOcrV6Pipeline : IDisposable
             _recognizer = new InferenceSession(paths.RecognizerModel, options);
             _detectorInputName = ValidateSession(_detector, "detector");
             _recognizerInputName = ValidateSession(_recognizer, "recognizer");
+            ValidateRecognizerClasses(_recognizer);
         }
         catch (PpOcrV6ModelException)
         {
-            Dispose();
+            ReleaseSessions();
             throw;
         }
         catch (Exception ex)
         {
-            Dispose();
-            throw new PpOcrV6ModelException("runtime_missing", $"Unable to load PP-OCRv6 ONNX sessions: {ex.Message}");
+            ReleaseSessions();
+            throw new PpOcrV6ModelException(WorkerErrorCodes.RuntimeMissing, $"Unable to load PP-OCRv6 ONNX sessions: {ex.Message}");
         }
+    }
+
+    private void ValidateRecognizerClasses(InferenceSession session)
+    {
+        var output = session.OutputMetadata.Values.FirstOrDefault(metadata =>
+            metadata.Dimensions.Length >= 3 && metadata.Dimensions[^1] > 0);
+        if (output is not null && output.Dimensions[^1] != _characters.Count + 1)
+        {
+            throw new PpOcrV6ModelException(
+                WorkerErrorCodes.ModelInvalid,
+                $"PP-OCRv6 recognizer dictionary has {_characters.Count} characters but the model exposes {output.Dimensions[^1] - 1} classes.");
+        }
+    }
+
+    private void ReleaseSessions()
+    {
+        _detector?.Dispose();
+        _recognizer?.Dispose();
+        _detector = null;
+        _recognizer = null;
     }
 
     private static string ValidateSession(InferenceSession session, string name)
     {
         if (session.InputMetadata.Count != 1 || session.OutputMetadata.Count == 0)
         {
-            throw new PpOcrV6ModelException("model_invalid", $"PP-OCRv6 {name} session has an unsupported tensor contract.");
+            throw new PpOcrV6ModelException(WorkerErrorCodes.ModelInvalid, $"PP-OCRv6 {name} session has an unsupported tensor contract.");
         }
 
         var input = session.InputMetadata.Single();
         if (input.Value.ElementType != typeof(float))
         {
-            throw new PpOcrV6ModelException("model_invalid", $"PP-OCRv6 {name} input must be float32.");
+            throw new PpOcrV6ModelException(WorkerErrorCodes.ModelInvalid, $"PP-OCRv6 {name} input must be float32.");
         }
 
         return input.Key;
@@ -284,19 +305,21 @@ internal sealed class PpOcrV6Pipeline : IDisposable
                 var sourceX = Math.Min(width - 1, (int)((x + 0.5) * width / inputWidth));
                 var source = (sourceY * width + sourceX) * 4;
                 var destination = y * inputWidth + x;
-                data[destination] = Normalize(pixels[source]);
-                data[channelSize + destination] = Normalize(pixels[source + 1]);
-                data[2 * channelSize + destination] = Normalize(pixels[source + 2]);
+                data[destination] = Normalize(pixels[source], 0);
+                data[channelSize + destination] = Normalize(pixels[source + 1], 1);
+                data[2 * channelSize + destination] = Normalize(pixels[source + 2], 2);
             }
         }
 
         return new DetectionInput(data, [1, 3, inputHeight, inputWidth], inputWidth, inputHeight);
     }
 
-    private static float Normalize(byte value)
+    private static readonly float[] DetectionMean = [0.485f, 0.456f, 0.406f];
+    private static readonly float[] DetectionStd = [0.229f, 0.224f, 0.225f];
+
+    private static float Normalize(byte value, int channel)
     {
-        var channel = value / 255f;
-        return (channel - 0.485f) / 0.229f;
+        return (value / 255f - DetectionMean[channel]) / DetectionStd[channel];
     }
 
     private static int RoundToMultipleOf32(int value)
@@ -316,7 +339,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
         var mapWidth = shape.Length >= 3 ? shape[^1] : 0;
         if (mapHeight <= 0 || mapWidth <= 0 || output.Length < mapHeight * mapWidth)
         {
-            throw new PpOcrV6ModelException("model_invalid", "PP-OCRv6 detector output shape is unsupported.");
+            throw new PpOcrV6ModelException(WorkerErrorCodes.ModelInvalid, "PP-OCRv6 detector output shape is unsupported.");
         }
 
         var probabilities = new float[mapHeight * mapWidth];
@@ -385,15 +408,13 @@ internal sealed class PpOcrV6Pipeline : IDisposable
 
                 var distance = (maxX - minX + 1) * (maxY - minY + 1) * UnclipRatio /
                                (2f * ((maxX - minX + 1) + (maxY - minY + 1)));
-                var x1 = (minX - distance) * originalWidth / (double)mapWidth;
-                var y1 = (minY - distance) * originalHeight / (double)mapHeight;
-                var x2 = (maxX + 1 + distance) * originalWidth / (double)mapWidth;
-                var y2 = (maxY + 1 + distance) * originalHeight / (double)mapHeight;
-                boxes.Add(new PpBox(
-                    Math.Clamp(x1, 0, originalWidth),
-                    Math.Clamp(y1, 0, originalHeight),
-                    Math.Clamp(x2 - x1, 0, originalWidth),
-                    Math.Clamp(y2 - y1, 0, originalHeight)));
+                var scaleX = originalWidth / (double)inputWidth;
+                var scaleY = originalHeight / (double)inputHeight;
+                var x1 = Math.Clamp((minX - distance) * inputWidth / mapWidth * scaleX, 0, originalWidth);
+                var y1 = Math.Clamp((minY - distance) * inputHeight / mapHeight * scaleY, 0, originalHeight);
+                var x2 = Math.Clamp((maxX + 1 + distance) * inputWidth / mapWidth * scaleX, 0, originalWidth);
+                var y2 = Math.Clamp((maxY + 1 + distance) * inputHeight / mapHeight * scaleY, 0, originalHeight);
+                boxes.Add(new PpBox(x1, y1, x2 - x1, y2 - y1));
             }
         }
 
@@ -484,7 +505,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
     {
         if (shape.Length != 3 || shape[0] != 1 || shape[2] <= 1)
         {
-            throw new PpOcrV6ModelException("model_invalid", "PP-OCRv6 recognizer output shape is unsupported.");
+            throw new PpOcrV6ModelException(WorkerErrorCodes.ModelInvalid, "PP-OCRv6 recognizer output shape is unsupported.");
         }
 
         var timeSteps = shape[1];
@@ -498,14 +519,24 @@ internal sealed class PpOcrV6Pipeline : IDisposable
             var offset = time * classes;
             var bestClass = 0;
             var bestValue = output[offset];
+            var maxLogit = bestValue;
             for (var cls = 1; cls < classes; cls++)
             {
-                if (output[offset + cls] > bestValue)
+                var logit = output[offset + cls];
+                if (logit > bestValue)
                 {
                     bestClass = cls;
-                    bestValue = output[offset + cls];
+                    bestValue = logit;
                 }
+                maxLogit = MathF.Max(maxLogit, logit);
             }
+
+            var expSum = 0f;
+            for (var cls = 0; cls < classes; cls++)
+            {
+                expSum += MathF.Exp(output[offset + cls] - maxLogit);
+            }
+            var bestProbability = MathF.Exp(bestValue - maxLogit) / expSum;
 
             if (bestClass != 0 && bestClass != previous)
             {
@@ -513,7 +544,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
                 if (characterIndex >= 0 && characterIndex < _characters.Count)
                 {
                     text.Append(_characters[characterIndex]);
-                    confidenceSum += bestValue;
+                    confidenceSum += bestProbability;
                     confidenceCount++;
                 }
             }
@@ -531,10 +562,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
         }
 
         _disposed = true;
-        _detector?.Dispose();
-        _recognizer?.Dispose();
-        _detector = null;
-        _recognizer = null;
+        ReleaseSessions();
     }
 
     private sealed record DetectionInput(float[] Data, int[] Shape, int InputWidth, int InputHeight);

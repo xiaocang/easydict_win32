@@ -60,6 +60,13 @@ public sealed class OcrWorkerClientFallbackTests
             .Should().BeTrue();
     }
 
+    [Fact]
+    public void CanFallbackToInProc_ReturnsTrue_WhenWorkerTimesOut()
+    {
+        OcrWorkerClient.CanFallbackToInProc(new SidecarTimeoutException("req-1"))
+            .Should().BeTrue();
+    }
+
     // Regression for issue #176: the worker used to naively join words with spaces, so CJK text
     // came back as "你 好 世 界". MapResult must re-merge per-word data with the same CJK-aware
     // merger as the in-process WindowsOcrService (no space between adjacent CJK characters).

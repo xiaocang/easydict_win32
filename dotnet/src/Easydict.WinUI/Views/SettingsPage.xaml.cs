@@ -16,6 +16,7 @@ using Easydict.OpenVINO.Services;
 using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.SidecarClient.Protocol;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Media;
@@ -4391,7 +4392,11 @@ public sealed partial class SettingsPage : Page
         _settings.OcrEngine = ocrOptions.Engine;
         _settings.OcrApiKey = ocrOptions.ApiKey;
         _settings.OcrEndpoint = ocrOptions.Endpoint;
-        _settings.OcrModel = ocrOptions.Model;
+        if (ocrOptions.Engine != OcrEngineType.PpOcrV6
+            || new PpOcrV6ModelStore().GetStateBySize(ocrOptions.Model) == PpOcrV6ModelState.Installed)
+        {
+            _settings.OcrModel = ocrOptions.Model;
+        }
         _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
         _settings.OcrEnableThinking = ocrOptions.EnableThinking;
         SavePpOcrV6Settings();

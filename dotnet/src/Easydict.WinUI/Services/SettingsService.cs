@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Services;
 using Easydict.TranslationService.Services.AgentCli;
+using Easydict.SidecarClient.Protocol;
 using Easydict.WindowsAI;
 using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
@@ -339,7 +340,7 @@ public sealed class SettingsService
     /// </summary>
     public bool OcrEnableThinking { get; set; }
 
-    public int PpOcrV6ThreadCount { get; set; } = 4;
+    public int PpOcrV6ThreadCount { get; set; } = PpOcrV6ModelCatalog.DefaultThreadCount;
     public bool PpOcrV6UseGpu { get; set; }
     public bool PpOcrV6AllowFallback { get; set; } = true;
 
@@ -817,7 +818,10 @@ public sealed class SettingsService
         OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
         OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
         OcrEnableThinking = GetValue(nameof(OcrEnableThinking), false);
-        PpOcrV6ThreadCount = Math.Clamp(GetValue(nameof(PpOcrV6ThreadCount), 4), 1, 16);
+        PpOcrV6ThreadCount = Math.Clamp(
+            GetValue(nameof(PpOcrV6ThreadCount), PpOcrV6ModelCatalog.DefaultThreadCount),
+            PpOcrV6ModelCatalog.MinThreadCount,
+            PpOcrV6ModelCatalog.MaxThreadCount);
         PpOcrV6UseGpu = GetValue(nameof(PpOcrV6UseGpu), false);
         PpOcrV6AllowFallback = GetValue(nameof(PpOcrV6AllowFallback), true);
 
@@ -1081,7 +1085,10 @@ public sealed class SettingsService
         _settings[nameof(OcrModel)] = OcrModel;
         _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
         _settings[nameof(OcrEnableThinking)] = OcrEnableThinking;
-        _settings[nameof(PpOcrV6ThreadCount)] = Math.Clamp(PpOcrV6ThreadCount, 1, 16);
+        _settings[nameof(PpOcrV6ThreadCount)] = Math.Clamp(
+            PpOcrV6ThreadCount,
+            PpOcrV6ModelCatalog.MinThreadCount,
+            PpOcrV6ModelCatalog.MaxThreadCount);
         _settings[nameof(PpOcrV6UseGpu)] = PpOcrV6UseGpu;
         _settings[nameof(PpOcrV6AllowFallback)] = PpOcrV6AllowFallback;
 

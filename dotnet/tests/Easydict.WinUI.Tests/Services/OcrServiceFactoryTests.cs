@@ -38,6 +38,7 @@ public class OcrServiceFactoryTests
             var svc = OcrServiceFactory.Create();
 
             svc.Should().BeOfType(expected);
+            (svc as IDisposable)?.Dispose();
         }
         finally
         {
@@ -59,6 +60,7 @@ public class OcrServiceFactoryTests
             var svc = OcrServiceFactory.Create();
 
             svc.Should().BeOfType<WindowsOcrService>();
+            (svc as IDisposable)?.Dispose();
         }
         finally
         {
@@ -104,6 +106,7 @@ public class OcrServiceFactoryTests
             var svc = OcrServiceFactory.Create(options);
 
             svc.Should().BeOfType(expected);
+            (svc as IDisposable)?.Dispose();
         }
         finally
         {
@@ -157,6 +160,49 @@ public class OcrServiceFactoryTests
         PpOcrV6ModelCatalog.Models.Should().ContainSingle(model => model.Id == PpOcrV6ModelCatalog.MediumId);
         PpOcrV6ModelCatalog.Get(PpOcrV6ModelCatalog.MediumId).DownloadSizeBytes.Should().Be(138_739_282);
         PpOcrV6ModelCatalog.Get(PpOcrV6ModelCatalog.TinyId).Languages.Should().NotContain("ja");
+    }
+
+    [Theory]
+    [InlineData("zh", true)]
+    [InlineData("zh-Hans", true)]
+    [InlineData("zh-Hant", true)]
+    [InlineData("sr", true)]
+    [InlineData("sr-Latn", true)]
+    [InlineData("ja", false)]
+    public void PpOcrV6Catalog_SupportsBaseAndQualifiedLanguageTags(string languageTag, bool expected)
+    {
+        PpOcrV6ModelCatalog.SupportsLanguage(PpOcrV6ModelCatalog.TinyId, languageTag)
+            .Should().Be(expected);
+    }
+
+    [Fact]
+    public void PpOcrV6ModelStore_GetStateBySize_DetectsMissingAndWrongSize()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "Easydict", "ppocrv6-tests", Guid.NewGuid().ToString("N"));
+        var store = new PpOcrV6ModelStore(root);
+        var paths = store.GetPaths(PpOcrV6ModelCatalog.TinyId);
+        try
+        {
+            store.GetStateBySize(PpOcrV6ModelCatalog.TinyId).Should().Be(PpOcrV6ModelState.Missing);
+            Directory.CreateDirectory(paths.Directory);
+            File.WriteAllText(paths.CompletionSentinel, PpOcrV6ModelCatalog.TinyId);
+            store.GetStateBySize(PpOcrV6ModelCatalog.TinyId).Should().Be(PpOcrV6ModelState.Invalid);
+
+            foreach (var artifact in PpOcrV6ModelCatalog.Get(PpOcrV6ModelCatalog.TinyId).Artifacts)
+            {
+                using var stream = File.Create(Path.Combine(paths.Directory, artifact.FileName));
+                stream.SetLength(artifact.SizeBytes);
+            }
+
+            store.GetStateBySize(PpOcrV6ModelCatalog.TinyId).Should().Be(PpOcrV6ModelState.Installed);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]

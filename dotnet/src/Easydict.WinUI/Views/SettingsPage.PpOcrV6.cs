@@ -32,7 +32,10 @@ public sealed partial class SettingsPage
                 ? _settings.OcrModel
                 : PpOcrV6ModelCatalog.SmallId;
             SelectComboByTag(PpOcrV6ModelCombo, selectedModel);
-            PpOcrV6ThreadCountBox.Value = Math.Clamp(_settings.PpOcrV6ThreadCount, 1, 16);
+            PpOcrV6ThreadCountBox.Value = Math.Clamp(
+                _settings.PpOcrV6ThreadCount,
+                PpOcrV6ModelCatalog.MinThreadCount,
+                PpOcrV6ModelCatalog.MaxThreadCount);
             PpOcrV6GpuToggle.IsOn = _settings.PpOcrV6UseGpu;
             PpOcrV6GpuToggle.IsEnabled = true;
             PpOcrV6FallbackToggle.IsOn = _settings.PpOcrV6AllowFallback;
@@ -66,20 +69,15 @@ public sealed partial class SettingsPage
         PpOcrV6ModelStatusText.Text = "Checking model...";
         PpOcrV6DownloadButton.Visibility = Visibility.Collapsed;
         var version = ++_ppOcrV6StatusVersion;
-        _ = RefreshPpOcrV6ModelStatusAsync(modelId, version);
+        RefreshPpOcrV6ModelStatusAsync(modelId, version);
     }
 
-    private async Task RefreshPpOcrV6ModelStatusAsync(string modelId, int version)
+    private void RefreshPpOcrV6ModelStatusAsync(string modelId, int version)
     {
         PpOcrV6ModelState state;
-        using var httpClient = OcrServiceFactory.CreateProxyAwareHttpClient(
-            _settings.ProxyEnabled,
-            _settings.ProxyUri,
-            _settings.ProxyBypassLocal);
-        using var service = new PpOcrV6ModelDownloadService(httpClient);
         try
         {
-            state = await service.Store.ValidateAsync(modelId).ConfigureAwait(false);
+            state = new PpOcrV6ModelStore().GetStateBySize(modelId);
         }
         catch (Exception ex)
         {
@@ -164,19 +162,24 @@ public sealed partial class SettingsPage
                 });
             });
 
-            var state = await service.DownloadAsync(modelId, progress);
+            var state = await service.DownloadAsync(modelId, progress, _lifetimeCts.Token);
             if (state != PpOcrV6ModelState.Installed)
             {
                 throw new InvalidDataException("PP-OCRv6 model did not pass final integrity validation.");
             }
 
-            _settings.OcrModel = modelId;
-            _settings.Save();
-            UpdatePpOcrV6ModelUi();
+            if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
+            {
+                _settings.OcrModel = modelId;
+            }
+            OnSettingChanged(sender, e);
+        }
+        catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
-            PpOcrV6ModelStatusText.Text = "Download failed";
+            UpdatePpOcrV6ModelUi();
             var dialog = new ContentDialog
             {
                 Title = "PP-OCRv6 download failed",
@@ -242,8 +245,8 @@ public sealed partial class SettingsPage
     {
         var value = PpOcrV6ThreadCountBox.Value;
         return double.IsNaN(value)
-            ? Math.Clamp(_settings.PpOcrV6ThreadCount, 1, 16)
-            : Math.Clamp((int)Math.Round(value), 1, 16);
+            ? Math.Clamp(_settings.PpOcrV6ThreadCount, PpOcrV6ModelCatalog.MinThreadCount, PpOcrV6ModelCatalog.MaxThreadCount)
+            : Math.Clamp((int)Math.Round(value), PpOcrV6ModelCatalog.MinThreadCount, PpOcrV6ModelCatalog.MaxThreadCount);
     }
 
     private void SavePpOcrV6Settings()
@@ -255,7 +258,11 @@ public sealed partial class SettingsPage
 
         if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
         {
-            _settings.OcrModel = GetSelectedPpOcrV6ModelId();
+            var modelId = GetSelectedPpOcrV6ModelId();
+            if (new PpOcrV6ModelStore().GetStateBySize(modelId) == PpOcrV6ModelState.Installed)
+            {
+                _settings.OcrModel = modelId;
+            }
         }
         _settings.PpOcrV6ThreadCount = GetPpOcrV6ThreadCount();
         _settings.PpOcrV6UseGpu = PpOcrV6GpuToggle.IsOn;

@@ -22,6 +22,9 @@ public static class PpOcrV6ModelCatalog
     public const string TinyId = "PP-OCRv6_tiny";
     public const string SmallId = "PP-OCRv6_small";
     public const string MediumId = "PP-OCRv6_medium";
+    public const int MinThreadCount = 1;
+    public const int MaxThreadCount = 16;
+    public const int DefaultThreadCount = 4;
 
     private static readonly IReadOnlyList<string> SupportedLanguages = new ReadOnlyCollection<string>(
     [
@@ -117,6 +120,7 @@ public static class PpOcrV6ModelCatalog
             var candidate = language.ToLowerInvariant();
             return normalized == candidate
                 || normalized.StartsWith(candidate + "-", StringComparison.Ordinal)
+                || candidate.StartsWith(normalized + "-", StringComparison.Ordinal)
                 || (candidate == "zh-hans" && normalized.StartsWith("zh-cn", StringComparison.Ordinal))
                 || (candidate == "zh-hant" && normalized.StartsWith("zh-tw", StringComparison.Ordinal));
         });
@@ -151,10 +155,10 @@ public static class PpOcrV6ModelCatalog
             detectorModelName,
             recognizerModelName,
             [
-                new("det.onnx", $"{detectorBaseUrl}/inference.onnx", detectorSizeBytes, detectorSha256),
-                new("det.yml", $"{detectorBaseUrl}/inference.yml", detectorConfigSizeBytes, detectorConfigSha256),
-                new("rec.onnx", $"{recognizerBaseUrl}/inference.onnx", recognizerSizeBytes, recognizerSha256),
-                new("rec.yml", $"{recognizerBaseUrl}/inference.yml", recognizerConfigSizeBytes, recognizerConfigSha256),
+                new(PpOcrV6ModelStore.DetectorModelFileName, $"{detectorBaseUrl}/inference.onnx", detectorSizeBytes, detectorSha256),
+                new(PpOcrV6ModelStore.DetectorConfigFileName, $"{detectorBaseUrl}/inference.yml", detectorConfigSizeBytes, detectorConfigSha256),
+                new(PpOcrV6ModelStore.RecognizerModelFileName, $"{recognizerBaseUrl}/inference.onnx", recognizerSizeBytes, recognizerSha256),
+                new(PpOcrV6ModelStore.RecognizerConfigFileName, $"{recognizerBaseUrl}/inference.yml", recognizerConfigSizeBytes, recognizerSha256),
             ],
             string.Equals(id, TinyId, StringComparison.OrdinalIgnoreCase)
                 ? TinyLanguages

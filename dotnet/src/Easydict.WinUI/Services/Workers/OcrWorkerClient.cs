@@ -9,6 +9,8 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 {
     private const string WorkerSubdir = "ocr";
     private const string WorkerExeName = "Easydict.Workers.Ocr.exe";
+    private const int WindowsOcrRequestTimeoutMs = 60_000;
+    private const int PpOcrV6RequestTimeoutMs = 120_000;
 
     private readonly SettingsService _settings;
     private readonly IOcrService _fallback;
@@ -37,7 +39,10 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
         _fallback = fallback;
         _engine = engine;
         _modelId = engine == OcrEngineType.PpOcrV6 ? modelId ?? settings.OcrModel : null;
-        _threadCount = Math.Clamp(threadCount ?? settings.PpOcrV6ThreadCount, 1, 16);
+        _threadCount = Math.Clamp(
+            threadCount ?? settings.PpOcrV6ThreadCount,
+            PpOcrV6ModelCatalog.MinThreadCount,
+            PpOcrV6ModelCatalog.MaxThreadCount);
         _allowFallback = allowFallback ?? settings.PpOcrV6AllowFallback;
         _useGpu = useGpu ?? settings.PpOcrV6UseGpu;
         _modelStore = new PpOcrV6ModelStore();
@@ -73,7 +78,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
     private bool IsPpOcrV6ModelInstalled()
     {
         return PpOcrV6ModelCatalog.TryGet(_modelId, out var model)
-            && _modelStore.GetStateByPresence(model!.Id) == PpOcrV6ModelState.Installed;
+            && _modelStore.GetStateBySize(model!.Id) == PpOcrV6ModelState.Installed;
     }
 
     public async Task<OcrResult> RecognizeAsync(
@@ -110,6 +115,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
             await _recognizeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 var client = await GetClientAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
@@ -128,7 +134,9 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                             ThreadCount = _engine == OcrEngineType.PpOcrV6 ? _threadCount : null,
                             UseGpu = _engine == OcrEngineType.PpOcrV6 && _useGpu,
                         },
-                        timeoutMs: 0,
+                        timeoutMs: _engine == OcrEngineType.PpOcrV6
+                            ? PpOcrV6RequestTimeoutMs
+                            : WindowsOcrRequestTimeoutMs,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
 
                     var result = MapResult(dto);
@@ -142,6 +150,22 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     await InvalidateClientAsync().ConfigureAwait(false);
+                    throw;
+                }
+                catch (SidecarTimeoutException ex)
+                {
+                    await InvalidateClientAsync().ConfigureAwait(false);
+                    if (CanFallback(ex))
+                    {
+                        Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker timeout: {ex.Message}");
+                        return await _fallback.RecognizeAsync(
+                            pixelData,
+                            pixelWidth,
+                            pixelHeight,
+                            preferredLanguageTag,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+
                     throw;
                 }
                 catch (SidecarProcessExitedException ex)
@@ -162,7 +186,11 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                 }
                 catch (SidecarErrorException ex)
                 {
-                    await InvalidateClientAsync().ConfigureAwait(false);
+                    if (!IsRequestScopedError(ex.Error.Code))
+                    {
+                        await InvalidateClientAsync().ConfigureAwait(false);
+                    }
+
                     if (CanFallback(ex))
                     {
                         Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker error: {ex.Message}");
@@ -177,7 +205,10 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
                     throw;
                 }
             }
-            catch (Exception ex) when (CanFallback(ex))
+            catch (Exception ex) when (ex is not SidecarErrorException
+                                        && ex is not SidecarTimeoutException
+                                        && ex is not SidecarProcessExitedException
+                                        && CanFallback(ex))
             {
                 await InvalidateClientAsync().ConfigureAwait(false);
                 Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR: {ex.Message}");
@@ -201,6 +232,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
     private async Task<SidecarClient.SidecarClient> GetClientAsync(CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (_client is { IsRunning: true })
         {
             return _client;
@@ -218,11 +250,22 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
     private async Task InvalidateClientAsync()
     {
-        var client = _client;
-        _client = null;
-        if (client is not null)
+        var client = Interlocked.Exchange(ref _client, null);
+        if (client is null)
         {
-            await client.DisposeAsync().ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await client.StopAsync(gracefulTimeoutMs: 2_000).ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            client.Dispose();
         }
     }
 
@@ -317,7 +360,16 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
         return ex is WorkerStartFailedException
             or WorkerVersionMismatchException
             or FileNotFoundException
-            or SidecarProcessExitedException;
+            or SidecarProcessExitedException
+            or SidecarTimeoutException;
+    }
+
+    private static bool IsRequestScopedError(string code)
+    {
+        return code is WorkerErrorCodes.InvalidParams
+            or WorkerErrorCodes.ModelMissing
+            or WorkerErrorCodes.ModelInvalid
+            or WorkerErrorCodes.UnsupportedLanguage;
     }
 
     internal bool CanFallback(Exception ex)
@@ -330,13 +382,13 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
         if (ex is SidecarErrorException sidecarError)
         {
             return sidecarError.Error.Code is
-                "model_missing" or
-                "model_invalid" or
-                "runtime_missing" or
-                "gpu_unavailable" or
-                "inference_error" or
-                "service_error" or
-                "internal_error";
+                WorkerErrorCodes.ModelMissing or
+                WorkerErrorCodes.ModelInvalid or
+                WorkerErrorCodes.RuntimeMissing or
+                WorkerErrorCodes.GpuUnavailable or
+                WorkerErrorCodes.InferenceError or
+                WorkerErrorCodes.ServiceError or
+                WorkerErrorCodes.Internal;
         }
 
         return CanFallbackToInProc(ex);
@@ -350,8 +402,22 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
         }
 
         _disposed = true;
-        _client?.Dispose();
-        _client = null;
-        _recognizeLock.Dispose();
+        if (_recognizeLock.Wait(TimeSpan.FromSeconds(5)))
+        {
+            try
+            {
+                _client?.Dispose();
+                _client = null;
+            }
+            finally
+            {
+                _recognizeLock.Release();
+            }
+
+            return;
+        }
+
+        var client = Interlocked.Exchange(ref _client, null);
+        client?.Dispose();
     }
 }

@@ -98,6 +98,7 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
 
             var backupDirectory = $"{finalPaths.Directory}.{Guid.NewGuid():N}.backup";
             var oldDirectoryMoved = false;
+            var publishedDirectoryMoved = false;
             try
             {
                 if (Directory.Exists(finalPaths.Directory))
@@ -107,6 +108,7 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
                 }
 
                 Directory.Move(publishedDirectory, finalPaths.Directory);
+                publishedDirectoryMoved = true;
                 if (oldDirectoryMoved)
                 {
                     TryDeleteDirectory(backupDirectory);
@@ -114,11 +116,21 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
             }
             catch
             {
-                TryDeleteDirectory(finalPaths.Directory);
+                if (publishedDirectoryMoved)
+                {
+                    TryDeleteDirectory(finalPaths.Directory);
+                }
+
                 if (oldDirectoryMoved && Directory.Exists(backupDirectory))
                 {
+                    if (Directory.Exists(finalPaths.Directory))
+                    {
+                        TryDeleteDirectory(finalPaths.Directory);
+                    }
+
                     Directory.Move(backupDirectory, finalPaths.Directory);
                 }
+
                 throw;
             }
 

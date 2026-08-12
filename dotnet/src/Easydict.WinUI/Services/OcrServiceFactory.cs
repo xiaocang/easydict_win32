@@ -26,7 +26,7 @@ public static class OcrServiceFactory
     /// Optional shared <see cref="HttpClient"/> for API-based engines.
     /// If null, a shared client with a 3-minute timeout is used.
     /// </param>
-    /// <returns>An <see cref="IOcrService"/> ready to recognize text.</returns>
+    /// <returns>An <see cref="IOcrService"/> ready to recognize text. The caller owns the returned service.</returns>
     public static IOcrService Create(OcrServiceOptions? options = null, HttpClient? httpClient = null)
     {
         var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);

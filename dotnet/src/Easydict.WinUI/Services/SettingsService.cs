@@ -340,8 +340,13 @@ public sealed class SettingsService
     /// </summary>
     public bool OcrEnableThinking { get; set; }
 
+    /// <summary>CPU inference threads for PP-OCRv6. Range: 1-16. Default: 4.</summary>
     public int PpOcrV6ThreadCount { get; set; } = PpOcrV6ModelCatalog.DefaultThreadCount;
+
+    /// <summary>Use the DirectML GPU provider for PP-OCRv6 when available.</summary>
     public bool PpOcrV6UseGpu { get; set; }
+
+    /// <summary>Fall back to Windows OCR when PP-OCRv6 is unavailable or fails.</summary>
     public bool PpOcrV6AllowFallback { get; set; } = true;
 
     // Layout detection settings (long document translation)

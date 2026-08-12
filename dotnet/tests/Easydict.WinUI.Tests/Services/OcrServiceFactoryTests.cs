@@ -162,6 +162,40 @@ public class OcrServiceFactoryTests
         PpOcrV6ModelCatalog.Get(PpOcrV6ModelCatalog.TinyId).Languages.Should().NotContain("ja");
     }
 
+    [Fact]
+    public void PpOcrV6Catalog_ArtifactsMaintainStructuralInvariants()
+    {
+        foreach (var model in PpOcrV6ModelCatalog.Models)
+        {
+            model.DownloadSizeBytes.Should().Be(model.Artifacts.Sum(artifact => artifact.SizeBytes));
+            model.Languages.Should().NotBeEmpty();
+            model.Artifacts.Should().OnlyContain(artifact =>
+                artifact.SizeBytes > 0
+                && artifact.Sha256.Length == 64
+                && artifact.Sha256.All(Uri.IsHexDigit));
+        }
+    }
+
+    [Fact]
+    public void PpOcrV6ModelStore_InvalidateCompletion_IgnoresMissingDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "Easydict", "ppocrv6-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new PpOcrV6ModelStore(root);
+            var act = () => store.InvalidateCompletion(PpOcrV6ModelCatalog.TinyId);
+
+            act.Should().NotThrow();
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     [Theory]
     [InlineData("zh", true)]
     [InlineData("zh-Hans", true)]

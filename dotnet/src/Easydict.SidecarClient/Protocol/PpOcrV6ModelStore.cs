@@ -138,6 +138,9 @@ public sealed class PpOcrV6ModelStore
         catch (FileNotFoundException)
         {
         }
+        catch (DirectoryNotFoundException)
+        {
+        }
     }
 
 }

@@ -37,11 +37,11 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
         var model = PpOcrV6ModelCatalog.Get(modelId);
         var lockKey = Path.Combine(_store.RootDirectory, model.Id);
         var downloadLock = DownloadLocks.GetOrAdd(lockKey, static _ => new SemaphoreSlim(1, 1));
-        await downloadLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         var stagingDirectory = Path.Combine(
             _store.RootDirectory,
             $".{model.Id}.{Guid.NewGuid():N}.staging");
         string? publishedDirectory = null;
+        await downloadLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {

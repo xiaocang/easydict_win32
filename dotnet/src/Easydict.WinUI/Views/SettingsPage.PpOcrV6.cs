@@ -248,12 +248,7 @@ public sealed partial class SettingsPage
         try
         {
             await App.ReleasePpOcrV6ModelAsync(modelId).ConfigureAwait(true);
-            using var httpClient = OcrServiceFactory.CreateProxyAwareHttpClient(
-                _settings.ProxyEnabled,
-                _settings.ProxyUri,
-                _settings.ProxyBypassLocal,
-                TimeSpan.FromMinutes(30));
-            using var service = new PpOcrV6ModelDownloadService(httpClient);
+            using var service = new PpOcrV6ModelDownloadService();
             await service.RemoveAsync(modelId, _lifetimeCts.Token).ConfigureAwait(true);
         }
         catch (OperationCanceledException)

@@ -4284,6 +4284,23 @@ public sealed partial class SettingsPage : Page
             }
         }
 
+        if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
+        {
+            var modelId = GetSelectedPpOcrV6ModelId();
+            if (new PpOcrV6ModelStore().GetStateBySize(modelId) != PpOcrV6ModelState.Installed)
+            {
+                var errorDialog = new ContentDialog
+                {
+                    Title = "PP-OCRv6 model unavailable",
+                    Content = $"Download the PP-OCRv6 model '{modelId}' before selecting this engine.",
+                    CloseButtonText = loc.GetString("OK"),
+                    XamlRoot = this.XamlRoot
+                };
+                await ShowDialogAsync(errorDialog);
+                return false;
+            }
+        }
+
         // Validate hotkey strings — an enabled hotkey that cannot be parsed
         // (or that has no modifier and is not a function key) would silently
         // fail to register, so block the save and tell the user.
@@ -4393,11 +4410,9 @@ public sealed partial class SettingsPage : Page
         _settings.OcrEngine = ocrOptions.Engine;
         _settings.OcrApiKey = ocrOptions.ApiKey;
         _settings.OcrEndpoint = ocrOptions.Endpoint;
-        if (ocrOptions.Engine != OcrEngineType.PpOcrV6
-            || new PpOcrV6ModelStore().GetStateBySize(ocrOptions.Model) == PpOcrV6ModelState.Installed)
-        {
-            _settings.OcrModel = ocrOptions.Model;
-        }
+        _settings.OcrModel = ocrOptions.Engine == OcrEngineType.PpOcrV6
+            ? GetSelectedPpOcrV6ModelId()
+            : ocrOptions.Model;
         _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
         _settings.OcrEnableThinking = ocrOptions.EnableThinking;
         SavePpOcrV6Settings();

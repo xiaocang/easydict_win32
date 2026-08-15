@@ -76,7 +76,9 @@ public sealed record OcrServiceOptions
             settings.OcrEngine,
             settings.OcrApiKey,
             settings.OcrEndpoint,
-            settings.OcrModel,
+            settings.OcrEngine == OcrEngineType.PpOcrV6
+                ? settings.PpOcrV6ModelId
+                : settings.OcrModel,
             settings.OcrSystemPrompt,
             settings.OcrEnableThinking);
     }

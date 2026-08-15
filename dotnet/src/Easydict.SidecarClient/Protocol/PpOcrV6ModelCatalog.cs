@@ -5,8 +5,7 @@ namespace Easydict.SidecarClient.Protocol;
 public sealed record PpOcrV6Artifact(
     string FileName,
     string Url,
-    long SizeBytes,
-    string Sha256);
+    long SizeBytes);
 
 public sealed record PpOcrV6ModelInfo(
     string Id,
@@ -47,15 +46,12 @@ public static class PpOcrV6ModelCatalog
             "2612ab37152ae0a677521bae4e1e3d4fb4cf7c30",
             "PP-OCRv6_tiny_det",
             "PP-OCRv6_tiny_rec",
-            6_299_683,
-            1_780_590,
-            4_462_639,
-            883,
-            55_571,
-            "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
-            "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6",
-            "3ac018be6f97499a08faa3bbdeb33640968d9307f6736d152902747a9f259593",
-            "66170210bad538e83fff3c4a3867e547d6bf20b50d64b20347c4b913f3034ea1"),
+            [
+                new(PpOcrV6ModelStore.DetectorModelFileName, "inference.onnx", 1_780_590),
+                new(PpOcrV6ModelStore.DetectorConfigFileName, "inference.yml", 883),
+                new(PpOcrV6ModelStore.RecognizerModelFileName, "inference.onnx", 4_462_639),
+                new(PpOcrV6ModelStore.RecognizerConfigFileName, "inference.yml", 55_571),
+            ]),
         CreateModel(
             SmallId,
             "PP-OCRv6 Small",
@@ -63,15 +59,12 @@ public static class PpOcrV6ModelCatalog
             "b8f84f0b80c529de40b4fbb3544b84fa7233a513",
             "PP-OCRv6_small_det",
             "PP-OCRv6_small_rec",
-            31_191_354,
-            9_880_512,
-            21_159_378,
-            885,
-            150_579,
-            "d73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e",
-            "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634",
-            "193f435274bf9f0b5f71a929bbfbcf148282df7e633b34e7c373e8f44741b516",
-            "ab078671bb49f06228eadccd34f1bb501e157f7a047095ffb943ba81512c77d1"),
+            [
+                new(PpOcrV6ModelStore.DetectorModelFileName, "inference.onnx", 9_880_512),
+                new(PpOcrV6ModelStore.DetectorConfigFileName, "inference.yml", 885),
+                new(PpOcrV6ModelStore.RecognizerModelFileName, "inference.onnx", 21_159_378),
+                new(PpOcrV6ModelStore.RecognizerConfigFileName, "inference.yml", 150_579),
+            ]),
         CreateModel(
             MediumId,
             "PP-OCRv6 Medium",
@@ -79,15 +72,12 @@ public static class PpOcrV6ModelCatalog
             "50c7eacafc52fa7bcf4194e8cd08e46f8558504b",
             "PP-OCRv6_medium_det",
             "PP-OCRv6_medium_rec",
-            138_739_282,
-            62_032_837,
-            76_554_979,
-            886,
-            150_580,
-            "eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1",
-            "9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba",
-            "7298d5ead546584af2504d03355f881ac7a7bc0eb1e282d3e159277c1d0af871",
-            "991b700facf5b50a7de193468207d5f4255b538dde0d312ae3b7c7a9b6873129")
+            [
+                new(PpOcrV6ModelStore.DetectorModelFileName, "inference.onnx", 62_032_837),
+                new(PpOcrV6ModelStore.DetectorConfigFileName, "inference.yml", 886),
+                new(PpOcrV6ModelStore.RecognizerModelFileName, "inference.onnx", 76_554_979),
+                new(PpOcrV6ModelStore.RecognizerConfigFileName, "inference.yml", 150_580),
+            ])
     ];
 
     public static IReadOnlyList<PpOcrV6ModelInfo> Models => _models;
@@ -133,35 +123,38 @@ public static class PpOcrV6ModelCatalog
         string recognizerRevision,
         string detectorModelName,
         string recognizerModelName,
-        long downloadSizeBytes,
-        long detectorSizeBytes,
-        long recognizerSizeBytes,
-        long detectorConfigSizeBytes,
-        long recognizerConfigSizeBytes,
-        string detectorSha256,
-        string recognizerSha256,
-        string detectorConfigSha256,
-        string recognizerConfigSha256)
+        IReadOnlyList<ArtifactSpec> artifactSpecs)
     {
         var detectorRepository = $"PaddlePaddle/{detectorModelName}_onnx";
         var recognizerRepository = $"PaddlePaddle/{recognizerModelName}_onnx";
         var detectorBaseUrl = $"https://huggingface.co/{detectorRepository}/resolve/{detectorRevision}";
         var recognizerBaseUrl = $"https://huggingface.co/{recognizerRepository}/resolve/{recognizerRevision}";
+        var artifacts = artifactSpecs.Select(spec => new PpOcrV6Artifact(
+            spec.FileName,
+            $"{(spec.IsDetector ? detectorBaseUrl : recognizerBaseUrl)}/{spec.RemoteFileName}",
+            spec.SizeBytes)).ToArray();
 
         return new PpOcrV6ModelInfo(
             id,
             displayName,
-            downloadSizeBytes,
+            artifacts.Sum(artifact => artifact.SizeBytes),
             detectorModelName,
             recognizerModelName,
-            [
-                new(PpOcrV6ModelStore.DetectorModelFileName, $"{detectorBaseUrl}/inference.onnx", detectorSizeBytes, detectorSha256),
-                new(PpOcrV6ModelStore.DetectorConfigFileName, $"{detectorBaseUrl}/inference.yml", detectorConfigSizeBytes, detectorConfigSha256),
-                new(PpOcrV6ModelStore.RecognizerModelFileName, $"{recognizerBaseUrl}/inference.onnx", recognizerSizeBytes, recognizerSha256),
-                new(PpOcrV6ModelStore.RecognizerConfigFileName, $"{recognizerBaseUrl}/inference.yml", recognizerConfigSizeBytes, recognizerSha256),
-            ],
+            artifacts,
             string.Equals(id, TinyId, StringComparison.OrdinalIgnoreCase)
                 ? TinyLanguages
                 : SupportedLanguages);
+    }
+
+    private sealed record ArtifactSpec(
+        string FileName,
+        string RemoteFileName,
+        long SizeBytes,
+        bool IsDetector)
+    {
+        public ArtifactSpec(string fileName, string remoteFileName, long sizeBytes)
+            : this(fileName, remoteFileName, sizeBytes, fileName.StartsWith("det.", StringComparison.Ordinal))
+        {
+        }
     }
 }

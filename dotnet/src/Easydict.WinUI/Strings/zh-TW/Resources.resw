@@ -1173,6 +1173,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>自訂 API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6 模型無法使用</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>選擇此引擎前請先下載 PP-OCRv6 模型「{0}」。</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API 金鑰（選填）</value>
   </data>

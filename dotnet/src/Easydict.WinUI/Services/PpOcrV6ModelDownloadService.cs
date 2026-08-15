@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
 using Easydict.SidecarClient.Protocol;
 
 namespace Easydict.WinUI.Services;
@@ -45,8 +44,7 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
 
         try
         {
-            if (await _store.ValidateAsync(model.Id, cancellationToken).ConfigureAwait(false)
-                == PpOcrV6ModelState.Installed)
+            if (_store.GetStateBySize(model.Id) == PpOcrV6ModelState.Installed)
             {
                 return PpOcrV6ModelState.Installed;
             }
@@ -75,8 +73,12 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
                     stage,
                     artifactProgress,
                     cancellationToken).ConfigureAwait(false);
-                await ValidateArtifactAsync(artifact, targetPath, cancellationToken)
-                    .ConfigureAwait(false);
+                var downloadedSize = new FileInfo(targetPath).Length;
+                if (downloadedSize != artifact.SizeBytes)
+                {
+                    throw new InvalidDataException(
+                        $"Unexpected size for {artifact.FileName}: expected {artifact.SizeBytes}, got {downloadedSize}.");
+                }
                 completedBytes += artifact.SizeBytes;
             }
 
@@ -134,7 +136,7 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
                 throw;
             }
 
-            return await _store.ValidateAsync(model.Id, cancellationToken).ConfigureAwait(false);
+            return _store.GetStateBySize(model.Id);
         }
         finally
         {
@@ -168,29 +170,6 @@ public sealed class PpOcrV6ModelDownloadService : IDisposable
         finally
         {
             downloadLock.Release();
-        }
-    }
-
-    private static async Task ValidateArtifactAsync(
-        PpOcrV6Artifact artifact,
-        string path,
-        CancellationToken cancellationToken)
-    {
-        var fileInfo = new FileInfo(path);
-        if (fileInfo.Length != artifact.SizeBytes)
-        {
-            throw new InvalidDataException(
-                $"Unexpected size for {artifact.FileName}: expected {artifact.SizeBytes}, got {fileInfo.Length}.");
-        }
-
-        await using var stream = File.OpenRead(path);
-        using var sha = SHA256.Create();
-        var actualHash = Convert.ToHexString(
-            await sha.ComputeHashAsync(stream, cancellationToken)).ToLowerInvariant();
-        if (!string.Equals(actualHash, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException(
-                $"SHA-256 mismatch for {artifact.FileName}: expected {artifact.Sha256}, got {actualHash}.");
         }
     }
 

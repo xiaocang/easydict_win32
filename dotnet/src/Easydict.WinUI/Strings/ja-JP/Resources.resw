@@ -1140,6 +1140,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>カスタム API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6 モデルを利用できません</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>このエンジンを選択する前に PP-OCRv6 モデル「{0}」をダウンロードしてください。</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API キー（任意）</value>
   </data>

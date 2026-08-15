@@ -30,7 +30,6 @@ public static class OcrServiceFactory
     public static IOcrService Create(OcrServiceOptions? options = null, HttpClient? httpClient = null)
     {
         var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);
-        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
 
         if (resolved.Engine == OcrEngineType.PpOcrV6
             || (SettingsService.Instance.UseOcrWorker && resolved.Engine == OcrEngineType.WindowsNative))
@@ -45,18 +44,20 @@ public static class OcrServiceFactory
                 SettingsService.Instance.PpOcrV6UseGpu);
         }
 
-        return CreateInProc(resolved, client);
+        return CreateInProc(resolved, httpClient);
     }
 
     internal static IOcrService CreateInProc(OcrServiceOptions resolved, HttpClient? httpClient = null)
     {
-        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
-        return resolved.Engine switch
+        if (resolved.Engine is not (OcrEngineType.Ollama or OcrEngineType.CustomApi))
         {
-            OcrEngineType.Ollama => new OllamaOcrService(client, resolved),
-            OcrEngineType.CustomApi => new CustomApiOcrService(client, resolved),
-            _ => new WindowsOcrService()
-        };
+            return new WindowsOcrService();
+        }
+
+        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
+        return resolved.Engine == OcrEngineType.Ollama
+            ? new OllamaOcrService(client, resolved)
+            : new CustomApiOcrService(client, resolved);
     }
 
     internal static HttpClient CreateProxyAwareHttpClient(

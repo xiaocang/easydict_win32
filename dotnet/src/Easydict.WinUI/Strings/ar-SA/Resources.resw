@@ -982,6 +982,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>API مخصص</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>نموذج PP-OCRv6 غير متاح</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>نزّل نموذج PP-OCRv6 '{0}' قبل اختيار هذا المحرك.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>مفتاح API (اختياري)</value>
   </data>

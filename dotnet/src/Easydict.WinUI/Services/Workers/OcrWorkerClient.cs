@@ -5,7 +5,7 @@ using Easydict.WinUI.Models;
 
 namespace Easydict.WinUI.Services.Workers;
 
-internal sealed class OcrWorkerClient : IOcrService, IDisposable
+internal sealed class OcrWorkerClient : IOcrService, IDisposable, IAsyncDisposable
 {
     private const string WorkerSubdir = "ocr";
     private const string WorkerExeName = "Easydict.Workers.Ocr.exe";
@@ -24,7 +24,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
     private readonly bool _allowFallback;
     private readonly SemaphoreSlim _recognizeLock = new(1, 1);
     private SidecarClient.SidecarClient? _client;
-    private bool _disposed;
+    private int _disposed;
 
     public OcrWorkerClient(
         SettingsService settings,
@@ -38,7 +38,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
         _settings = settings;
         _fallback = fallback;
         _engine = engine;
-        _modelId = engine == OcrEngineType.PpOcrV6 ? modelId ?? settings.OcrModel : null;
+        _modelId = engine == OcrEngineType.PpOcrV6 ? modelId ?? settings.PpOcrV6ModelId : null;
         _threadCount = Math.Clamp(
             threadCount ?? settings.PpOcrV6ThreadCount,
             PpOcrV6ModelCatalog.MinThreadCount,
@@ -88,7 +88,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
         string? preferredLanguageTag = null,
         CancellationToken cancellationToken = default)
     {
-        if (_disposed) throw new ObjectDisposedException(nameof(OcrWorkerClient));
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
 
@@ -115,7 +115,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
             await _recognizeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                ObjectDisposedException.ThrowIf(_disposed, this);
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
                 var client = await GetClientAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
@@ -232,7 +232,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
     private async Task<SidecarClient.SidecarClient> GetClientAsync(CancellationToken cancellationToken)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (_client is { IsRunning: true })
         {
             return _client;
@@ -258,14 +258,10 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
         try
         {
-            await client.StopAsync(gracefulTimeoutMs: 2_000).ConfigureAwait(false);
+            await client.DisposeAsync().ConfigureAwait(false);
         }
         catch
         {
-        }
-        finally
-        {
-            client.Dispose();
         }
     }
 
@@ -384,6 +380,7 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
             return sidecarError.Error.Code is
                 WorkerErrorCodes.ModelMissing or
                 WorkerErrorCodes.ModelInvalid or
+                WorkerErrorCodes.UnsupportedLanguage or
                 WorkerErrorCodes.RuntimeMissing or
                 WorkerErrorCodes.GpuUnavailable or
                 WorkerErrorCodes.InferenceError or
@@ -396,28 +393,30 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
-            return;
-        }
-
-        _disposed = true;
-        if (_recognizeLock.Wait(TimeSpan.FromSeconds(5)))
-        {
-            try
-            {
-                _client?.Dispose();
-                _client = null;
-            }
-            finally
-            {
-                _recognizeLock.Release();
-            }
-
             return;
         }
 
         var client = Interlocked.Exchange(ref _client, null);
         client?.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        await _recognizeLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await InvalidateClientAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _recognizeLock.Release();
+        }
     }
 }

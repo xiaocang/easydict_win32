@@ -1218,6 +1218,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>Custom API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6 model unavailable</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Download the PP-OCRv6 model '{0}' before selecting this engine.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API Key (Optional)</value>
   </data>

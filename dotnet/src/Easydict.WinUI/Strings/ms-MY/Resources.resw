@@ -568,6 +568,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>API Tersuai</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>Model PP-OCRv6 tidak tersedia</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Muat turun model PP-OCRv6 '{0}' sebelum memilih enjin ini.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>Kunci API (Pilihan)</value>
   </data>

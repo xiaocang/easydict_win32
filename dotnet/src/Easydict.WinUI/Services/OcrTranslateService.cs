@@ -20,7 +20,7 @@ internal enum OcrFailureReason
 /// Orchestrates the OCR translation flow: Screenshot → OCR → Translate.
 /// All operations are asynchronous and non-blocking to the UI thread.
 /// </summary>
-public sealed class OcrTranslateService : IDisposable
+public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
 {
     private bool _disposed;
     private readonly ScreenCaptureService _captureService = new();
@@ -116,31 +116,41 @@ public sealed class OcrTranslateService : IDisposable
             {
                 var ocrOptions = OcrServiceOptions.FromSettings(SettingsService.Instance);
                 LogOcrDiagnostics(label, ocrOptions);
-                var ocrEngine = GetOcrEngine(ocrOptions);
-                if (!ocrEngine.IsAvailable)
+                var (ocrEngine, ownedByCaller) = await GetOcrEngineAsync(ocrOptions).ConfigureAwait(false);
+                try
                 {
-                    var message = $"[OcrTranslate] {label} OCR engine unavailable";
-                    Debug.WriteLine(message);
-                    CrashDiagnostics.Log(message);
-                    ReportFailure(OcrFailureReason.EngineUnavailable);
-                    return null;
+                    if (!ocrEngine.IsAvailable)
+                    {
+                        var message = $"[OcrTranslate] {label} OCR engine unavailable";
+                        Debug.WriteLine(message);
+                        CrashDiagnostics.Log(message);
+                        ReportFailure(OcrFailureReason.EngineUnavailable);
+                        return null;
+                    }
+
+                    var preferredLanguage = GetPreferredOcrLanguage();
+                    var ocrResult = await ocrEngine.RecognizeAsync(
+                        capture, preferredLanguage, cts.Token).ConfigureAwait(false);
+
+                    cts.Token.ThrowIfCancellationRequested();
+
+                    if (string.IsNullOrWhiteSpace(ocrResult.Text))
+                    {
+                        Debug.WriteLine($"[OcrTranslate] No text recognized ({label})");
+                        ReportFailure(OcrFailureReason.NoTextRecognized);
+                        return null;
+                    }
+
+                    Debug.WriteLine($"[OcrTranslate] {label}: {ocrResult.Text.Length} chars recognized");
+                    return ocrResult.Text;
                 }
-
-                var preferredLanguage = GetPreferredOcrLanguage();
-                var ocrResult = await ocrEngine.RecognizeAsync(
-                    capture, preferredLanguage, cts.Token).ConfigureAwait(false);
-
-                cts.Token.ThrowIfCancellationRequested();
-
-                if (string.IsNullOrWhiteSpace(ocrResult.Text))
+                finally
                 {
-                    Debug.WriteLine($"[OcrTranslate] No text recognized ({label})");
-                    ReportFailure(OcrFailureReason.NoTextRecognized);
-                    return null;
+                    if (ownedByCaller)
+                    {
+                        await DisposeAsync(ocrEngine).ConfigureAwait(false);
+                    }
                 }
-
-                Debug.WriteLine($"[OcrTranslate] {label}: {ocrResult.Text.Length} chars recognized");
-                return ocrResult.Text;
             }
         }
         catch (TimeoutException ex)
@@ -182,13 +192,13 @@ public sealed class OcrTranslateService : IDisposable
         }
     }
 
-    private IOcrService GetOcrEngine(OcrServiceOptions options)
+    private async Task<(IOcrService Engine, bool OwnedByCaller)> GetOcrEngineAsync(OcrServiceOptions options)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (options.Engine != OcrEngineType.PpOcrV6)
         {
-            DisposePpOcrV6Client();
-            return OcrServiceFactory.Create(options);
+            await DisposePpOcrV6ClientAsync().ConfigureAwait(false);
+            return (OcrServiceFactory.Create(options), true);
         }
 
         var settings = SettingsService.Instance;
@@ -202,7 +212,7 @@ public sealed class OcrTranslateService : IDisposable
             settings.PpOcrV6AllowFallback);
         if (_ppOcrV6Client is null || _ppOcrV6ClientKey != key)
         {
-            DisposePpOcrV6Client();
+            await DisposePpOcrV6ClientAsync().ConfigureAwait(false);
             _ppOcrV6Client = new OcrWorkerClient(
                 settings,
                 new WindowsOcrService(),
@@ -214,12 +224,24 @@ public sealed class OcrTranslateService : IDisposable
             _ppOcrV6ClientKey = key;
         }
 
-        return _ppOcrV6Client;
+        return (_ppOcrV6Client, false);
+    }
+
+    private static async ValueTask DisposeAsync(IOcrService service)
+    {
+        if (service is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            (service as IDisposable)?.Dispose();
+        }
     }
 
     internal async Task ReleasePpOcrV6ModelAsync(string modelId)
     {
-        if (_ppOcrV6ClientKey?.ModelId != modelId)
+        if (_disposed || _ppOcrV6ClientKey?.ModelId != modelId)
         {
             return;
         }
@@ -239,7 +261,7 @@ public sealed class OcrTranslateService : IDisposable
 
         try
         {
-            DisposePpOcrV6Client();
+            await DisposePpOcrV6ClientAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -252,6 +274,16 @@ public sealed class OcrTranslateService : IDisposable
         _ppOcrV6Client?.Dispose();
         _ppOcrV6Client = null;
         _ppOcrV6ClientKey = null;
+    }
+
+    private async ValueTask DisposePpOcrV6ClientAsync()
+    {
+        var client = Interlocked.Exchange(ref _ppOcrV6Client, null);
+        _ppOcrV6ClientKey = null;
+        if (client is not null)
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     public void Dispose()
@@ -271,22 +303,35 @@ public sealed class OcrTranslateService : IDisposable
         {
         }
 
-        if (_ocrPipelineLock.Wait(TimeSpan.FromSeconds(5)))
-        {
-            try
-            {
-                DisposePpOcrV6Client();
-            }
-            finally
-            {
-                _ocrPipelineLock.Release();
-                _ocrPipelineLock.Dispose();
-            }
+        DisposePpOcrV6Client();
+    }
 
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
             return;
         }
 
-        DisposePpOcrV6Client();
+        _disposed = true;
+        var cts = Interlocked.Exchange(ref _currentCts, null);
+        try
+        {
+            cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        await _ocrPipelineLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await DisposePpOcrV6ClientAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _ocrPipelineLock.Release();
+        }
     }
 
     private readonly record struct PpOcrV6ClientKey(

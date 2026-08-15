@@ -331,6 +331,7 @@ public sealed class SettingsService
     public string? OcrApiKey { get; set; }
     public string OcrEndpoint { get; set; } = OcrServiceOptions.DefaultEndpoint;
     public string OcrModel { get; set; } = OcrServiceOptions.DefaultModel;
+    public string PpOcrV6ModelId { get; set; } = PpOcrV6ModelCatalog.SmallId;
     public string OcrSystemPrompt { get; set; } = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
 
     /// <summary>
@@ -821,6 +822,18 @@ public sealed class SettingsService
         OcrApiKey = GetSensitiveSetting(nameof(OcrApiKey));
         OcrEndpoint = GetValue(nameof(OcrEndpoint), OcrServiceOptions.DefaultEndpoint);
         OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
+        var legacyPpOcrV6Model = PpOcrV6ModelCatalog.TryGet(OcrModel, out _)
+            ? OcrModel
+            : PpOcrV6ModelCatalog.SmallId;
+        PpOcrV6ModelId = GetValue(nameof(PpOcrV6ModelId), legacyPpOcrV6Model);
+        if (!PpOcrV6ModelCatalog.TryGet(PpOcrV6ModelId, out _))
+        {
+            PpOcrV6ModelId = PpOcrV6ModelCatalog.SmallId;
+        }
+        if (PpOcrV6ModelCatalog.TryGet(OcrModel, out _))
+        {
+            OcrModel = OcrServiceOptions.DefaultModel;
+        }
         OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
         OcrEnableThinking = GetValue(nameof(OcrEnableThinking), false);
         PpOcrV6ThreadCount = Math.Clamp(
@@ -1088,6 +1101,9 @@ public sealed class SettingsService
         SaveSensitiveSetting(nameof(OcrApiKey), OcrApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(OcrEndpoint)] = OcrEndpoint;
         _settings[nameof(OcrModel)] = OcrModel;
+        _settings[nameof(PpOcrV6ModelId)] = PpOcrV6ModelCatalog.TryGet(PpOcrV6ModelId, out _)
+            ? PpOcrV6ModelId
+            : PpOcrV6ModelCatalog.SmallId;
         _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
         _settings[nameof(OcrEnableThinking)] = OcrEnableThinking;
         _settings[nameof(PpOcrV6ThreadCount)] = Math.Clamp(

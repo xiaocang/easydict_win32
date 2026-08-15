@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace Easydict.SidecarClient.Protocol;
 
 public enum PpOcrV6ModelState
@@ -88,41 +86,6 @@ public sealed class PpOcrV6ModelStore
         return PpOcrV6ModelState.Installed;
     }
 
-    public async Task<PpOcrV6ModelState> ValidateAsync(
-        string modelId,
-        CancellationToken cancellationToken = default)
-    {
-        var presence = GetStateByPresence(modelId);
-        if (presence != PpOcrV6ModelState.Installed)
-        {
-            return presence;
-        }
-
-        var model = PpOcrV6ModelCatalog.Get(modelId);
-        var paths = GetPaths(modelId);
-        foreach (var artifact in model.Artifacts)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var path = Path.Combine(paths.Directory, artifact.FileName);
-            var info = new FileInfo(path);
-            if (info.Length != artifact.SizeBytes)
-            {
-                return PpOcrV6ModelState.Invalid;
-            }
-
-            await using var stream = File.OpenRead(path);
-            using var sha = SHA256.Create();
-            var hash = Convert.ToHexString(
-                await sha.ComputeHashAsync(stream, cancellationToken)).ToLowerInvariant();
-            if (!string.Equals(hash, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
-            {
-                return PpOcrV6ModelState.Invalid;
-            }
-        }
-
-        return PpOcrV6ModelState.Installed;
-    }
-
     public void PrepareRoot()
     {
         Directory.CreateDirectory(RootDirectory);
@@ -135,10 +98,13 @@ public sealed class PpOcrV6ModelStore
         {
             File.Delete(paths.CompletionSentinel);
         }
-        catch (FileNotFoundException)
+        catch (DirectoryNotFoundException)
         {
         }
-        catch (DirectoryNotFoundException)
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
         {
         }
     }

@@ -186,13 +186,15 @@ internal static class Program
             {
                 throw;
             }
-            catch (OnnxRuntimeException)
+            catch (OnnxRuntimeException ex)
             {
                 if (ReferenceEquals(_ppOcrV6Pipeline, pipeline))
                 {
                     DisposePpOcrV6Pipeline();
                 }
-                throw;
+                throw new PpOcrV6ModelException(
+                    WorkerErrorCodes.InferenceError,
+                    $"PP-OCRv6 inference failed: {ex.Message}");
             }
         }
 

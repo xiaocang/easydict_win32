@@ -23,10 +23,12 @@ public sealed class ModelDownloadClient : IDisposable
     private static readonly TimeSpan SourceProbeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly HttpClient _httpClient;
+    private readonly bool _ownsHttpClient;
     private bool _disposed;
 
     public ModelDownloadClient(HttpClient? httpClient = null)
     {
+        _ownsHttpClient = httpClient is null;
         _httpClient = httpClient ?? CreateProxyAwareHttpClient();
     }
 
@@ -225,6 +227,9 @@ public sealed class ModelDownloadClient : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _httpClient.Dispose();
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
     }
 }

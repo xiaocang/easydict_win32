@@ -30,8 +30,8 @@ public sealed partial class SettingsPage
                 });
             }
 
-            var selectedModel = PpOcrV6ModelCatalog.TryGet(_settings.OcrModel, out _)
-                ? _settings.OcrModel
+            var selectedModel = PpOcrV6ModelCatalog.TryGet(_settings.PpOcrV6ModelId, out _)
+                ? _settings.PpOcrV6ModelId
                 : PpOcrV6ModelCatalog.SmallId;
             SelectComboByTag(PpOcrV6ModelCombo, selectedModel);
             PpOcrV6ThreadCountBox.Value = Math.Clamp(
@@ -47,7 +47,8 @@ public sealed partial class SettingsPage
             _ppOcrV6UiLoading = false;
         }
 
-        UpdatePpOcrV6ModelUi();
+        PpOcrV6ThreadCountBox.Minimum = PpOcrV6ModelCatalog.MinThreadCount;
+        PpOcrV6ThreadCountBox.Maximum = PpOcrV6ModelCatalog.MaxThreadCount;
     }
 
     private string GetSelectedPpOcrV6ModelId()
@@ -71,15 +72,15 @@ public sealed partial class SettingsPage
         PpOcrV6ModelStatusText.Text = "Checking model...";
         PpOcrV6DownloadButton.Visibility = Visibility.Collapsed;
         var version = ++_ppOcrV6StatusVersion;
-        RefreshPpOcrV6ModelStatusAsync(modelId, version);
+        _ = RefreshPpOcrV6ModelStatusAsync(modelId, version);
     }
 
-    private void RefreshPpOcrV6ModelStatusAsync(string modelId, int version)
+    private async Task RefreshPpOcrV6ModelStatusAsync(string modelId, int version)
     {
         PpOcrV6ModelState state;
         try
         {
-            state = new PpOcrV6ModelStore().GetStateBySize(modelId);
+            state = await Task.Run(() => _ppOcrV6ModelStore.GetStateBySize(modelId)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -145,7 +146,7 @@ public sealed partial class SettingsPage
         }
 
         var modelId = GetSelectedPpOcrV6ModelId();
-        if (new PpOcrV6ModelStore().GetStateBySize(modelId) == PpOcrV6ModelState.Installed)
+        if (_ppOcrV6ModelStore.GetStateBySize(modelId) == PpOcrV6ModelState.Installed)
         {
             await RemovePpOcrV6ModelAsync(modelId);
             return;
@@ -197,10 +198,6 @@ public sealed partial class SettingsPage
                 throw new InvalidDataException("PP-OCRv6 model did not pass final integrity validation.");
             }
 
-            if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
-            {
-                _settings.OcrModel = modelId;
-            }
             OnSettingChanged(sender, e);
         }
         catch (OperationCanceledException)
@@ -287,7 +284,7 @@ public sealed partial class SettingsPage
             }
 
             using (capture)
-            using (var ocr = new OcrWorkerClient(
+            await using (var ocr = new OcrWorkerClient(
                        SettingsService.Instance,
                        new WindowsOcrService(),
                        OcrEngineType.PpOcrV6,
@@ -333,9 +330,9 @@ public sealed partial class SettingsPage
         if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
         {
             var modelId = GetSelectedPpOcrV6ModelId();
-            if (new PpOcrV6ModelStore().GetStateBySize(modelId) == PpOcrV6ModelState.Installed)
+            if (_ppOcrV6ModelStore.GetStateBySize(modelId) == PpOcrV6ModelState.Installed)
             {
-                _settings.OcrModel = modelId;
+                _settings.PpOcrV6ModelId = modelId;
             }
         }
         _settings.PpOcrV6ThreadCount = GetPpOcrV6ThreadCount();
@@ -346,7 +343,7 @@ public sealed partial class SettingsPage
     private bool PpOcrV6SettingsDifferFromSettings()
     {
         return GetSelectedOcrEngine() == OcrEngineType.PpOcrV6
-            && (!string.Equals(GetSelectedPpOcrV6ModelId(), _settings.OcrModel, StringComparison.Ordinal)
+            && (!string.Equals(GetSelectedPpOcrV6ModelId(), _settings.PpOcrV6ModelId, StringComparison.Ordinal)
                 || GetPpOcrV6ThreadCount() != _settings.PpOcrV6ThreadCount
                 || PpOcrV6GpuToggle.IsOn != _settings.PpOcrV6UseGpu
                 || PpOcrV6FallbackToggle.IsOn != _settings.PpOcrV6AllowFallback);

@@ -982,6 +982,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>API Tùy chỉnh</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>Mô hình PP-OCRv6 không khả dụng</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Hãy tải mô hình PP-OCRv6 '{0}' xuống trước khi chọn công cụ này.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>Khóa API (Tùy chọn)</value>
   </data>

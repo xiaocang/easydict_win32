@@ -1098,6 +1098,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>Benutzerdefinierte API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6-Modell nicht verfügbar</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Laden Sie das PP-OCRv6-Modell „{0}“ herunter, bevor Sie diese Engine auswählen.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API-Schlüssel (optional)</value>
   </data>

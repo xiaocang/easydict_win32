@@ -188,6 +188,7 @@ public sealed partial class SettingsPage : Page
 #endif
     };
     private readonly SettingsService _settings = SettingsService.Instance;
+    private readonly PpOcrV6ModelStore _ppOcrV6ModelStore = new();
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _isInitialized;
     private bool _isUnloaded;
@@ -2865,7 +2866,7 @@ public sealed partial class SettingsPage : Page
         return ocrOptions.Engine != _settings.OcrEngine
             || !SameSetting(ocrOptions.ApiKey, _settings.OcrApiKey)
             || !SameSetting(ocrOptions.Endpoint, _settings.OcrEndpoint)
-            || !SameSetting(ocrOptions.Model, _settings.OcrModel)
+            || (ocrOptions.Engine != OcrEngineType.PpOcrV6 && !SameSetting(ocrOptions.Model, _settings.OcrModel))
             || !SameSetting(ocrOptions.SystemPrompt, _settings.OcrSystemPrompt)
             || ocrOptions.EnableThinking != _settings.OcrEnableThinking
             || PpOcrV6SettingsDifferFromSettings()
@@ -3152,7 +3153,9 @@ public sealed partial class SettingsPage : Page
             SelectComboByTag(OcrEngineCombo, _settings.OcrEngine.ToString());
             OcrApiKeyBox.Password = _settings.OcrApiKey ?? string.Empty;
             OcrEndpointBox.Text = _settings.OcrEndpoint;
-            OcrModelBox.Text = _settings.OcrModel;
+            OcrModelBox.Text = PpOcrV6ModelCatalog.TryGet(_settings.OcrModel, out _)
+                ? OcrServiceOptions.DefaultModel
+                : _settings.OcrModel;
             OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
             OcrEnableThinkingToggle.IsOn = _settings.OcrEnableThinking;
             InitializePpOcrV6Settings();
@@ -3965,7 +3968,9 @@ public sealed partial class SettingsPage : Page
             engine,
             OcrApiKeyBox.Password,
             OcrEndpointBox.Text,
-            OcrModelBox.Text,
+            engine == OcrEngineType.PpOcrV6
+                ? GetSelectedPpOcrV6ModelId()
+                : OcrModelBox.Text,
             OcrSystemPromptBox.Text,
             OcrEnableThinkingToggle.IsOn);
     }
@@ -4287,12 +4292,12 @@ public sealed partial class SettingsPage : Page
         if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
         {
             var modelId = GetSelectedPpOcrV6ModelId();
-            if (new PpOcrV6ModelStore().GetStateBySize(modelId) != PpOcrV6ModelState.Installed)
+            if (await Task.Run(() => _ppOcrV6ModelStore.GetStateBySize(modelId)) != PpOcrV6ModelState.Installed)
             {
                 var errorDialog = new ContentDialog
                 {
-                    Title = "PP-OCRv6 model unavailable",
-                    Content = $"Download the PP-OCRv6 model '{modelId}' before selecting this engine.",
+                    Title = loc.GetString("PpOcrV6ModelUnavailableTitle"),
+                    Content = loc.GetString("PpOcrV6ModelUnavailableMessage", modelId),
                     CloseButtonText = loc.GetString("OK"),
                     XamlRoot = this.XamlRoot
                 };
@@ -4410,9 +4415,10 @@ public sealed partial class SettingsPage : Page
         _settings.OcrEngine = ocrOptions.Engine;
         _settings.OcrApiKey = ocrOptions.ApiKey;
         _settings.OcrEndpoint = ocrOptions.Endpoint;
-        _settings.OcrModel = ocrOptions.Engine == OcrEngineType.PpOcrV6
-            ? GetSelectedPpOcrV6ModelId()
-            : ocrOptions.Model;
+        if (ocrOptions.Engine != OcrEngineType.PpOcrV6)
+        {
+            _settings.OcrModel = ocrOptions.Model;
+        }
         _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
         _settings.OcrEnableThinking = ocrOptions.EnableThinking;
         SavePpOcrV6Settings();
@@ -4787,19 +4793,33 @@ public sealed partial class SettingsPage : Page
                     ProxyUriBox.Text,
                     ProxyBypassLocalToggle.IsOn);
                 var ocrEngine = OcrServiceFactory.Create(GetCurrentOcrServiceOptions(), httpClient);
-                var result = await ocrEngine.RecognizeAsync(capture, null, CancellationToken.None);
-
-                DispatcherQueue.TryEnqueue(() =>
+                try
                 {
-                    if (string.IsNullOrWhiteSpace(result.Text))
+                    var result = await ocrEngine.RecognizeAsync(capture, null, CancellationToken.None);
+
+                    DispatcherQueue.TryEnqueue(() =>
                     {
-                        OcrTestStatusBox.Text = "Success: Image processed, but no text was recognized.";
+                        if (string.IsNullOrWhiteSpace(result.Text))
+                        {
+                            OcrTestStatusBox.Text = "Success: Image processed, but no text was recognized.";
+                        }
+                        else
+                        {
+                            OcrTestStatusBox.Text = result.Text;
+                        }
+                    });
+                }
+                finally
+                {
+                    if (ocrEngine is IAsyncDisposable asyncDisposable)
+                    {
+                        await asyncDisposable.DisposeAsync();
                     }
                     else
                     {
-                        OcrTestStatusBox.Text = result.Text;
+                        (ocrEngine as IDisposable)?.Dispose();
                     }
-                });
+                }
             }
         }
         catch (Exception ex)

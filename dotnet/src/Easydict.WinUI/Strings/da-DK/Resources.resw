@@ -568,6 +568,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>Brugerdefineret API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6-modellen er ikke tilgængelig</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Download PP-OCRv6-modellen '{0}', før du vælger denne motor.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API-nøgle (valgfri)</value>
   </data>

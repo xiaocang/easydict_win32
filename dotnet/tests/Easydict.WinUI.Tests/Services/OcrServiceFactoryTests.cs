@@ -169,10 +169,51 @@ public class OcrServiceFactoryTests
         {
             model.DownloadSizeBytes.Should().Be(model.Artifacts.Sum(artifact => artifact.SizeBytes));
             model.Languages.Should().NotBeEmpty();
-            model.Artifacts.Should().OnlyContain(artifact =>
-                artifact.SizeBytes > 0
-                && artifact.Sha256.Length == 64
-                && artifact.Sha256.All(Uri.IsHexDigit));
+            model.Artifacts.Select(artifact => artifact.FileName)
+                .Should().Equal(
+                    PpOcrV6ModelStore.DetectorModelFileName,
+                    PpOcrV6ModelStore.DetectorConfigFileName,
+                    PpOcrV6ModelStore.RecognizerModelFileName,
+                    PpOcrV6ModelStore.RecognizerConfigFileName);
+            model.Artifacts.Should().OnlyContain(artifact => artifact.SizeBytes > 0);
+
+            foreach (var artifact in model.Artifacts)
+            {
+                var isDetector = artifact.FileName.StartsWith("det.", StringComparison.Ordinal);
+                var modelName = isDetector ? model.DetectorModelName : model.RecognizerModelName;
+                var remoteName = artifact.FileName.EndsWith(".onnx", StringComparison.Ordinal)
+                    ? "inference.onnx"
+                    : "inference.yml";
+                artifact.Url.Should().Contain($"/{modelName}_onnx/");
+                artifact.Url.Should().EndWith($"/{remoteName}");
+            }
+
+            model.Artifacts.Select(artifact => artifact.Url).Should().OnlyHaveUniqueItems();
+        }
+    }
+
+    [Fact]
+    public void OcrServiceOptions_UsesDedicatedPpOcrV6ModelSetting()
+    {
+        var originalEngine = _settings.OcrEngine;
+        var originalModel = _settings.OcrModel;
+        var originalPpModel = _settings.PpOcrV6ModelId;
+        try
+        {
+            _settings.OcrEngine = OcrEngineType.PpOcrV6;
+            _settings.OcrModel = "custom-api-model";
+            _settings.PpOcrV6ModelId = PpOcrV6ModelCatalog.TinyId;
+
+            OcrServiceOptions.FromSettings(_settings).Model.Should().Be(PpOcrV6ModelCatalog.TinyId);
+
+            _settings.OcrEngine = OcrEngineType.CustomApi;
+            OcrServiceOptions.FromSettings(_settings).Model.Should().Be("custom-api-model");
+        }
+        finally
+        {
+            _settings.OcrEngine = originalEngine;
+            _settings.OcrModel = originalModel;
+            _settings.PpOcrV6ModelId = originalPpModel;
         }
     }
 
@@ -226,6 +267,8 @@ public class OcrServiceFactoryTests
             {
                 using var stream = File.Create(Path.Combine(paths.Directory, artifact.FileName));
                 stream.SetLength(artifact.SizeBytes);
+                stream.Position = 0;
+                stream.WriteByte(0xA5);
             }
 
             store.GetStateBySize(PpOcrV6ModelCatalog.TinyId).Should().Be(PpOcrV6ModelState.Installed);
@@ -260,6 +303,20 @@ public class OcrServiceFactoryTests
 
         OcrTranslateService.FormatEndpointForDiagnostics(options)
             .Should().Be("<redacted>");
+    }
+
+    [Fact]
+    public void ModelDownloadClient_DoesNotDisposeInjectedHttpClient()
+    {
+        using var handler = new RecordingHttpMessageHandler();
+        using var httpClient = new HttpClient(handler);
+        using (var downloadClient = new ModelDownloadClient(httpClient))
+        {
+        }
+
+        var act = () => httpClient.DefaultRequestHeaders.Add("X-Test", "still-alive");
+
+        act.Should().NotThrow();
     }
 
     [Fact]

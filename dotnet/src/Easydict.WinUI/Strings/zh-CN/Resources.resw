@@ -1218,6 +1218,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>自定义 API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6 模型不可用</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>选择此引擎前请先下载 PP-OCRv6 模型“{0}”。</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API 密钥（可选）</value>
   </data>

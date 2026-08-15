@@ -1,3 +1,4 @@
+using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService;
 using Easydict.WindowsAI;
 using Easydict.WinUI.Models;
@@ -949,6 +950,7 @@ public class SettingsServiceTests
         var originalEngine = _settings.OcrEngine;
         var originalEndpoint = _settings.OcrEndpoint;
         var originalModel = _settings.OcrModel;
+        var originalPpModel = _settings.PpOcrV6ModelId;
         var originalPrompt = _settings.OcrSystemPrompt;
         var originalEnableThinking = _settings.OcrEnableThinking;
 
@@ -957,6 +959,7 @@ public class SettingsServiceTests
             _settings.OcrEngine = OcrEngineType.Ollama;
             _settings.OcrEndpoint = "http://test.local/ocr";
             _settings.OcrModel = "test-model";
+            _settings.PpOcrV6ModelId = PpOcrV6ModelCatalog.MediumId;
             _settings.OcrSystemPrompt = "Extract test text.";
             _settings.OcrEnableThinking = true;
             _settings.Save();
@@ -964,6 +967,7 @@ public class SettingsServiceTests
             _settings.OcrEngine.Should().Be(OcrEngineType.Ollama);
             _settings.OcrEndpoint.Should().Be("http://test.local/ocr");
             _settings.OcrModel.Should().Be("test-model");
+            _settings.PpOcrV6ModelId.Should().Be(PpOcrV6ModelCatalog.MediumId);
             _settings.OcrSystemPrompt.Should().Be("Extract test text.");
             _settings.OcrEnableThinking.Should().BeTrue();
         }
@@ -972,6 +976,7 @@ public class SettingsServiceTests
             _settings.OcrEngine = originalEngine;
             _settings.OcrEndpoint = originalEndpoint;
             _settings.OcrModel = originalModel;
+            _settings.PpOcrV6ModelId = originalPpModel;
             _settings.OcrSystemPrompt = originalPrompt;
             _settings.OcrEnableThinking = originalEnableThinking;
             _settings.Save();

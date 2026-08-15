@@ -664,15 +664,6 @@ namespace Easydict.WinUI
         // OcrTranslateService captures DispatcherQueue. Called from all OCR entry points
         // (hotkeys, tray menu, shell context menu signal, browser extension signal,
         // protocol activation).
-        internal static async Task ReleasePpOcrV6ModelAsync(string modelId)
-        {
-            var service = Instance._ocrTranslateService;
-            if (service is not null)
-            {
-                await service.ReleasePpOcrV6ModelAsync(modelId).ConfigureAwait(false);
-            }
-        }
-
         private OcrTranslateService? EnsureOcrTranslateService()
         {
             if (_ocrTranslateService != null) return _ocrTranslateService;
@@ -688,6 +679,15 @@ namespace Easydict.WinUI
                 System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService lazy init failed: {ex}");
             }
             return _ocrTranslateService;
+        }
+
+        internal static async Task ReleasePpOcrV6ModelAsync(string modelId)
+        {
+            var service = Instance._ocrTranslateService;
+            if (service is not null)
+            {
+                await service.ReleasePpOcrV6ModelAsync(modelId).ConfigureAwait(false);
+            }
         }
 
         private async void ShowOcrFailureDialog(OcrFailureReason reason)
@@ -1254,6 +1254,11 @@ namespace Easydict.WinUI
 
         public static void CleanupServices()
         {
+            _ = CleanupServicesAsync();
+        }
+
+        public static async Task CleanupServicesAsync()
+        {
             var app = Instance;
 
             // Dispose OCR signal event first — this unblocks the listener thread's WaitOne()
@@ -1273,8 +1278,13 @@ namespace Easydict.WinUI
             app._clipboardService?.Dispose();
             app._hotkeyService?.Dispose();
             app._trayIconService?.Dispose();
-            app._ocrTranslateService?.Dispose();
-            app._ocrTranslateService = null;
+
+            var ocrService = Interlocked.Exchange(ref app._ocrTranslateService, null);
+            if (ocrService is not null)
+            {
+                await ocrService.DisposeAsync().ConfigureAwait(false);
+            }
+
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
             TextToSpeechService.StopIfInitialized();
@@ -1498,7 +1508,7 @@ namespace Easydict.WinUI
                         _isSystemShutdownRequested = true;
                         CrashDiagnostics.Log(
                             $"[AppWindow] WM_ENDSESSION confirmed, reasonFlags=0x{unchecked((nuint)lParam):X}");
-                        _trayIconService?.ExitApplication();
+                        CleanupServices();
                         Environment.Exit(0);
 
                         return 0;

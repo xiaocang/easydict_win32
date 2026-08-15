@@ -305,9 +305,9 @@ internal sealed class PpOcrV6Pipeline : IDisposable
                 var sourceX = Math.Min(width - 1, (int)((x + 0.5) * width / inputWidth));
                 var source = (sourceY * width + sourceX) * 4;
                 var destination = y * inputWidth + x;
-                data[destination] = Normalize(pixels[source], 0);
+                data[destination] = Normalize(pixels[source + 2], 0);
                 data[channelSize + destination] = Normalize(pixels[source + 1], 1);
-                data[2 * channelSize + destination] = Normalize(pixels[source + 2], 2);
+                data[2 * channelSize + destination] = Normalize(pixels[source], 2);
             }
         }
 
@@ -335,7 +335,7 @@ internal sealed class PpOcrV6Pipeline : IDisposable
         int inputWidth,
         int inputHeight)
     {
-        var mapHeight = shape.Length >= 4 ? shape[^2] : shape.Length == 3 ? shape[^2] : 0;
+        var mapHeight = shape.Length >= 3 ? shape[^2] : 0;
         var mapWidth = shape.Length >= 3 ? shape[^1] : 0;
         if (mapHeight <= 0 || mapWidth <= 0 || output.Length < mapHeight * mapWidth)
         {

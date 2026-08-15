@@ -936,6 +936,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>API ที่กำหนดเอง</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>ไม่พบโมเดล PP-OCRv6</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>ดาวน์โหลดโมเดล PP-OCRv6 '{0}' ก่อนเลือกเครื่องมือนี้</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>คีย์ API (ไม่บังคับ)</value>
   </data>

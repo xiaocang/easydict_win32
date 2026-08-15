@@ -2525,8 +2525,6 @@
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                     <NumberBox x:Name="PpOcrV6ThreadCountBox"
                                             Header="CPU Threads"
-                                            Minimum="1"
-                                            Maximum="16"
                                             SpinButtonPlacementMode="Inline"
                                             ValueChanged="OnPpOcrV6SettingChanged"
                                             Width="180"/>

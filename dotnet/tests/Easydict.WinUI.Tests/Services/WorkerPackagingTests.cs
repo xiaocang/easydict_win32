@@ -23,8 +23,9 @@ public sealed class WorkerPackagingTests
         workflow.Should().Contain("Easydict.Workers.LongDoc");
         workflow.Should().Contain("Easydict.Workers.LocalAi");
         workflow.Should().Contain("Easydict.Workers.Ocr");
-        workflow.Should().Contain("./publish/${{ matrix.platform }}/workers/ocr");
         workflow.Should().Contain("./publish-msix/${{ matrix.platform }}/workers/ocr");
+        workflow.Should().Contain("PublishWorkerOutputs");
+        workflow.Should().Contain("Verify portable workers present");
         workflow.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
     }
 
@@ -54,17 +55,32 @@ public sealed class WorkerPackagingTests
         makefile.Should().Contain("Easydict.Workers.LongDoc");
         makefile.Should().Contain("Easydict.Workers.LocalAi");
         makefile.Should().Contain("Easydict.Workers.Ocr");
-        makefile.Should().Contain("./publish/x64/workers/ocr");
-        makefile.Should().Contain("./publish/arm64/workers/ocr");
         makefile.Should().Contain("./publish-msix/x64/workers/ocr");
         makefile.Should().Contain("./publish-msix/arm64/workers/ocr");
         makefile.Should().Contain("./publish-msix/x64 -p:BuildWorkerOutputs=false");
+        makefile.Should().Contain("-p:PublishWorkerOutputs=false");
         makefile.Should().Contain("./publish-msix/arm64 -p:BuildWorkerOutputs=false");
+        makefile.Should().Contain("PublishWorkerOutputs");
+        makefile.Should().Contain("Workers are auto-published");
         makefile.Should().Contain("winapp package ./publish-msix/x64");
         makefile.Should().Contain("<Identity[^>]* Version=");
         makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
         makefile.Should().Contain("Worker settings default");
         makefile.Should().NotContain("UseLocalAiWorker default false");
+    }
+
+    [Fact]
+    public void WinuiCsproj_AutoPublishesWorkersOnPublishTarget()
+    {
+        var csprojPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Easydict.WinUI.csproj");
+        var csproj = File.ReadAllText(csprojPath);
+
+        csproj.Should().Contain("PublishWorkerOutputs");
+        csproj.Should().Contain("Target Name=\"PublishWorkerOutputs\"");
+        csproj.Should().Contain("AfterTargets=\"Publish\"");
+        csproj.Should().Contain("Target Name=\"ValidateWorkerPublish\"");
+        csproj.Should().Contain("workers\\ocr\\Easydict.Workers.Ocr.exe");
+        csproj.Should().Contain("WorkerPublishSelfContained");
     }
 
     [Fact]

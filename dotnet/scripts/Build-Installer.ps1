@@ -96,6 +96,17 @@ if (-not (Test-Path $mainExe)) {
     exit 1
 }
 
+if ($Platform -ne "x86") {
+    $missing = @()
+    foreach ($w in @("workers\ocr\Easydict.Workers.Ocr.exe", "workers\longdoc\Easydict.Workers.LongDoc.exe", "workers\localai\Easydict.Workers.LocalAi.exe")) {
+        if (-not (Test-Path (Join-Path $PublishDir $w))) { $missing += $w }
+    }
+    if ($missing.Count -gt 0) {
+        Write-Error "Worker(s) missing in PublishDir: $($missing -join ', '). Run dotnet publish Easydict.WinUI (which auto-publishes workers) or make publish-$Platform."
+        exit 1
+    }
+}
+
 # Create output directory
 $outputDir = Join-Path $SolutionDir "installer-output"
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null

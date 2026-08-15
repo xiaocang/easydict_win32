@@ -189,6 +189,8 @@
              in CI; otherwise test/release graphs can compile the same worker into the same
              obj path concurrently. Local dev keeps the default worker-copy behavior. -->
         <BuildWorkerOutputs Condition="'$(BuildWorkerOutputs)' == '' and '$(CI)' == 'true'">false</BuildWorkerOutputs>
+        <PublishWorkerOutputs Condition="'$(PublishWorkerOutputs)' == ''">true</PublishWorkerOutputs>
+        <WorkerPublishSelfContained Condition="'$(WorkerPublishSelfContained)' == ''">$(SelfContained)</WorkerPublishSelfContained>
         <!-- Release artifacts always ship the long-document worker, so do not also
              carry the in-process PDF/MuPDF/PdfPig implementation in the host. Debug
              keeps it for local diagnostics and unit-test coverage. Override with
@@ -392,19 +394,66 @@
                                      Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
         <_OcrWorkerFilesAnyCpu  Include="..\Easydict.Workers.Ocr\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
                                      Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
+        <_LongDocWorkerFilesPlatformX64 Include="..\Easydict.Workers.LongDoc\bin\x64\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                        Condition="'$(Platform)' == 'x64'" />
+        <_LocalAiWorkerFilesPlatformX64 Include="..\Easydict.Workers.LocalAi\bin\x64\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                        Condition="'$(Platform)' == 'x64'" />
+        <_OcrWorkerFilesPlatformX64 Include="..\Easydict.Workers.Ocr\bin\x64\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                    Condition="'$(Platform)' == 'x64'" />
       </ItemGroup>
-      <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu)"
-            DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
+      <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu);@(_LongDocWorkerFilesPlatformX64)"
+            DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesPlatformX64->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(_LongDocWorkerFilesPlatform)@(_LongDocWorkerFilesAnyCpu)' != ''" />
-      <Copy SourceFiles="@(_LocalAiWorkerFilesPlatform);@(_LocalAiWorkerFilesAnyCpu)"
-            DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
+            Condition="'@(_LongDocWorkerFilesPlatform)@(_LongDocWorkerFilesAnyCpu)@(_LongDocWorkerFilesPlatformX64)' != ''" />
+      <Copy SourceFiles="@(_LocalAiWorkerFilesPlatform);@(_LocalAiWorkerFilesAnyCpu);@(_LocalAiWorkerFilesPlatformX64)"
+            DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesPlatformX64->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)' != ''" />
-      <Copy SourceFiles="@(_OcrWorkerFilesPlatform);@(_OcrWorkerFilesAnyCpu)"
-            DestinationFiles="@(_OcrWorkerFilesPlatform->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesAnyCpu->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)')"
+            Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)@(_LocalAiWorkerFilesPlatformX64)' != ''" />
+      <Copy SourceFiles="@(_OcrWorkerFilesPlatform);@(_OcrWorkerFilesAnyCpu);@(_OcrWorkerFilesPlatformX64)"
+            DestinationFiles="@(_OcrWorkerFilesPlatform->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesAnyCpu->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesPlatformX64->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(_OcrWorkerFilesPlatform)@(_OcrWorkerFilesAnyCpu)' != ''" />
+            Condition="'@(_OcrWorkerFilesPlatform)@(_OcrWorkerFilesAnyCpu)@(_OcrWorkerFilesPlatformX64)' != ''" />
+    </Target>
+
+    <PropertyGroup>
+      <_WorkerRid Condition="'$(RuntimeIdentifier)' != '' and $(RuntimeIdentifier.Contains('win-'))">$(RuntimeIdentifier)</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'x64'">win-x64</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'X64'">win-x64</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'x86'">win-x86</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'X86'">win-x86</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and ('$(Platform)' == 'ARM64' OR '$(Platform)' == 'arm64' OR '$(Platform)' == 'Arm64')">win-arm64</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == ''">win-x64</_WorkerRid>
+      <_WorkerPublishArgs Condition="'$(WorkerPublishSelfContained)' == 'true'">--self-contained true</_WorkerPublishArgs>
+      <_WorkerPublishArgs Condition="'$(WorkerPublishSelfContained)' != 'true'">--self-contained false</_WorkerPublishArgs>
+      <_WorkerPublishPlatform Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'">$(Platform)</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(Platform)' == 'AnyCPU' OR '$(Platform)' == ''">x64</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(_WorkerPublishPlatform)' == 'X64'">x64</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(_WorkerPublishPlatform)' == 'X86'">x86</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(_WorkerPublishPlatform)' == 'ARM64' OR '$(_WorkerPublishPlatform)' == 'Arm64'">arm64</_WorkerPublishPlatform>
+    </PropertyGroup>
+
+    <Target Name="PublishWorkerOutputs"
+            AfterTargets="Publish"
+            Condition="'$(PublishWorkerOutputs)' == 'true' AND '$(PublishDir)' != '' AND '$(IsPublishable)' != 'false'">
+      <Message Importance="high" Text="[Workers] Publishing workers to $(PublishDir)workers\ (RID=$(_WorkerRid), SelfContained=$(WorkerPublishSelfContained), Platform=$(_WorkerPublishPlatform))" />
+      <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj&quot; --configuration $(Configuration) --runtime $(_WorkerRid) $(_WorkerPublishArgs) --output &quot;$(PublishDir)workers\longdoc&quot; -p:Platform=$(_WorkerPublishPlatform) -p:PublishReadyToRun=false"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj') and '$(_WorkerRid)' != 'win-x86'" />
+      <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj&quot; --configuration $(Configuration) --runtime $(_WorkerRid) $(_WorkerPublishArgs) --output &quot;$(PublishDir)workers\localai&quot; -p:Platform=$(_WorkerPublishPlatform) -p:PublishReadyToRun=false"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj') and '$(_WorkerRid)' != 'win-x86'" />
+      <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj&quot; --configuration $(Configuration) --runtime $(_WorkerRid) $(_WorkerPublishArgs) --output &quot;$(PublishDir)workers\ocr&quot; -p:Platform=$(_WorkerPublishPlatform) -p:PublishReadyToRun=false"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj') and '$(_WorkerRid)' != 'win-x86'" />
+      <Warning Condition="'$(_WorkerRid)' == 'win-x86'" Text="[Workers] win-x86 has no workers (MuPDF.NET/ORT lack stable x86 runtimes). Host will fall back to in-proc paths." />
+    </Target>
+
+    <Target Name="ValidateWorkerPublish"
+            AfterTargets="PublishWorkerOutputs"
+            Condition="'$(PublishWorkerOutputs)' == 'true' AND '$(PublishDir)' != '' AND '$(_WorkerRid)' != 'win-x86'">
+      <Error Condition="!Exists('$(PublishDir)workers\ocr\Easydict.Workers.Ocr.exe')"
+             Text="Worker publish failed: $(PublishDir)workers\ocr\Easydict.Workers.Ocr.exe not found. Check PublishWorkerOutputs. Disable with -p:PublishWorkerOutputs=false if intentional." />
+      <Error Condition="!Exists('$(PublishDir)workers\longdoc\Easydict.Workers.LongDoc.exe')"
+             Text="Worker publish failed: $(PublishDir)workers\longdoc\Easydict.Workers.LongDoc.exe not found." />
+      <Error Condition="!Exists('$(PublishDir)workers\localai\Easydict.Workers.LocalAi.exe')"
+             Text="Worker publish failed: $(PublishDir)workers\localai\Easydict.Workers.LocalAi.exe not found." />
     </Target>
 
     <!-- FlaUI for proper UI Automation text selection -->

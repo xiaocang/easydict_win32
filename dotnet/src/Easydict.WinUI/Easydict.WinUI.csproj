@@ -1,23 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- Workaround for `Payload contains two or more files with the same destination path 'onnxruntime.dll'`.
-         Both Intel.ML.OnnxRuntime.OpenVino 1.21.0 (referenced via Easydict.OpenVINO, needed for the
-         OpenVINO EP that targets NPU) and Microsoft.Windows.AI.MachineLearning 2.0.300 (transitive
-         from Microsoft.WindowsAppSDK 2.x — Windows ML's own ORT build with DirectML EP) ship
-         runtimes/win-x64/native/onnxruntime.dll. AppX packaging refuses the duplicate destination.
-         We keep the Intel-shipped runtime (it has the OpenVINO EP we actually use) and drop the
-         Microsoft.Windows.AI.MachineLearning native asset via a sweep across every collection the
-         publish / AppX pipeline pulls files from. -->
+    <!-- Workaround for duplicate runtimes/win-x64/native/onnxruntime.dll.
+
+         Root cause: WinUI references out-of-process worker executables via
+         ProjectReference (ReferenceOutputAssembly=false). Even with that flag,
+         their PackageReference closures flow transitively into WinUI's
+         project.assets.json and then into the WinUI publish graph:
+
+           Easydict.Workers.Ocr      -> Microsoft.ML.OnnxRuntime.DirectML 1.21.0
+           Easydict.Workers.LocalAi  -> Microsoft.ML.OnnxRuntime 1.21.0
+           Microsoft.WindowsAppSDK   -> Microsoft.Windows.AI.MachineLearning 2.0.300  (ORT+DirectML build)
+
+         All three ship runtimes/win-x64/native/onnxruntime.dll at the same
+         RelativePath, and the SDK's _HandleFileConflictsForPublish
+         (CheckForDuplicateItemMetadata on ResolvedFileToPublish.RelativePath)
+         trips NETSDK1152.
+
+         Workers publish independently into workers/{kind}/ via the Makefile
+         and the host loads ONNX only from the downloaded runtime dir or from
+         the worker process — WinUI itself never needs a bundled onnxruntime.dll.
+         So we collapse the duplicates to a single winner.
+
+         Why two targets: ComputeFilesToPublish *creates* ResolvedFileToPublish,
+         so a single target cannot both run before it (to handle
+         ReferenceCopyLocalPaths etc) and after it (to handle
+         ResolvedFileToPublish). DedupeOnnxRuntime runs before publish
+         materialization; DedupeOnnxRuntimeForPublish runs right between
+         ComputeFilesToPublish and _HandleFileConflictsForPublish. -->
     <Target Name="DedupeOnnxRuntime"
             AfterTargets="ResolveAssemblyReferences;ResolvePackageAssets;ResolveRuntimePackAssets;_ResolveCopyLocalAssetsForRuntimeDependencies"
             BeforeTargets="_CopyFilesMarkedCopyLocal;ComputeFilesToPublish;_ComputeResolvedFilesToPublishTypes;_GetPackagingOutputs;GenerateAppxPackageRecipe">
         <ItemGroup>
             <ReferenceCopyLocalPaths
                 Remove="@(ReferenceCopyLocalPaths)"
-                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
-                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
-            <ResolvedFileToPublish
-                Remove="@(ResolvedFileToPublish)"
                 Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
                            $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
             <RuntimeCopyLocalItems
@@ -40,6 +55,30 @@
                 Remove="@(PackagingOutputs)"
                 Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
                            $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="DedupeOnnxRuntimeForPublish"
+            AfterTargets="ComputeFilesToPublish"
+            BeforeTargets="_HandleFileConflictsForPublish">
+        <ItemGroup>
+            <_OnnxDupe Include="@(ResolvedFileToPublish)"
+                       Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll'" />
+            <_OnnxWinner Include="@(_OnnxDupe)" Condition="'%(_OnnxDupe.Identity)' != ''" />
+        </ItemGroup>
+        <PropertyGroup>
+            <_OnnxWinnerFullPath Condition="'@(_OnnxWinner)' != ''">%(_OnnxWinner.FullPath)</_OnnxWinnerFullPath>
+            <_OnnxWinnerFullPath Condition="'@(_OnnxWinner)' != ''">$([System.IO.Path]::GetFullPath('$(_OnnxWinnerFullPath)'))</_OnnxWinnerFullPath>
+        </PropertyGroup>
+        <ItemGroup Condition="'@(_OnnxWinner)' != ''">
+            <ResolvedFileToPublish
+                Remove="@(ResolvedFileToPublish)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant()) != $([System.String]::Copy('$(_OnnxWinnerFullPath)').ToLowerInvariant())" />
+            <_ResolvedCopyLocalPublishAssets
+                Remove="@(_ResolvedCopyLocalPublishAssets)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant()) != $([System.String]::Copy('$(_OnnxWinnerFullPath)').ToLowerInvariant())" />
         </ItemGroup>
     </Target>
 

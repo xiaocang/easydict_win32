@@ -210,7 +210,7 @@ public static class UITestHelper
         {
             return !element.IsOffscreen;
         }
-        catch (PropertyNotSupportedException)
+        catch (Exception ex) when (ex is PropertyNotSupportedException or TimeoutException or COMException)
         {
             return true;
         }
@@ -244,11 +244,10 @@ public static class UITestHelper
     /// </summary>
     public static TextBox? FindInputTextBox(Window window, TimeSpan? timeout = null)
     {
-        var inputBox = window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox()
-            ?? window.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox();
-        if (inputBox == null || inputBox.IsOffscreen)
+        var inputBox = FindByAutomationIdOrName(window, "InputTextBox")?.AsTextBox();
+        if (inputBox == null || !IsOnScreenOrUnknown(inputBox))
         {
-            var collapsed = window.FindFirstDescendant(cf => cf.ByAutomationId("SourceTextCollapsed"));
+            var collapsed = FindByAutomationIdOrName(window, "SourceTextCollapsed");
             if (collapsed != null)
             {
                 try { Mouse.Click(collapsed.GetClickablePoint()); } catch { /* ignore */ }
@@ -257,8 +256,7 @@ public static class UITestHelper
         }
 
         return Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox()
-                ?? window.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
+            () => FindByAutomationIdOrName(window, "InputTextBox")?.AsTextBox(),
             timeout ?? TimeSpan.FromSeconds(10)).Result;
     }
 

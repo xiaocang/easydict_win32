@@ -124,7 +124,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
-- **多种翻译服务**（21 种可用服务；Linguee 当前不可用）
+- **多种翻译服务**（22 种可用服务；Linguee 当前不可用）
   - Google 翻译（免费，无需 API Key）
   - Google 词典（丰富词典：音标、释义、例句）
   - 必应翻译（免费，无需 API Key）

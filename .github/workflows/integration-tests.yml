@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: 'Service to test (all, google, openai, deepl, deepseek, groq, zhipu, github-models, gemini, doubao, caiyun, niutrans, volcano, linguee, bing, youdao, phonetic, ocr)'
+        description: 'Service to test (all, google, openai, deepl, deepseek, groq, zhipu, kimi, github-models, gemini, doubao, caiyun, niutrans, volcano, linguee, bing, youdao, phonetic, ocr)'
         required: false
         default: 'all'
         type: choice
@@ -19,6 +19,7 @@ on:
           - deepseek
           - groq
           - zhipu
+          - kimi
           - github-models
           - gemini
           - doubao
@@ -89,6 +90,7 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
           CAIYUN_API_KEY: ${{ secrets.CAIYUN_API_KEY }}
           NIUTRANS_API_KEY: ${{ secrets.NIUTRANS_API_KEY }}
           DOUBAO_API_KEY: ${{ secrets.DOUBAO_API_KEY }}

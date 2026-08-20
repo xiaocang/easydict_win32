@@ -124,7 +124,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
-- **Multiple Translation Services** (21 available services; Linguee currently unavailable)
+- **Multiple Translation Services** (22 available services; Linguee currently unavailable)
   - Google Translate (free, no API key required)
   - Google Dict (rich dictionary: phonetics, definitions, examples)
   - Bing Translate (free, no API key required)

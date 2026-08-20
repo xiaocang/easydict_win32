@@ -20,6 +20,9 @@ internal static class ForegroundWindowHelper
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool AllowSetForegroundWindow(uint dwProcessId);
 
@@ -54,8 +57,16 @@ internal static class ForegroundWindowHelper
 
     private static void PrimeForegroundActivationContext(string owner)
     {
+        if (!ShouldPrimeForegroundActivation(GetAsyncKeyState(VkMenu)))
+        {
+            Debug.WriteLine($"[{owner}] Skipped foreground priming because ALT is physically held");
+            return;
+        }
+
         keybd_event(VkMenu, 0, KeyeventfExtendedkey, UIntPtr.Zero);
         keybd_event(VkMenu, 0, KeyeventfExtendedkey | KeyeventfKeyup, UIntPtr.Zero);
         Debug.WriteLine($"[{owner}] Primed foreground activation with keybd_event(VK_MENU)");
     }
+
+    internal static bool ShouldPrimeForegroundActivation(short altKeyState) => altKeyState >= 0;
 }

@@ -70,6 +70,8 @@ namespace Easydict.WinUI
         private Task? _shutdownCleanupTask;
         private bool _shutdownCleanupCompleted;
         private static int _pendingRedirectedOcrTranslate;
+        private int _miniWindowShowGeneration;
+        private int _fixedWindowShowGeneration;
 
         // IPC: named event for context menu --ocr-translate signaling
         private EventWaitHandle? _ocrSignalEvent;
@@ -520,16 +522,62 @@ namespace Easydict.WinUI
 
         private async void OnShowMiniWindowHotkey()
         {
+            var requestGeneration = HotkeyShowRequestTracker.Begin(ref _miniWindowShowGeneration);
             try
             {
+                // Toggle behavior (issue #194): like the main window hotkey (#123),
+                // pressing the hotkey while the mini window is foreground hides it.
+                // Checked before the selection-capture delay so closing is instant.
+                // WM_HOTKEY is dispatched on the UI thread, so it is safe to touch
+                // the window services directly here.
+                var mini = MiniWindowService.Instance;
+                if (mini.IsVisible && mini.IsForeground)
+                {
+                    mini.Hide();
+                    return;
+                }
+
+                // Create the window (hidden) on a separate dispatcher work item so
+                // first-show XAML inflation overlaps the selection-capture wait
+                // below instead of adding to it (issue #194: mini window slower
+                // to appear than the main window).
+                _window?.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (HotkeyShowRequestTracker.IsCurrent(
+                        ref _miniWindowShowGeneration,
+                        requestGeneration))
+                    {
+                        MiniWindowService.Instance.EnsureCreated();
+                    }
+                });
+
                 await Task.Delay(150);
+                if (!HotkeyShowRequestTracker.IsCurrent(
+                    ref _miniWindowShowGeneration,
+                    requestGeneration))
+                {
+                    return;
+                }
 
                 TextInsertionService.CaptureSourceWindow();
 
                 var text = await TextSelectionService.GetSelectedTextAsync();
+                if (!HotkeyShowRequestTracker.IsCurrent(
+                    ref _miniWindowShowGeneration,
+                    requestGeneration))
+                {
+                    return;
+                }
 
                 _window?.DispatcherQueue.TryEnqueue(() =>
                 {
+                    if (!HotkeyShowRequestTracker.IsCurrent(
+                        ref _miniWindowShowGeneration,
+                        requestGeneration))
+                    {
+                        return;
+                    }
+
                     if (!string.IsNullOrWhiteSpace(text))
                         MiniWindowService.Instance.ShowWithText(text);
                     else
@@ -544,16 +592,58 @@ namespace Easydict.WinUI
 
         private async void OnShowFixedWindowHotkey()
         {
+            var requestGeneration = HotkeyShowRequestTracker.Begin(ref _fixedWindowShowGeneration);
             try
             {
+                // Toggle behavior (issue #194): like the main window hotkey (#123),
+                // pressing the hotkey while the fixed window is foreground hides it.
+                // Checked before the selection-capture delay so closing is instant.
+                var fixedWindow = FixedWindowService.Instance;
+                if (fixedWindow.IsVisible && fixedWindow.IsForeground)
+                {
+                    fixedWindow.Hide();
+                    return;
+                }
+
+                // Create the window (hidden) on a separate dispatcher work item so
+                // first-show XAML inflation overlaps the selection-capture wait.
+                _window?.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (HotkeyShowRequestTracker.IsCurrent(
+                        ref _fixedWindowShowGeneration,
+                        requestGeneration))
+                    {
+                        FixedWindowService.Instance.EnsureCreated();
+                    }
+                });
+
                 await Task.Delay(150);
+                if (!HotkeyShowRequestTracker.IsCurrent(
+                    ref _fixedWindowShowGeneration,
+                    requestGeneration))
+                {
+                    return;
+                }
 
                 TextInsertionService.CaptureSourceWindow();
 
                 var text = await TextSelectionService.GetSelectedTextAsync();
+                if (!HotkeyShowRequestTracker.IsCurrent(
+                    ref _fixedWindowShowGeneration,
+                    requestGeneration))
+                {
+                    return;
+                }
 
                 _window?.DispatcherQueue.TryEnqueue(() =>
                 {
+                    if (!HotkeyShowRequestTracker.IsCurrent(
+                        ref _fixedWindowShowGeneration,
+                        requestGeneration))
+                    {
+                        return;
+                    }
+
                     if (!string.IsNullOrWhiteSpace(text))
                         FixedWindowService.Instance.ShowWithText(text);
                     else

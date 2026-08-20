@@ -92,8 +92,8 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 - **全局快捷键**
   - `Ctrl+Alt+T` - 显示/隐藏主窗口
   - `Ctrl+Alt+D` - 翻译剪贴板内容
-  - `Ctrl+Alt+M` - 显示迷你窗口（自动复制选中文本并翻译）
-  - `Ctrl+Alt+F` - 显示固定窗口
+  - `Ctrl+Alt+M` - 显示/隐藏迷你窗口（自动复制选中文本并翻译）
+  - `Ctrl+Alt+F` - 显示/隐藏固定窗口
   - `Ctrl+Alt+S` - OCR 截图翻译
   - `Ctrl+Alt+Shift+S` - 静默 OCR（复制识别文字到剪贴板）
   - `Ctrl+Alt+Shift+M` - 切换迷你窗口可见性

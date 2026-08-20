@@ -92,8 +92,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 - **Global Hotkeys**
   - `Ctrl+Alt+T` - Show/hide main window
   - `Ctrl+Alt+D` - Translate clipboard content
-  - `Ctrl+Alt+M` - Show mini window (copies selection and translates when available)
-  - `Ctrl+Alt+F` - Show fixed window
+  - `Ctrl+Alt+M` - Show/hide mini window (copies selection and translates when available)
+  - `Ctrl+Alt+F` - Show/hide fixed window
   - `Ctrl+Alt+S` - OCR screenshot translate
   - `Ctrl+Alt+Shift+S` - Silent OCR (copy recognized text to clipboard)
   - `Ctrl+Alt+Shift+M` - Toggle mini window visibility

@@ -73,6 +73,16 @@ public sealed class FixedWindowService : IDisposable
     }
 
     /// <summary>
+    /// Ensure the fixed window instance exists without showing it.
+    /// Lets callers pay the window-creation cost ahead of time (e.g. while
+    /// selection capture is still running) so the first Show is instant.
+    /// </summary>
+    public void EnsureCreated()
+    {
+        EnsureWindowCreated();
+    }
+
+    /// <summary>
     /// Show the fixed window, creating it if necessary.
     /// </summary>
     public void Show()

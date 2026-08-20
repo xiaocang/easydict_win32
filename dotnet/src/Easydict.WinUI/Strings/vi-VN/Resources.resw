@@ -982,6 +982,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>API Tùy chỉnh</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>Mô hình PP-OCRv6 không khả dụng</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Hãy tải mô hình PP-OCRv6 '{0}' xuống trước khi chọn công cụ này.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>Khóa API (Tùy chọn)</value>
   </data>
@@ -1418,4 +1424,35 @@
   </data>
   <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>Bản dựng gỡ lỗi · Bản phát hành mới nhất {0} · Xem bản cập nhật →</value></data>
   <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>Đã có phiên bản mới {0} · Xem bản cập nhật →</value></data>
+  <data name="PpOcrV6EngineLocal" xml:space="preserve"><value>PP-OCRv6 (Cục bộ)</value></data>
+  <data name="PpOcrV6ModelLabel" xml:space="preserve"><value>Mô hình PP-OCRv6</value></data>
+  <data name="PpOcrV6ModelTiny" xml:space="preserve"><value>PP-OCRv6 Siêu nhỏ</value></data>
+  <data name="PpOcrV6ModelSmall" xml:space="preserve"><value>PP-OCRv6 Nhỏ</value></data>
+  <data name="PpOcrV6ModelMedium" xml:space="preserve"><value>PP-OCRv6 Trung bình</value></data>
+  <data name="PpOcrV6DownloadSize" xml:space="preserve"><value>Tải xuống: {0:F1} MB</value></data>
+  <data name="PpOcrV6LanguageCount" xml:space="preserve"><value>Ngôn ngữ: {0}</value></data>
+  <data name="PpOcrV6StatusChecking" xml:space="preserve"><value>Đang kiểm tra mô hình...</value></data>
+  <data name="PpOcrV6StatusDownloaded" xml:space="preserve"><value>Đã tải xuống</value></data>
+  <data name="PpOcrV6ActionRemove" xml:space="preserve"><value>Xóa</value></data>
+  <data name="PpOcrV6StatusInvalid" xml:space="preserve"><value>Mô hình không hợp lệ — cần sửa chữa</value></data>
+  <data name="PpOcrV6ActionRepair" xml:space="preserve"><value>Sửa chữa</value></data>
+  <data name="PpOcrV6StatusNotDownloaded" xml:space="preserve"><value>Chưa tải xuống</value></data>
+  <data name="PpOcrV6ActionDownload" xml:space="preserve"><value>Tải xuống</value></data>
+  <data name="PpOcrV6StatusDownloading" xml:space="preserve"><value>Đang tải xuống...</value></data>
+  <data name="PpOcrV6DownloadFailedTitle" xml:space="preserve"><value>Tải PP-OCRv6 xuống không thành công</value></data>
+  <data name="PpOcrV6IntegrityValidationFailed" xml:space="preserve"><value>Mô hình PP-OCRv6 không vượt qua bước xác thực tính toàn vẹn cuối cùng.</value></data>
+  <data name="PpOcrV6RemoveTitle" xml:space="preserve"><value>Xóa mô hình PP-OCRv6</value></data>
+  <data name="PpOcrV6RemoveMessage" xml:space="preserve"><value>Xóa mô hình đã tải xuống '{0}'?</value></data>
+  <data name="PpOcrV6RemoveFailedTitle" xml:space="preserve"><value>Không thể xóa PP-OCRv6</value></data>
+  <data name="PpOcrV6CpuThreads" xml:space="preserve"><value>Luồng CPU</value></data>
+  <data name="PpOcrV6UseGpu" xml:space="preserve"><value>Sử dụng GPU (DirectML)</value></data>
+  <data name="PpOcrV6Fallback" xml:space="preserve"><value>Chuyển về Windows OCR</value></data>
+  <data name="PpOcrV6TestButton" xml:space="preserve"><value>Kiểm tra PP-OCRv6</value></data>
+  <data name="PpOcrV6TestSelectRegion" xml:space="preserve"><value>Chọn một vùng trên màn hình để kiểm tra PP-OCRv6...</value></data>
+  <data name="PpOcrV6TestCancelled" xml:space="preserve"><value>Đã hủy kiểm tra.</value></data>
+  <data name="PpOcrV6TestProcessingGpu" xml:space="preserve"><value>Đang xử lý bằng PP-OCRv6 GPU...</value></data>
+  <data name="PpOcrV6TestProcessingCpu" xml:space="preserve"><value>Đang xử lý bằng PP-OCRv6 CPU...</value></data>
+  <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Thành công: hình ảnh đã được xử lý nhưng không nhận dạng được văn bản.</value></data>
+  <data name="PpOcrV6TestError" xml:space="preserve"><value>[Lỗi] {0}</value></data>
+  <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
 </root>

@@ -26,31 +26,38 @@ public static class OcrServiceFactory
     /// Optional shared <see cref="HttpClient"/> for API-based engines.
     /// If null, a shared client with a 3-minute timeout is used.
     /// </param>
-    /// <returns>An <see cref="IOcrService"/> ready to recognize text.</returns>
+    /// <returns>An <see cref="IOcrService"/> ready to recognize text. The caller owns the returned service.</returns>
     public static IOcrService Create(OcrServiceOptions? options = null, HttpClient? httpClient = null)
     {
         var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);
-        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
 
-        if (SettingsService.Instance.UseOcrWorker && resolved.Engine == OcrEngineType.WindowsNative)
+        if (resolved.Engine == OcrEngineType.PpOcrV6
+            || (SettingsService.Instance.UseOcrWorker && resolved.Engine == OcrEngineType.WindowsNative))
         {
             return new Workers.OcrWorkerClient(
                 SettingsService.Instance,
-                CreateInProc(resolved, client));
+                new WindowsOcrService(),
+                resolved.Engine,
+                resolved.Model,
+                SettingsService.Instance.PpOcrV6ThreadCount,
+                SettingsService.Instance.PpOcrV6AllowFallback,
+                SettingsService.Instance.PpOcrV6UseGpu);
         }
 
-        return CreateInProc(resolved, client);
+        return CreateInProc(resolved, httpClient);
     }
 
     internal static IOcrService CreateInProc(OcrServiceOptions resolved, HttpClient? httpClient = null)
     {
-        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
-        return resolved.Engine switch
+        if (resolved.Engine is not (OcrEngineType.Ollama or OcrEngineType.CustomApi))
         {
-            OcrEngineType.Ollama => new OllamaOcrService(client, resolved),
-            OcrEngineType.CustomApi => new CustomApiOcrService(client, resolved),
-            _ => new WindowsOcrService()
-        };
+            return new WindowsOcrService();
+        }
+
+        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
+        return resolved.Engine == OcrEngineType.Ollama
+            ? new OllamaOcrService(client, resolved)
+            : new CustomApiOcrService(client, resolved);
     }
 
     internal static HttpClient CreateProxyAwareHttpClient(

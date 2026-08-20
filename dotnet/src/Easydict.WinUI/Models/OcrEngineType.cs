@@ -18,5 +18,10 @@ public enum OcrEngineType
     /// <summary>
     /// Use a custom OpenAI-compatible vision API.
     /// </summary>
-    CustomApi = 2
+    CustomApi = 2,
+
+    /// <summary>
+    /// Use the local PP-OCRv6 ONNX pipeline.
+    /// </summary>
+    PpOcrV6 = 3
 }

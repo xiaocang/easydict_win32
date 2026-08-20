@@ -1173,6 +1173,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>自訂 API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6 模型無法使用</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>選擇此引擎前請先下載 PP-OCRv6 模型「{0}」。</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API 金鑰（選填）</value>
   </data>
@@ -1423,4 +1429,35 @@
   </data>
   <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>偵錯組建 · 最新版本 {0} · 查看更新 →</value></data>
   <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>發現新版本 {0} · 查看更新 →</value></data>
+  <data name="PpOcrV6EngineLocal" xml:space="preserve"><value>PP-OCRv6（本機）</value></data>
+  <data name="PpOcrV6ModelLabel" xml:space="preserve"><value>PP-OCRv6 模型</value></data>
+  <data name="PpOcrV6ModelTiny" xml:space="preserve"><value>PP-OCRv6 微型</value></data>
+  <data name="PpOcrV6ModelSmall" xml:space="preserve"><value>PP-OCRv6 小型</value></data>
+  <data name="PpOcrV6ModelMedium" xml:space="preserve"><value>PP-OCRv6 中型</value></data>
+  <data name="PpOcrV6DownloadSize" xml:space="preserve"><value>下載：{0:F1} MB</value></data>
+  <data name="PpOcrV6LanguageCount" xml:space="preserve"><value>語言：{0}</value></data>
+  <data name="PpOcrV6StatusChecking" xml:space="preserve"><value>正在檢查模型...</value></data>
+  <data name="PpOcrV6StatusDownloaded" xml:space="preserve"><value>已下載</value></data>
+  <data name="PpOcrV6ActionRemove" xml:space="preserve"><value>移除</value></data>
+  <data name="PpOcrV6StatusInvalid" xml:space="preserve"><value>模型無效 — 需要修復</value></data>
+  <data name="PpOcrV6ActionRepair" xml:space="preserve"><value>修復</value></data>
+  <data name="PpOcrV6StatusNotDownloaded" xml:space="preserve"><value>尚未下載</value></data>
+  <data name="PpOcrV6ActionDownload" xml:space="preserve"><value>下載</value></data>
+  <data name="PpOcrV6StatusDownloading" xml:space="preserve"><value>正在下載...</value></data>
+  <data name="PpOcrV6DownloadFailedTitle" xml:space="preserve"><value>PP-OCRv6 下載失敗</value></data>
+  <data name="PpOcrV6IntegrityValidationFailed" xml:space="preserve"><value>PP-OCRv6 模型未通過最終完整性驗證。</value></data>
+  <data name="PpOcrV6RemoveTitle" xml:space="preserve"><value>移除 PP-OCRv6 模型</value></data>
+  <data name="PpOcrV6RemoveMessage" xml:space="preserve"><value>要移除已下載的模型 '{0}' 嗎？</value></data>
+  <data name="PpOcrV6RemoveFailedTitle" xml:space="preserve"><value>PP-OCRv6 移除失敗</value></data>
+  <data name="PpOcrV6CpuThreads" xml:space="preserve"><value>CPU 執行緒</value></data>
+  <data name="PpOcrV6UseGpu" xml:space="preserve"><value>使用 GPU (DirectML)</value></data>
+  <data name="PpOcrV6Fallback" xml:space="preserve"><value>回復使用 Windows OCR</value></data>
+  <data name="PpOcrV6TestButton" xml:space="preserve"><value>測試 PP-OCRv6</value></data>
+  <data name="PpOcrV6TestSelectRegion" xml:space="preserve"><value>請選取螢幕上的區域以測試 PP-OCRv6...</value></data>
+  <data name="PpOcrV6TestCancelled" xml:space="preserve"><value>測試已取消。</value></data>
+  <data name="PpOcrV6TestProcessingGpu" xml:space="preserve"><value>正在使用 PP-OCRv6 GPU 處理...</value></data>
+  <data name="PpOcrV6TestProcessingCpu" xml:space="preserve"><value>正在使用 PP-OCRv6 CPU 處理...</value></data>
+  <data name="PpOcrV6TestNoText" xml:space="preserve"><value>成功：影像已處理，但未辨識出文字。</value></data>
+  <data name="PpOcrV6TestError" xml:space="preserve"><value>[錯誤] {0}</value></data>
+  <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
 </root>

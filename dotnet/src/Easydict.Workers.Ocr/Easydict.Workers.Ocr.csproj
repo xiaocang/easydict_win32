@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.21.0" />
   </ItemGroup>
 
 </Project>

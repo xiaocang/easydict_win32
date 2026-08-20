@@ -111,7 +111,11 @@ jobs:
         working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }} -p:Configuration=Release -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
-      # Build and publish the application (portable: ZIP and EXE)
+      # Portable build: host auto-publishes workers via PublishWorkerOutputs (AfterTargets=Publish).
+      # This step intentionally does NOT set PublishWorkerOutputs=false so the worker EXEs
+      # land in ./publish/{arch}/workers/{kind}/ without needing separate worker steps.
+      # MSIX below still opts out (PublishWorkerOutputs=false) and publishes workers explicitly
+      # as framework-dependent with a shared dotnet runtime.
       - name: Publish WinUI App (portable)
         working-directory: dotnet
         run: |
@@ -127,6 +131,17 @@ jobs:
             -p:EnableInProcLongDocFallback=false `
             -p:EnableGitHubUpdateCheck=true `
             -p:PublishTrimmed=false
+
+      - name: Verify portable workers present
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          $missing = @()
+          foreach ($w in @("workers/ocr/Easydict.Workers.Ocr.exe","workers/longdoc/Easydict.Workers.LongDoc.exe","workers/localai/Easydict.Workers.LocalAi.exe")) {
+            if (-not (Test-Path "./publish/${{ matrix.platform }}/$w")) { $missing += $w }
+          }
+          if ($missing.Count -gt 0) { throw "Portable worker(s) missing: $($missing -join ', ')" }
+          Write-Host "Portable workers OK: workers/ocr, workers/longdoc, workers/localai"
 
       # Publish NativeBridge (for portable/Inno installer)
       - name: Publish NativeBridge
@@ -150,48 +165,10 @@ jobs:
             --output ./publish/${{ matrix.platform }} `
             -p:PublishTrimmed=true
 
-      # Publish LongDoc worker (out-of-process PDF + ONNX layout detection).
-      # Resolved by host via AppContext.BaseDirectory + "workers/longdoc/Easydict.Workers.LongDoc.exe".
-      # No trimming — MuPDF.NET and ONNX Runtime use reflection that breaks under IL trim.
-      # Portable artifacts ship outside the MSIX framework-dependency umbrella, so
-      # workers self-contain both .NET and WindowsAppSDK. The MSIX path below strips
-      # this back to a shared .NET 8 runtime via Extract-DotnetRuntime.ps1.
-      - name: Publish LongDoc Worker
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish/${{ matrix.platform }}/workers/longdoc `
-            -p:Platform=${{ matrix.platform }} `
-            -p:PublishTrimmed=false
-
-      - name: Publish LocalAi Worker
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish/${{ matrix.platform }}/workers/localai `
-            -p:Platform=${{ matrix.platform }} `
-            -p:PublishTrimmed=false
-
-      - name: Publish OCR Worker
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish/${{ matrix.platform }}/workers/ocr `
-            -p:Platform=${{ matrix.platform }} `
-            -p:PublishTrimmed=false
-
       # Publish again for MSIX without bundled Windows App SDK DLLs.
       # MSIX declares a framework package dependency (Microsoft.WindowsAppRuntime)
-      # so bundled DLLs are redundant and cause launch failures.
+      # so bundled DLLs are redundant and cause launch failures. Workers are handled
+      # explicitly below as framework-dependent, so suppress the portable auto-publish.
       - name: Publish WinUI App (MSIX)
         working-directory: dotnet
         run: |
@@ -204,6 +181,7 @@ jobs:
             -p:Version=${{ needs.prepare.outputs.BASE_VERSION }} `
             -p:Platform=${{ matrix.platform }} `
             -p:BuildWorkerOutputs=false `
+            -p:PublishWorkerOutputs=false `
             -p:EnableInProcLongDocFallback=false `
             -p:EnableGitHubUpdateCheck=false `
             -p:PublishTrimmed=false `

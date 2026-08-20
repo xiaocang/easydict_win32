@@ -1098,6 +1098,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>Benutzerdefinierte API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6-Modell nicht verfügbar</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Laden Sie das PP-OCRv6-Modell „{0}“ herunter, bevor Sie diese Engine auswählen.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API-Schlüssel (optional)</value>
   </data>
@@ -1423,4 +1429,35 @@
   </data>
   <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>Debugbuild · Neueste Version {0} · Update anzeigen →</value></data>
   <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>Neue Version {0} verfügbar · Update anzeigen →</value></data>
+  <data name="PpOcrV6EngineLocal" xml:space="preserve"><value>PP-OCRv6 (lokal)</value></data>
+  <data name="PpOcrV6ModelLabel" xml:space="preserve"><value>PP-OCRv6-Modell</value></data>
+  <data name="PpOcrV6ModelTiny" xml:space="preserve"><value>PP-OCRv6 Winzig</value></data>
+  <data name="PpOcrV6ModelSmall" xml:space="preserve"><value>PP-OCRv6 Klein</value></data>
+  <data name="PpOcrV6ModelMedium" xml:space="preserve"><value>PP-OCRv6 Mittel</value></data>
+  <data name="PpOcrV6DownloadSize" xml:space="preserve"><value>Download: {0:F1} MB</value></data>
+  <data name="PpOcrV6LanguageCount" xml:space="preserve"><value>Sprachen: {0}</value></data>
+  <data name="PpOcrV6StatusChecking" xml:space="preserve"><value>Modell wird überprüft...</value></data>
+  <data name="PpOcrV6StatusDownloaded" xml:space="preserve"><value>Heruntergeladen</value></data>
+  <data name="PpOcrV6ActionRemove" xml:space="preserve"><value>Entfernen</value></data>
+  <data name="PpOcrV6StatusInvalid" xml:space="preserve"><value>Modell ungültig — Reparatur erforderlich</value></data>
+  <data name="PpOcrV6ActionRepair" xml:space="preserve"><value>Reparieren</value></data>
+  <data name="PpOcrV6StatusNotDownloaded" xml:space="preserve"><value>Nicht heruntergeladen</value></data>
+  <data name="PpOcrV6ActionDownload" xml:space="preserve"><value>Herunterladen</value></data>
+  <data name="PpOcrV6StatusDownloading" xml:space="preserve"><value>Wird heruntergeladen...</value></data>
+  <data name="PpOcrV6DownloadFailedTitle" xml:space="preserve"><value>PP-OCRv6-Download fehlgeschlagen</value></data>
+  <data name="PpOcrV6IntegrityValidationFailed" xml:space="preserve"><value>Das PP-OCRv6-Modell hat die abschließende Integritätsprüfung nicht bestanden.</value></data>
+  <data name="PpOcrV6RemoveTitle" xml:space="preserve"><value>PP-OCRv6-Modell entfernen</value></data>
+  <data name="PpOcrV6RemoveMessage" xml:space="preserve"><value>Das heruntergeladene Modell '{0}' entfernen?</value></data>
+  <data name="PpOcrV6RemoveFailedTitle" xml:space="preserve"><value>PP-OCRv6 konnte nicht entfernt werden</value></data>
+  <data name="PpOcrV6CpuThreads" xml:space="preserve"><value>CPU-Threads</value></data>
+  <data name="PpOcrV6UseGpu" xml:space="preserve"><value>GPU verwenden (DirectML)</value></data>
+  <data name="PpOcrV6Fallback" xml:space="preserve"><value>Auf Windows OCR zurückgreifen</value></data>
+  <data name="PpOcrV6TestButton" xml:space="preserve"><value>PP-OCRv6 testen</value></data>
+  <data name="PpOcrV6TestSelectRegion" xml:space="preserve"><value>Wählen Sie einen Bereich auf dem Bildschirm aus, um PP-OCRv6 zu testen...</value></data>
+  <data name="PpOcrV6TestCancelled" xml:space="preserve"><value>Test abgebrochen.</value></data>
+  <data name="PpOcrV6TestProcessingGpu" xml:space="preserve"><value>Verarbeitung mit PP-OCRv6 GPU...</value></data>
+  <data name="PpOcrV6TestProcessingCpu" xml:space="preserve"><value>Verarbeitung mit PP-OCRv6 CPU...</value></data>
+  <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Erfolgreich: Das Bild wurde verarbeitet, aber es wurde kein Text erkannt.</value></data>
+  <data name="PpOcrV6TestError" xml:space="preserve"><value>[Fehler] {0}</value></data>
+  <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
 </root>

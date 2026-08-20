@@ -119,7 +119,9 @@ clean:
 	rm -rf tests/Easydict.UIAutomation.Tests/bin tests/Easydict.UIAutomation.Tests/obj
 	rm -rf publish publish-msix msix
 
-# Publish for distribution (portable)
+# Publish for distribution (portable) — workers are auto-published by
+# Easydict.WinUI.csproj PublishWorkerOutputs (AfterTargets=Publish) so a plain
+# `dotnet publish Easydict.WinUI.csproj` always yields a runnable layout.
 publish: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained true
 
@@ -128,7 +130,8 @@ publish: restore
 # framework package installed, so the workers self-contain everything they need
 # (the size penalty here is ~30 MB per worker, accepted as the cost of a portable
 # distribution). MSIX strips this back to a single shared .NET 8 runtime — see
-# the publish-msix-* targets below.
+# the publish-msix-* targets below. Workers are auto-published by the host
+# PublishWorkerOutputs target; no explicit worker publish is needed for portable.
 #
 # x86 omits the workers because MuPDF.NET 3.2.12 doesn't ship a stable x86 runtime
 # and the worker csproj RuntimeIdentifiers exclude win-x86. Worker settings default
@@ -137,9 +140,6 @@ publish-x64: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64
 	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:PublishTrimmed=true
 	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64
-	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/localai -p:Platform=x64
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/ocr -p:Platform=x64
 
 publish-x86: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86
@@ -150,35 +150,32 @@ publish-arm64: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64
 	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:PublishTrimmed=true
 	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64
-	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/localai -p:Platform=arm64
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/ocr -p:Platform=arm64
 
 # Publish for MSIX (without bundled Windows App SDK DLLs)
 # MSIX declares a framework package dependency so bundled DLLs are redundant and cause launch failures.
 # Includes NativeBridge + BrowserRegistrar + workers published into the same output directory.
 publish-msix-x64: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:BuildWorkerOutputs=false -p:PublishWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
 	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:PublishTrimmed=true
 	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:PublishTrimmed=true
 	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
 	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/ocr -p:Platform=x64
+	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/ocr -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
 	pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64
 	pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet
 
 publish-msix-x86: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:BuildWorkerOutputs=false -p:PublishWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
 	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:PublishTrimmed=true
 	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:PublishTrimmed=true
 
 publish-msix-arm64: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:BuildWorkerOutputs=false -p:PublishWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
 	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:PublishTrimmed=true
 	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:PublishTrimmed=true
 	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false
 	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/ocr -p:Platform=arm64
+	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/ocr -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false
 	pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64
 	pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet
 

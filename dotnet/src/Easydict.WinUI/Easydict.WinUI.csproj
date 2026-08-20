@@ -1,23 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- Workaround for `Payload contains two or more files with the same destination path 'onnxruntime.dll'`.
-         Both Intel.ML.OnnxRuntime.OpenVino 1.21.0 (referenced via Easydict.OpenVINO, needed for the
-         OpenVINO EP that targets NPU) and Microsoft.Windows.AI.MachineLearning 2.0.300 (transitive
-         from Microsoft.WindowsAppSDK 2.x — Windows ML's own ORT build with DirectML EP) ship
-         runtimes/win-x64/native/onnxruntime.dll. AppX packaging refuses the duplicate destination.
-         We keep the Intel-shipped runtime (it has the OpenVINO EP we actually use) and drop the
-         Microsoft.Windows.AI.MachineLearning native asset via a sweep across every collection the
-         publish / AppX pipeline pulls files from. -->
+    <!-- Workaround for duplicate runtimes/win-x64/native/onnxruntime.dll.
+
+         Root cause: WinUI references out-of-process worker executables via
+         ProjectReference (ReferenceOutputAssembly=false). Even with that flag,
+         their PackageReference closures flow transitively into WinUI's
+         project.assets.json and then into the WinUI publish graph:
+
+           Easydict.Workers.Ocr      -> Microsoft.ML.OnnxRuntime.DirectML 1.21.0
+           Easydict.Workers.LocalAi  -> Microsoft.ML.OnnxRuntime 1.21.0
+           Microsoft.WindowsAppSDK   -> Microsoft.Windows.AI.MachineLearning 2.0.300  (ORT+DirectML build)
+
+         All three ship runtimes/win-x64/native/onnxruntime.dll at the same
+         RelativePath, and the SDK's _HandleFileConflictsForPublish
+         (CheckForDuplicateItemMetadata on ResolvedFileToPublish.RelativePath)
+         trips NETSDK1152.
+
+         Workers publish independently into workers/{kind}/ via the Makefile
+         and the host loads ONNX only from the downloaded runtime dir or from
+         the worker process — WinUI itself never needs a bundled onnxruntime.dll.
+         So we collapse the duplicates to a single winner.
+
+         Why two targets: ComputeFilesToPublish *creates* ResolvedFileToPublish,
+         so a single target cannot both run before it (to handle
+         ReferenceCopyLocalPaths etc) and after it (to handle
+         ResolvedFileToPublish). DedupeOnnxRuntime runs before publish
+         materialization; DedupeOnnxRuntimeForPublish runs right between
+         ComputeFilesToPublish and _HandleFileConflictsForPublish. -->
     <Target Name="DedupeOnnxRuntime"
             AfterTargets="ResolveAssemblyReferences;ResolvePackageAssets;ResolveRuntimePackAssets;_ResolveCopyLocalAssetsForRuntimeDependencies"
             BeforeTargets="_CopyFilesMarkedCopyLocal;ComputeFilesToPublish;_ComputeResolvedFilesToPublishTypes;_GetPackagingOutputs;GenerateAppxPackageRecipe">
         <ItemGroup>
             <ReferenceCopyLocalPaths
                 Remove="@(ReferenceCopyLocalPaths)"
-                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
-                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
-            <ResolvedFileToPublish
-                Remove="@(ResolvedFileToPublish)"
                 Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
                            $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
             <RuntimeCopyLocalItems
@@ -40,6 +55,30 @@
                 Remove="@(PackagingOutputs)"
                 Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
                            $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="DedupeOnnxRuntimeForPublish"
+            AfterTargets="ComputeFilesToPublish"
+            BeforeTargets="_HandleFileConflictsForPublish">
+        <ItemGroup>
+            <_OnnxDupe Include="@(ResolvedFileToPublish)"
+                       Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll'" />
+            <_OnnxWinner Include="@(_OnnxDupe)" Condition="'%(_OnnxDupe.Identity)' != ''" />
+        </ItemGroup>
+        <PropertyGroup>
+            <_OnnxWinnerFullPath Condition="'@(_OnnxWinner)' != ''">%(_OnnxWinner.FullPath)</_OnnxWinnerFullPath>
+            <_OnnxWinnerFullPath Condition="'@(_OnnxWinner)' != ''">$([System.IO.Path]::GetFullPath('$(_OnnxWinnerFullPath)'))</_OnnxWinnerFullPath>
+        </PropertyGroup>
+        <ItemGroup Condition="'@(_OnnxWinner)' != ''">
+            <ResolvedFileToPublish
+                Remove="@(ResolvedFileToPublish)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant()) != $([System.String]::Copy('$(_OnnxWinnerFullPath)').ToLowerInvariant())" />
+            <_ResolvedCopyLocalPublishAssets
+                Remove="@(_ResolvedCopyLocalPublishAssets)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant()) != $([System.String]::Copy('$(_OnnxWinnerFullPath)').ToLowerInvariant())" />
         </ItemGroup>
     </Target>
 
@@ -150,6 +189,8 @@
              in CI; otherwise test/release graphs can compile the same worker into the same
              obj path concurrently. Local dev keeps the default worker-copy behavior. -->
         <BuildWorkerOutputs Condition="'$(BuildWorkerOutputs)' == '' and '$(CI)' == 'true'">false</BuildWorkerOutputs>
+        <PublishWorkerOutputs Condition="'$(PublishWorkerOutputs)' == ''">true</PublishWorkerOutputs>
+        <WorkerPublishSelfContained Condition="'$(WorkerPublishSelfContained)' == ''">$(SelfContained)</WorkerPublishSelfContained>
         <!-- Release artifacts always ship the long-document worker, so do not also
              carry the in-process PDF/MuPDF/PdfPig implementation in the host. Debug
              keeps it for local diagnostics and unit-test coverage. Override with
@@ -353,19 +394,66 @@
                                      Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
         <_OcrWorkerFilesAnyCpu  Include="..\Easydict.Workers.Ocr\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
                                      Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
+        <_LongDocWorkerFilesPlatformX64 Include="..\Easydict.Workers.LongDoc\bin\x64\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                        Condition="'$(Platform)' == 'x64'" />
+        <_LocalAiWorkerFilesPlatformX64 Include="..\Easydict.Workers.LocalAi\bin\x64\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                        Condition="'$(Platform)' == 'x64'" />
+        <_OcrWorkerFilesPlatformX64 Include="..\Easydict.Workers.Ocr\bin\x64\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                    Condition="'$(Platform)' == 'x64'" />
       </ItemGroup>
-      <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu)"
-            DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
+      <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu);@(_LongDocWorkerFilesPlatformX64)"
+            DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesPlatformX64->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(_LongDocWorkerFilesPlatform)@(_LongDocWorkerFilesAnyCpu)' != ''" />
-      <Copy SourceFiles="@(_LocalAiWorkerFilesPlatform);@(_LocalAiWorkerFilesAnyCpu)"
-            DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
+            Condition="'@(_LongDocWorkerFilesPlatform)@(_LongDocWorkerFilesAnyCpu)@(_LongDocWorkerFilesPlatformX64)' != ''" />
+      <Copy SourceFiles="@(_LocalAiWorkerFilesPlatform);@(_LocalAiWorkerFilesAnyCpu);@(_LocalAiWorkerFilesPlatformX64)"
+            DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesPlatformX64->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)' != ''" />
-      <Copy SourceFiles="@(_OcrWorkerFilesPlatform);@(_OcrWorkerFilesAnyCpu)"
-            DestinationFiles="@(_OcrWorkerFilesPlatform->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesAnyCpu->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)')"
+            Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)@(_LocalAiWorkerFilesPlatformX64)' != ''" />
+      <Copy SourceFiles="@(_OcrWorkerFilesPlatform);@(_OcrWorkerFilesAnyCpu);@(_OcrWorkerFilesPlatformX64)"
+            DestinationFiles="@(_OcrWorkerFilesPlatform->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesAnyCpu->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesPlatformX64->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(_OcrWorkerFilesPlatform)@(_OcrWorkerFilesAnyCpu)' != ''" />
+            Condition="'@(_OcrWorkerFilesPlatform)@(_OcrWorkerFilesAnyCpu)@(_OcrWorkerFilesPlatformX64)' != ''" />
+    </Target>
+
+    <PropertyGroup>
+      <_WorkerRid Condition="'$(RuntimeIdentifier)' != '' and $(RuntimeIdentifier.Contains('win-'))">$(RuntimeIdentifier)</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'x64'">win-x64</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'X64'">win-x64</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'x86'">win-x86</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and '$(Platform)' == 'X86'">win-x86</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == '' and ('$(Platform)' == 'ARM64' OR '$(Platform)' == 'arm64' OR '$(Platform)' == 'Arm64')">win-arm64</_WorkerRid>
+      <_WorkerRid Condition="'$(_WorkerRid)' == ''">win-x64</_WorkerRid>
+      <_WorkerPublishArgs Condition="'$(WorkerPublishSelfContained)' == 'true'">--self-contained true</_WorkerPublishArgs>
+      <_WorkerPublishArgs Condition="'$(WorkerPublishSelfContained)' != 'true'">--self-contained false</_WorkerPublishArgs>
+      <_WorkerPublishPlatform Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'">$(Platform)</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(Platform)' == 'AnyCPU' OR '$(Platform)' == ''">x64</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(_WorkerPublishPlatform)' == 'X64'">x64</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(_WorkerPublishPlatform)' == 'X86'">x86</_WorkerPublishPlatform>
+      <_WorkerPublishPlatform Condition="'$(_WorkerPublishPlatform)' == 'ARM64' OR '$(_WorkerPublishPlatform)' == 'Arm64'">arm64</_WorkerPublishPlatform>
+    </PropertyGroup>
+
+    <Target Name="PublishWorkerOutputs"
+            AfterTargets="Publish"
+            Condition="'$(PublishWorkerOutputs)' == 'true' AND '$(PublishDir)' != '' AND '$(IsPublishable)' != 'false'">
+      <Message Importance="high" Text="[Workers] Publishing workers to $(PublishDir)workers\ (RID=$(_WorkerRid), SelfContained=$(WorkerPublishSelfContained), Platform=$(_WorkerPublishPlatform))" />
+      <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj&quot; --configuration $(Configuration) --runtime $(_WorkerRid) $(_WorkerPublishArgs) --output &quot;$(PublishDir)workers\longdoc&quot; -p:Platform=$(_WorkerPublishPlatform) -p:PublishReadyToRun=false"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj') and '$(_WorkerRid)' != 'win-x86'" />
+      <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj&quot; --configuration $(Configuration) --runtime $(_WorkerRid) $(_WorkerPublishArgs) --output &quot;$(PublishDir)workers\localai&quot; -p:Platform=$(_WorkerPublishPlatform) -p:PublishReadyToRun=false"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj') and '$(_WorkerRid)' != 'win-x86'" />
+      <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj&quot; --configuration $(Configuration) --runtime $(_WorkerRid) $(_WorkerPublishArgs) --output &quot;$(PublishDir)workers\ocr&quot; -p:Platform=$(_WorkerPublishPlatform) -p:PublishReadyToRun=false"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj') and '$(_WorkerRid)' != 'win-x86'" />
+      <Warning Condition="'$(_WorkerRid)' == 'win-x86'" Text="[Workers] win-x86 has no workers (MuPDF.NET/ORT lack stable x86 runtimes). Host will fall back to in-proc paths." />
+    </Target>
+
+    <Target Name="ValidateWorkerPublish"
+            AfterTargets="PublishWorkerOutputs"
+            Condition="'$(PublishWorkerOutputs)' == 'true' AND '$(PublishDir)' != '' AND '$(_WorkerRid)' != 'win-x86'">
+      <Error Condition="!Exists('$(PublishDir)workers\ocr\Easydict.Workers.Ocr.exe')"
+             Text="Worker publish failed: $(PublishDir)workers\ocr\Easydict.Workers.Ocr.exe not found. Check PublishWorkerOutputs. Disable with -p:PublishWorkerOutputs=false if intentional." />
+      <Error Condition="!Exists('$(PublishDir)workers\longdoc\Easydict.Workers.LongDoc.exe')"
+             Text="Worker publish failed: $(PublishDir)workers\longdoc\Easydict.Workers.LongDoc.exe not found." />
+      <Error Condition="!Exists('$(PublishDir)workers\localai\Easydict.Workers.LocalAi.exe')"
+             Text="Worker publish failed: $(PublishDir)workers\localai\Easydict.Workers.LocalAi.exe not found." />
     </Target>
 
     <!-- FlaUI for proper UI Automation text selection -->

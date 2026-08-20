@@ -13,6 +13,24 @@ namespace Easydict.WinUI.Tests.Services;
 public sealed class OcrWorkerClientFallbackTests
 {
     [Fact]
+    public async Task DisposeAsync_MakesWorkerClientRejectNewRequests()
+    {
+        await using var client = new OcrWorkerClient(
+            SettingsService.Instance,
+            new FakeOcrService(),
+            _ => throw new InvalidOperationException("worker should not start after disposal"));
+
+        await client.DisposeAsync();
+
+        var act = () => client.RecognizeAsync(
+            new byte[] { 0, 0, 0, 255 },
+            pixelWidth: 1,
+            pixelHeight: 1);
+
+        await act.Should().ThrowAsync<ObjectDisposedException>();
+    }
+
+    [Fact]
     public async Task RecognizeAsync_ThrowsArgumentException_WhenBufferShorterThanExpected()
     {
         var fallback = new FakeOcrService();
@@ -58,6 +76,49 @@ public sealed class OcrWorkerClientFallbackTests
     {
         OcrWorkerClient.CanFallbackToInProc(new SidecarProcessExitedException(unchecked((int)0xC0000409)))
             .Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanFallbackToInProc_ReturnsTrue_WhenWorkerTimesOut()
+    {
+        OcrWorkerClient.CanFallbackToInProc(new SidecarTimeoutException("req-1"))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanFallback_ReturnsTrue_WhenLanguageIsUnsupportedAndFallbackEnabled()
+    {
+        using var client = new OcrWorkerClient(
+            SettingsService.Instance,
+            new FakeOcrService(),
+            OcrEngineType.PpOcrV6,
+            PpOcrV6ModelCatalog.SmallId,
+            allowFallback: true);
+        var error = new SidecarErrorException(new IpcError
+        {
+            Code = WorkerErrorCodes.UnsupportedLanguage,
+            Message = "unsupported"
+        });
+
+        client.CanFallback(error).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanFallback_ReturnsFalse_WhenLanguageIsUnsupportedAndFallbackDisabled()
+    {
+        using var client = new OcrWorkerClient(
+            SettingsService.Instance,
+            new FakeOcrService(),
+            OcrEngineType.PpOcrV6,
+            PpOcrV6ModelCatalog.SmallId,
+            allowFallback: false);
+        var error = new SidecarErrorException(new IpcError
+        {
+            Code = WorkerErrorCodes.UnsupportedLanguage,
+            Message = "unsupported"
+        });
+
+        client.CanFallback(error).Should().BeFalse();
     }
 
     // Regression for issue #176: the worker used to naively join words with spaces, so CJK text

@@ -67,6 +67,8 @@ namespace Easydict.WinUI
         private SubclassProc? _appWindowSubclassProc;
         private volatile bool _isSystemShutdownRequested;
         private bool _servicesInitialized;
+        private Task? _shutdownCleanupTask;
+        private bool _shutdownCleanupCompleted;
         private static int _pendingRedirectedOcrTranslate;
 
         // IPC: named event for context menu --ocr-translate signaling
@@ -681,6 +683,15 @@ namespace Easydict.WinUI
             return _ocrTranslateService;
         }
 
+        internal static async Task ReleasePpOcrV6ModelAsync(string modelId)
+        {
+            var service = Instance._ocrTranslateService;
+            if (service is not null)
+            {
+                await service.ReleasePpOcrV6ModelAsync(modelId).ConfigureAwait(false);
+            }
+        }
+
         private async void ShowOcrFailureDialog(OcrFailureReason reason)
         {
             try
@@ -1132,8 +1143,14 @@ namespace Easydict.WinUI
             CrashDiagnostics.Log("[MemoryGate] Root frame released after hiding main window");
         }
 
-        private void OnWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+        private async void OnWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
         {
+            if (_shutdownCleanupCompleted)
+            {
+                args.Cancel = false;
+                return;
+            }
+
             try
             {
                 SaveWindowDimensions();
@@ -1178,22 +1195,44 @@ namespace Easydict.WinUI
                         ex,
                         isTerminating: false,
                         isHandled: true);
-                    args.Cancel = false;
                 }
-
             }
 
-            args.Cancel = false;
+            args.Cancel = true;
             CrashDiagnostics.Log(
                 $"[WindowClosing] Closing, shutdownRequested={_isSystemShutdownRequested}, memoryAbB={IsMemoryAbVariantB()}");
+
+            if (_shutdownCleanupTask is not null)
+            {
+                return;
+            }
+
             try
             {
-                CleanupServices();
+                _shutdownCleanupTask = CleanupServicesAsync();
+                await _shutdownCleanupTask;
             }
             catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
             {
                 CrashDiagnostics.LogException(
                     "App.OnWindowClosing.CleanupServices",
+                    ex,
+                    isTerminating: false,
+                    isHandled: true);
+            }
+            finally
+            {
+                _shutdownCleanupCompleted = true;
+            }
+
+            try
+            {
+                _window?.Close();
+            }
+            catch (COMException ex)
+            {
+                CrashDiagnostics.LogException(
+                    "App.OnWindowClosing.Close",
                     ex,
                     isTerminating: false,
                     isHandled: true);
@@ -1243,31 +1282,70 @@ namespace Easydict.WinUI
             settings.Save();
         }
 
-        public static void CleanupServices()
+
+        public static async Task CleanupServicesAsync()
         {
             var app = Instance;
+            var ocrService = app.BeginCleanupServices();
+            try
+            {
+                if (ocrService is not null)
+                {
+                    // Resume on the UI thread before disposing WinUI windows below.
+                    await ocrService.DisposeAsync();
+                }
+            }
+            finally
+            {
+                app.FinishCleanupServices();
+            }
+        }
 
+        private static void CleanupServicesSynchronously()
+        {
+            var app = Instance;
+            var ocrService = app.BeginCleanupServices();
+            try
+            {
+                // WM_ENDSESSION cannot pump asynchronous continuations. Force-stop
+                // the OCR worker instead of blocking the UI thread on DisposeAsync().
+                ocrService?.Dispose();
+            }
+            finally
+            {
+                app.FinishCleanupServices();
+            }
+        }
+
+        private OcrTranslateService? BeginCleanupServices()
+        {
             // Dispose OCR signal event first — this unblocks the listener thread's WaitOne()
             // which throws ObjectDisposedException, causing the thread to exit gracefully.
-            app._ocrSignalEvent?.Dispose();
-            app._ocrSignalEvent = null;
+            _ocrSignalEvent?.Dispose();
+            _ocrSignalEvent = null;
 
             // Wait briefly for the signal thread to finish to avoid races during teardown
-            if (app._ocrSignalThread?.IsAlive == true)
+            if (_ocrSignalThread?.IsAlive == true)
             {
-                app._ocrSignalThread.Join(TimeSpan.FromSeconds(2));
+                _ocrSignalThread.Join(TimeSpan.FromSeconds(2));
             }
-            app._ocrSignalThread = null;
+            _ocrSignalThread = null;
 
-            app._mouseHookService?.Dispose();
-            app._popButtonService?.Dispose();
-            app._clipboardService?.Dispose();
-            app._hotkeyService?.Dispose();
-            app._trayIconService?.Dispose();
+            _mouseHookService?.Dispose();
+            _popButtonService?.Dispose();
+            _clipboardService?.Dispose();
+            _hotkeyService?.Dispose();
+            _trayIconService?.Dispose();
+
+            return Interlocked.Exchange(ref _ocrTranslateService, null);
+        }
+
+        private void FinishCleanupServices()
+        {
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
             TextToSpeechService.StopIfInitialized();
-            app.UnregisterSystemMessageHandlers();
+            UnregisterSystemMessageHandlers();
         }
 
         /// <summary>
@@ -1487,7 +1565,7 @@ namespace Easydict.WinUI
                         _isSystemShutdownRequested = true;
                         CrashDiagnostics.Log(
                             $"[AppWindow] WM_ENDSESSION confirmed, reasonFlags=0x{unchecked((nuint)lParam):X}");
-                        _trayIconService?.ExitApplication();
+                        CleanupServicesSynchronously();
                         Environment.Exit(0);
 
                         return 0;

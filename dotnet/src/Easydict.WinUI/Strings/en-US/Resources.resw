@@ -1218,6 +1218,12 @@
   <data name="OcrEngineCustomApi" xml:space="preserve">
     <value>Custom API</value>
   </data>
+  <data name="PpOcrV6ModelUnavailableTitle" xml:space="preserve">
+    <value>PP-OCRv6 model unavailable</value>
+  </data>
+  <data name="PpOcrV6ModelUnavailableMessage" xml:space="preserve">
+    <value>Download the PP-OCRv6 model '{0}' before selecting this engine.</value>
+  </data>
   <data name="OcrApiKey" xml:space="preserve">
     <value>API Key (Optional)</value>
   </data>
@@ -1420,4 +1426,35 @@
   </data>
   <data name="PortableUpdateBanner_Debug" xml:space="preserve"><value>Debug build · Latest release {0} · View update →</value></data>
   <data name="PortableUpdateBanner_Available" xml:space="preserve"><value>New version {0} available · View update →</value></data>
+  <data name="PpOcrV6EngineLocal" xml:space="preserve"><value>PP-OCRv6 (Local)</value></data>
+  <data name="PpOcrV6ModelLabel" xml:space="preserve"><value>PP-OCRv6 Model</value></data>
+  <data name="PpOcrV6ModelTiny" xml:space="preserve"><value>PP-OCRv6 Tiny</value></data>
+  <data name="PpOcrV6ModelSmall" xml:space="preserve"><value>PP-OCRv6 Small</value></data>
+  <data name="PpOcrV6ModelMedium" xml:space="preserve"><value>PP-OCRv6 Medium</value></data>
+  <data name="PpOcrV6DownloadSize" xml:space="preserve"><value>Download: {0:F1} MB</value></data>
+  <data name="PpOcrV6LanguageCount" xml:space="preserve"><value>Languages: {0}</value></data>
+  <data name="PpOcrV6StatusChecking" xml:space="preserve"><value>Checking model...</value></data>
+  <data name="PpOcrV6StatusDownloaded" xml:space="preserve"><value>Downloaded</value></data>
+  <data name="PpOcrV6ActionRemove" xml:space="preserve"><value>Remove</value></data>
+  <data name="PpOcrV6StatusInvalid" xml:space="preserve"><value>Model invalid — repair required</value></data>
+  <data name="PpOcrV6ActionRepair" xml:space="preserve"><value>Repair</value></data>
+  <data name="PpOcrV6StatusNotDownloaded" xml:space="preserve"><value>Not downloaded</value></data>
+  <data name="PpOcrV6ActionDownload" xml:space="preserve"><value>Download</value></data>
+  <data name="PpOcrV6StatusDownloading" xml:space="preserve"><value>Downloading...</value></data>
+  <data name="PpOcrV6DownloadFailedTitle" xml:space="preserve"><value>PP-OCRv6 download failed</value></data>
+  <data name="PpOcrV6IntegrityValidationFailed" xml:space="preserve"><value>The PP-OCRv6 model did not pass final integrity validation.</value></data>
+  <data name="PpOcrV6RemoveTitle" xml:space="preserve"><value>Remove PP-OCRv6 model</value></data>
+  <data name="PpOcrV6RemoveMessage" xml:space="preserve"><value>Remove the downloaded model '{0}'?</value></data>
+  <data name="PpOcrV6RemoveFailedTitle" xml:space="preserve"><value>PP-OCRv6 removal failed</value></data>
+  <data name="PpOcrV6CpuThreads" xml:space="preserve"><value>CPU Threads</value></data>
+  <data name="PpOcrV6UseGpu" xml:space="preserve"><value>Use GPU (DirectML)</value></data>
+  <data name="PpOcrV6Fallback" xml:space="preserve"><value>Fallback to Windows OCR</value></data>
+  <data name="PpOcrV6TestButton" xml:space="preserve"><value>Test PP-OCRv6</value></data>
+  <data name="PpOcrV6TestSelectRegion" xml:space="preserve"><value>Select a region on your screen to test PP-OCRv6...</value></data>
+  <data name="PpOcrV6TestCancelled" xml:space="preserve"><value>Test cancelled.</value></data>
+  <data name="PpOcrV6TestProcessingGpu" xml:space="preserve"><value>Processing with PP-OCRv6 GPU...</value></data>
+  <data name="PpOcrV6TestProcessingCpu" xml:space="preserve"><value>Processing with PP-OCRv6 CPU...</value></data>
+  <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Success: image processed, but no text was recognized.</value></data>
+  <data name="PpOcrV6TestError" xml:space="preserve"><value>[Error] {0}</value></data>
+  <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
 </root>

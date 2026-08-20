@@ -246,7 +246,7 @@ public sealed class TrayIconService : IDisposable
         menu.Items.Add(new MenuFlyoutSeparator());
 
         var exitItem = new MenuFlyoutItem { Text = L("TrayExit") };
-        exitItem.Click += (_, _) => ExitApplication();
+        exitItem.Click += async (_, _) => await ExitApplicationAsync();
         SetTip(exitItem);
         menu.Items.Add(exitItem);
 
@@ -356,14 +356,13 @@ public sealed class TrayIconService : IDisposable
     /// <summary>
     /// Exit the application completely.
     /// </summary>
-    public void ExitApplication()
+    public async Task ExitApplicationAsync()
     {
         CrashDiagnostics.Log($"[TrayExit] Exit requested. pid={Environment.ProcessId}");
 
         try
         {
-            // Clean up all services including Win32 hooks before exit.
-            App.CleanupServices();
+            await App.CleanupServicesAsync().ConfigureAwait(true);
             CrashDiagnostics.Log($"[TrayExit] Cleanup completed. pid={Environment.ProcessId}");
         }
         catch (Exception ex)
@@ -375,7 +374,6 @@ public sealed class TrayIconService : IDisposable
         {
             try
             {
-                // Terminate the WinUI message loop.
                 Application.Current.Exit();
             }
             catch (Exception ex)
@@ -385,9 +383,6 @@ public sealed class TrayIconService : IDisposable
             }
 
             CrashDiagnostics.Log($"[TrayExit] Forcing process exit. pid={Environment.ProcessId}");
-
-            // Fallback: force process termination if any stubborn threads remain.
-            // This ensures the process doesn't become a zombie.
             Environment.Exit(0);
         }
     }

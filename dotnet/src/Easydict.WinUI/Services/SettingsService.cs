@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Services;
 using Easydict.TranslationService.Services.AgentCli;
+using Easydict.SidecarClient.Protocol;
 using Easydict.WindowsAI;
 using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
@@ -330,6 +331,7 @@ public sealed class SettingsService
     public string? OcrApiKey { get; set; }
     public string OcrEndpoint { get; set; } = OcrServiceOptions.DefaultEndpoint;
     public string OcrModel { get; set; } = OcrServiceOptions.DefaultModel;
+    public string PpOcrV6ModelId { get; set; } = PpOcrV6ModelCatalog.SmallId;
     public string OcrSystemPrompt { get; set; } = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
 
     /// <summary>
@@ -338,6 +340,15 @@ public sealed class SettingsService
     /// models that support thinking.
     /// </summary>
     public bool OcrEnableThinking { get; set; }
+
+    /// <summary>CPU inference threads for PP-OCRv6. Range: 1-16. Default: 4.</summary>
+    public int PpOcrV6ThreadCount { get; set; } = PpOcrV6ModelCatalog.DefaultThreadCount;
+
+    /// <summary>Use the DirectML GPU provider for PP-OCRv6 when available.</summary>
+    public bool PpOcrV6UseGpu { get; set; }
+
+    /// <summary>Fall back to Windows OCR when PP-OCRv6 is unavailable or fails.</summary>
+    public bool PpOcrV6AllowFallback { get; set; } = true;
 
     // Layout detection settings (long document translation)
 
@@ -811,8 +822,26 @@ public sealed class SettingsService
         OcrApiKey = GetSensitiveSetting(nameof(OcrApiKey));
         OcrEndpoint = GetValue(nameof(OcrEndpoint), OcrServiceOptions.DefaultEndpoint);
         OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
+        var legacyPpOcrV6Model = PpOcrV6ModelCatalog.TryGet(OcrModel, out _)
+            ? OcrModel
+            : PpOcrV6ModelCatalog.SmallId;
+        PpOcrV6ModelId = GetValue(nameof(PpOcrV6ModelId), legacyPpOcrV6Model);
+        if (!PpOcrV6ModelCatalog.TryGet(PpOcrV6ModelId, out _))
+        {
+            PpOcrV6ModelId = PpOcrV6ModelCatalog.SmallId;
+        }
+        if (PpOcrV6ModelCatalog.TryGet(OcrModel, out _))
+        {
+            OcrModel = OcrServiceOptions.DefaultModel;
+        }
         OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
         OcrEnableThinking = GetValue(nameof(OcrEnableThinking), false);
+        PpOcrV6ThreadCount = Math.Clamp(
+            GetValue(nameof(PpOcrV6ThreadCount), PpOcrV6ModelCatalog.DefaultThreadCount),
+            PpOcrV6ModelCatalog.MinThreadCount,
+            PpOcrV6ModelCatalog.MaxThreadCount);
+        PpOcrV6UseGpu = GetValue(nameof(PpOcrV6UseGpu), false);
+        PpOcrV6AllowFallback = GetValue(nameof(PpOcrV6AllowFallback), true);
 
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
         TtsSpeed = GetValue(nameof(TtsSpeed), 1.0);
@@ -1072,8 +1101,17 @@ public sealed class SettingsService
         SaveSensitiveSetting(nameof(OcrApiKey), OcrApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(OcrEndpoint)] = OcrEndpoint;
         _settings[nameof(OcrModel)] = OcrModel;
+        _settings[nameof(PpOcrV6ModelId)] = PpOcrV6ModelCatalog.TryGet(PpOcrV6ModelId, out _)
+            ? PpOcrV6ModelId
+            : PpOcrV6ModelCatalog.SmallId;
         _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
         _settings[nameof(OcrEnableThinking)] = OcrEnableThinking;
+        _settings[nameof(PpOcrV6ThreadCount)] = Math.Clamp(
+            PpOcrV6ThreadCount,
+            PpOcrV6ModelCatalog.MinThreadCount,
+            PpOcrV6ModelCatalog.MaxThreadCount);
+        _settings[nameof(PpOcrV6UseGpu)] = PpOcrV6UseGpu;
+        _settings[nameof(PpOcrV6AllowFallback)] = PpOcrV6AllowFallback;
 
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
         _settings[nameof(TtsSpeed)] = TtsSpeed;

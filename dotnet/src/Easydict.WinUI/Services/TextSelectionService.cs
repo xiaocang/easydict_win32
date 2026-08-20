@@ -26,6 +26,9 @@ public static class TextSelectionService
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("kernel32.dll")]
@@ -37,24 +40,24 @@ public static class TextSelectionService
     [DllImport("user32.dll")]
     private static extern uint GetClipboardSequenceNumber();
 
-    // INPUT struct must be 40 bytes on 64-bit Windows
-    // The union must be at offset 8 for proper alignment
+    // INPUT struct must be 40 bytes on 64-bit Windows.
+    // Internal visibility lets pure sequence tests inspect generated key events.
     [StructLayout(LayoutKind.Explicit, Size = 40)]
-    private struct INPUT
+    internal struct INPUT
     {
         [FieldOffset(0)] public uint type;
         [FieldOffset(8)] public InputUnion U;
     }
 
-    // Union must be 32 bytes (size of MOUSEINPUT, the largest member)
+    // Union must be 32 bytes (size of MOUSEINPUT, the largest member).
     [StructLayout(LayoutKind.Explicit, Size = 32)]
-    private struct InputUnion
+    internal struct InputUnion
     {
         [FieldOffset(0)] public KEYBDINPUT ki;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct KEYBDINPUT
+    internal struct KEYBDINPUT
     {
         public ushort wVk;
         public ushort wScan;
@@ -63,12 +66,31 @@ public static class TextSelectionService
         public IntPtr dwExtraInfo;
     }
 
+    [Flags]
+    internal enum HeldModifierKeys
+    {
+        None = 0,
+        LeftControl = 1 << 0,
+        RightControl = 1 << 1,
+        LeftAlt = 1 << 2,
+        RightAlt = 1 << 3,
+        LeftShift = 1 << 4,
+        RightShift = 1 << 5,
+        LeftWin = 1 << 6,
+        RightWin = 1 << 7,
+    }
+
     private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const ushort VK_CONTROL = 0x11;
     private const ushort VK_C = 0x43;
-    private const ushort VK_SHIFT = 0x10;
-    private const ushort VK_MENU = 0x12; // Alt
+    private const ushort VK_LSHIFT = 0xA0;
+    private const ushort VK_RSHIFT = 0xA1;
+    private const ushort VK_LCONTROL = 0xA2;
+    private const ushort VK_RCONTROL = 0xA3;
+    private const ushort VK_LMENU = 0xA4;
+    private const ushort VK_RMENU = 0xA5;
     private const ushort VK_LWIN = 0x5B;
     private const ushort VK_RWIN = 0x5C;
 
@@ -889,95 +911,13 @@ public static class TextSelectionService
     private sealed record ClipboardProbe(bool HasText, string? Text, int AvailableFormatCount);
 
     /// <summary>
-    /// Sends Ctrl+C keystroke to copy selected text using SendInput API.
-    /// Flushes physical modifier keys before sending Ctrl+C to avoid modifier bleed.
+    /// Sends Ctrl+C keystrokes while preserving the physical state of every modifier side.
     /// </summary>
     private static void SendCtrlC()
     {
         Debug.WriteLine("[TextSelectionService] SendCtrlC() called");
 
-        var inputs = new List<INPUT>();
-
-        // 1. Flush physical modifier keys (KEYUP) to avoid modifier bleed
-        // This ensures the target app sees a pure "Ctrl+C" even if user is holding Alt/Shift/Win.
-        ushort[] modifiersToFlush = { VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN };
-        foreach (var vk in modifiersToFlush)
-        {
-            inputs.Add(new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                U = new InputUnion
-                {
-                    ki = new KEYBDINPUT
-                    {
-                        wVk = vk,
-                        dwFlags = KEYEVENTF_KEYUP,
-                        dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
-                    }
-                }
-            });
-        }
-
-        // 2. Send Ctrl+C sequence
-        // Ctrl down
-        inputs.Add(new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = VK_CONTROL,
-                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
-                }
-            }
-        });
-
-        // C down
-        inputs.Add(new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = VK_C,
-                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
-                }
-            }
-        });
-
-        // C up
-        inputs.Add(new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = VK_C,
-                    dwFlags = KEYEVENTF_KEYUP,
-                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
-                }
-            }
-        });
-
-        // Ctrl up
-        inputs.Add(new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = VK_CONTROL,
-                    dwFlags = KEYEVENTF_KEYUP,
-                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
-                }
-            }
-        });
-
-        var inputArray = inputs.ToArray();
+        var inputArray = BuildCtrlCInputs(GetHeldModifierKeys());
         var inputSize = Marshal.SizeOf<INPUT>();
         uint result = SendInput((uint)inputArray.Length, inputArray, inputSize);
 
@@ -988,6 +928,96 @@ public static class TextSelectionService
             var error = Marshal.GetLastWin32Error();
             Debug.WriteLine($"[TextSelectionService] SendInput error code: {error}");
         }
+    }
+
+    private static HeldModifierKeys GetHeldModifierKeys()
+    {
+        var heldModifiers = HeldModifierKeys.None;
+
+        if (GetAsyncKeyState(VK_LCONTROL) < 0) heldModifiers |= HeldModifierKeys.LeftControl;
+        if (GetAsyncKeyState(VK_RCONTROL) < 0) heldModifiers |= HeldModifierKeys.RightControl;
+        if (GetAsyncKeyState(VK_LMENU) < 0) heldModifiers |= HeldModifierKeys.LeftAlt;
+        if (GetAsyncKeyState(VK_RMENU) < 0) heldModifiers |= HeldModifierKeys.RightAlt;
+        if (GetAsyncKeyState(VK_LSHIFT) < 0) heldModifiers |= HeldModifierKeys.LeftShift;
+        if (GetAsyncKeyState(VK_RSHIFT) < 0) heldModifiers |= HeldModifierKeys.RightShift;
+        if (GetAsyncKeyState(VK_LWIN) < 0) heldModifiers |= HeldModifierKeys.LeftWin;
+        if (GetAsyncKeyState(VK_RWIN) < 0) heldModifiers |= HeldModifierKeys.RightWin;
+
+        return heldModifiers;
+    }
+
+    internal static INPUT[] BuildCtrlCInputs(HeldModifierKeys heldModifiers)
+    {
+        var inputs = new List<INPUT>(12);
+
+        // Temporarily release only the held non-Ctrl modifiers so the target receives pure Ctrl+C.
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.LeftAlt, VK_LMENU, isKeyUp: true);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.RightAlt, VK_RMENU, isKeyUp: true);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.LeftShift, VK_LSHIFT, isKeyUp: true);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.RightShift, VK_RSHIFT, isKeyUp: true);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.LeftWin, VK_LWIN, isKeyUp: true);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.RightWin, VK_RWIN, isKeyUp: true);
+
+        var isControlHeld = (heldModifiers &
+            (HeldModifierKeys.LeftControl | HeldModifierKeys.RightControl)) != 0;
+        if (!isControlHeld)
+        {
+            inputs.Add(CreateKeyboardInput(VK_CONTROL, isKeyUp: false));
+        }
+
+        inputs.Add(CreateKeyboardInput(VK_C, isKeyUp: false));
+        inputs.Add(CreateKeyboardInput(VK_C, isKeyUp: true));
+
+        if (!isControlHeld)
+        {
+            inputs.Add(CreateKeyboardInput(VK_CONTROL, isKeyUp: true));
+        }
+
+        // Restore each released side exactly; AltGr therefore restores Right Alt, not Left Alt.
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.LeftAlt, VK_LMENU, isKeyUp: false);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.RightAlt, VK_RMENU, isKeyUp: false);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.LeftShift, VK_LSHIFT, isKeyUp: false);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.RightShift, VK_RSHIFT, isKeyUp: false);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.LeftWin, VK_LWIN, isKeyUp: false);
+        AddModifierInputIfHeld(inputs, heldModifiers, HeldModifierKeys.RightWin, VK_RWIN, isKeyUp: false);
+
+        return inputs.ToArray();
+    }
+
+    private static void AddModifierInputIfHeld(
+        List<INPUT> inputs,
+        HeldModifierKeys heldModifiers,
+        HeldModifierKeys modifier,
+        ushort virtualKey,
+        bool isKeyUp)
+    {
+        if ((heldModifiers & modifier) != 0)
+        {
+            inputs.Add(CreateKeyboardInput(virtualKey, isKeyUp));
+        }
+    }
+
+    private static INPUT CreateKeyboardInput(ushort virtualKey, bool isKeyUp)
+    {
+        var flags = virtualKey is VK_RCONTROL or VK_RMENU ? KEYEVENTF_EXTENDEDKEY : 0;
+        if (isKeyUp)
+        {
+            flags |= KEYEVENTF_KEYUP;
+        }
+
+        return new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = virtualKey,
+                    dwFlags = flags,
+                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
+                }
+            }
+        };
     }
 
     // ---- Adaptive suppression bookkeeping ----

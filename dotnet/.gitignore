@@ -45,6 +45,7 @@ src/Easydict.WinUI/Assets/icon_unplated_1024.png
 src/Easydict.WinUI/Assets/ServiceIcons/*.scale-*.png
 !src/Easydict.WinUI/Assets/ServiceIcons/GitHubOnLight.scale-*.png
 !src/Easydict.WinUI/Assets/ServiceIcons/windows-local-ai.scale-*.png
+!src/Easydict.WinUI/Assets/ServiceIcons/Kimi.scale-*.png
 
 temp_*/
 test-extracted/

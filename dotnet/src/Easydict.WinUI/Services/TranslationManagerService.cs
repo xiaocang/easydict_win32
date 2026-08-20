@@ -373,6 +373,17 @@ public sealed class TranslationManagerService : IDisposable
             }
         });
 
+        // Configure Kimi
+        _translationManager.ConfigureService("kimi", service =>
+        {
+            if (service is KimiService kimi)
+            {
+                kimi.Configure(
+                    _settings.KimiApiKey ?? "",
+                    model: _settings.KimiModel);
+            }
+        });
+
         // Configure GitHub Models
         _translationManager.ConfigureService("github", service =>
         {

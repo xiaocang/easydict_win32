@@ -159,6 +159,10 @@ public sealed class SettingsService
     public string? ZhipuApiKey { get; set; }
     public string ZhipuModel { get; set; } = "glm-4.5-flash";
 
+    // Kimi settings
+    public string? KimiApiKey { get; set; }
+    public string KimiModel { get; set; } = "kimi-k2-turbo-preview";
+
     // GitHub Models settings
     public string? GitHubModelsToken { get; set; }
     public string GitHubModelsModel { get; set; } = "gpt-4.1";
@@ -752,6 +756,10 @@ public sealed class SettingsService
         ZhipuApiKey = GetSensitiveSetting(nameof(ZhipuApiKey));
         ZhipuModel = GetValue(nameof(ZhipuModel), "glm-4.5-flash");
 
+        // Kimi settings
+        KimiApiKey = GetSensitiveSetting(nameof(KimiApiKey));
+        KimiModel = GetValue(nameof(KimiModel), "kimi-k2-turbo-preview");
+
         // GitHub Models settings
         GitHubModelsToken = GetSensitiveSetting(nameof(GitHubModelsToken));
         GitHubModelsModel = GetValue(nameof(GitHubModelsModel), "gpt-4.1");
@@ -1035,6 +1043,10 @@ public sealed class SettingsService
         // Zhipu settings
         SaveSensitiveSetting(nameof(ZhipuApiKey), ZhipuApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(ZhipuModel)] = ZhipuModel;
+
+        // Kimi settings
+        SaveSensitiveSetting(nameof(KimiApiKey), KimiApiKey, preserveUnmigratedSensitiveSettings);
+        _settings[nameof(KimiModel)] = KimiModel;
 
         // GitHub Models settings
         SaveSensitiveSetting(nameof(GitHubModelsToken), GitHubModelsToken, preserveUnmigratedSensitiveSettings);

@@ -185,6 +185,7 @@ BaseTranslationService : ITranslationService            # Abstract base with val
     ├── DeepSeekService
     ├── GroqService
     ├── ZhipuService
+    ├── KimiService
     ├── GitHubModelsService
     └── CustomOpenAIService
 ```

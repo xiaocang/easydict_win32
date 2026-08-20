@@ -141,8 +141,8 @@ make run
   - `Ctrl+Alt+D` - Translate clipboard content
   - `Ctrl+Alt+S` - OCR screenshot translate (capture → recognize → translate)
   - `Ctrl+Alt+Shift+S` - Silent OCR (capture → recognize → copy to clipboard)
-  - `Ctrl+Alt+M` - Show mini window with selection
-  - `Ctrl+Alt+F` - Show fixed window
+  - `Ctrl+Alt+M` - Show/hide mini window (shows with selection; hides when foreground)
+  - `Ctrl+Alt+F` - Show/hide fixed window (shows with selection; hides when foreground)
   - `Ctrl+Alt+Shift+M` - Toggle mini window
   - `Ctrl+Alt+Shift+F` - Toggle fixed window
 - **Mouse Selection Translate**: Select text in any app (drag, double-click, triple-click) → floating icon appears → click to translate in Mini Window (uses `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks)

@@ -1674,7 +1674,7 @@ public sealed partial class SettingsPage : Page
         OcrEngineCombo.Header = loc.GetString("OcrEngine");
         OcrEngineNativeItem.Content = loc.GetString("OcrEngineNative");
         OcrEngineCustomApiItem.Content = loc.GetString("OcrEngineCustomApi");
-        OcrEnginePpOcrV6Item.Content = "PP-OCRv6 (Local)";
+        OcrEnginePpOcrV6Item.Content = loc.GetString("PpOcrV6EngineLocal");
         OcrApiKeyHeaderText.Text = loc.GetString("OcrApiKey");
         OcrEndpointBox.Header = loc.GetString("OcrEndpoint");
         OcrModelBox.Header = loc.GetString("OcrModel");
@@ -1683,6 +1683,13 @@ public sealed partial class SettingsPage : Page
         OcrEnableThinkingDescriptionText.Text = loc.GetString("OcrEnableThinkingDescription");
         TestOcrConnectionButton.Content = loc.GetString("TestOcrConnection");
         OcrTestStatusBox.Header = loc.GetString("OcrTestResult");
+        PpOcrV6ModelCombo.Header = loc.GetString("PpOcrV6ModelLabel");
+        PpOcrV6DownloadButton.Content = loc.GetString("PpOcrV6ActionDownload");
+        PpOcrV6ThreadCountBox.Header = loc.GetString("PpOcrV6CpuThreads");
+        PpOcrV6GpuToggle.Header = loc.GetString("PpOcrV6UseGpu");
+        PpOcrV6FallbackToggle.Header = loc.GetString("PpOcrV6Fallback");
+        PpOcrV6TestButton.Content = loc.GetString("PpOcrV6TestButton");
+        PpOcrV6TestStatusBox.Header = loc.GetString("OcrTestResult");
     }
 
     private void ApplyPasswordRevealLocalization(LocalizationService loc)

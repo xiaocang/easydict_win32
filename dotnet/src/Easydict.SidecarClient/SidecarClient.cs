@@ -349,7 +349,11 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
 
         _cts?.Cancel();
 
-        try { _process?.Kill(); } catch { }
+        try { _process?.Kill(entireProcessTree: true); } catch { }
+
+        // Process.Exited can race with Process.Dispose(), so unblock active callers
+        // directly before releasing the process handle.
+        FailPendingRequests(exitCode: null);
         _process?.Dispose();
         _stdin?.Dispose();
 

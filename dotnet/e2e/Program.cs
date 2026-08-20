@@ -173,6 +173,37 @@ allPassed &= await RunTest("Stderr log collection", async () =>
     Assert(logs.Any(l => l.Contains("\"level\"")), "logs should be structured JSON");
 });
 
+// Test 9: Synchronous disposal force-stops an active request without awaiting the worker.
+allPassed &= await RunTest("Synchronous disposal stops active request", async () =>
+{
+    var client = CreateClient(mockServicePath);
+    client.Start();
+
+    var request = client.SendRequestAsync("translate", new
+    {
+        text = "active-request",
+        toLang = "en",
+        delayMs = 30_000
+    }, timeoutMs: 0);
+    await Task.Delay(250);
+
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    client.Dispose();
+    stopwatch.Stop();
+
+    Assert(stopwatch.Elapsed < TimeSpan.FromSeconds(2),
+        $"synchronous disposal should return promptly, took {stopwatch.Elapsed}");
+    try
+    {
+        await request.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert(false, "active request should not complete successfully after disposal");
+    }
+    catch (SidecarProcessExitedException)
+    {
+        // Expected: Dispose() force-kills the sidecar process.
+    }
+});
+
 // Summary
 Console.WriteLine();
 Console.WriteLine(allPassed ? "[E2E] ✅ All tests passed!" : "[E2E] ❌ Some tests failed!");

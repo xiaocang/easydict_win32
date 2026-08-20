@@ -95,7 +95,7 @@ internal static class WorkerTranslationManagerFactory
         {
             if (svc is KimiService ks && snapshot.KimiApiKey is not null)
             {
-                ks.Configure(snapshot.KimiApiKey, snapshot.KimiModel);
+                ks.Configure(snapshot.KimiApiKey, model: snapshot.KimiModel);
             }
         });
 

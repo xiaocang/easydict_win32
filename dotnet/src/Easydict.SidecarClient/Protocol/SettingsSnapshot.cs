@@ -69,6 +69,12 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("zhipuModel")]
     public string? ZhipuModel { get; init; }
 
+    [JsonPropertyName("kimiApiKey")]
+    public string? KimiApiKey { get; init; }
+
+    [JsonPropertyName("kimiModel")]
+    public string? KimiModel { get; init; }
+
     [JsonPropertyName("doubaoApiKey")]
     public string? DoubaoApiKey { get; init; }
 

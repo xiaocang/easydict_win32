@@ -174,6 +174,7 @@ public sealed partial class SettingsPage : Page
         ["builtin"] = 80,
         ["deepseek"] = 90,
         ["zhipu"] = 100,
+        ["kimi"] = 105,
         ["groq"] = 110,
         ["gemini"] = 120,
         ["github"] = 130,
@@ -1396,6 +1397,8 @@ public sealed partial class SettingsPage : Page
         GroqModelCombo.Header = loc.GetString("Model");
         ZhipuKeyHeaderText.Text = loc.GetString("ApiKey");
         ZhipuModelCombo.Header = loc.GetString("Model");
+        KimiKeyHeaderText.Text = loc.GetString("ApiKey");
+        KimiModelCombo.Header = loc.GetString("Model");
         GitHubModelsTokenHeaderText.Text = loc.GetString("GitHubToken");
         GitHubModelsModelCombo.Header = loc.GetString("Model");
         GeminiKeyHeaderText.Text = loc.GetString("ApiKey");
@@ -1451,6 +1454,7 @@ public sealed partial class SettingsPage : Page
         TestDeepSeekButton.Content = testButtonText;
         TestGroqButton.Content = testButtonText;
         TestZhipuButton.Content = testButtonText;
+        TestKimiButton.Content = testButtonText;
         TestGitHubModelsButton.Content = testButtonText;
         TestGeminiButton.Content = testButtonText;
         TestCustomOpenAIButton.Content = testButtonText;
@@ -1707,6 +1711,7 @@ public sealed partial class SettingsPage : Page
         yield return DeepSeekKeyRevealButton;
         yield return GroqKeyRevealButton;
         yield return ZhipuKeyRevealButton;
+        yield return KimiKeyRevealButton;
         yield return GitHubModelsTokenRevealButton;
         yield return GeminiKeyRevealButton;
         yield return CustomOpenAIKeyRevealButton;
@@ -2266,6 +2271,7 @@ public sealed partial class SettingsPage : Page
         DeepSeekModelCombo.SelectionChanged += OnSettingChanged;
         GroqModelCombo.SelectionChanged += OnSettingChanged;
         ZhipuModelCombo.SelectionChanged += OnSettingChanged;
+        KimiModelCombo.SelectionChanged += OnSettingChanged;
         GitHubModelsModelCombo.SelectionChanged += OnSettingChanged;
         GeminiModelCombo.SelectionChanged += OnSettingChanged;
 
@@ -2324,6 +2330,7 @@ public sealed partial class SettingsPage : Page
         DeepSeekKeyBox.PasswordChanged += OnSettingChanged;
         GroqKeyBox.PasswordChanged += OnSettingChanged;
         ZhipuKeyBox.PasswordChanged += OnSettingChanged;
+        KimiKeyBox.PasswordChanged += OnSettingChanged;
         GitHubModelsTokenBox.PasswordChanged += OnSettingChanged;
         GeminiKeyBox.PasswordChanged += OnSettingChanged;
         CustomOpenAIEndpointBox.TextChanged += OnSettingChanged;
@@ -2386,6 +2393,7 @@ public sealed partial class SettingsPage : Page
         DeepSeekModelCombo.SelectionChanged -= OnSettingChanged;
         GroqModelCombo.SelectionChanged -= OnSettingChanged;
         ZhipuModelCombo.SelectionChanged -= OnSettingChanged;
+        KimiModelCombo.SelectionChanged -= OnSettingChanged;
         GitHubModelsModelCombo.SelectionChanged -= OnSettingChanged;
         GeminiModelCombo.SelectionChanged -= OnSettingChanged;
 
@@ -2441,6 +2449,7 @@ public sealed partial class SettingsPage : Page
         DeepSeekKeyBox.PasswordChanged -= OnSettingChanged;
         GroqKeyBox.PasswordChanged -= OnSettingChanged;
         ZhipuKeyBox.PasswordChanged -= OnSettingChanged;
+        KimiKeyBox.PasswordChanged -= OnSettingChanged;
         GitHubModelsTokenBox.PasswordChanged -= OnSettingChanged;
         GeminiKeyBox.PasswordChanged -= OnSettingChanged;
         CustomOpenAIEndpointBox.TextChanged -= OnSettingChanged;
@@ -2784,6 +2793,8 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(GetEditableComboValue(GroqModelCombo, "llama-3.3-70b-versatile"), _settings.GroqModel)
             || !SameSecret(ZhipuKeyBox.Password, _settings.ZhipuApiKey)
             || !SameSetting(GetEditableComboValue(ZhipuModelCombo, "glm-4.5-flash"), _settings.ZhipuModel)
+            || !SameSecret(KimiKeyBox.Password, _settings.KimiApiKey)
+            || !SameSetting(GetEditableComboValue(KimiModelCombo, "kimi-k2-turbo-preview"), _settings.KimiModel)
             || !SameSecret(GitHubModelsTokenBox.Password, _settings.GitHubModelsToken)
             || !SameSetting(GetEditableComboValue(GitHubModelsModelCombo, "gpt-4.1"), _settings.GitHubModelsModel)
             || !SameSecret(GeminiKeyBox.Password, _settings.GeminiApiKey)
@@ -3018,6 +3029,10 @@ public sealed partial class SettingsPage : Page
             ZhipuKeyBox.Password = _settings.ZhipuApiKey ?? string.Empty;
             SetEditableComboValue(ZhipuModelCombo, _settings.ZhipuModel);
 
+            // Kimi settings
+            KimiKeyBox.Password = _settings.KimiApiKey ?? string.Empty;
+            SetEditableComboValue(KimiModelCombo, _settings.KimiModel);
+
             // GitHub Models settings
             GitHubModelsTokenBox.Password = _settings.GitHubModelsToken ?? string.Empty;
             SetEditableComboValue(GitHubModelsModelCombo, _settings.GitHubModelsModel);
@@ -3233,6 +3248,7 @@ public sealed partial class SettingsPage : Page
             ["deepseek"] = DeepSeekStatusText,
             ["groq"] = GroqStatusText,
             ["zhipu"] = ZhipuStatusText,
+            ["kimi"] = KimiStatusText,
             ["github"] = GitHubModelsStatusText,
             ["gemini"] = GeminiStatusText,
             ["custom-openai"] = CustomOpenAIStatusText,
@@ -4386,6 +4402,11 @@ public sealed partial class SettingsPage : Page
         _settings.ZhipuApiKey = string.IsNullOrWhiteSpace(zhipuKey) ? null : zhipuKey;
         _settings.ZhipuModel = GetEditableComboValue(ZhipuModelCombo, "glm-4.5-flash");
 
+        // Save Kimi settings
+        var kimiKey = KimiKeyBox.Password;
+        _settings.KimiApiKey = string.IsNullOrWhiteSpace(kimiKey) ? null : kimiKey;
+        _settings.KimiModel = GetEditableComboValue(KimiModelCombo, "kimi-k2-turbo-preview");
+
         // Save GitHub Models settings
         var githubToken = GitHubModelsTokenBox.Password;
         _settings.GitHubModelsToken = string.IsNullOrWhiteSpace(githubToken) ? null : githubToken;
@@ -5106,6 +5127,7 @@ public sealed partial class SettingsPage : Page
             "deepseek" => new DeepSeekService(httpClient),
             "groq" => new GroqService(httpClient),
             "zhipu" => new ZhipuService(httpClient),
+            "kimi" => new KimiService(httpClient),
             "github" => new GitHubModelsService(httpClient),
             "gemini" => new GeminiService(httpClient),
             "custom-openai" => new CustomOpenAIService(httpClient),
@@ -5380,6 +5402,22 @@ public sealed partial class SettingsPage : Page
                 zhipu.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
             }
         }, TestZhipuButton, ZhipuStatusText);
+    }
+
+    /// <summary>
+    /// Test Kimi configuration.
+    /// </summary>
+    private async void OnTestKimi(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("kimi", service =>
+        {
+            if (service is KimiService kimi)
+            {
+                var apiKey = KimiKeyBox.Password;
+                var model = GetEditableComboValue(KimiModelCombo, "kimi-k2-turbo-preview");
+                kimi.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
+            }
+        }, TestKimiButton, KimiStatusText);
     }
 
     /// <summary>

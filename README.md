@@ -124,7 +124,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
-- **Multiple Translation Services** (21 available services; Linguee currently unavailable)
+- **Multiple Translation Services** (22 available services; Linguee currently unavailable)
   - Google Translate (free, no API key required)
   - Google Dict (rich dictionary: phonetics, definitions, examples)
   - Bing Translate (free, no API key required)
@@ -134,7 +134,8 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Gemini (Google AI, including Gemini 2.5 models)
   - DeepSeek
   - Groq (fast LLM inference)
-  - Zhipu AI
+  - Zhipu AI (GLM models)
+  - Kimi (Moonshot AI)
   - GitHub Models (free)
   - Doubao (ByteDance translation-specialized model)
   - Volcano Engine (火山翻译, ByteDance)
@@ -231,7 +232,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OpenAI | OpenAI API | ✅ | |
 | DeepSeek | OpenAI API | ✅ | |
 | Gemini | Gemini API | ✅ | Custom SSE streaming |
-| Zhipu AI | OpenAI API | ✅ | |
+| Zhipu AI | OpenAI API | ✅ | GLM models |
+| Kimi | OpenAI API | — | OpenAI-compatible (Moonshot AI), missing API key |
 | Volcano Engine | REST | ✅ | HMAC-SHA256 signing |
 | Groq | OpenAI API | ✅ | OpenAI-compatible |
 | GitHub Models | OpenAI API | — | OpenAI-compatible, missing API key |
@@ -284,7 +286,7 @@ If Easydict for Windows is useful to you, please [give the repository a star on 
 |---------|--------|----------------|
 | Layout Detection | DocLayout-YOLO | ONNX (DocLayout-YOLO) / Vision LLM / Heuristic / Auto |
 | Formula Protection | LaTeX preservation | Three-tier detection, multi-font glyph rendering, subscript/superscript handling |
-| LLM Backends | OpenAI, Ollama, Azure OpenAI, etc. | OpenAI, Gemini, DeepSeek, Groq, Zhipu, GitHub Models, Doubao, Ollama, Custom OpenAI-compatible |
+| LLM Backends | OpenAI, Ollama, Azure OpenAI, etc. | OpenAI, Gemini, DeepSeek, Groq, Zhipu, Kimi, GitHub Models, Doubao, Ollama, Custom OpenAI-compatible |
 | Document Context Pass | No | Yes — glossary + summary + preservation hints extracted before block translation for terminology consistency |
 | Translation Cache | No | Yes — SQLite cache keyed by source hash + service + language pair |
 | Parallel Translation | Limited | Configurable concurrency with retry + quality feedback |

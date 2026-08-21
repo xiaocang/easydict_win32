@@ -243,6 +243,8 @@ internal sealed class WorkerSpawner
             GroqModel = settings.GroqModel,
             ZhipuApiKey = settings.ZhipuApiKey,
             ZhipuModel = settings.ZhipuModel,
+            KimiApiKey = settings.KimiApiKey,
+            KimiModel = settings.KimiModel,
             DoubaoApiKey = settings.DoubaoApiKey,
             DoubaoModel = settings.DoubaoModel,
             // GitHubModelsApiKey: SettingsService does not currently expose a key

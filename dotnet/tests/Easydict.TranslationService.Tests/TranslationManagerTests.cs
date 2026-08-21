@@ -35,6 +35,7 @@ public class TranslationManagerTests : IDisposable
         _manager.Services.Should().ContainKey("deepseek");
         _manager.Services.Should().ContainKey("groq");
         _manager.Services.Should().ContainKey("zhipu");
+        _manager.Services.Should().ContainKey("kimi");
         _manager.Services.Should().ContainKey("github");
         _manager.Services.Should().ContainKey("custom-openai");
         _manager.Services.Should().ContainKey("gemini");

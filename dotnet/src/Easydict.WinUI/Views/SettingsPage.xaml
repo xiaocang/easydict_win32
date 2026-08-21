@@ -845,6 +845,74 @@
                             </StackPanel>
                         </Expander>
 
+                        <!-- Kimi (Moonshot AI) -->
+                        <Expander HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Tag="Kimi">
+                            <Expander.Header>
+                                <Grid>
+                                    <TextBlock Text="Kimi (Moonshot AI)"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="KimiStatusText"
+                                            Text="✓"
+                                            FontWeight="SemiBold"
+                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                            HorizontalAlignment="Right"
+                                            Visibility="Collapsed"/>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Spacing="12"
+                                    Margin="0,8,0,8">
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="KimiKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="KimiKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Kimi API key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="KimiKeyRevealButton"
+                                                AutomationProperties.AutomationId="KimiKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=KimiKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                                <ComboBox x:Name="KimiModelCombo"
+                                        Header="Model"
+                                        Width="280"
+                                        IsEditable="True">
+                                    <ComboBoxItem Content="kimi-k2-turbo-preview"
+                                            Tag="kimi-k2-turbo-preview"/>
+                                    <ComboBoxItem Content="kimi-k2-0905-preview"
+                                            Tag="kimi-k2-0905-preview"/>
+                                    <ComboBoxItem Content="kimi-latest"
+                                            Tag="kimi-latest"/>
+                                    <ComboBoxItem Content="moonshot-v1-8k"
+                                            Tag="moonshot-v1-8k"/>
+                                </ComboBox>
+                                <TextBlock Text="Get your API key from platform.moonshot.cn. You can type a custom model name."
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+                                <Button x:Name="TestKimiButton"
+                                        Content="Test"
+                                        Click="OnTestKimi"
+                                        Padding="8,4"/>
+                            </StackPanel>
+                        </Expander>
+
                         <!-- GitHub Models -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"

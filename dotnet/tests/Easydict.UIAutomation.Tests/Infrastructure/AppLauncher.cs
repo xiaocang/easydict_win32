@@ -25,7 +25,65 @@ public sealed class AppLauncher : IDisposable
     {
         var resolvedTimeout = ResolveLaunchTimeout(timeout ?? TimeSpan.FromSeconds(30));
         var appUserModelId = $"{packageFamilyName}!App";
-        LaunchWithRetry(() => Application.LaunchStoreApp(appUserModelId), resolvedTimeout);
+        LaunchWithRetry(() => LaunchStoreAppOutOfProcess(appUserModelId, resolvedTimeout), resolvedTimeout);
+    }
+
+    private static Application LaunchStoreAppOutOfProcess(string appUserModelId, TimeSpan timeout)
+    {
+        const string processName = "Easydict.WinUI";
+        var existingProcessIds = Process.GetProcessesByName(processName)
+            .Select(process =>
+            {
+                try
+                {
+                    return process.Id;
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            })
+            .ToHashSet();
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            UseShellExecute = true
+        };
+        startInfo.ArgumentList.Add($@"shell:AppsFolder\{appUserModelId}");
+
+        using var activationProcess = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start MSIX activation helper for {appUserModelId}.");
+
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < timeout)
+        {
+            int? launchedProcessId = null;
+            foreach (var process in Process.GetProcessesByName(processName))
+            {
+                try
+                {
+                    if (!existingProcessIds.Contains(process.Id))
+                    {
+                        launchedProcessId = process.Id;
+                    }
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+
+            if (launchedProcessId.HasValue)
+            {
+                return new Application(launchedProcessId.Value, isStoreApp: true);
+            }
+
+            Thread.Sleep(100);
+        }
+
+        throw new TimeoutException(
+            $"MSIX activation did not start a new {processName} process within {timeout.TotalSeconds}s.");
     }
 
     /// <summary>

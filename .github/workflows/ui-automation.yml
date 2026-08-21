@@ -380,6 +380,8 @@ jobs:
           dotnet test tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
             --configuration Release `
             --no-build `
+            --blame-hang-timeout 5m `
+            --blame-hang-dump-type mini `
             --verbosity normal `
             --logger "trx;LogFileName=ui-test-results.trx" `
             --logger "console;verbosity=detailed" `
@@ -471,7 +473,7 @@ jobs:
         if: always()
         with:
           name: ui-automation-test-results-${{ matrix.shard.suffix }}
-          path: dotnet/**/TestResults/*.trx
+          path: dotnet/**/TestResults/**
           retention-days: 30
 
       - name: Upload MSIX artifact

@@ -91,6 +91,14 @@ internal static class WorkerTranslationManagerFactory
             }
         });
 
+        ConfigureIfPresent(manager, "kimi", svc =>
+        {
+            if (svc is KimiService ks && snapshot.KimiApiKey is not null)
+            {
+                ks.Configure(snapshot.KimiApiKey, model: snapshot.KimiModel);
+            }
+        });
+
         ConfigureIfPresent(manager, "ollama", svc =>
         {
             if (svc is OllamaService ollama)

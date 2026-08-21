@@ -105,6 +105,7 @@ public sealed class TranslationManager : IDisposable
         RegisterService(new DeepSeekService(_httpClient));
         RegisterService(new GroqService(_httpClient));
         RegisterService(new ZhipuService(_httpClient));
+        RegisterService(new KimiService(_httpClient));
         RegisterService(new GitHubModelsService(_httpClient));
         RegisterService(new CustomOpenAIService(_httpClient));
         RegisterService(new GeminiService(_httpClient));

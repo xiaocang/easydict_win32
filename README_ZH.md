@@ -124,7 +124,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
-- **多种翻译服务**（21 种可用服务；Linguee 当前不可用）
+- **多种翻译服务**（22 种可用服务；Linguee 当前不可用）
   - Google 翻译（免费，无需 API Key）
   - Google 词典（丰富词典：音标、释义、例句）
   - 必应翻译（免费，无需 API Key）
@@ -134,7 +134,8 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
   - Gemini（Google AI，包括 Gemini 2.5 模型）
   - DeepSeek（深度求索）
   - Groq（快速 LLM 推理）
-  - 智谱 AI
+  - 智谱 AI（GLM 模型）
+  - Kimi（月之暗面 Moonshot AI）
   - GitHub Models（免费）
   - 豆包（字节跳动翻译专用模型）
   - 火山翻译（字节跳动）
@@ -231,7 +232,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OpenAI | OpenAI API | ✅ | |
 | DeepSeek | OpenAI API | ✅ | |
 | Gemini | Gemini API | ✅ | 自定义 SSE 流式协议 |
-| 智谱 AI | OpenAI API | ✅ | |
+| 智谱 AI | OpenAI API | ✅ | GLM 模型 |
+| Kimi | OpenAI API | — | OpenAI 兼容（月之暗面），缺少 API Key |
 | 火山翻译 | REST | ✅ | HMAC-SHA256 签名 |
 | Groq | OpenAI API | ✅ | OpenAI 兼容 |
 | GitHub Models | OpenAI API | — | OpenAI 兼容，缺少 API Key |
@@ -284,7 +286,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 |------|--------|----------------|
 | 版面检测 | DocLayout-YOLO | ONNX (DocLayout-YOLO) / Vision LLM / 启发式 / 自动 |
 | 公式保护 | LaTeX 保留 | 三级检测、多字体字形渲染、上下标处理 |
-| LLM 服务 | OpenAI、Ollama、Azure OpenAI 等 | OpenAI、Gemini、DeepSeek、Groq、智谱、GitHub Models、豆包、Ollama、自定义 OpenAI 兼容接口 |
+| LLM 服务 | OpenAI、Ollama、Azure OpenAI 等 | OpenAI、Gemini、DeepSeek、Groq、智谱、Kimi、GitHub Models、豆包、Ollama、自定义 OpenAI 兼容接口 |
 | 文档上下文预处理 | 不支持 | 支持 — 块级翻译前提取术语表、摘要与保留提示，保证术语一致性 |
 | 翻译缓存 | 不支持 | 支持 — 基于源文本哈希 + 服务 + 语言对的 SQLite 缓存 |
 | 并行翻译 | 有限 | 可配置并发 + 重试 + 质量反馈 |

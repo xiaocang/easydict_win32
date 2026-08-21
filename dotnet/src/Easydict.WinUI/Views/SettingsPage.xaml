@@ -2582,8 +2582,7 @@
                                     <ProgressBar x:Name="PpOcrV6DownloadProgress"
                                             Minimum="0"
                                             Maximum="100"
-                                            Visibility="Collapsed"
-                                            Width="350"/>
+                                            Visibility="Collapsed"/>
                                     <TextBlock x:Name="PpOcrV6DownloadProgressText"
                                             Visibility="Collapsed"
                                             FontSize="12"
@@ -2591,6 +2590,7 @@
                                     <NumberBox x:Name="PpOcrV6ThreadCountBox"
                                             SpinButtonPlacementMode="Inline"
                                             ValueChanged="OnPpOcrV6SettingChanged"
+                                            HorizontalAlignment="Left"
                                             Width="180"/>
                                     <ToggleSwitch x:Name="PpOcrV6GpuToggle"
                                             Toggled="OnPpOcrV6SettingChanged"/>

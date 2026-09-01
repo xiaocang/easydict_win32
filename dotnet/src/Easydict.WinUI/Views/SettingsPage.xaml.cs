@@ -5762,8 +5762,8 @@ public sealed partial class SettingsPage : Page
 
     private async Task<IReadOnlyList<ModelCatalogEntry>> FetchDeepSeekModelsAsync()
     {
-        using var httpClient = new HttpClient();
-        var service = new DeepSeekService(httpClient);
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        var service = new DeepSeekService(handle.Manager.SharedHttpClient);
         service.Configure(DeepSeekKeyBox.Password);
         return await service.FetchModelsAsync();
     }
@@ -5797,8 +5797,8 @@ public sealed partial class SettingsPage : Page
 
     private async Task<IReadOnlyList<ModelCatalogEntry>> FetchZhipuModelsAsync()
     {
-        using var httpClient = new HttpClient();
-        var service = new ZhipuService(httpClient);
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        var service = new ZhipuService(handle.Manager.SharedHttpClient);
         service.Configure(ZhipuKeyBox.Password);
         return await service.FetchModelsAsync();
     }
@@ -5832,8 +5832,8 @@ public sealed partial class SettingsPage : Page
 
     private async Task<IReadOnlyList<ModelCatalogEntry>> FetchKimiModelsAsync()
     {
-        using var httpClient = new HttpClient();
-        var service = new KimiService(httpClient);
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        var service = new KimiService(handle.Manager.SharedHttpClient);
         service.Configure(KimiKeyBox.Password);
         return await service.FetchModelsAsync();
     }
@@ -5867,8 +5867,8 @@ public sealed partial class SettingsPage : Page
 
     private static async Task<IReadOnlyList<ModelCatalogEntry>> FetchOpenRouterModelsAsync()
     {
-        using var httpClient = new HttpClient();
-        var service = new OpenRouterService(httpClient);
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        var service = new OpenRouterService(handle.Manager.SharedHttpClient);
         return await service.FetchModelsAsync();
     }
 
@@ -5901,8 +5901,8 @@ public sealed partial class SettingsPage : Page
 
     private async Task<IReadOnlyList<ModelCatalogEntry>> FetchOrcaRouterModelsAsync()
     {
-        using var httpClient = new HttpClient();
-        var service = new OrcaRouterService(httpClient);
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        var service = new OrcaRouterService(handle.Manager.SharedHttpClient);
         service.Configure(OrcaRouterKeyBox.Password);
         return await service.FetchModelsAsync();
     }

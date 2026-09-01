@@ -14,8 +14,8 @@ public sealed class OrcaRouterService : BaseOpenAIService, IModelCatalogProvider
     private const string DefaultModel = "orcarouter/free";
 
     /// <summary>
-    /// Referral link used to sign up for OrcaRouter. Shown as an ordinary "get an API key"
-    /// link in Settings, matching every other provider's sign-up link.
+    /// Referral link used to sign up for OrcaRouter. Settings explicitly labels it as a
+    /// referral link so users can make an informed choice before opening it.
     /// </summary>
     public const string ReferralUrl = "https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6";
 

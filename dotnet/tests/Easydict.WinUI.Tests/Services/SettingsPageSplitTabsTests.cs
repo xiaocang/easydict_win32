@@ -609,6 +609,22 @@ public class SettingsPageSplitTabsTests
             "OpenRouterGetKeyLink.Content = loc.GetString(\"GetApiKeyLink\");");
     }
 
+    [Theory]
+    [InlineData("FetchDeepSeekModelsAsync")]
+    [InlineData("FetchZhipuModelsAsync")]
+    [InlineData("FetchKimiModelsAsync")]
+    [InlineData("FetchOpenRouterModelsAsync")]
+    [InlineData("FetchOrcaRouterModelsAsync")]
+    public void SettingsPage_ModelCatalogFetchesUseProxyAwareSharedClient(string methodName)
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var method = GetMethodBody(codeBehind, methodName);
+
+        method.Should().Contain("TranslationManagerService.Instance.AcquireHandle()");
+        method.Should().Contain("handle.Manager.SharedHttpClient");
+        method.Should().NotContain("new HttpClient(");
+    }
+
     /// <summary>
     /// Maps each registered service that <see cref="ITranslationService.RequiresApiKey"/>
     /// to a token that must appear in SettingsPage.xaml, proving the service has a
@@ -966,6 +982,9 @@ public class SettingsPageSplitTabsTests
             "private static void",
             "private async void",
             "private async Task",
+            "private static async Task",
+            "private async Task<IReadOnlyList<ModelCatalogEntry>>",
+            "private static async Task<IReadOnlyList<ModelCatalogEntry>>",
             "protected override void"
         };
         var start = prefixes

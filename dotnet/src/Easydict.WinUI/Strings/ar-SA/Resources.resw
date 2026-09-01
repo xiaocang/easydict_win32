@@ -1455,4 +1455,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>نجاح: تمت معالجة الصورة، ولكن لم يتم التعرف على أي نص.</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[خطأ] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>نماذج مجانية</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>الحصول على مفتاح API (رابط إحالة)</value></data>
 </root>

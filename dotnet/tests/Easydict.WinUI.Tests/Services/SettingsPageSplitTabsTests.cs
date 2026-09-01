@@ -112,7 +112,9 @@ public class SettingsPageSplitTabsTests
         "PhiSilicaPreparationProgress_DeliveryOptimizationEstimate",
         "PhiSilicaPreparationProgress_TimeUnknown",
         "PhiSilicaPreparationProgress_WindowsUpdateLink",
-        "WindowsLocalAI_Status_UnsupportedWindowsAIBaseline"
+        "WindowsLocalAI_Status_UnsupportedWindowsAIBaseline",
+        "FreeModelsBadge",
+        "GetApiKeyReferralLink"
     ];
 
     private static readonly string[] ExpectedServiceConfigurationIconAssets =
@@ -128,8 +130,8 @@ public class SettingsPageSplitTabsTests
         "GitHub",
         "Gemini",
         "CustomOpenAI",
-        // TODO: add "OpenRouter" and "OrcaRouter" once official service icons are supplied
-        // (Assets/ServiceIcons/{OpenRouter,OrcaRouter}.scale-*.png) — see .gitignore whitelist.
+        "OpenRouter",
+        "OrcaRouter",
         "Doubao",
         "Caiyun",
         "NiuTrans",
@@ -578,6 +580,33 @@ public class SettingsPageSplitTabsTests
             File.Exists(Path.Combine(iconDir, $"{assetName}.scale-100.png")).Should().BeTrue(
                 $"theme-specific service icon asset {assetName} should be available");
         }
+    }
+
+    [Theory]
+    [InlineData("GitHubModels")]
+    [InlineData("OpenRouter")]
+    [InlineData("OrcaRouter")]
+    public void SettingsPage_FreeModelServicesShowLocalizedHeaderBadge(string serviceName)
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+
+        xaml.Should().Contain($"x:Name=\"{serviceName}FreeModelsBadgeText\"");
+        codeBehind.Should().Contain(
+            $"{serviceName}FreeModelsBadgeText.Text = loc.GetString(\"FreeModelsBadge\");");
+    }
+
+    [Fact]
+    public void SettingsPage_OrcaRouterDisclosesReferralLink()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+
+        xaml.Should().Contain("Content=\"Get an API key (referral link)\"");
+        codeBehind.Should().Contain(
+            "OrcaRouterGetKeyLink.Content = loc.GetString(\"GetApiKeyReferralLink\");");
+        codeBehind.Should().Contain(
+            "OpenRouterGetKeyLink.Content = loc.GetString(\"GetApiKeyLink\");");
     }
 
     /// <summary>

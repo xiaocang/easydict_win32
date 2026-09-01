@@ -1409,4 +1409,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>สำเร็จ: ประมวลผลรูปภาพแล้ว แต่ไม่พบข้อความ</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[ข้อผิดพลาด] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>โมเดลฟรี</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>รับคีย์ API (ลิงก์แนะนำ)</value></data>
 </root>

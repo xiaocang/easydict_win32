@@ -1447,4 +1447,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Operazione riuscita: l’immagine è stata elaborata, ma non è stato riconosciuto alcun testo.</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[Errore] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>Modelli gratuiti</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Ottieni una chiave API (link di riferimento)</value></data>
 </root>

@@ -1460,4 +1460,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>성공: 이미지가 처리되었지만 텍스트가 인식되지 않았습니다.</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[오류] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>무료 모델</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>API 키 받기 (추천 링크)</value></data>
 </root>

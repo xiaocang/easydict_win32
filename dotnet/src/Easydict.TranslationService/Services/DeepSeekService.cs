@@ -1,11 +1,12 @@
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services.ModelCatalog;
 
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
 /// DeepSeek translation service using OpenAI-compatible API.
 /// </summary>
-public sealed class DeepSeekService : BaseOpenAIService
+public sealed class DeepSeekService : BaseOpenAIService, IModelCatalogProvider
 {
     private const string DefaultEndpoint = "https://api.deepseek.com/v1/chat/completions";
     private const string DefaultModel = "deepseek-chat";
@@ -36,6 +37,15 @@ public sealed class DeepSeekService : BaseOpenAIService
     public override string ApiKey => _apiKey;
     public override string Model => _model;
     public override double Temperature => _temperature;
+
+    public string ModelsEndpoint => "https://api.deepseek.com/models";
+
+    public Task<IReadOnlyList<ModelCatalogEntry>> FetchModelsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return OpenAiCompatibleModelCatalog.FetchAsync(
+            HttpClient, ModelsEndpoint, _apiKey, cancellationToken);
+    }
 
     /// <summary>
     /// Configure the DeepSeek service with API credentials and options.

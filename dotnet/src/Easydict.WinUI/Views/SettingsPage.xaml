@@ -647,7 +647,8 @@
                         <!-- DeepSeek -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
-                                Tag="DeepSeek">
+                                Tag="DeepSeek"
+                                Expanding="OnDeepSeekExpanding">
                             <Expander.Header>
                                 <Grid>
                                     <TextBlock Text="DeepSeek"
@@ -689,23 +690,32 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <ComboBox x:Name="DeepSeekModelCombo"
-                                        Header="Model"
-                                        Width="280"
-                                        IsEditable="True">
-                                    <ComboBoxItem Content="deepseek-chat"
-                                            Tag="deepseek-chat"/>
-                                    <ComboBoxItem Content="deepseek-reasoner"
-                                            Tag="deepseek-reasoner"/>
-                                </ComboBox>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="DeepSeekModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="deepseek-chat"
+                                                Tag="deepseek-chat"/>
+                                        <ComboBoxItem Content="deepseek-reasoner"
+                                                Tag="deepseek-reasoner"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshDeepSeekModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshDeepSeekModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestDeepSeekButton"
+                                            Content="Test"
+                                            Click="OnTestDeepSeek"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
                                 <TextBlock Text="Get your API key from platform.deepseek.com. You can type a custom model name."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
-                                <Button x:Name="TestDeepSeekButton"
-                                        Content="Test"
-                                        Click="OnTestDeepSeek"
-                                        Padding="8,4"/>
                             </StackPanel>
                         </Expander>
 
@@ -779,7 +789,8 @@
                         <!-- Zhipu (智谱) -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
-                                Tag="Zhipu">
+                                Tag="Zhipu"
+                                Expanding="OnZhipuExpanding">
                             <Expander.Header>
                                 <Grid>
                                     <TextBlock Text="Zhipu (智谱)"
@@ -821,34 +832,44 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <ComboBox x:Name="ZhipuModelCombo"
-                                        Header="Model"
-                                        Width="280"
-                                        IsEditable="True">
-                                    <ComboBoxItem Content="glm-4.5-flash"
-                                            Tag="glm-4.5-flash"/>
-                                    <ComboBoxItem Content="glm-4-flash-250414"
-                                            Tag="glm-4-flash-250414"/>
-                                    <ComboBoxItem Content="glm-4.7"
-                                            Tag="glm-4.7"/>
-                                    <ComboBoxItem Content="glm-4.5-air"
-                                            Tag="glm-4.5-air"/>
-                                </ComboBox>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="ZhipuModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="glm-4.5-flash"
+                                                Tag="glm-4.5-flash"/>
+                                        <ComboBoxItem Content="glm-4-flash-250414"
+                                                Tag="glm-4-flash-250414"/>
+                                        <ComboBoxItem Content="glm-4.7"
+                                                Tag="glm-4.7"/>
+                                        <ComboBoxItem Content="glm-4.5-air"
+                                                Tag="glm-4.5-air"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshZhipuModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshZhipuModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestZhipuButton"
+                                            Content="Test"
+                                            Click="OnTestZhipu"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
                                 <TextBlock Text="Get your API key from open.bigmodel.cn. You can type a custom model name."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
-                                <Button x:Name="TestZhipuButton"
-                                        Content="Test"
-                                        Click="OnTestZhipu"
-                                        Padding="8,4"/>
                             </StackPanel>
                         </Expander>
 
                         <!-- Kimi (Moonshot AI) -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
-                                Tag="Kimi">
+                                Tag="Kimi"
+                                Expanding="OnKimiExpanding">
                             <Expander.Header>
                                 <Grid>
                                     <TextBlock Text="Kimi (Moonshot AI)"
@@ -889,27 +910,36 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <ComboBox x:Name="KimiModelCombo"
-                                        Header="Model"
-                                        Width="280"
-                                        IsEditable="True">
-                                    <ComboBoxItem Content="kimi-k2-turbo-preview"
-                                            Tag="kimi-k2-turbo-preview"/>
-                                    <ComboBoxItem Content="kimi-k2-0905-preview"
-                                            Tag="kimi-k2-0905-preview"/>
-                                    <ComboBoxItem Content="kimi-latest"
-                                            Tag="kimi-latest"/>
-                                    <ComboBoxItem Content="moonshot-v1-8k"
-                                            Tag="moonshot-v1-8k"/>
-                                </ComboBox>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="KimiModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="kimi-k2-turbo-preview"
+                                                Tag="kimi-k2-turbo-preview"/>
+                                        <ComboBoxItem Content="kimi-k2-0905-preview"
+                                                Tag="kimi-k2-0905-preview"/>
+                                        <ComboBoxItem Content="kimi-latest"
+                                                Tag="kimi-latest"/>
+                                        <ComboBoxItem Content="moonshot-v1-8k"
+                                                Tag="moonshot-v1-8k"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshKimiModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshKimiModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestKimiButton"
+                                            Content="Test"
+                                            Click="OnTestKimi"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
                                 <TextBlock Text="Get your API key from platform.moonshot.cn. You can type a custom model name."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
-                                <Button x:Name="TestKimiButton"
-                                        Content="Test"
-                                        Click="OnTestKimi"
-                                        Padding="8,4"/>
                             </StackPanel>
                         </Expander>
 
@@ -919,9 +949,23 @@
                                 Tag="GitHub">
                             <Expander.Header>
                                 <Grid>
-                                    <TextBlock Text="GitHub Models"
-                                            FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                    <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock Text="GitHub Models"
+                                                FontWeight="SemiBold"
+                                                VerticalAlignment="Center"/>
+                                        <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                CornerRadius="9"
+                                                Padding="7,1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="GitHubModelsFreeModelsBadgeText"
+                                                    Text="Free models"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock x:Name="GitHubModelsStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1136,9 +1180,23 @@
                                 Expanding="OnOpenRouterExpanding">
                             <Expander.Header>
                                 <Grid>
-                                    <TextBlock Text="OpenRouter"
-                                            FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                    <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock Text="OpenRouter"
+                                                FontWeight="SemiBold"
+                                                VerticalAlignment="Center"/>
+                                        <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                CornerRadius="9"
+                                                Padding="7,1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="OpenRouterFreeModelsBadgeText"
+                                                    Text="Free models"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock x:Name="OpenRouterStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1216,9 +1274,23 @@
                                 Expanding="OnOrcaRouterExpanding">
                             <Expander.Header>
                                 <Grid>
-                                    <TextBlock Text="OrcaRouter"
-                                            FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                    <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock Text="OrcaRouter"
+                                                FontWeight="SemiBold"
+                                                VerticalAlignment="Center"/>
+                                        <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                CornerRadius="9"
+                                                Padding="7,1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="OrcaRouterFreeModelsBadgeText"
+                                                    Text="Free models"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock x:Name="OrcaRouterStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1287,7 +1359,7 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
                                 <HyperlinkButton x:Name="OrcaRouterGetKeyLink"
-                                        Content="Get an API key"
+                                        Content="Get an API key (referral link)"
                                         FontSize="12"
                                         Padding="0"/>
                             </StackPanel>

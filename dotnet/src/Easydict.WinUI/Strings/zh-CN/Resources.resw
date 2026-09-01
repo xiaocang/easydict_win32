@@ -1457,4 +1457,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>成功：图像已处理，但未识别出文本。</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[错误] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>含免费模型</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>获取 API 密钥（推荐链接）</value></data>
 </root>

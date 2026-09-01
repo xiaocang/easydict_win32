@@ -1047,4 +1047,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>सफल: छवि प्रोसेस हुई, लेकिन कोई पाठ पहचाना नहीं गया।</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[त्रुटि] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>मुफ़्त मॉडल</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>API key प्राप्त करें (रेफ़रल लिंक)</value></data>
 </root>

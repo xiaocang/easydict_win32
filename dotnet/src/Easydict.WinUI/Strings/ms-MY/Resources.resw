@@ -1047,4 +1047,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Berjaya: imej diproses, tetapi tiada teks dikenal pasti.</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[Ralat] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>Model percuma</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Dapatkan kunci API (pautan rujukan)</value></data>
 </root>

@@ -1457,4 +1457,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Success: image processed, but no text was recognized.</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[Error] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>Free models</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Get an API key (referral link)</value></data>
 </root>

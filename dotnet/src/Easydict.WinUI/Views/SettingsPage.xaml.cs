@@ -204,6 +204,9 @@ public sealed partial class SettingsPage : Page
     private bool _suppressAgentCliToggleDialog; // Reentrancy guard while reverting an agent CLI toggle
     private bool _hasRefreshedClaudeCodeModels;
     private bool _hasRefreshedCodexModels;
+    private bool _hasRefreshedDeepSeekModels;
+    private bool _hasRefreshedZhipuModels;
+    private bool _hasRefreshedKimiModels;
     private bool _hasRefreshedOpenRouterModels;
     private bool _hasRefreshedOrcaRouterModels;
     private bool _isMainWindowReorderModeEnabled;
@@ -1398,14 +1401,18 @@ public sealed partial class SettingsPage : Page
         OpenAIModelCombo.Header = loc.GetString("Model");
         DeepSeekKeyHeaderText.Text = loc.GetString("ApiKey");
         DeepSeekModelCombo.Header = loc.GetString("Model");
+        RefreshDeepSeekModelsButton.Content = loc.GetString("Refresh");
         GroqKeyHeaderText.Text = loc.GetString("ApiKey");
         GroqModelCombo.Header = loc.GetString("Model");
         ZhipuKeyHeaderText.Text = loc.GetString("ApiKey");
         ZhipuModelCombo.Header = loc.GetString("Model");
+        RefreshZhipuModelsButton.Content = loc.GetString("Refresh");
         KimiKeyHeaderText.Text = loc.GetString("ApiKey");
         KimiModelCombo.Header = loc.GetString("Model");
+        RefreshKimiModelsButton.Content = loc.GetString("Refresh");
         GitHubModelsTokenHeaderText.Text = loc.GetString("GitHubToken");
         GitHubModelsModelCombo.Header = loc.GetString("Model");
+        GitHubModelsFreeModelsBadgeText.Text = loc.GetString("FreeModelsBadge");
         GeminiKeyHeaderText.Text = loc.GetString("ApiKey");
         GeminiModelCombo.Header = loc.GetString("Model");
         CustomOpenAIKeyHeaderText.Text = loc.GetString("ApiKeyOptional");
@@ -1416,13 +1423,15 @@ public sealed partial class SettingsPage : Page
         OpenRouterKeyHeaderText.Text = loc.GetString("ApiKey");
         OpenRouterModelCombo.Header = loc.GetString("Model");
         OpenRouterDescriptionText.Text = loc.GetString("OpenRouterDescription");
+        OpenRouterFreeModelsBadgeText.Text = loc.GetString("FreeModelsBadge");
         OpenRouterGetKeyLink.Content = loc.GetString("GetApiKeyLink");
         OpenRouterGetKeyLink.NavigateUri = new Uri(OpenRouterService.SignUpUrl);
         RefreshOpenRouterModelsButton.Content = loc.GetString("Refresh");
         OrcaRouterKeyHeaderText.Text = loc.GetString("ApiKey");
         OrcaRouterModelCombo.Header = loc.GetString("Model");
         OrcaRouterDescriptionText.Text = loc.GetString("OrcaRouterDescription");
-        OrcaRouterGetKeyLink.Content = loc.GetString("GetApiKeyLink");
+        OrcaRouterFreeModelsBadgeText.Text = loc.GetString("FreeModelsBadge");
+        OrcaRouterGetKeyLink.Content = loc.GetString("GetApiKeyReferralLink");
         OrcaRouterGetKeyLink.NavigateUri = new Uri(OrcaRouterService.ReferralUrl);
         RefreshOrcaRouterModelsButton.Content = loc.GetString("Refresh");
         DoubaoKeyHeaderText.Text = loc.GetString("ApiKey");
@@ -5724,12 +5733,117 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    private async void OnDeepSeekExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (_hasRefreshedDeepSeekModels) return;
+
+        _hasRefreshedDeepSeekModels = true;
+        await RefreshCatalogModelsAsync(
+            "deepseek",
+            DeepSeekModelCombo,
+            RefreshDeepSeekModelsButton,
+            "deepseek-chat",
+            forceRefresh: false,
+            showErrorDialog: false,
+            FetchDeepSeekModelsAsync);
+    }
+
+    private async void OnRefreshDeepSeekModels(object sender, RoutedEventArgs e)
+    {
+        await RefreshCatalogModelsAsync(
+            "deepseek",
+            DeepSeekModelCombo,
+            RefreshDeepSeekModelsButton,
+            "deepseek-chat",
+            forceRefresh: true,
+            showErrorDialog: true,
+            FetchDeepSeekModelsAsync);
+    }
+
+    private async Task<IReadOnlyList<ModelCatalogEntry>> FetchDeepSeekModelsAsync()
+    {
+        using var httpClient = new HttpClient();
+        var service = new DeepSeekService(httpClient);
+        service.Configure(DeepSeekKeyBox.Password);
+        return await service.FetchModelsAsync();
+    }
+
+    private async void OnZhipuExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (_hasRefreshedZhipuModels) return;
+
+        _hasRefreshedZhipuModels = true;
+        await RefreshCatalogModelsAsync(
+            "zhipu",
+            ZhipuModelCombo,
+            RefreshZhipuModelsButton,
+            "glm-4.5-flash",
+            forceRefresh: false,
+            showErrorDialog: false,
+            FetchZhipuModelsAsync);
+    }
+
+    private async void OnRefreshZhipuModels(object sender, RoutedEventArgs e)
+    {
+        await RefreshCatalogModelsAsync(
+            "zhipu",
+            ZhipuModelCombo,
+            RefreshZhipuModelsButton,
+            "glm-4.5-flash",
+            forceRefresh: true,
+            showErrorDialog: true,
+            FetchZhipuModelsAsync);
+    }
+
+    private async Task<IReadOnlyList<ModelCatalogEntry>> FetchZhipuModelsAsync()
+    {
+        using var httpClient = new HttpClient();
+        var service = new ZhipuService(httpClient);
+        service.Configure(ZhipuKeyBox.Password);
+        return await service.FetchModelsAsync();
+    }
+
+    private async void OnKimiExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (_hasRefreshedKimiModels) return;
+
+        _hasRefreshedKimiModels = true;
+        await RefreshCatalogModelsAsync(
+            "kimi",
+            KimiModelCombo,
+            RefreshKimiModelsButton,
+            "kimi-k2-turbo-preview",
+            forceRefresh: false,
+            showErrorDialog: false,
+            FetchKimiModelsAsync);
+    }
+
+    private async void OnRefreshKimiModels(object sender, RoutedEventArgs e)
+    {
+        await RefreshCatalogModelsAsync(
+            "kimi",
+            KimiModelCombo,
+            RefreshKimiModelsButton,
+            "kimi-k2-turbo-preview",
+            forceRefresh: true,
+            showErrorDialog: true,
+            FetchKimiModelsAsync);
+    }
+
+    private async Task<IReadOnlyList<ModelCatalogEntry>> FetchKimiModelsAsync()
+    {
+        using var httpClient = new HttpClient();
+        var service = new KimiService(httpClient);
+        service.Configure(KimiKeyBox.Password);
+        return await service.FetchModelsAsync();
+    }
+
     private async void OnOpenRouterExpanding(Expander sender, ExpanderExpandingEventArgs e)
     {
         if (_hasRefreshedOpenRouterModels) return;
 
         _hasRefreshedOpenRouterModels = true;
-        await RefreshRouterModelsAsync(
+        await RefreshCatalogModelsAsync(
             "openrouter",
             OpenRouterModelCombo,
             RefreshOpenRouterModelsButton,
@@ -5741,7 +5855,7 @@ public sealed partial class SettingsPage : Page
 
     private async void OnRefreshOpenRouterModels(object sender, RoutedEventArgs e)
     {
-        await RefreshRouterModelsAsync(
+        await RefreshCatalogModelsAsync(
             "openrouter",
             OpenRouterModelCombo,
             RefreshOpenRouterModelsButton,
@@ -5763,7 +5877,7 @@ public sealed partial class SettingsPage : Page
         if (_hasRefreshedOrcaRouterModels) return;
 
         _hasRefreshedOrcaRouterModels = true;
-        await RefreshRouterModelsAsync(
+        await RefreshCatalogModelsAsync(
             "orcarouter",
             OrcaRouterModelCombo,
             RefreshOrcaRouterModelsButton,
@@ -5775,7 +5889,7 @@ public sealed partial class SettingsPage : Page
 
     private async void OnRefreshOrcaRouterModels(object sender, RoutedEventArgs e)
     {
-        await RefreshRouterModelsAsync(
+        await RefreshCatalogModelsAsync(
             "orcarouter",
             OrcaRouterModelCombo,
             RefreshOrcaRouterModelsButton,
@@ -5794,15 +5908,15 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Populates a router service's model dropdown from the on-disk catalog cache, refetching
-    /// from the network when the cache is missing/stale (or when <paramref name="forceRefresh"/>
-    /// is set, e.g. from an explicit Refresh button click). A failed lazy (non-forced) fetch
-    /// falls back to a stale cache, then to the dropdown's existing seed items, and stays
-    /// silent — opening Settings offline must never pop an error dialog. A failed forced
-    /// refresh shows the same "test failed" dialog used elsewhere on this page when
-    /// <paramref name="showErrorDialog"/> is set.
+    /// Populates an OpenAI-compatible service's model dropdown from the on-disk catalog cache,
+    /// refetching from the network when the cache is missing/stale (or when
+    /// <paramref name="forceRefresh"/> is set, e.g. from an explicit Refresh button click).
+    /// A failed lazy (non-forced) fetch falls back to a stale cache, then to the dropdown's
+    /// existing seed items, and stays silent — opening Settings offline must never pop an error
+    /// dialog. A failed forced refresh shows the same "test failed" dialog used elsewhere on
+    /// this page when <paramref name="showErrorDialog"/> is set.
     /// </summary>
-    private async Task RefreshRouterModelsAsync(
+    private async Task RefreshCatalogModelsAsync(
         string serviceId,
         ComboBox combo,
         Button refreshButton,

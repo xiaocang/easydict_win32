@@ -126,4 +126,24 @@ public class ZhipuServiceTests
         await action.Should().ThrowAsync<TranslationException>()
             .Where(e => e.ErrorCode == TranslationErrorCode.InvalidApiKey);
     }
+    [Fact]
+    public async Task FetchModelsAsync_SendsBearerTokenAndParsesCatalog()
+    {
+        _service.Configure("test-key");
+        _mockHandler.EnqueueJsonResponse("""
+        {
+            "data": [
+                { "id": "glm-4.5-air" },
+                { "id": "glm-4.5-flash" }
+            ]
+        }
+        """);
+
+        var models = await _service.FetchModelsAsync();
+
+        models.Select(model => model.Id).Should().Equal("glm-4.5-air", "glm-4.5-flash");
+        _mockHandler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/paas/v4/models");
+        _mockHandler.LastRequest.Headers.Authorization!.Parameter.Should().Be("test-key");
+    }
+
 }

@@ -1,11 +1,12 @@
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services.ModelCatalog;
 
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
 /// Kimi (Moonshot AI, 月之暗面) translation service using OpenAI-compatible API.
 /// </summary>
-public sealed class KimiService : BaseOpenAIService
+public sealed class KimiService : BaseOpenAIService, IModelCatalogProvider
 {
     private const string DefaultEndpoint = "https://api.moonshot.cn/v1/chat/completions";
     private const string DefaultModel = "kimi-k2-turbo-preview";
@@ -38,6 +39,15 @@ public sealed class KimiService : BaseOpenAIService
     public override string ApiKey => _apiKey;
     public override string Model => _model;
     public override double Temperature => _temperature;
+
+    public string ModelsEndpoint => "https://api.moonshot.cn/v1/models";
+
+    public Task<IReadOnlyList<ModelCatalogEntry>> FetchModelsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return OpenAiCompatibleModelCatalog.FetchAsync(
+            HttpClient, ModelsEndpoint, _apiKey, cancellationToken);
+    }
 
     /// <summary>
     /// Configure the Kimi service with API credentials and options.

@@ -1455,4 +1455,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Thành công: hình ảnh đã được xử lý nhưng không nhận dạng được văn bản.</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[Lỗi] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>Mô hình miễn phí</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Nhận khóa API (liên kết giới thiệu)</value></data>
 </root>

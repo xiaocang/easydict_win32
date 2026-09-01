@@ -85,13 +85,13 @@ internal sealed class CompactWindowControlsView
 
     public void RefreshTheme(FrameworkElement? themeRoot)
     {
-        var surfaceBrush = ThemeResourceService.GetBrush("ControlFillColorDefaultBrush", themeRoot)
+        var surfaceBrush = ThemeResourceService.GetBrush("EasydictCardBackgroundBrush", themeRoot)
             ?? new SolidColorBrush(Colors.White);
-        var secondarySurfaceBrush = ThemeResourceService.GetBrush("ControlFillColorSecondaryBrush", themeRoot)
+        var secondarySurfaceBrush = ThemeResourceService.GetBrush("EasydictInputBackgroundBrush", themeRoot)
             ?? surfaceBrush;
-        var strokeBrush = ThemeResourceService.GetBrush("ControlStrokeColorDefaultBrush", themeRoot)
+        var strokeBrush = ThemeResourceService.GetBrush("EasydictInputBorderBrush", themeRoot)
             ?? new SolidColorBrush(Colors.Gray);
-        var textBrush = ThemeResourceService.GetBrush("TextFillColorSecondaryBrush", themeRoot)
+        var textBrush = ThemeResourceService.GetBrush("EasydictSecondaryTextBrush", themeRoot)
             ?? new SolidColorBrush(Colors.DimGray);
         var transparentBrush = new SolidColorBrush(Colors.Transparent);
 

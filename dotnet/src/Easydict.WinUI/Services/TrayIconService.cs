@@ -201,10 +201,11 @@ public sealed class TrayIconService : IDisposable
     {
         var menu = new MenuFlyout();
 
-        // Set MinWidth to fit the longest menu item text
-        // This ensures proper width on first open (H.NotifyIcon SecondWindow mode quirk)
+        // Match the wider, rounded system-tray menu treatment while preserving
+        // the default item templates, separators, theme colors, and input behavior.
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
-        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 300d));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 340d));
+        presenterStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(20)));
         menu.MenuFlyoutPresenterStyle = presenterStyle;
 
         var showItem = new MenuFlyoutItem { Text = L("TrayShow") };

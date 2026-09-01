@@ -694,148 +694,98 @@ public class SettingsPageSplitTabsTests
     }
 
     [Fact]
-    public void SettingsPage_ScopesCommonControlForegroundsForExplicitLightTheme()
+    public void SettingsPage_UsesSemanticTokensWithoutShadowingWinUiControlResources()
     {
         var xaml = File.ReadAllText(SettingsPageXamlPath);
         var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
         var settingsResources = File.ReadAllText(SettingsPageResourcesPath);
         var colorsResources = File.ReadAllText(ColorsResourcesPath);
         var minimalResources = File.ReadAllText(MinimalResourcesPath);
+        var appResources = File.ReadAllText(Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml"));
 
-        foreach (var resourceKey in new[]
+        foreach (var semanticKey in new[]
         {
+            "EasydictWindowSurfaceBrush",
+            "EasydictLayerFillBrush",
+            "EasydictCardBackgroundBrush",
+            "EasydictCardBorderBrush",
+            "EasydictInputBackgroundBrush",
+            "EasydictInputBorderBrush",
+            "EasydictPrimaryTextBrush",
+            "EasydictSecondaryTextBrush",
+            "EasydictTertiaryTextBrush",
+            "EasydictIconForegroundBrush",
+            "EasydictAccentBrush",
+            "EasydictAccentForegroundBrush",
+            "EasydictSuccessBrush",
+            "EasydictCriticalBrush",
+            "EasydictLinkBrush",
+            "EasydictResultHeaderBackgroundBrush",
+            "EasydictResultHeaderPointerOverBrush",
+            "EasydictPopButtonBackgroundBrush",
+            "EasydictPopButtonBorderBrush",
+            "EasydictPopButtonForegroundBrush"
+        })
+        {
+            colorsResources.Should().Contain($"x:Key=\"{semanticKey}\"");
+            minimalResources.Should().Contain($"x:Key=\"{semanticKey}\"");
+        }
+        foreach (var darkPaletteEntry in new Dictionary<string, string>
+        {
+            ["EasydictDarkWindowSurfaceColor"] = "#FF1B1D22",
+            ["EasydictDarkLayerFillColor"] = "#E61E2127",
+            ["EasydictDarkCardBackgroundColor"] = "#F02A2E36",
+            ["EasydictDarkInputBackgroundColor"] = "#FF252931",
+            ["EasydictDarkPrimaryTextColor"] = "#FFF4F6FA",
+            ["EasydictDarkSecondaryTextColor"] = "#FFC5CAD3",
+            ["EasydictDarkLinkColor"] = "#FF6CB8FF"
+        })
+        {
+            colorsResources.Should().Contain(
+                $"x:Key=\"{darkPaletteEntry.Key}\">{darkPaletteEntry.Value}</Color>");
+        }
+
+
+        foreach (var platformKey in new[]
+        {
+            "ApplicationPageBackgroundThemeBrush",
+            "ControlCornerRadius",
+            "OverlayCornerRadius",
+            "CardBackgroundFillColorDefaultBrush",
+            "CardStrokeColorDefaultBrush",
             "TextFillColorDisabledBrush",
-            "ComboBoxHeaderForeground",
-            "ComboBoxHeaderForegroundDisabled",
-            "ComboBoxHeaderForegroundThemeBrush",
-            "TextControlHeaderForeground",
-            "TextControlHeaderForegroundDisabled",
-            "TextControlHeaderForegroundThemeBrush",
-            "SliderHeaderForeground",
-            "SliderHeaderForegroundDisabled",
-            "SliderHeaderForegroundThemeBrush",
-            "ToggleSwitchContentForeground",
-            "ToggleSwitchContentForegroundDisabled",
-            "ToggleSwitchHeaderForeground",
-            "ToggleSwitchHeaderForegroundDisabled",
-            "ToggleSwitchForegroundThemeBrush",
-            "ToggleSwitchDisabledForegroundThemeBrush",
-            "ToggleSwitchHeaderForegroundThemeBrush",
-            "ToggleSwitchHeaderDisabledForegroundThemeBrush",
-            "ExpanderHeaderForeground",
-            "ExpanderHeaderForegroundPointerOver",
-            "ExpanderHeaderForegroundPressed",
-            "ExpanderHeaderDisabledForeground",
-            "ExpanderChevronForeground",
-            "CheckBoxForegroundUnchecked",
-            "CheckBoxForegroundUncheckedPointerOver",
-            "CheckBoxForegroundUncheckedPressed",
-            "CheckBoxForegroundUncheckedDisabled",
-            "CheckBoxForegroundChecked",
-            "CheckBoxForegroundCheckedPointerOver",
-            "CheckBoxForegroundCheckedPressed",
-            "CheckBoxForegroundCheckedDisabled",
-            "CheckBoxForegroundIndeterminate",
-            "CheckBoxForegroundIndeterminatePointerOver",
-            "CheckBoxForegroundIndeterminatePressed",
-            "CheckBoxForegroundIndeterminateDisabled"
+            "SystemFillColorSuccessBrush",
+            "SystemFillColorCriticalBrush"
         })
         {
-            settingsResources.Should().Contain($"x:Key=\"{resourceKey}\"",
-                $"{resourceKey} must be scoped close to SettingsPage templates through SettingsPageResources.xaml");
-            colorsResources.Should().Contain($"x:Key=\"{resourceKey}\"",
-                $"{resourceKey} must live in the theme dictionary instead of SettingsPage code-behind");
-            minimalResources.Should().Contain($"x:Key=\"{resourceKey}\"",
-                $"{resourceKey} must be defined for Minimal resources too");
+            colorsResources.Should().NotContain($"x:Key=\"{platformKey}\"");
+            minimalResources.Should().NotContain($"x:Key=\"{platformKey}\"");
+            settingsResources.Should().NotContain($"x:Key=\"{platformKey}\"");
         }
 
-        xaml.Should().Contain("ms-appx:///Themes/SettingsPageResources.xaml",
-            "SettingsPage should consume Settings-specific control chrome through one resource dictionary");
-        xaml.Should().NotContain("HeaderTemplate=\"{x:Null}\"",
-            "SettingsPage should not need per-control header-template opt-outs when header foregrounds are resource-scoped");
-
-        settingsResources.Should().Contain("x:Key=\"SettingsAccentButtonStyle\"");
-        settingsResources.Should().Contain("x:Key=\"SettingsSectionStyle\"");
-        settingsResources.Should().Contain("x:Key=\"SettingsInlineIconButtonStyle\"");
-        settingsResources.Should().Contain("x:Key=\"SettingsLinkForegroundBrush\"");
-        settingsResources.Should().Contain("x:Key=\"SettingsLinkButtonStyle\"");
-        settingsResources.Should().Contain("x:Key=\"SettingsTabButtonStyle\"");
-        settingsResources.Should().NotContain("x:Key=\"SettingsControlHeaderTemplate\"",
-            "a shared HeaderTemplate binds arbitrary DataContexts in item templates and can surface model type names");
-        settingsResources.Should().NotContain("HeaderTemplate\" Value=\"{StaticResource SettingsControlHeaderTemplate}\"");
-
-        foreach (var resourceKey in new[]
+        foreach (var resources in new[] { colorsResources, minimalResources, settingsResources })
         {
-            "AccentFillColorDefaultBrush",
-            "AccentFillColorSecondaryBrush",
-            "AccentFillColorTertiaryBrush",
-            "AccentFillColorDisabledBrush",
-            "TextOnAccentFillColorPrimaryBrush",
-            "TextOnAccentFillColorSecondaryBrush",
-            "TextOnAccentFillColorDisabledBrush",
-            "ToggleSwitchFillOn",
-            "ToggleSwitchFillOnPointerOver",
-            "ToggleSwitchFillOnPressed",
-            "ToggleSwitchFillOnDisabled",
-            "ToggleSwitchStrokeOn",
-            "ToggleSwitchStrokeOnPointerOver",
-            "ToggleSwitchStrokeOnPressed",
-            "ToggleSwitchStrokeOnDisabled",
-            "ToggleSwitchKnobFillOn",
-            "ToggleSwitchKnobFillOnPointerOver",
-            "ToggleSwitchKnobFillOnPressed",
-            "ToggleSwitchKnobFillOnDisabled",
-            "CheckBoxCheckBackgroundStrokeChecked",
-            "CheckBoxCheckBackgroundStrokeCheckedPointerOver",
-            "CheckBoxCheckBackgroundStrokeCheckedPressed",
-            "CheckBoxCheckBackgroundStrokeCheckedDisabled",
-            "CheckBoxCheckBackgroundStrokeIndeterminate",
-            "CheckBoxCheckBackgroundStrokeIndeterminatePointerOver",
-            "CheckBoxCheckBackgroundStrokeIndeterminatePressed",
-            "CheckBoxCheckBackgroundStrokeIndeterminateDisabled",
-            "CheckBoxCheckBackgroundFillChecked",
-            "CheckBoxCheckBackgroundFillCheckedPointerOver",
-            "CheckBoxCheckBackgroundFillCheckedPressed",
-            "CheckBoxCheckBackgroundFillCheckedDisabled",
-            "CheckBoxCheckBackgroundFillIndeterminate",
-            "CheckBoxCheckBackgroundFillIndeterminatePointerOver",
-            "CheckBoxCheckBackgroundFillIndeterminatePressed",
-            "CheckBoxCheckBackgroundFillIndeterminateDisabled",
-            "CheckBoxCheckGlyphForegroundChecked",
-            "CheckBoxCheckGlyphForegroundCheckedPointerOver",
-            "CheckBoxCheckGlyphForegroundCheckedPressed",
-            "CheckBoxCheckGlyphForegroundCheckedDisabled",
-            "CheckBoxCheckGlyphForegroundIndeterminate",
-            "CheckBoxCheckGlyphForegroundIndeterminatePointerOver",
-            "CheckBoxCheckGlyphForegroundIndeterminatePressed",
-            "CheckBoxCheckGlyphForegroundIndeterminateDisabled"
-        })
-        {
-            settingsResources.Should().Contain($"x:Key=\"{resourceKey}\"",
-                $"{resourceKey} should pin Settings checked/on visuals to the app accent instead of the Windows system accent");
+            resources.Should().NotMatchRegex(@"x:Key=""(?:AccentTextFillColorPrimaryBrush|ControlFillColor|ControlStrokeColor|Button|ComboBox|TextControl|ToggleSwitch|Expander|CheckBox)""");
         }
 
-        foreach (var targetType in new[]
-        {
-            "ComboBox",
-            "ComboBoxItem",
-            "TextBox",
-            "PasswordBox",
-            "ToggleSwitch",
-            "CheckBox",
-            "Slider",
-            "Expander"
-        })
-        {
-            settingsResources.Should().NotContain($"<Style TargetType=\"{targetType}\">",
-                $"SettingsPageResources.xaml should override {targetType} template brushes through resource keys, not implicit styles");
-        }
+        appResources.Should().Contain("BasedOn=\"{StaticResource DefaultButtonStyle}\"");
+        appResources.Should().Contain("BasedOn=\"{StaticResource AccentButtonStyle}\"");
+        appResources.Should().Contain("BasedOn=\"{StaticResource DefaultTextBoxStyle}\"");
+        settingsResources.Should().Contain("TargetType=\"RadioButton\" BasedOn=\"{StaticResource DefaultToggleButtonStyle}\"");
+        settingsResources.Should().NotContain("<ControlTemplate");
+        xaml.Should().Contain("ms-appx:///Themes/SettingsPageResources.xaml");
+        xaml.Should().Contain("<RadioButton Click=\"OnSettingsTabClick\"");
+        xaml.Should().Contain("Checked=\"OnSettingsTabChecked\"");
+        xaml.Should().Contain("IsChecked=\"{Binding IsSelected, Mode=OneWay}\"");
+        codeBehind.Should().Contain("sender is not RadioButton { Tag: SettingsTabId tabId }");
+        codeBehind.Should().Contain("SettingsTab_{Id}");
+        codeBehind.Should().Contain("ApplySettingsTabButtonSelection(tabId);");
+        codeBehind.Should().Contain("button.IsChecked = true;");
 
-        codeBehind.Should().NotContain("ScopedThemeResourceBrushes");
-        codeBehind.Should().NotContain("CreateSettingsHeaderContent");
-        codeBehind.Should().NotContain("ComboBoxHeaderForeground\", chrome.");
-        codeBehind.Should().NotContain("TextControlHeaderForeground\", chrome.");
-        codeBehind.Should().NotContain("ToggleSwitchHeaderForeground\", chrome.");
+        foreach (var tab in ExpectedTabs)
+        {
+            codeBehind.Should().Contain($"SettingsTabId.{tab}");
+        }
     }
 
     [Fact]
@@ -845,7 +795,7 @@ public class SettingsPageSplitTabsTests
         var settingsResources = File.ReadAllText(SettingsPageResourcesPath);
 
         settingsResources.Should().Contain("SettingsLinkForegroundBrush");
-        settingsResources.Should().Contain("DictionaryHtmlLinkColor");
+        settingsResources.Should().Contain("EasydictLinkBrush");
         settingsResources.Should().Contain("SettingsLinkButtonStyle");
 
         foreach (var automationId in new[]

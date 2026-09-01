@@ -239,6 +239,8 @@ namespace Easydict.WinUI
             {
                 return;
             }
+            var usesMica = MinimalThemeService.ApplyWindowBackdrop(_window);
+            MinimalThemeService.ApplyWindowRootBackground(rootFrame, usesMica);
 
             CrashDiagnostics.Log("[OnLaunched] Navigating to MainPage...");
             _ = rootFrame.Navigate(typeof(MainPage), e.Arguments);
@@ -1540,6 +1542,14 @@ namespace Easydict.WinUI
 
             var elementTheme = MinimalThemeService.ToElementTheme(theme);
             ApplyMainWindowTitleBarChrome(theme, elementTheme);
+            if (Instance._window is { } mainWindow)
+            {
+                var usesMica = MinimalThemeService.ApplyWindowBackdrop(mainWindow);
+                if (mainWindow.Content is FrameworkElement root)
+                {
+                    MinimalThemeService.ApplyWindowRootBackground(root, usesMica);
+                }
+            }
 
             if (Instance._window?.Content is Frame frame)
             {

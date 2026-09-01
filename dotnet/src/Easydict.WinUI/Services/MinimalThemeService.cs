@@ -1,3 +1,6 @@
+using System.Runtime.InteropServices;
+using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Controls;
 
@@ -98,110 +101,50 @@ internal static class MinimalThemeService
         root.RequestedTheme = theme;
     }
 
-    public static void ApplyWindowBackdrop(Window window)
+    public static bool ApplyWindowBackdrop(Window window)
     {
-        if (IsActive)
+        ArgumentNullException.ThrowIfNull(window);
+
+        if (IsActive || ThemeResourceService.IsHighContrastActive())
         {
             window.SystemBackdrop = null;
+            return false;
+        }
+
+        try
+        {
+            window.SystemBackdrop = new MicaBackdrop();
+            return true;
+        }
+        catch (COMException)
+        {
+            window.SystemBackdrop = null;
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            window.SystemBackdrop = null;
+            return false;
         }
     }
 
-    public static void ApplyFloatingWindowRootBackground(FrameworkElement root)
+    public static void ApplyWindowRootBackground(FrameworkElement root, bool usesMica)
     {
-        if (root is not Panel panel)
-        {
-            return;
-        }
-
-        if (IsActive)
-        {
-            panel.Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush")
+        ArgumentNullException.ThrowIfNull(root);
+        var background = usesMica
+            ? _transparentBrush
+            : ThemeResourceService.GetBrush("EasydictWindowSurfaceBrush", root)
                 ?? _transparentBrush;
-        }
-        else
+
+        switch (root)
         {
-            panel.Background = _transparentBrush;
+            case Panel panel:
+                panel.Background = background;
+                break;
+            case Control control:
+                control.Background = background;
+                break;
         }
-    }
-
-    /// <summary>
-    /// Apply chrome for the floating MiniWindow / FixedWindow surfaces. Both windows share
-    /// the same root-padding, surface-clear, and source-input container layout.
-    /// </summary>
-    public static void ApplyFloatingChrome(
-        Grid? rootGrid,
-        Border surface,
-        Border sourceContainer,
-        bool minimal,
-        FrameworkElement? themeRoot)
-    {
-        if (rootGrid is not null)
-        {
-            rootGrid.Padding = minimal
-                ? new Thickness(8)
-                : ThemeResourceService.GetResourceOrDefault(
-                    "FloatingWindowOuterPadding",
-                    themeRoot,
-                    new Thickness(0));
-        }
-
-        if (minimal)
-        {
-            surface.BorderThickness = new Thickness(0);
-            surface.CornerRadius = new CornerRadius(0);
-            surface.Padding = new Thickness(0);
-            surface.Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush");
-            sourceContainer.Background = ThemeResourceService.GetBrush("CardBackgroundFillColorDefaultBrush");
-            sourceContainer.BorderBrush = ThemeResourceService.GetBrush("CardStrokeColorDefaultBrush");
-            sourceContainer.BorderThickness = new Thickness(1);
-            sourceContainer.CornerRadius = new CornerRadius(0);
-            sourceContainer.Padding = new Thickness(8);
-            sourceContainer.Margin = new Thickness(0, 0, 0, 4);
-            return;
-        }
-
-        surface.BorderThickness = ThemeResourceService.GetResourceOrDefault(
-            "FloatingWindowBorderThickness",
-            themeRoot,
-            new Thickness(0));
-        surface.CornerRadius = ThemeResourceService.GetResourceOrDefault(
-            "FloatingWindowCornerRadius",
-            themeRoot,
-            new CornerRadius(0));
-
-        var resolvedAppBg = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush", themeRoot);
-#if DEBUG
-        System.Diagnostics.Debug.WriteLine(
-            $"[Theme] ApplyFloatingChrome " +
-            $"AppTheme={SettingsService.Instance.AppTheme} " +
-            $"SystemDark={SystemThemeProbe.IsSystemDark()} " +
-            $"ThemeRootRequested={themeRoot?.RequestedTheme} " +
-            $"ThemeRootActual={themeRoot?.ActualTheme} " +
-            $"DictName={ThemeResourceService.GetThemeDictionaryName(themeRoot)} " +
-            $"ResolvedAppBg={(resolvedAppBg as SolidColorBrush)?.Color} " +
-            $"SurfaceBgBefore={(surface.Background as SolidColorBrush)?.Color}");
-#endif
-        surface.Background = resolvedAppBg;
-        surface.BorderBrush = ThemeResourceService.GetBrush("FloatingWindowBorderBrush", themeRoot);
-        surface.Padding = ThemeResourceService.GetResourceOrDefault(
-            "FloatingWindowContentPadding",
-            themeRoot,
-            new Thickness(8));
-        sourceContainer.Background = ThemeResourceService.GetBrush("TextControlBackground", themeRoot);
-        sourceContainer.BorderBrush = ThemeResourceService.GetBrush("TextControlBorderBrush", themeRoot);
-        sourceContainer.BorderThickness = new Thickness(1);
-        sourceContainer.CornerRadius = ThemeResourceService.GetResourceOrDefault(
-            "FloatingInputCornerRadius",
-            themeRoot,
-            new CornerRadius(18));
-        sourceContainer.Padding = ThemeResourceService.GetResourceOrDefault(
-            "FloatingInputPadding",
-            themeRoot,
-            new Thickness(6, 4, 6, 4));
-        sourceContainer.Margin = ThemeResourceService.GetResourceOrDefault(
-            "FloatingInputMargin",
-            themeRoot,
-            new Thickness(0, 0, 0, 3));
     }
 
     public static void ApplyAccentIconForeground(
@@ -209,14 +152,8 @@ internal static class MinimalThemeService
         ProgressRing? progressRing = null,
         FrameworkElement? themeRoot = null)
     {
-        var foreground = IsActive
-            ? ThemeResourceService.GetBrush("ButtonForeground", themeRoot)
-                ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush", themeRoot)
-                ?? _transparentBrush
-            : ThemeResourceService.GetBrush("AccentTextFillColorPrimaryBrush", themeRoot)
-                ?? ThemeResourceService.GetBrush("AccentForegroundBrush", themeRoot)
-                ?? ThemeResourceService.GetBrush("ButtonForeground", themeRoot)
-                ?? _transparentBrush;
+        var foreground = ThemeResourceService.GetBrush("EasydictAccentForegroundBrush", themeRoot)
+            ?? _transparentBrush;
 
         icon.Foreground = foreground;
         if (progressRing is not null)

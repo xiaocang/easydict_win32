@@ -17,167 +17,83 @@
 
             <!-- Accent and Status Colors are now theme-aware via Themes/Colors.xaml -->
 
-            <!-- Shared WinUI surface styles -->
+            <!-- Shared Fluent surfaces preserve existing page style contracts. -->
             <Style x:Key="EasydictSurfaceStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="Background" Value="{ThemeResource EasydictCardBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource EasydictCardBorderBrush}" />
                 <Setter Property="BorderThickness" Value="{ThemeResource EasydictCardBorderThickness}" />
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictCardCornerRadius}" />
                 <Setter Property="Padding" Value="{ThemeResource EasydictCardPadding}" />
             </Style>
 
             <Style x:Key="EasydictElevatedSurfaceStyle" TargetType="Border" BasedOn="{StaticResource EasydictSurfaceStyle}">
-                <Setter Property="Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorSecondaryBrush}" />
+                <Setter Property="Background" Value="{ThemeResource EasydictLayerFillBrush}" />
             </Style>
 
             <Style x:Key="CardStyle" TargetType="Border" BasedOn="{StaticResource EasydictElevatedSurfaceStyle}" />
 
             <Style x:Key="EasydictInputPillStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource TextControlBackground}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource TextControlBorderBrush}" />
+                <Setter Property="Background" Value="{ThemeResource EasydictInputBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource EasydictInputBorderBrush}" />
                 <Setter Property="BorderThickness" Value="{ThemeResource EasydictCardBorderThickness}" />
-                <Setter Property="CornerRadius" Value="{ThemeResource FloatingInputCornerRadius}" />
-                <Setter Property="Padding" Value="{ThemeResource FloatingInputPadding}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
+                <Setter Property="Padding" Value="8,4" />
             </Style>
 
-            <Style x:Key="EasydictBaseButtonStyle" TargetType="Button">
+            <Style x:Key="EasydictBaseButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="MinHeight" Value="0" />
                 <Setter Property="Padding" Value="8,6" />
-                <Setter Property="Background" Value="{ThemeResource ButtonBackground}" />
-                <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ButtonBorderBrush}" />
-                <Setter Property="BorderThickness" Value="{ThemeResource EasydictCardBorderThickness}" />
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="UseSystemFocusVisuals" Value="True" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Grid x:Name="Root"
-                                  Background="Transparent">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="ButtonChrome.Background" Value="{ThemeResource ButtonBackgroundPointerOver}" />
-                                                <Setter Target="ButtonChrome.BorderBrush" Value="{ThemeResource ButtonBorderBrushPointerOver}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="ButtonChrome.Background" Value="{ThemeResource ButtonBackgroundPressed}" />
-                                                <Setter Target="ButtonChrome.BorderBrush" Value="{ThemeResource ButtonBorderBrushPressed}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="Root.Opacity" Value="0.5" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <Border x:Name="ButtonChrome"
-                                        Background="{TemplateBinding Background}"
-                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                        CornerRadius="{TemplateBinding CornerRadius}">
-                                    <ContentPresenter
-                                        Content="{TemplateBinding Content}"
-                                        ContentTemplate="{TemplateBinding ContentTemplate}"
-                                        Padding="{TemplateBinding Padding}"
-                                        Foreground="{TemplateBinding Foreground}"
-                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
             </Style>
 
             <Style x:Key="EasydictChipButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictBaseButtonStyle}">
                 <Setter Property="Padding" Value="12,7" />
-                <Setter Property="CornerRadius" Value="{ThemeResource FloatingInputCornerRadius}" />
             </Style>
 
             <Style x:Key="EasydictIconButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictBaseButtonStyle}">
-                <Setter Property="Width" Value="32" />
-                <Setter Property="Height" Value="32" />
+                <Setter Property="Width" Value="{ThemeResource EasydictCompactControlSize}" />
+                <Setter Property="Height" Value="{ThemeResource EasydictCompactControlSize}" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="{ThemeResource EasydictIconButtonBorderThickness}" />
+                <Setter Property="BorderThickness" Value="0" />
             </Style>
 
-            <Style x:Key="EasydictAccentButtonStyle" TargetType="Button">
+            <Style x:Key="EasydictAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="MinHeight" Value="0" />
-                <Setter Property="Padding" Value="12,8" />
-                <Setter Property="Background" Value="{ThemeResource AccentBrush}" />
-                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="{ThemeResource EasydictIconButtonBorderThickness}" />
+                <Setter Property="Padding" Value="12,6" />
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
+                <Setter Property="Background" Value="{ThemeResource EasydictAccentBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource EasydictAccentForegroundBrush}" />
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="UseSystemFocusVisuals" Value="True" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Grid x:Name="Root"
-                                  Background="Transparent">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver" />
-                                        <VisualState x:Name="Pressed" />
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="Root.Opacity" Value="0.5" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <Border x:Name="ButtonChrome"
-                                        Background="{TemplateBinding Background}"
-                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                        CornerRadius="{TemplateBinding CornerRadius}">
-                                    <ContentPresenter
-                                        Content="{TemplateBinding Content}"
-                                        ContentTemplate="{TemplateBinding ContentTemplate}"
-                                        Padding="{TemplateBinding Padding}"
-                                        Foreground="{TemplateBinding Foreground}"
-                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
             </Style>
 
-            <Style x:Key="EasydictPrimaryRoundButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictAccentButtonStyle}">
-                <Setter Property="Width" Value="36" />
-                <Setter Property="Height" Value="36" />
+            <Style x:Key="EasydictPrimaryIconButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictAccentButtonStyle}">
+                <Setter Property="Width" Value="{ThemeResource EasydictStandardControlHeight}" />
+                <Setter Property="Height" Value="{ThemeResource EasydictStandardControlHeight}" />
                 <Setter Property="Padding" Value="0" />
-                <Setter Property="CornerRadius" Value="{ThemeResource EasydictRoundButtonCornerRadius}" />
             </Style>
 
-            <!-- Text Area Style -->
-            <Style x:Key="TranslationTextBoxStyle" TargetType="TextBox">
-                <Setter Property="FontSize" Value="15" />
+            <Style x:Key="TranslationTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
                 <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI" />
                 <Setter Property="TextWrapping" Value="Wrap" />
                 <Setter Property="AcceptsReturn" Value="True" />
                 <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
-                <Setter Property="Padding" Value="6" />
+                <Setter Property="Padding" Value="12" />
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
-                <Setter Property="MinHeight" Value="80" />
+                <Setter Property="MinHeight" Value="{ThemeResource EasydictStandardControlHeight}" />
+            </Style>
+
+            <Style x:Key="CompactTranslationTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource TranslationTextBoxStyle}">
+                <Setter Property="MinHeight" Value="40" />
+                <Setter Property="MaxHeight" Value="120" />
+                <Setter Property="Padding" Value="8,4" />
             </Style>
 
         </ResourceDictionary>

@@ -44,6 +44,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(1000);
         var pathDark = ScreenshotHelper.CaptureWindow(window, "31_main_dark_mode");
         _output.WriteLine($"Dark mode screenshot saved: {pathDark}");
+        AssertRedesignedDarkPalette(pathDark, "main window");
 
         var result = VisualRegressionHelper.CompareWithBaseline(pathDark, "31_main_dark_mode");
         if (result != null)
@@ -78,6 +79,8 @@ public class DarkModeTests : IDisposable
         // Stay on settings page and capture
         Thread.Sleep(1000);
         var path = ScreenshotHelper.CaptureWindow(window, "32_settings_dark_mode");
+        AssertRedesignedDarkPalette(path, "settings General tab");
+        AssertSingleActiveSettingsTab(window, "SettingsTab_General", "General");
         _output.WriteLine($"Screenshot saved: {path}");
 
         CaptureSettingsTab(
@@ -113,6 +116,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(500);
 
         var path = ScreenshotHelper.CaptureWindow(miniWindow, "35_mini_dark_mode");
+        AssertRedesignedDarkPalette(path, "mini window");
         _output.WriteLine($"Screenshot saved: {path}");
 
         var result = VisualRegressionHelper.CompareWithBaseline(path, "35_mini_dark_mode");
@@ -146,6 +150,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(500);
 
         var path = ScreenshotHelper.CaptureWindow(fixedWindow, "36_fixed_dark_mode");
+        AssertRedesignedDarkPalette(path, "fixed window");
         _output.WriteLine($"Screenshot saved: {path}");
 
         var result = VisualRegressionHelper.CompareWithBaseline(path, "36_fixed_dark_mode");
@@ -194,6 +199,7 @@ public class DarkModeTests : IDisposable
 
         tab.Should().NotBeNull($"{label} settings tab must be available before dark-mode screenshot capture");
         ActivateSettingsTab(window, tab!, label);
+        AssertSingleActiveSettingsTab(window, tabAutomationId, label);
 
         var expectedElement = Retry.WhileNull(
             () =>
@@ -214,9 +220,105 @@ public class DarkModeTests : IDisposable
         expectedElement.Should().NotBeNull(
             $"{label} settings screenshot must show {expectedElementAutomationId} instead of stale General tab content");
 
+        try
+        {
+            expectedElement!.Focus();
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Could not move focus away from the {label} tab: {ex.Message}");
+        }
+
+        DismissTransientSettingsTooltip(window);
+
         var path = ScreenshotHelper.CaptureWindow(window, screenshotName);
         _output.WriteLine($"{label} settings screenshot saved: {path}");
+        AssertRedesignedDarkPalette(path, $"settings {label} tab");
     }
+    private void AssertSingleActiveSettingsTab(Window window, string expectedAutomationId, string label)
+    {
+        var tabs = SettingsTabAutomationIds
+            .Select(id => window.FindFirstDescendant(cf => cf.ByAutomationId(id)))
+            .Where(tab => tab is not null)
+            .Cast<AutomationElement>()
+            .ToArray();
+
+        tabs.Should().HaveCount(
+            SettingsTabAutomationIds.Length,
+            "all Settings tabs must remain available while switching to {0}",
+            label);
+
+        var activeTabs = tabs
+            .Where(tab => tab.Patterns.SelectionItem.PatternOrDefault?.IsSelected.Value == true)
+            .ToArray();
+
+        activeTabs.Should().ContainSingle(
+            "activating {0} must clear the previous Settings tab highlight",
+            label);
+        activeTabs[0].AutomationId.Should().Be(
+            expectedAutomationId,
+            "{0} must be the only highlighted Settings tab",
+            label);
+    }
+
+    private void AssertRedesignedDarkPalette(string screenshotPath, string label)
+    {
+        using var bitmap = new Bitmap(screenshotPath);
+        var stride = Math.Max(2, Math.Min(bitmap.Width, bitmap.Height) / 240);
+        var startY = Math.Max(0, bitmap.Height / 12);
+        var sampleCount = 0;
+        var darkSurfaceCount = 0;
+        var coolNeutralCount = 0;
+
+        for (var y = startY; y < bitmap.Height; y += stride)
+        {
+            for (var x = 0; x < bitmap.Width; x += stride)
+            {
+                var color = bitmap.GetPixel(x, y);
+                var brightness = (0.2126 * color.R) + (0.7152 * color.G) + (0.0722 * color.B);
+                sampleCount++;
+
+                if (brightness is < 18 or > 120)
+                {
+                    continue;
+                }
+
+                darkSurfaceCount++;
+                var channelSpread = Math.Max(color.R, Math.Max(color.G, color.B))
+                    - Math.Min(color.R, Math.Min(color.G, color.B));
+                if (channelSpread <= 32 && color.B + 4 >= color.R)
+                {
+                    coolNeutralCount++;
+                }
+            }
+        }
+
+        var darkSurfaceRatio = darkSurfaceCount / (double)sampleCount;
+        var coolNeutralRatio = darkSurfaceCount == 0
+            ? 0
+            : coolNeutralCount / (double)darkSurfaceCount;
+        _output.WriteLine(
+            $"{label} dark palette: dark-surface ratio={darkSurfaceRatio:P1}, cool-neutral ratio={coolNeutralRatio:P1}");
+
+        darkSurfaceRatio.Should().BeGreaterThan(
+            0.50,
+            $"{label} must be dominated by the redesigned dark surfaces");
+        coolNeutralRatio.Should().BeGreaterThan(
+            0.70,
+            $"{label} dark surfaces must use the cool-neutral palette rather than the previous mixed colors");
+    }
+
+    private static readonly string[] SettingsTabAutomationIds =
+    {
+        "SettingsTab_General",
+        "SettingsTab_Services",
+        "SettingsTab_Views",
+        "SettingsTab_Hotkeys",
+        "SettingsTab_Advanced",
+        "SettingsTab_Language",
+        "SettingsTab_About"
+    };
+
 
     private void ActivateSettingsTab(Window window, AutomationElement tab, string label)
     {
@@ -631,6 +733,10 @@ public class DarkModeTests : IDisposable
         var topPath = ScreenshotHelper.CaptureWindowPhysical(window, $"{baseName}_top_palette");
         _output.WriteLine($"Explicit {palette} top palette screenshot saved: {topPath}");
         AssertMainWindowPalette(topPath, palette, TopPaletteProbes);
+        if (palette == ThemePalette.Dark)
+        {
+            AssertRedesignedDarkPalette(topPath, "explicit dark main window");
+        }
 
         var serviceRows = ScrollServiceRowsIntoView(window);
         var servicePath = ScreenshotHelper.CaptureWindowPhysical(window, $"{baseName}_service_rows_palette");

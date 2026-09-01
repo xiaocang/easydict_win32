@@ -4,6 +4,7 @@ using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -119,6 +120,9 @@ public sealed partial class PopButtonWindow : Window
     public PopButtonWindow()
     {
         this.InitializeComponent();
+        AutomationProperties.SetName(
+            TranslateButton,
+            LocalizationService.Instance.GetStringOrDefault("TranslateTooltip", "Translate"));
 
         _hwnd = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(_hwnd);

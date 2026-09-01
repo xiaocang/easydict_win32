@@ -9,17 +9,15 @@
     mc:Ignorable="d"
     Title="Easydict ᵇᵉᵗᵃ Mini">
 
-    <!-- Background bound to a non-themed transparent brush so the window-level Mica
-         backdrop applied in MiniWindow.xaml.cs is actually visible. -->
     <Grid Background="Transparent"
           Padding="0">
         <Border
             x:Name="WindowSurface"
-            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-            BorderBrush="{ThemeResource MainBorderBrush}"
-            BorderThickness="0"
-            CornerRadius="0"
-            Padding="{ThemeResource FloatingWindowContentPadding}">
+            Background="{ThemeResource EasydictLayerFillBrush}"
+            BorderBrush="{ThemeResource EasydictCardBorderBrush}"
+            BorderThickness="{ThemeResource EasydictCardBorderThickness}"
+            CornerRadius="{ThemeResource EasydictCardCornerRadius}"
+            Padding="8">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -57,16 +55,15 @@
                 <FontIcon x:Name="PinIcon"
                         Glyph="&#xE718;"
                         FontSize="14"
-                        Foreground="{ThemeResource ButtonForeground}"/>
+                        Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
             </ToggleButton>
 
             <TextBlock
                 x:Name="TitleText"
                 Grid.Column="1"
                 Text="Quick Translate"
-                FontSize="12"
-                FontWeight="SemiBold"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Foreground="{ThemeResource EasydictSecondaryTextBrush}"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"/>
 
@@ -82,7 +79,7 @@
                 Padding="0">
                 <FontIcon Glyph="&#xE722;"
                         FontSize="14"
-                        Foreground="{ThemeResource ButtonForeground}"/>
+                        Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
             </Button>
 
             <Button
@@ -98,19 +95,19 @@
                 Padding="0">
                 <FontIcon Glyph="&#xE8BB;"
                         FontSize="14"
-                        Foreground="{ThemeResource ButtonForeground}"/>
+                        Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
             </Button>
         </Grid>
 
         <!-- Compact Input -->
         <Border x:Name="SourceTextContainer"
                 Grid.Row="1"
-                Background="{ThemeResource TextControlBackground}"
-                BorderBrush="{ThemeResource TextControlBorderBrush}"
+                Background="{ThemeResource EasydictInputBackgroundBrush}"
+                BorderBrush="{ThemeResource EasydictInputBorderBrush}"
                 BorderThickness="{ThemeResource EasydictCardBorderThickness}"
-                CornerRadius="{ThemeResource FloatingInputCornerRadius}"
-                Padding="{ThemeResource FloatingInputPadding}"
-                Margin="{ThemeResource FloatingInputMargin}"
+                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                Padding="8,4"
+                Margin="0,0,0,4"
                 PointerEntered="OnSourceTextContainerPointerEntered"
                 PointerExited="OnSourceTextContainerPointerExited"
                 Tapped="OnSourceTextContainerTapped">
@@ -127,7 +124,7 @@
                                MaxLines="1"
                                TextTrimming="CharacterEllipsis"
                                IsTextSelectionEnabled="False"
-                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               Foreground="{ThemeResource EasydictPrimaryTextBrush}"
                                VerticalAlignment="Center"
                                Visibility="Visible" />
 
@@ -135,27 +132,10 @@
                     <TextBox
                         x:Name="InputTextBox"
                         PlaceholderText="Enter text..."
-                        BorderThickness="0"
-                        Background="Transparent"
-                        MinHeight="40"
-                        MaxHeight="120"
-                        AcceptsReturn="True"
-                        TextWrapping="Wrap"
-                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                        Style="{StaticResource CompactTranslationTextBoxStyle}"
                         PreviewKeyDown="OnInputKeyDown"
                         LostFocus="OnInputTextBoxLostFocus"
-                        Visibility="Collapsed">
-                        <TextBox.Resources>
-                            <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
-                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
-                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
-                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
-                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
-                            <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
-                            <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
-                        </TextBox.Resources>
-                    </TextBox>
+                        Visibility="Collapsed"/>
                 </Grid>
 
                 <Button x:Name="SourcePlayButton"
@@ -173,7 +153,7 @@
                     <FontIcon x:Name="SourcePlayIcon"
                                Glyph="&#xE768;"
                                FontSize="14"
-                               Foreground="{ThemeResource ButtonForeground}" />
+                               Foreground="{ThemeResource EasydictIconForegroundBrush}" />
                 </Button>
             </Grid>
         </Border>
@@ -214,7 +194,7 @@
                 Margin="4,0">
                 <FontIcon Glyph="&#xE8AB;"
                         FontSize="12"
-                        Foreground="{ThemeResource ButtonForeground}"/>
+                        Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
             </Button>
 
             <ComboBox
@@ -233,7 +213,7 @@
                 Width="32"
                 Height="32"
                 Padding="0"
-                Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
+                Style="{StaticResource EasydictPrimaryIconButtonStyle}"
                 ToolTipService.ToolTip="Translate"
                 AutomationProperties.Name="Translate"
                 Margin="4,0,0,0">
@@ -243,13 +223,13 @@
                         IsActive="False"
                         Width="14"
                         Height="14"
-                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Foreground="{ThemeResource EasydictAccentForegroundBrush}"
                         Visibility="Collapsed"/>
                     <FontIcon
                         x:Name="TranslateIcon"
                         Glyph="&#xE8C1;"
                         FontSize="14"
-                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                        Foreground="{ThemeResource EasydictAccentForegroundBrush}"/>
                 </Grid>
             </Button>
         </Grid>
@@ -259,8 +239,8 @@
             x:Name="DetectedLangText"
             Grid.Row="3"
             Text=""
-            FontSize="10"
-            Foreground="{ThemeResource BlueAccentBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource EasydictLinkBrush}"
             Margin="0,0,0,2"
             Visibility="Collapsed"/>
 

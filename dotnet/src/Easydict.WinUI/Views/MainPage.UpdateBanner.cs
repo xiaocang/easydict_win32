@@ -169,8 +169,8 @@ public partial class MainPage
         }
 
         _updateBannerButton.Foreground =
-            ThemeResourceService.GetBrush("TextFillColorTertiaryBrush", this)
-            ?? ThemeResourceService.GetBrush("TextFillColorSecondaryBrush", this);
+            ThemeResourceService.GetBrush("EasydictTertiaryTextBrush", this)
+            ?? ThemeResourceService.GetBrush("EasydictSecondaryTextBrush", this);
     }
 
     private async void OnUpdateBannerClicked(object sender, RoutedEventArgs e)

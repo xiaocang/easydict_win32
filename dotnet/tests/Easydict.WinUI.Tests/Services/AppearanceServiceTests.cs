@@ -58,16 +58,22 @@ public class AppearanceServiceTests
     }
 
     [Fact]
-    public void CurrentSnapshot_DerivesHeaderAndStatusSizesFromScale()
+    public void CurrentSnapshot_KeepsChromeTypographyFixedAcrossResultScales()
     {
         var original = _settings.ResultFontScale;
         try
         {
-            _settings.ResultFontScale = 1.0;
-            var snapshot = AppearanceService.CurrentSnapshot();
-            snapshot.ResultFontSize.Should().BeApproximately(13.0, 0.001);
-            snapshot.ServiceNameFontSize.Should().BeApproximately(12.0, 0.001);
-            snapshot.StatusFontSize.Should().BeApproximately(10.0, 0.001);
+            _settings.ResultFontScale = 0.85;
+            var compactSnapshot = AppearanceService.CurrentSnapshot();
+
+            _settings.ResultFontScale = 1.4;
+            var enlargedSnapshot = AppearanceService.CurrentSnapshot();
+
+            compactSnapshot.ResultFontSize.Should().BeLessThan(enlargedSnapshot.ResultFontSize);
+            compactSnapshot.ServiceNameFontSize.Should().Be(13.0);
+            enlargedSnapshot.ServiceNameFontSize.Should().Be(13.0);
+            compactSnapshot.StatusFontSize.Should().Be(11.0);
+            enlargedSnapshot.StatusFontSize.Should().Be(11.0);
         }
         finally
         {

@@ -623,12 +623,12 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     {
         GrammarResultPanel.Visibility = Visibility.Collapsed;
         var resultTextBrush = FindServiceChromeBrushFallback(
-                "QueryTextBrush",
+                "EasydictPrimaryTextBrush",
                 "TextFillColorPrimaryBrush")
             ?? ResultText.Foreground;
         var infoTextBrush = FindServiceChromeBrushFallback(
-                "TextFillColorSecondaryBrush",
-                "ExampleTextBrush")
+                "EasydictSecondaryTextBrush",
+                "TextFillColorSecondaryBrush")
             ?? resultTextBrush;
 
         // Result text - handle streaming state
@@ -1149,7 +1149,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                     FontStyle = Windows.UI.Text.FontStyle.Italic,
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = FindServiceChromeBrushFallback(
-                        "ExampleTextBrush",
+                        "EasydictSecondaryTextBrush",
                         "TextFillColorSecondaryBrush"),
                     IsTextSelectionEnabled = true,
                     Margin = new Thickness(0, 1, 0, 1)
@@ -1168,10 +1168,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private TextBlock CreateWordFormsRow(IReadOnlyList<WordForm> wordForms)
     {
         var mutedBrush = FindServiceChromeBrushFallback(
-            "ExampleTextBrush",
+            "EasydictSecondaryTextBrush",
             "TextFillColorSecondaryBrush");
         var normalBrush = FindServiceChromeBrushFallback(
-            "QueryTextBrush",
+            "EasydictPrimaryTextBrush",
             "TextFillColorPrimaryBrush");
 
         var block = new TextBlock
@@ -1221,10 +1221,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private Grid CreateSynonymRow(Synonym synonym)
     {
         var mutedBrush = FindServiceChromeBrushFallback(
-            "ExampleTextBrush",
+            "EasydictSecondaryTextBrush",
             "TextFillColorSecondaryBrush");
         var normalBrush = FindServiceChromeBrushFallback(
-            "QueryTextBrush",
+            "EasydictPrimaryTextBrush",
             "TextFillColorPrimaryBrush");
 
         var row = new Grid { ColumnSpacing = 6 };
@@ -1317,7 +1317,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 Foreground = FindServiceChromeBrushFallback(
                     "PosTagTextBrush",
                     "BlueAccentBrush",
-                    "QueryTextBrush"),
+                    "EasydictPrimaryTextBrush"),
                 VerticalAlignment = VerticalAlignment.Center
             };
 
@@ -1336,7 +1336,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 FontSize = 13,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = FindServiceChromeBrushFallback(
-                    "QueryTextBrush",
+                    "EasydictPrimaryTextBrush",
                     "TextFillColorPrimaryBrush"),
                 IsTextSelectionEnabled = true,
                 VerticalAlignment = VerticalAlignment.Center
@@ -1397,7 +1397,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Foreground = FindServiceChromeBrushFallback(
                     "PhoneticBadgeTextBrush",
-                    "QueryTextBrush"),
+                    "EasydictPrimaryTextBrush"),
                 VerticalAlignment = VerticalAlignment.Center
             });
         }
@@ -1409,7 +1409,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             FontSize = 10,
             Foreground = FindServiceChromeBrushFallback(
                 "PhoneticBadgeTextBrush",
-                "QueryTextBrush"),
+                "EasydictPrimaryTextBrush"),
             VerticalAlignment = VerticalAlignment.Center,
             IsTextSelectionEnabled = true
         });
@@ -1431,7 +1431,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             FontSize = 10,
             Foreground = FindServiceChromeBrushFallback(
                 "PhoneticBadgeTextBrush",
-                "QueryTextBrush")
+                "EasydictPrimaryTextBrush")
         };
         speakerButton.Content = speakerIcon;
 
@@ -1677,25 +1677,18 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
         using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.ApplyServiceChromeForCurrentTheme");
 
-        if (FindServiceChromeColorOrBrush(
-                "ResultViewBackgroundColor",
-                "ResultViewBackgroundBrush") is Brush rootBackground)
+        if (FindServiceChromeColorOrBrush("EasydictCardBackgroundBrush") is Brush rootBackground)
         {
             RootBorder.Background = rootBackground;
         }
 
-        if (FindServiceChromeColorOrBrush(
-                "EasydictCardBorderColor",
-                "CardStrokeColorDefaultBrush",
-                "MainBorderBrush") is Brush borderBrush)
+        if (FindServiceChromeColorOrBrush("EasydictCardBorderBrush") is Brush borderBrush)
         {
             RootBorder.BorderBrush = borderBrush;
             HeaderBar.BorderBrush = borderBrush;
         }
 
-        if (FindServiceChromeColorOrBrush(
-                "ServiceResultHeaderBackgroundColor",
-                "ServiceResultHeaderBackgroundBrush") is Brush brush)
+        if (FindServiceChromeColorOrBrush("EasydictResultHeaderBackgroundBrush") is Brush brush)
         {
             HeaderBar.Background = brush;
         }
@@ -1709,14 +1702,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     {
         using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.ApplyHeaderForegroundForCurrentChrome");
 
-        var primaryBrush = FindServiceChromeColorOrBrush(
-            "ServiceResultHeaderForegroundColor",
-            "ServiceResultHeaderForegroundBrush",
-            "TextFillColorPrimaryBrush");
-        var secondaryBrush = FindServiceChromeColorOrBrush(
-            "ServiceResultHeaderSecondaryForegroundColor",
-            "ServiceResultHeaderSecondaryForegroundBrush",
-            "TextFillColorSecondaryBrush");
+        var primaryBrush = FindServiceChromeColorOrBrush("EasydictPrimaryTextBrush");
+        var secondaryBrush = FindServiceChromeColorOrBrush("EasydictSecondaryTextBrush");
 
         if (primaryBrush is not null)
         {

@@ -26,8 +26,8 @@ internal static class AppearanceService
 {
     // Base font sizes hardcoded in the result-item XAML today.
     private const double BaseResultFontSize = 13.0;
-    private const double BaseServiceNameFontSize = 12.0;
-    private const double BaseStatusFontSize = 10.0;
+    private const double BaseServiceNameFontSize = 13.0;
+    private const double BaseStatusFontSize = 11.0;
 
     private const double MinFontScale = 0.85;
     private const double MaxFontScale = 1.4;
@@ -43,8 +43,8 @@ internal static class AppearanceService
         Math.Clamp(SettingsService.Instance.ResultFontScale, MinFontScale, MaxFontScale);
 
     public static double ResultFontSize => BaseResultFontSize * FontScale;
-    public static double ServiceNameFontSize => BaseServiceNameFontSize * FontScale;
-    public static double StatusFontSize => BaseStatusFontSize * FontScale;
+    public static double ServiceNameFontSize => BaseServiceNameFontSize;
+    public static double StatusFontSize => BaseStatusFontSize;
 
     /// <summary>Captures the current effective metrics into an immutable snapshot.</summary>
     public static AppearanceSettings CurrentSnapshot() => new()

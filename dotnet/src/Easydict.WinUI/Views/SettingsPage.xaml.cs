@@ -23,6 +23,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Windows.System;
 
 namespace Easydict.WinUI.Views;
@@ -38,25 +39,12 @@ internal enum SettingsTabId
     About
 }
 
-internal sealed record SettingsTabBrushes(
-    Brush? Background,
-    Brush? BorderBrush,
-    Brush? Foreground,
-    Brush? SelectedBackground,
-    Brush? SelectedBorderBrush,
-    Brush? SelectedForeground);
 
 internal sealed class SettingsTabItem : INotifyPropertyChanged
 {
     private bool _isSelected;
     private string _label = string.Empty;
     private string _tooltip = string.Empty;
-    private Brush? _background;
-    private Brush? _borderBrush;
-    private Brush? _foreground;
-    private Brush? _selectedBackground;
-    private Brush? _selectedBorderBrush;
-    private Brush? _selectedForeground;
 
     public required SettingsTabId Id { get; init; }
     public required string IconGlyph { get; init; }
@@ -74,41 +62,6 @@ internal sealed class SettingsTabItem : INotifyPropertyChanged
         set => SetField(ref _tooltip, value);
     }
 
-    public Brush? Background
-    {
-        get => _background;
-        private set => SetField(ref _background, value);
-    }
-
-    public Brush? BorderBrush
-    {
-        get => _borderBrush;
-        private set => SetField(ref _borderBrush, value);
-    }
-
-    public Brush? Foreground
-    {
-        get => _foreground;
-        private set => SetField(ref _foreground, value);
-    }
-
-    public Brush? SelectedBackground
-    {
-        get => _selectedBackground;
-        private set => SetField(ref _selectedBackground, value);
-    }
-
-    public Brush? SelectedBorderBrush
-    {
-        get => _selectedBorderBrush;
-        private set => SetField(ref _selectedBorderBrush, value);
-    }
-
-    public Brush? SelectedForeground
-    {
-        get => _selectedForeground;
-        private set => SetField(ref _selectedForeground, value);
-    }
 
     public bool IsSelected
     {
@@ -118,16 +71,6 @@ internal sealed class SettingsTabItem : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public void RefreshThemeBindings(SettingsTabBrushes brushes)
-    {
-        Background = brushes.Background;
-        BorderBrush = brushes.BorderBrush;
-        Foreground = brushes.Foreground;
-        SelectedBackground = brushes.SelectedBackground;
-        SelectedBorderBrush = brushes.SelectedBorderBrush;
-        SelectedForeground = brushes.SelectedForeground;
-        OnPropertyChanged(nameof(IsSelected));
-    }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
@@ -217,6 +160,7 @@ public sealed partial class SettingsPage : Page
     private bool _teardownQueued;
     private bool _releaseVisualTreeImmediatelyOnUnload;
     private int _settingsTabSwitchVersion;
+    private bool _isApplyingSettingsTabButtonSelection;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
@@ -517,14 +461,13 @@ public sealed partial class SettingsPage : Page
     public void ApplyThemeChrome()
     {
         var minimal = MinimalThemeService.IsActive;
-        var chrome = CreateSettingsThemeChrome();
-        Background = chrome.PageBackground;
         SaveButton.Shadow = minimal ? null : new ThemeShadow();
         if (LoadingOverlayRing is not null)
         {
             LoadingOverlayRing.IsActive = !minimal;
             LoadingOverlayRing.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
         }
+
         if (NavigationLoadingRing is not null
             && NavigationLoadingOverlay is { Visibility: Visibility.Visible })
         {
@@ -532,339 +475,7 @@ public sealed partial class SettingsPage : Page
             NavigationLoadingRing.Visibility = Visibility.Visible;
         }
 
-        var tabBrushes = CreateSettingsTabBrushes();
-        foreach (var tab in _settingsTabs)
-        {
-            tab.RefreshThemeBindings(tabBrushes);
-        }
-
-        RefreshSettingsControlChrome(chrome);
         UpdateAllPasswordTailHints();
-    }
-
-    private void RefreshSettingsControlChrome(SettingsThemeChrome chrome)
-    {
-        var tabStyle = Resources["SettingsTabButtonStyle"] as Style;
-        var accentButtonStyle = Resources["SettingsAccentButtonStyle"] as Style;
-        var inlineIconButtonStyle = Resources["SettingsInlineIconButtonStyle"] as Style;
-        var sectionStyle = Resources["SettingsSectionStyle"] as Style;
-        var placeholderForeground = ThemeResourceService.GetBrush("TextControlPlaceholderForeground", this);
-
-        var pending = new Queue<DependencyObject>();
-        pending.Enqueue(this);
-        while (pending.Count > 0)
-        {
-            var current = pending.Dequeue();
-
-            if (current is Button { Style: { } buttonStyle } && ReferenceEquals(buttonStyle, tabStyle))
-            {
-                continue;
-            }
-
-            if (current is Border border && ReferenceEquals(border.Style, sectionStyle))
-            {
-                border.Background = chrome.CardBackground;
-                border.BorderBrush = chrome.CardBorder;
-            }
-            else if (current is ComboBox comboBox)
-            {
-                ApplyComboBoxChrome(comboBox, chrome);
-            }
-            else if (current is TextBox textBox)
-            {
-                ApplyTextBoxChrome(textBox, chrome, placeholderForeground);
-            }
-            else if (current is PasswordBox passwordBox)
-            {
-                ApplyPasswordBoxChrome(passwordBox, chrome);
-            }
-            else if (current is Expander expander)
-            {
-                ApplyExpanderChrome(expander, chrome);
-            }
-            else if (current is TextBlock textBlock)
-            {
-                textBlock.Foreground = GetSettingsTextForeground(
-                    textBlock,
-                    chrome.PrimaryForeground,
-                    chrome.SecondaryForeground);
-            }
-            else if (current is FontIcon fontIcon)
-            {
-                fontIcon.Foreground = chrome.SecondaryForeground;
-            }
-            else if (current is HyperlinkButton hyperlinkButton)
-            {
-                hyperlinkButton.Foreground = chrome.HyperlinkForeground;
-                SetResourceIfNotNull(hyperlinkButton.Resources, "TextFillColorPrimaryBrush", chrome.HyperlinkForeground);
-                SetResourceIfNotNull(hyperlinkButton.Resources, "TextFillColorSecondaryBrush", chrome.HyperlinkForeground);
-                continue;
-            }
-            else if (current is Button button && !ReferenceEquals(button.Style, tabStyle))
-            {
-                if (ReferenceEquals(button.Style, accentButtonStyle) ||
-                    ReferenceEquals(button, BackButton) ||
-                    ReferenceEquals(button, SaveButton))
-                {
-                    ApplyButtonChrome(
-                        button,
-                        chrome.AccentBackground,
-                        chrome.AccentHoverBackground,
-                        chrome.AccentPressedBackground,
-                        chrome.AccentForeground,
-                        chrome.InputBorder);
-                }
-                else if (ReferenceEquals(button.Style, inlineIconButtonStyle))
-                {
-                    if (chrome.ButtonForeground is not null)
-                    {
-                        button.Foreground = chrome.ButtonForeground;
-                    }
-
-                    SetResourceIfNotNull(button.Resources, "ButtonForeground", chrome.ButtonForeground);
-                    SetResourceIfNotNull(button.Resources, "ButtonForegroundPointerOver", chrome.ButtonForeground);
-                    SetResourceIfNotNull(button.Resources, "ButtonForegroundPressed", chrome.ButtonForeground);
-                }
-                else
-                {
-                    ApplyButtonChrome(
-                        button,
-                        chrome.CardBackground,
-                        chrome.InputBackground,
-                        chrome.InputBackground,
-                        chrome.ButtonForeground,
-                        chrome.InputBorder);
-                }
-
-                continue;
-            }
-            else if (current is ToggleSwitch toggleSwitch)
-            {
-                ApplyToggleSwitchChrome(toggleSwitch, chrome);
-            }
-            else if (current is CheckBox checkBox)
-            {
-                ApplyCheckBoxChrome(checkBox, chrome);
-            }
-            else if (current is Slider slider)
-            {
-                ApplySliderChrome(slider, chrome);
-            }
-            else if (current is RadioButton radioButton)
-            {
-                radioButton.Foreground = chrome.PrimaryForeground;
-            }
-            else if (current is ComboBoxItem comboBoxItem)
-            {
-                comboBoxItem.Background = chrome.CardBackground;
-                comboBoxItem.Foreground = chrome.PrimaryForeground;
-            }
-
-            EnqueueVisualChildren(current, pending);
-        }
-    }
-
-    private static void ApplyComboBoxChrome(ComboBox comboBox, SettingsThemeChrome chrome)
-    {
-        comboBox.Background = chrome.CardBackground;
-        comboBox.Foreground = chrome.PrimaryForeground;
-        comboBox.BorderBrush = chrome.InputBorder;
-    }
-
-    private static void ApplyTextBoxChrome(
-        TextBox textBox,
-        SettingsThemeChrome chrome,
-        Brush? placeholderForeground)
-    {
-        textBox.Background = chrome.InputBackground;
-        textBox.Foreground = chrome.PrimaryForeground;
-        textBox.BorderBrush = chrome.InputBorder;
-        textBox.PlaceholderForeground = placeholderForeground;
-    }
-
-    private static void ApplyPasswordBoxChrome(PasswordBox passwordBox, SettingsThemeChrome chrome)
-    {
-        passwordBox.Background = chrome.InputBackground;
-        passwordBox.Foreground = chrome.PrimaryForeground;
-        passwordBox.BorderBrush = chrome.InputBorder;
-    }
-
-    private static void ApplySliderChrome(Slider slider, SettingsThemeChrome chrome)
-    {
-        slider.Foreground = chrome.PrimaryForeground;
-    }
-
-    private static void ApplyToggleSwitchChrome(ToggleSwitch toggleSwitch, SettingsThemeChrome chrome)
-    {
-        toggleSwitch.Foreground = chrome.PrimaryForeground;
-    }
-
-    private static void ApplyExpanderChrome(Expander expander, SettingsThemeChrome chrome)
-    {
-        expander.Foreground = chrome.PrimaryForeground;
-    }
-
-    private static void ApplyCheckBoxChrome(CheckBox checkBox, SettingsThemeChrome chrome)
-    {
-        checkBox.Foreground = chrome.PrimaryForeground;
-    }
-
-    private SettingsTabBrushes CreateSettingsTabBrushes()
-    {
-        return new SettingsTabBrushes(
-            Background: CreateThemeBrush("SettingsTabBackgroundColor"),
-            BorderBrush: CreateThemeBrush("SettingsTabBorderColor"),
-            Foreground: CreateThemeBrush("SettingsTabForegroundColor"),
-            SelectedBackground: CreateThemeBrush("SettingsTabSelectedBackgroundColor"),
-            SelectedBorderBrush: CreateThemeBrush("SettingsTabSelectedBorderColor"),
-            SelectedForeground: CreateThemeBrush("SettingsTabSelectedForegroundColor"));
-    }
-
-    private SettingsThemeChrome CreateSettingsThemeChrome()
-    {
-        var primaryForeground = CreateThemeBrush("QueryTextColor");
-        var inputBackground = CreateThemeBrush("FloatingInputBackgroundColor");
-        var inputBorder = CreateThemeBrush("FloatingInputBorderColor");
-        var accentBackground = CreateThemeBrush("AccentColor");
-
-        return new SettingsThemeChrome(
-            PageBackground: CreateThemeBrush("FloatingWindowBackgroundColor"),
-            CardBackground: CreateThemeBrush("EasydictCardBackgroundColor"),
-            CardBorder: CreateThemeBrush("EasydictCardBorderColor"),
-            InputBackground: inputBackground,
-            InputBorder: inputBorder,
-            PrimaryForeground: primaryForeground,
-            SecondaryForeground: CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
-                ?? primaryForeground,
-            ButtonForeground: CreateThemeBrush("FloatingIconForegroundColor")
-                ?? primaryForeground,
-            AccentBackground: accentBackground,
-            AccentForeground: CreateThemeBrush("AccentForegroundColor"),
-            AccentHoverBackground: CreateThemeBrush("AccentPointerOverColor") ?? accentBackground,
-            AccentPressedBackground: CreateThemeBrush("AccentPressedColor") ?? accentBackground,
-            HyperlinkForeground: CreateThemeBrush("BlueAccentColor"));
-    }
-
-    private static Brush? GetSettingsTextForeground(
-        TextBlock textBlock,
-        Brush? primaryForeground,
-        Brush? secondaryForeground)
-    {
-        if (IsStatusOrSuccessText(textBlock))
-        {
-            return textBlock.Foreground;
-        }
-
-        if (!HasLocalValue(textBlock, TextBlock.ForegroundProperty) || IsPrimarySettingsText(textBlock))
-        {
-            return primaryForeground;
-        }
-
-        return secondaryForeground ?? primaryForeground;
-    }
-
-    private static bool IsPrimarySettingsText(TextBlock textBlock)
-    {
-        return textBlock.FontWeight.Weight >= 600 || textBlock.FontSize >= 18;
-    }
-
-    private static bool IsStatusOrSuccessText(TextBlock textBlock)
-    {
-        return string.Equals(textBlock.Text, "✓", StringComparison.Ordinal);
-    }
-
-    private sealed record SettingsThemeChrome(
-        Brush? PageBackground,
-        Brush? CardBackground,
-        Brush? CardBorder,
-        Brush? InputBackground,
-        Brush? InputBorder,
-        Brush? PrimaryForeground,
-        Brush? SecondaryForeground,
-        Brush? ButtonForeground,
-        Brush? AccentBackground,
-        Brush? AccentForeground,
-        Brush? AccentHoverBackground,
-        Brush? AccentPressedBackground,
-        Brush? HyperlinkForeground);
-
-    private Brush? CreateThemeBrush(string colorKey)
-    {
-        return ThemeResourceService.GetColor(colorKey, this) is { } color
-            ? new SolidColorBrush(color)
-            : null;
-    }
-
-    private static void ApplyButtonChrome(
-        Button button,
-        Brush? background,
-        Brush? hoverBackground,
-        Brush? pressedBackground,
-        Brush? foreground,
-        Brush? border)
-    {
-        if (background is not null)
-        {
-            button.Background = background;
-        }
-
-        if (foreground is not null)
-        {
-            button.Foreground = foreground;
-        }
-
-        if (border is not null)
-        {
-            button.BorderBrush = border;
-        }
-
-        SetResourceIfNotNull(button.Resources, "ButtonBackground", background);
-        SetResourceIfNotNull(button.Resources, "ButtonBackgroundPointerOver", hoverBackground ?? background);
-        SetResourceIfNotNull(button.Resources, "ButtonBackgroundPressed", pressedBackground ?? hoverBackground ?? background);
-        SetResourceIfNotNull(button.Resources, "ButtonForeground", foreground);
-        SetResourceIfNotNull(button.Resources, "ButtonForegroundPointerOver", foreground);
-        SetResourceIfNotNull(button.Resources, "ButtonForegroundPressed", foreground);
-        SetResourceIfNotNull(button.Resources, "ButtonBorderBrush", border);
-        SetResourceIfNotNull(button.Resources, "ButtonBorderBrushPointerOver", border);
-        SetResourceIfNotNull(button.Resources, "ButtonBorderBrushPressed", border);
-        SetResourceIfNotNull(button.Resources, "AccentTextFillColorPrimaryBrush", foreground);
-    }
-
-    private static void SetResourceIfNotNull(ResourceDictionary resources, string key, object? value)
-    {
-        if (value is not null)
-        {
-            resources[key] = value;
-        }
-    }
-
-    private static bool HasLocalValue(DependencyObject obj, DependencyProperty property)
-    {
-        return !ReferenceEquals(obj.ReadLocalValue(property), DependencyProperty.UnsetValue);
-    }
-
-    private static void EnqueueVisualChildren(
-        DependencyObject parent,
-        Queue<DependencyObject> pending)
-    {
-        int count;
-        try
-        {
-            count = VisualTreeHelper.GetChildrenCount(parent);
-        }
-        catch (COMException)
-        {
-            return;
-        }
-        catch (ArgumentException)
-        {
-            return;
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            pending.Enqueue(VisualTreeHelper.GetChild(parent, i));
-        }
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -930,12 +541,25 @@ public sealed partial class SettingsPage : Page
 
     private async void OnSettingsTabClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: SettingsTabId tabId })
+        if (sender is not RadioButton { Tag: SettingsTabId tabId } button)
         {
             return;
         }
 
+        ApplySettingsTabButtonSelection(tabId);
+        button.IsChecked = true;
         await SelectSettingsTabAsync(tabId, resetScroll: true);
+    }
+
+    private void OnSettingsTabChecked(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingSettingsTabButtonSelection
+            || sender is not RadioButton { Tag: SettingsTabId tabId })
+        {
+            return;
+        }
+
+        ApplySettingsTabButtonSelection(tabId);
     }
 
     private async void OnRateAppLinkClick(object sender, RoutedEventArgs e)
@@ -975,7 +599,7 @@ public sealed partial class SettingsPage : Page
 
     private void OnSettingsTabButtonLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button button || button.DataContext is not SettingsTabItem tab)
+        if (sender is not RadioButton button || button.DataContext is not SettingsTabItem tab)
         {
             return;
         }
@@ -1116,10 +740,7 @@ public sealed partial class SettingsPage : Page
 
     private void ApplySettingsTabSelection(SettingsTabId tabId, bool resetScroll)
     {
-        foreach (var item in _settingsTabs)
-        {
-            item.IsSelected = item.Id == tabId;
-        }
+        ApplySettingsTabButtonSelection(tabId);
 
         GeneralTabContent.Visibility = tabId == SettingsTabId.General ? Visibility.Visible : Visibility.Collapsed;
         ServicesTabContent.Visibility = tabId == SettingsTabId.Services ? Visibility.Visible : Visibility.Collapsed;
@@ -1137,12 +758,27 @@ public sealed partial class SettingsPage : Page
         {
             MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
         }
+    }
 
-        // Theme chrome is refreshed on actual theme changes (OnActualThemeChanged →
-        // QueueApplyThemeChrome) and when a tab's XAML is first inflated
-        // (EnsureTabContentLoaded above). Visibility-toggle switches reuse the brushes
-        // already assigned on the inflated subtrees, so re-walking the visual tree here
-        // costs ~ms-to-tens-of-ms on the Services tab for no observable change.
+    private void ApplySettingsTabButtonSelection(SettingsTabId tabId)
+    {
+        if (_isApplyingSettingsTabButtonSelection)
+        {
+            return;
+        }
+
+        _isApplyingSettingsTabButtonSelection = true;
+        try
+        {
+            foreach (var item in _settingsTabs)
+            {
+                item.IsSelected = item.Id == tabId;
+            }
+        }
+        finally
+        {
+            _isApplyingSettingsTabButtonSelection = false;
+        }
     }
 
     private void EnsureTabContentLoaded(SettingsTabId tabId)
@@ -1153,11 +789,7 @@ public sealed partial class SettingsPage : Page
                 FindName(nameof(ViewsTabContent));
                 BindWindowServicePanels();
                 ApplyWindowResultsLocalization(LocalizationService.Instance);
-                // Chrome the newly-inflated subtree — the rest of the page already has
-                // brushes assigned from the initial ctor pass. ApplyThemeChrome walks the
-                // entire visual tree (~thousands of elements on the Services tab), so
-                // confining it to this inflation site avoids paying the cost on every
-                // visibility-toggle switch in SelectSettingsTab below.
+                // Newly-inflated controls inherit the page and application semantic resources.
                 ApplyThemeChrome();
                 break;
         }
@@ -1844,9 +1476,9 @@ public sealed partial class SettingsPage : Page
 
         var tailLength = Math.Min(PasswordTailVisibleLength, password.Length);
         hint.Text.Text = PasswordTailHintPrefix + password.Substring(password.Length - tailLength);
-        hint.Text.Foreground = CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
-            ?? CreateThemeBrush("QueryTextColor");
-        hint.Container.Background = CreateThemeBrush("FloatingInputBackgroundColor");
+        hint.Text.Foreground = ThemeResourceService.GetBrush("EasydictSecondaryTextBrush", this)
+            ?? ThemeResourceService.GetBrush("EasydictPrimaryTextBrush", this);
+        hint.Container.Background = ThemeResourceService.GetBrush("EasydictInputBackgroundBrush", this);
         hint.Container.Visibility = Visibility.Visible;
     }
 

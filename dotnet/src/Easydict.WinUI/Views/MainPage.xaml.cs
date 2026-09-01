@@ -402,7 +402,7 @@ namespace Easydict.WinUI.Views
 
             var minimal = MinimalThemeService.IsActive;
             var compact = IsCompactChrome;
-            ModeEmojiIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ModeIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             ModeSelectorButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             ModeSubtitle.Visibility = compact || _currentMode != QueryMode.LongDocument
                 ? Visibility.Collapsed
@@ -439,13 +439,11 @@ namespace Easydict.WinUI.Views
                 }
             }
 
-            ApplyMainWindowBorderChrome(minimal);
             ApplyMainLayoutChrome(minimal, compact);
             ApplyStatusChrome();
             ApplyStatusSummaryChrome();
             ApplyTranslateButtonsChrome();
             ApplyButtonVisibility();
-            RefreshMainControlChrome();
 
             if (!refreshServiceResults)
             {
@@ -462,6 +460,9 @@ namespace Easydict.WinUI.Views
 
         private void ApplyMainLayoutChrome(bool minimal, bool compact)
         {
+            InputTextContainer.Margin = compact ? new Thickness(0) : new Thickness(0, 4, 0, 0);
+            InputTextBox.MinHeight = compact ? 40 : 88;
+
             if (minimal)
             {
                 MainHeader.Margin = new Thickness(8, 4, 8, 4);
@@ -475,7 +476,7 @@ namespace Easydict.WinUI.Views
                 QuickOutputCard.Margin = new Thickness(0, 2, 0, 0);
                 QuickInputCardContent.Margin = new Thickness(4);
                 QuickOutputCardContent.Margin = new Thickness(4);
-                QuickInputHeaderRow.Height = compact ? new GridLength(0) : new GridLength(15);
+                QuickInputHeaderRow.Height = compact ? new GridLength(0) : new GridLength(24);
 
                 LongDocInputCard.Margin = new Thickness(0, 0, 0, 2);
                 LongDocControlBar.Margin = new Thickness(0, 4, 0, 4);
@@ -515,7 +516,7 @@ namespace Easydict.WinUI.Views
             QuickOutputCard.Margin = new Thickness(0);
             QuickInputCardContent.Margin = new Thickness(0);
             QuickOutputCardContent.Margin = new Thickness(0);
-            QuickInputHeaderRow.Height = compact ? new GridLength(0) : GridLength.Auto;
+            QuickInputHeaderRow.Height = compact ? new GridLength(0) : new GridLength(24);
 
             LongDocInputCard.Margin = new Thickness(0, 0, 0, 4);
             LongDocControlBar.Margin = new Thickness(0, 4, 0, 4);
@@ -543,181 +544,6 @@ namespace Easydict.WinUI.Views
             LongDocTranslateButton.Margin = new Thickness(0);
         }
 
-        private void ApplyMainWindowBorderChrome(bool minimal)
-        {
-            if (minimal)
-            {
-                Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                MainWindowBorder.Background = null;
-                MainWindowBorder.BorderBrush = null;
-                MainWindowBorder.BorderThickness = new Thickness(0);
-                MainWindowBorder.CornerRadius = new CornerRadius(0);
-                MainWindowBorder.Padding = new Thickness(0);
-                ApplyMainInputChrome(minimal, IsCompactChrome);
-                return;
-            }
-
-            Background = CreateThemeBrush("FloatingWindowBackgroundColor")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            MainWindowBorder.Background = CreateThemeBrush("FloatingWindowBackgroundColor");
-            MainWindowBorder.BorderBrush = CreateThemeBrush("MainBorderColor");
-            MainWindowBorder.BorderThickness = new Thickness(0);
-            MainWindowBorder.CornerRadius = new CornerRadius(0);
-            MainWindowBorder.Padding = ThemeResourceService.GetResourceOrDefault(
-                "FloatingWindowContentPadding",
-                this,
-                new Thickness(8));
-            ApplyMainInputChrome(minimal, IsCompactChrome);
-        }
-
-        private void ApplyMainInputChrome(bool minimal, bool compact)
-        {
-            if (minimal)
-            {
-                var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                InputTextContainer.Background = transparent;
-                InputTextContainer.BorderBrush = transparent;
-                InputTextContainer.BorderThickness = new Thickness(0);
-                InputTextContainer.CornerRadius = new CornerRadius(0);
-                InputTextContainer.Padding = new Thickness(0);
-                InputTextContainer.Margin = compact ? new Thickness(0) : new Thickness(0, 4, 0, 0);
-                InputTextBox.Background = transparent;
-                InputTextBox.BorderBrush = transparent;
-                InputTextBox.BorderThickness = new Thickness(0);
-                InputTextBox.CornerRadius = new CornerRadius(0);
-                InputTextBox.Padding = new Thickness(8);
-                SetTextBoxChromeResources(InputTextBox, transparent, transparent);
-                return;
-            }
-
-            var textBackground = CreateThemeBrush("FloatingInputBackgroundColor")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var textBorder = CreateThemeBrush("FloatingInputBorderColor")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var textForeground = CreateThemeBrush("QueryTextColor");
-            var placeholderForeground = ThemeResourceService.GetBrush("TextControlPlaceholderForeground", this)
-                ?? ThemeResourceService.GetBrush("TextFillColorTertiaryBrush", this);
-            var transparentBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-
-            InputTextContainer.Background = textBackground;
-            InputTextContainer.BorderBrush = textBorder;
-            InputTextContainer.BorderThickness = new Thickness(1);
-            InputTextContainer.CornerRadius = ThemeResourceService.GetResourceOrDefault(
-                "FloatingInputCornerRadius",
-                this,
-                new CornerRadius(18));
-            InputTextContainer.Padding = ThemeResourceService.GetResourceOrDefault(
-                "FloatingInputPadding",
-                this,
-                new Thickness(6, 4, 6, 4));
-            InputTextContainer.Margin = compact ? new Thickness(0) : new Thickness(0, 3, 0, 0);
-
-            InputTextBox.Background = textBackground;
-            InputTextBox.BorderBrush = transparentBrush;
-            InputTextBox.BorderThickness = new Thickness(0);
-            InputTextBox.CornerRadius = new CornerRadius(0);
-            InputTextBox.Padding = new Thickness(0);
-            if (textForeground is not null)
-            {
-                InputTextBox.Foreground = textForeground;
-            }
-
-            if (placeholderForeground is not null)
-            {
-                InputTextBox.PlaceholderForeground = placeholderForeground;
-            }
-
-            SetTextBoxChromeResources(InputTextBox, textBackground, transparentBrush);
-        }
-
-        private void RefreshMainControlChrome()
-        {
-            if (MinimalThemeService.IsActive)
-            {
-                ClearMainControlChromeOverrides();
-                return;
-            }
-
-            var pageBackground = CreateThemeBrush("FloatingWindowBackgroundColor")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var pageBorder = CreateThemeBrush("MainBorderColor");
-            var cardBackground = CreateThemeBrush("EasydictCardBackgroundColor");
-            var cardBorder = CreateThemeBrush("EasydictCardBorderColor");
-            var comboBackground = CreateThemeBrush("EasydictCardBackgroundColor");
-            var comboHoverBackground = CreateThemeBrush("FloatingInputBackgroundColor");
-            var comboForeground = CreateThemeBrush("QueryTextColor");
-            var comboBorder = CreateThemeBrush("FloatingInputBorderColor");
-            var foreground = CreateThemeBrush("QueryTextColor");
-            var secondaryForeground = CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor");
-            var iconForeground = CreateThemeBrush("FloatingIconForegroundColor");
-
-            Background = pageBackground;
-            MainWindowBorder.Background = pageBackground;
-            MainWindowBorder.BorderBrush = pageBorder;
-
-            ApplyHeaderChrome(foreground, secondaryForeground ?? iconForeground);
-            ApplyCardChrome(QuickInputCard, cardBackground, cardBorder);
-            ApplyCardChrome(QuickOutputCard, cardBackground, cardBorder);
-            ApplyCardChrome(LongDocInputCard, cardBackground, cardBorder);
-            ApplyCardChrome(LongDocOutputCard, cardBackground, cardBorder);
-
-            ApplyComboBoxChrome(SourceLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(TargetLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(SourceLangComboNarrow, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(TargetLangComboNarrow, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(LongDocSourceLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(LongDocTargetLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(LongDocServiceCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(LongDocInputModeCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(LongDocOutputModeCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            RefreshLongDocServiceItemChrome();
-        }
-
-        private void ClearMainControlChromeOverrides()
-        {
-            ClearCardChrome(QuickInputCard);
-            ClearCardChrome(QuickOutputCard);
-            ClearCardChrome(LongDocInputCard);
-            ClearCardChrome(LongDocOutputCard);
-
-            ClearComboBoxChrome(SourceLangCombo);
-            ClearComboBoxChrome(TargetLangCombo);
-            ClearComboBoxChrome(SourceLangComboNarrow);
-            ClearComboBoxChrome(TargetLangComboNarrow);
-            ClearComboBoxChrome(LongDocSourceLangCombo);
-            ClearComboBoxChrome(LongDocTargetLangCombo);
-            ClearComboBoxChrome(LongDocServiceCombo);
-            ClearComboBoxChrome(LongDocInputModeCombo);
-            ClearComboBoxChrome(LongDocOutputModeCombo);
-            RefreshLongDocServiceItemChrome();
-
-            ModeSelectorButton.ClearValue(Control.ForegroundProperty);
-            ModeTitleText.ClearValue(TextBlock.ForegroundProperty);
-            ModeChevronIcon.ClearValue(FontIcon.ForegroundProperty);
-            ModeSubtitle.ClearValue(TextBlock.ForegroundProperty);
-            LangHelpIcon.ClearValue(FontIcon.ForegroundProperty);
-            LangHelpIconNarrow.ClearValue(FontIcon.ForegroundProperty);
-            InputHelpIcon.ClearValue(FontIcon.ForegroundProperty);
-        }
-
-        private void ApplyHeaderChrome(Brush? foreground, Brush? secondaryForeground)
-        {
-            if (foreground is not null)
-            {
-                ModeSelectorButton.Foreground = foreground;
-                ModeTitleText.Foreground = foreground;
-            }
-
-            if (secondaryForeground is not null)
-            {
-                ModeChevronIcon.Foreground = secondaryForeground;
-                ModeSubtitle.Foreground = secondaryForeground;
-                LangHelpIcon.Foreground = secondaryForeground;
-                LangHelpIconNarrow.Foreground = secondaryForeground;
-                InputHelpIcon.Foreground = secondaryForeground;
-            }
-        }
 
         private Brush? CreateThemeBrush(string colorKey)
         {
@@ -726,114 +552,6 @@ namespace Easydict.WinUI.Views
                 : null;
         }
 
-        private static void ApplyCardChrome(Border card, Brush? background, Brush? border)
-        {
-            if (background is not null)
-            {
-                card.Background = background;
-            }
-
-            if (border is not null)
-            {
-                card.BorderBrush = border;
-            }
-        }
-
-        private static void ClearCardChrome(Border card)
-        {
-            card.ClearValue(Border.BackgroundProperty);
-            card.ClearValue(Border.BorderBrushProperty);
-        }
-
-        private static void ApplyComboBoxChrome(
-            ComboBox comboBox,
-            Brush? background,
-            Brush? hoverBackground,
-            Brush? foreground,
-            Brush? border)
-        {
-            if (background is not null)
-            {
-                comboBox.Background = background;
-            }
-
-            if (foreground is not null)
-            {
-                comboBox.Foreground = foreground;
-            }
-
-            if (border is not null)
-            {
-                comboBox.BorderBrush = border;
-            }
-
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBackground", background);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBackgroundPointerOver", hoverBackground ?? background);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBackgroundFocused", background);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxForeground", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxForegroundPointerOver", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxForegroundFocused", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrush", border);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrushPointerOver", border);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrushFocused", border);
-
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForeground", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundPointerOver", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundPressed", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundSelected", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundSelectedPointerOver", foreground);
-            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundSelectedPressed", foreground);
-        }
-
-        private static void SetResourceIfNotNull(ResourceDictionary resources, string key, object? value)
-        {
-            if (value is not null)
-            {
-                resources[key] = value;
-            }
-        }
-
-        private static void ClearComboBoxChrome(ComboBox comboBox)
-        {
-            comboBox.ClearValue(Control.BackgroundProperty);
-            comboBox.ClearValue(Control.ForegroundProperty);
-            comboBox.ClearValue(Control.BorderBrushProperty);
-
-            RemoveResource(comboBox.Resources, "ComboBoxBackground");
-            RemoveResource(comboBox.Resources, "ComboBoxBackgroundPointerOver");
-            RemoveResource(comboBox.Resources, "ComboBoxBackgroundFocused");
-            RemoveResource(comboBox.Resources, "ComboBoxForeground");
-            RemoveResource(comboBox.Resources, "ComboBoxForegroundPointerOver");
-            RemoveResource(comboBox.Resources, "ComboBoxForegroundFocused");
-            RemoveResource(comboBox.Resources, "ComboBoxBorderBrush");
-            RemoveResource(comboBox.Resources, "ComboBoxBorderBrushPointerOver");
-            RemoveResource(comboBox.Resources, "ComboBoxBorderBrushFocused");
-
-            RemoveResource(comboBox.Resources, "ComboBoxItemForeground");
-            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundPointerOver");
-            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundPressed");
-            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundSelected");
-            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundSelectedPointerOver");
-            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundSelectedPressed");
-        }
-
-        private static void RemoveResource(ResourceDictionary resources, string key)
-        {
-            if (resources.ContainsKey(key))
-            {
-                resources.Remove(key);
-            }
-        }
-
-        private static void SetTextBoxChromeResources(TextBox textBox, Brush background, Brush border)
-        {
-            textBox.Resources["TextControlBackground"] = background;
-            textBox.Resources["TextControlBackgroundPointerOver"] = background;
-            textBox.Resources["TextControlBackgroundFocused"] = background;
-            textBox.Resources["TextControlBorderBrush"] = border;
-            textBox.Resources["TextControlBorderBrushPointerOver"] = border;
-            textBox.Resources["TextControlBorderBrushFocused"] = border;
-        }
 
         private void ApplyStatusChrome()
         {
@@ -1052,13 +770,6 @@ namespace Easydict.WinUI.Views
                 button.Height = 32;
                 button.MinWidth = 72;
                 button.Padding = new Thickness(10, 4, 10, 4);
-                button.Background = ThemeResourceService.GetBrush("ButtonBackground")
-                    ?? ThemeResourceService.GetBrush("CardBackgroundFillColorDefaultBrush");
-                button.BorderBrush = ThemeResourceService.GetBrush("ButtonBorderBrush")
-                    ?? ThemeResourceService.GetBrush("ControlStrokeColorDefaultBrush");
-                button.BorderThickness = new Thickness(1);
-                button.Foreground = ThemeResourceService.GetBrush("ButtonForeground")
-                    ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush");
                 return;
             }
 
@@ -1067,15 +778,6 @@ namespace Easydict.WinUI.Views
             button.Height = normalHeight;
             button.MinWidth = 0;
             button.Padding = new Thickness(0);
-            button.Background = ThemeResourceService.TryGetResource<Brush>(
-                "AccentBrush",
-                button,
-                out var accentBrush)
-                ? accentBrush
-                : null;
-            button.BorderBrush = null;
-            button.BorderThickness = new Thickness(0);
-            button.Foreground = null;
         }
 
         private async void OnPageUnloaded(object sender, RoutedEventArgs e)
@@ -1355,7 +1057,7 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
-        /// Apply all UI state for the current mode (emoji, subtitle, content visibility, grammar-specific controls).
+        /// Apply all UI state for the current mode, subtitle, content visibility, and grammar-specific controls.
         /// </summary>
         private void ApplyModeState(
             bool reinitializeServiceResults = true,
@@ -1365,12 +1067,9 @@ namespace Easydict.WinUI.Views
             var loc = LocalizationService.Instance;
             HideSuggestionPopup();
 
-            // Update header emoji
-            ModeEmojiIcon.Text = _currentMode switch
-            {
-                QueryMode.LongDocument => "📄",
-                _ => "🌐"
-            };
+            ModeIcon.Glyph = _currentMode == QueryMode.LongDocument
+                ? "\uE8A5"
+                : "\uE909";
 
             // Update subtitle
             var compactChrome = IsCompactChrome;
@@ -1417,19 +1116,10 @@ namespace Easydict.WinUI.Views
                 ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             }
 
-            // Localize menu item texts. Minimal mode avoids emoji decoration.
             var translationText = loc.GetString("QueryMode_Translation") ?? "Quick Translation";
             var longDocText = loc.GetString("Mode_LongDocument") ?? "Long Document";
-            if (MinimalThemeService.IsActive)
-            {
-                ModeTranslationItem.Text = translationText;
-                ModeLongDocItem.Text = longDocText;
-            }
-            else
-            {
-                ModeTranslationItem.Text = "🌐  " + translationText;
-                ModeLongDocItem.Text = "📄  " + longDocText;
-            }
+            ModeTranslationItem.Text = translationText;
+            ModeLongDocItem.Text = longDocText;
 
             // Re-initialize service results only for explicit mode-state transitions.
             if (reinitializeServiceResults && !isLongDoc)

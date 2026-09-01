@@ -9,24 +9,24 @@
 
     <Border
         x:Name="RootBorder"
-        Background="{ThemeResource ResultViewBackgroundBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        Background="{ThemeResource EasydictCardBackgroundBrush}"
+        BorderBrush="{ThemeResource EasydictCardBorderBrush}"
         BorderThickness="{ThemeResource EasydictCardBorderThickness}"
         CornerRadius="{ThemeResource EasydictCardCornerRadius}"
-        Margin="0,0,0,2">
+        Margin="0,0,0,8">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition MinHeight="{ThemeResource EasydictResultHeaderMinHeight}"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <Border
                 x:Name="HeaderBar"
                 Grid.Row="0"
-                Background="{ThemeResource ServiceResultHeaderBackgroundBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource EasydictResultHeaderBackgroundBrush}"
+                BorderBrush="{ThemeResource EasydictCardBorderBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="6,4"
+                Padding="10,0"
                 PointerPressed="OnHeaderPointerPressed">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -37,17 +37,17 @@
                     <TextBlock
                         x:Name="ServiceNameText"
                         Grid.Column="0"
-                        FontSize="12"
+                        FontSize="13"
                         FontWeight="SemiBold"
-                        Foreground="{ThemeResource ServiceResultHeaderForegroundBrush}"
+                        Foreground="{ThemeResource EasydictPrimaryTextBrush}"
                         TextTrimming="CharacterEllipsis"
                         VerticalAlignment="Center"/>
 
                     <TextBlock
                         x:Name="StatusText"
                         Grid.Column="1"
-                        FontSize="10"
-                        Foreground="{ThemeResource ServiceResultHeaderSecondaryForegroundBrush}"
+                        FontSize="11"
+                        Foreground="{ThemeResource EasydictSecondaryTextBrush}"
                         Margin="8,0,0,0"
                         Visibility="Collapsed"
                         VerticalAlignment="Center"/>
@@ -57,20 +57,20 @@
             <Border
                 x:Name="ContentArea"
                 Grid.Row="1"
-                Padding="8,6,8,8"
+                Padding="12,8"
                 Visibility="Collapsed">
                 <StackPanel Spacing="4">
                     <TextBlock
                         x:Name="PendingQueryText"
                         FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Foreground="{ThemeResource EasydictTertiaryTextBrush}"
                         Visibility="Collapsed"/>
 
                     <TextBlock
                         x:Name="ResultText"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
-                        Foreground="{ThemeResource QueryTextBrush}"
+                        Foreground="{ThemeResource EasydictPrimaryTextBrush}"
                         FontSize="13"
                         Visibility="Collapsed"/>
 
@@ -78,7 +78,7 @@
                         x:Name="ErrorText"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Foreground="{ThemeResource EasydictCriticalBrush}"
                         FontSize="12"
                         Visibility="Collapsed"/>
                 </StackPanel>

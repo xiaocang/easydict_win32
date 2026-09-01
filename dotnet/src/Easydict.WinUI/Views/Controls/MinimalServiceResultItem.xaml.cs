@@ -242,7 +242,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     private Brush? ResolveTextBrush(bool isInfoResult)
     {
         return ThemeResourceService.GetBrush(
-            isInfoResult ? "TextFillColorSecondaryBrush" : "QueryTextBrush",
+            isInfoResult ? "EasydictSecondaryTextBrush" : "EasydictPrimaryTextBrush",
             ThemeRoot ?? this);
     }
 

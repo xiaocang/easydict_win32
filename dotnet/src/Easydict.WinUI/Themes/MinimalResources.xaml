@@ -6,141 +6,106 @@
         <ResourceDictionary x:Key="Light">
             <Color x:Key="MinimalBackgroundColor">#FFFFFF</Color>
             <Color x:Key="MinimalSurfaceColor">#FFFFFF</Color>
-            <Color x:Key="MinimalLineColor">#999999</Color>
-            <Color x:Key="MinimalStrongLineColor">#000000</Color>
-            <Color x:Key="MinimalTextColor">#111111</Color>
-            <Color x:Key="MinimalSecondaryTextColor">#666666</Color>
-            <Color x:Key="QueryTextColor">#111111</Color>
-            <Color x:Key="ServiceResultHeaderSecondaryForegroundColor">#666666</Color>
-            <Color x:Key="MainBorderColor">#999999</Color>
-            <Color x:Key="FloatingWindowBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="FloatingInputBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="FloatingInputBorderColor">#999999</Color>
-            <Color x:Key="FloatingIconForegroundColor">#111111</Color>
-            <Color x:Key="EasydictCardBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="EasydictCardBorderColor">#999999</Color>
+            <Color x:Key="MinimalLineColor">#000000</Color>
+            <Color x:Key="MinimalTextColor">#000000</Color>
+            <Color x:Key="MinimalSecondaryTextColor">#000000</Color>
 
-            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource MinimalBackgroundColor}" />
-            <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource MinimalLineColor}" />
+            <SolidColorBrush x:Key="EasydictWindowSurfaceBrush" Color="{StaticResource MinimalBackgroundColor}" />
+            <SolidColorBrush x:Key="EasydictLayerFillBrush" Color="{StaticResource MinimalSurfaceColor}" />
+            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
+            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="{StaticResource MinimalLineColor}" />
+            <SolidColorBrush x:Key="EasydictInputBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
+            <SolidColorBrush x:Key="EasydictInputBorderBrush" Color="{StaticResource MinimalLineColor}" />
+            <SolidColorBrush x:Key="EasydictPrimaryTextBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="EasydictSecondaryTextBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="EasydictTertiaryTextBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="EasydictIconForegroundBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="EasydictAccentBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="EasydictAccentForegroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
+            <SolidColorBrush x:Key="EasydictSuccessBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="EasydictCriticalBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="EasydictLinkBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="EasydictResultHeaderBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
+            <SolidColorBrush x:Key="EasydictResultHeaderPointerOverBrush" Color="#F2F2F2" />
+            <SolidColorBrush x:Key="EasydictPopButtonBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
+            <SolidColorBrush x:Key="EasydictPopButtonBorderBrush" Color="{StaticResource MinimalLineColor}" />
+            <SolidColorBrush x:Key="EasydictPopButtonForegroundBrush" Color="{StaticResource MinimalTextColor}" />
 
-            <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="{StaticResource MinimalTextColor}" />
-
-            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#F7F7F7" />
-            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{StaticResource MinimalLineColor}" />
-            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{StaticResource MinimalLineColor}" />
-
-            <SolidColorBrush x:Key="ButtonBackground" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F7F7F7" />
-            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#EEEEEE" />
-            <SolidColorBrush x:Key="ButtonForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ButtonBorderBrush" Color="{StaticResource MinimalLineColor}" />
-            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource MinimalStrongLineColor}" />
-            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{StaticResource MinimalStrongLineColor}" />
-
-            <SolidColorBrush x:Key="ComboBoxBackground" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#F7F7F7" />
-            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{StaticResource MinimalLineColor}" />
-            <SolidColorBrush x:Key="ComboBoxForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="TextControlBackground" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource MinimalLineColor}" />
-            <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ComboBoxHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="TextControlHeaderForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="TextControlHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="TextControlHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="SliderHeaderForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="SliderHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="SliderHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="RadioButtonsHeaderForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="RadioButtonsHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchContentForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchContentForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchDisabledForegroundThemeBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderDisabledForegroundThemeBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderForegroundPointerOver" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderForegroundPressed" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderDisabledForeground" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderDisabledForeground" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderChevronPointerOverForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExpanderChevronPressedForeground" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminate" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePointerOver" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePressed" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
-
-            <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
-            <CornerRadius x:Key="OverlayCornerRadius">0</CornerRadius>
-            <CornerRadius x:Key="EasydictCardCornerRadius">0</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">0</CornerRadius>
-            <CornerRadius x:Key="EasydictRoundButtonCornerRadius">0</CornerRadius>
-            <CornerRadius x:Key="EasydictStatusCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="EasydictCardCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="EasydictOverlayCornerRadius">0</CornerRadius>
             <Thickness x:Key="EasydictCardBorderThickness">1</Thickness>
+            <CornerRadius x:Key="EasydictStatusCornerRadius">0</CornerRadius>
             <Thickness x:Key="EasydictIconButtonBorderThickness">1</Thickness>
+            <Thickness x:Key="EasydictCardPadding">12</Thickness>
+            <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="FloatingInputCornerRadius">0</CornerRadius>
+            <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
+            <Thickness x:Key="FloatingWindowContentPadding">8</Thickness>
+            <Thickness x:Key="FloatingWindowBorderThickness">1</Thickness>
+            <Thickness x:Key="FloatingInputPadding">6,4</Thickness>
+            <Thickness x:Key="FloatingInputMargin">0,0,0,3</Thickness>
 
-            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MinimalBackgroundColor}" />
-            <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MinimalStrongLineColor}" />
-            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="QueryTextBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderHoverBackgroundBrush" Color="#F7F7F7" />
-            <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="ButtonHoverBrush" Color="#F7F7F7" />
-            <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource MinimalLineColor}" />
-            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="PosTagTextBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="ExampleTextBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
-            <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="{StaticResource MinimalLineColor}" />
-            <SolidColorBrush x:Key="SettingsTabForegroundBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedBorderBrush" Color="{StaticResource MinimalStrongLineColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedForegroundBrush" Color="{StaticResource MinimalTextColor}" />
-            <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
-            <SolidColorBrush x:Key="PopButtonBorderBrush" Color="{StaticResource MinimalStrongLineColor}" />
-            <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="{StaticResource MinimalTextColor}" />
+            <!-- Minimal overrides for existing Easydict business resources. -->
+            <Color x:Key="TitleBarBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="TitleBarForegroundColor">#000000</Color>
+            <Color x:Key="TitleBarInactiveForegroundColor">#000000</Color>
+            <Color x:Key="TitleBarButtonHoverBackgroundColor">#F2F2F2</Color>
+            <Color x:Key="TitleBarButtonPressedBackgroundColor">#E6E6E6</Color>
+            <Color x:Key="BlueAccentColor">#000000</Color>
+            <Color x:Key="BlueTintColor">#000000</Color>
+            <Color x:Key="StatusDisconnectedColor">#000000</Color>
+            <Color x:Key="DictionaryHtmlBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="DictionaryHtmlTextColor">#000000</Color>
+            <Color x:Key="DictionaryHtmlLinkColor">#000000</Color>
+            <Color x:Key="PhoneticBadgeBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="PhoneticBadgeTextColor">#000000</Color>
+            <Color x:Key="PosTagBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="PosTagTextColor">#000000</Color>
+            <Color x:Key="ExampleTextColor">#000000</Color>
+            <Color x:Key="AddMinusBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="ListBorderColor">#000000</Color>
+
+            <StaticResource x:Key="MainViewBackgroundBrush" ResourceKey="EasydictWindowSurfaceBrush" />
+            <StaticResource x:Key="MainBorderBrush" ResourceKey="EasydictCardBorderBrush" />
+            <StaticResource x:Key="QueryViewBackgroundBrush" ResourceKey="EasydictLayerFillBrush" />
+            <StaticResource x:Key="QueryTextBrush" ResourceKey="EasydictPrimaryTextBrush" />
+            <StaticResource x:Key="ResultViewBackgroundBrush" ResourceKey="EasydictCardBackgroundBrush" />
+            <StaticResource x:Key="ServiceResultHeaderBackgroundBrush" ResourceKey="EasydictResultHeaderBackgroundBrush" />
+            <StaticResource x:Key="ServiceResultHeaderHoverBackgroundBrush" ResourceKey="EasydictResultHeaderPointerOverBrush" />
+            <StaticResource x:Key="ServiceResultHeaderForegroundBrush" ResourceKey="EasydictPrimaryTextBrush" />
+            <StaticResource x:Key="ServiceResultHeaderSecondaryForegroundBrush" ResourceKey="EasydictSecondaryTextBrush" />
+            <StaticResource x:Key="ButtonHoverBrush" ResourceKey="EasydictResultHeaderPointerOverBrush" />
+            <StaticResource x:Key="BlueAccentBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="BlueTintBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="ActionButtonIconBrush" ResourceKey="EasydictIconForegroundBrush" />
+            <StaticResource x:Key="StatusConnectedBrush" ResourceKey="EasydictSuccessBrush" />
+            <StaticResource x:Key="StatusDisconnectedBrush" ResourceKey="EasydictTertiaryTextBrush" />
+            <StaticResource x:Key="StatusErrorBrush" ResourceKey="EasydictCriticalBrush" />
+            <StaticResource x:Key="StatusIndicatorForegroundBrush" ResourceKey="EasydictAccentForegroundBrush" />
+            <StaticResource x:Key="AccentBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="AccentForegroundBrush" ResourceKey="EasydictAccentForegroundBrush" />
+            <StaticResource x:Key="AccentPointerOverBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="AccentPressedBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="PhoneticBadgeBackgroundBrush" ResourceKey="EasydictCardBackgroundBrush" />
+            <StaticResource x:Key="PhoneticBadgeTextBrush" ResourceKey="EasydictPrimaryTextBrush" />
+            <StaticResource x:Key="PosTagBackgroundBrush" ResourceKey="EasydictCardBackgroundBrush" />
+            <StaticResource x:Key="PosTagTextBrush" ResourceKey="EasydictPrimaryTextBrush" />
+            <StaticResource x:Key="ExampleTextBrush" ResourceKey="EasydictSecondaryTextBrush" />
+            <StaticResource x:Key="SettingsTabBackgroundBrush" ResourceKey="EasydictCardBackgroundBrush" />
+            <StaticResource x:Key="SettingsTabBorderBrush" ResourceKey="EasydictCardBorderBrush" />
+            <StaticResource x:Key="SettingsTabForegroundBrush" ResourceKey="EasydictPrimaryTextBrush" />
+            <StaticResource x:Key="SettingsTabSelectedBackgroundBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="SettingsTabSelectedBorderBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="SettingsTabSelectedForegroundBrush" ResourceKey="EasydictAccentForegroundBrush" />
+            <StaticResource x:Key="PopButtonBackgroundBrush" ResourceKey="EasydictPopButtonBackgroundBrush" />
+            <StaticResource x:Key="PopButtonBorderBrush" ResourceKey="EasydictPopButtonBorderBrush" />
+            <StaticResource x:Key="PopButtonForegroundBrush" ResourceKey="EasydictPopButtonForegroundBrush" />
+            <StaticResource x:Key="FloatingWindowBackgroundBrush" ResourceKey="EasydictWindowSurfaceBrush" />
+            <StaticResource x:Key="FloatingWindowBorderBrush" ResourceKey="EasydictCardBorderBrush" />
+            <StaticResource x:Key="FloatingInputBackgroundBrush" ResourceKey="EasydictInputBackgroundBrush" />
+            <StaticResource x:Key="FloatingInputBorderBrush" ResourceKey="EasydictInputBorderBrush" />
+            <StaticResource x:Key="FloatingIconForegroundBrush" ResourceKey="EasydictIconForegroundBrush" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

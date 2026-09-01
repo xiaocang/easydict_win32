@@ -105,9 +105,7 @@ public sealed partial class MiniWindow : Window
         var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
 
-        // Mica gives the small floating window a Fluent-native look. Falls through
-        // gracefully on hosts that don't support it (Win10 with no Mica, etc.).
-        TryApplyMicaBackdrop();
+        MinimalThemeService.ApplyWindowBackdrop(this);
 
         // Configure window appearance
         ConfigureWindow();
@@ -235,22 +233,6 @@ public sealed partial class MiniWindow : Window
         _compactWindowControls.RefreshTheme(Content as FrameworkElement);
     }
 
-    /// <summary>
-    /// Apply a Mica system backdrop. Mica respects ElementTheme automatically and is
-    /// supported on Windows 11 (Win10 and unsupported configurations silently keep
-    /// the solid theme background).
-    /// </summary>
-    private void TryApplyMicaBackdrop()
-    {
-        try
-        {
-            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
-        }
-        catch (System.Exception ex)
-        {
-            Debug.WriteLine($"[MiniWindow] Mica backdrop unavailable: {ex.Message}");
-        }
-    }
 
     /// <summary>
     /// Configure window to be compact with no title bar buttons.
@@ -1944,7 +1926,9 @@ public sealed partial class MiniWindow : Window
         {
             SourceTextCollapsed.Visibility = Visibility.Visible;
             InputTextBox.Visibility = Visibility.Collapsed;
-            SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+            SourceTextContainer.Background = ThemeResourceService.GetBrush("EasydictInputBackgroundBrush", Content as FrameworkElement);
+            SourceTextContainer.BorderBrush = ThemeResourceService.GetBrush("EasydictInputBorderBrush", Content as FrameworkElement);
+            SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
         }
     }
 
@@ -1962,8 +1946,7 @@ public sealed partial class MiniWindow : Window
         {
             ProtectedCursorHelper.Set(SourceTextContainer, InputSystemCursor.Create(InputSystemCursorShape.Hand));
             var themeRoot = Content as FrameworkElement;
-            SourceTextContainer.BorderBrush = ThemeResourceService.GetBrush("AccentTextFillColorPrimaryBrush", themeRoot)
-                ?? ThemeResourceService.GetBrush("AccentBrush", themeRoot);
+            SourceTextContainer.BorderBrush = ThemeResourceService.GetBrush("EasydictAccentBrush", themeRoot);
             SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
         }
     }
@@ -1973,7 +1956,7 @@ public sealed partial class MiniWindow : Window
         if (!_isSourceTextExpanded)
         {
             ProtectedCursorHelper.Set(SourceTextContainer, null);
-            SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+            SourceTextContainer.BorderBrush = ThemeResourceService.GetBrush("EasydictInputBorderBrush", Content as FrameworkElement);
         }
     }
 
@@ -2301,19 +2284,14 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
-        if (this.Content is FrameworkElement root)
+        var usesMica = MinimalThemeService.ApplyWindowBackdrop(this);
+        if (Content is FrameworkElement root)
         {
             MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);
-            MinimalThemeService.ApplyFloatingWindowRootBackground(root);
+            MinimalThemeService.ApplyWindowRootBackground(root, usesMica);
         }
 
         var minimal = MinimalThemeService.IsActive;
-        MinimalThemeService.ApplyFloatingChrome(
-            Content as Grid,
-            WindowSurface,
-            SourceTextContainer,
-            minimal,
-            Content as FrameworkElement);
         ApplyButtonVisibility();
         ApplyCompactChromeLayout();
         var themeRoot = Content as FrameworkElement;
@@ -2326,15 +2304,6 @@ public sealed partial class MiniWindow : Window
         else
         {
             ServiceResultViewHost.RefreshThemeChrome(_resultControls, themeRoot);
-        }
-
-        if (minimal)
-        {
-            MinimalThemeService.ApplyWindowBackdrop(this);
-        }
-        else
-        {
-            TryApplyMicaBackdrop();
         }
     }
 

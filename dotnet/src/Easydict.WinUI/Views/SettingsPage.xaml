@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:local="using:Easydict.WinUI.Views"
     mc:Ignorable="d"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    Background="{ThemeResource EasydictLayerFillBrush}">
 
     <Page.Resources>
         <ResourceDictionary>
@@ -41,7 +41,7 @@
                 HorizontalScrollBarVisibility="Disabled"
                 Visibility="Collapsed">
             <StackPanel x:Name="SettingsContentRoot"
-                    Spacing="24"
+                    Spacing="16"
                     Width="{Binding ViewportWidth, ElementName=MainScrollViewer}"
                     MaxWidth="1040"
                     HorizontalAlignment="Center">
@@ -57,13 +57,12 @@
                                 Padding="8">
                             <FontIcon Glyph="&#xE72B;"
                                     FontSize="16"
-                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                    Foreground="{ThemeResource EasydictAccentForegroundBrush}"/>
                         </Button>
                         <TextBlock x:Name="SettingsHeaderText"
-                                Text="Settings"
-                                FontSize="28"
-                                FontWeight="SemiBold"
-                                VerticalAlignment="Center"/>
+                                   Text="Settings"
+                                   Style="{StaticResource SettingsPageTitleStyle}"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>
 
@@ -79,61 +78,30 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Click="OnSettingsTabClick"
-                                        Loaded="OnSettingsTabButtonLoaded"
-                                        Tag="{Binding Id}"
-                                        AutomationProperties.AutomationId="{Binding AutomationId}"
-                                        AutomationProperties.Name="{Binding Label}"
-                                        Style="{StaticResource SettingsTabButtonStyle}"
-                                        Width="86"
-                                        Height="76"
-                                        Margin="0,0,10,10"
-                                        Padding="0"
-                                        Background="{Binding Background}"
-                                        BorderBrush="{Binding BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                                        Foreground="{Binding Foreground}"
-                                        HorizontalAlignment="Left"
-                                        ToolTipService.ToolTip="{Binding Tooltip}">
-                                    <Grid>
-                                        <StackPanel Spacing="6"
-                                                    HorizontalAlignment="Center"
-                                                    VerticalAlignment="Center">
-                                            <FontIcon Glyph="{Binding IconGlyph}"
-                                                      FontSize="22"
-                                                      Foreground="{Binding Foreground}"
-                                                      HorizontalAlignment="Center"/>
-                                            <TextBlock Text="{Binding Label}"
-                                                       FontSize="12"
-                                                       Foreground="{Binding Foreground}"
-                                                       TextAlignment="Center"
-                                                       HorizontalAlignment="Center"/>
-                                        </StackPanel>
-
-                                        <Border
-                                            Background="{Binding SelectedBackground}"
-                                            BorderBrush="{Binding SelectedBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                                            Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                                        <StackPanel Spacing="6"
-                                                    HorizontalAlignment="Center"
-                                                    VerticalAlignment="Center"
-                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <FontIcon Glyph="{Binding IconGlyph}"
-                                                      FontSize="22"
-                                                      Foreground="{Binding SelectedForeground}"
-                                                      HorizontalAlignment="Center"/>
-                                            <TextBlock Text="{Binding Label}"
-                                                       FontSize="12"
-                                                       Foreground="{Binding SelectedForeground}"
-                                                       TextAlignment="Center"
-                                                       HorizontalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
+                                <RadioButton Click="OnSettingsTabClick"
+                                              Checked="OnSettingsTabChecked"
+                                              GroupName="SettingsTabs"
+                                              Loaded="OnSettingsTabButtonLoaded"
+                                              Tag="{Binding Id}"
+                                              IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                              AutomationProperties.AutomationId="{Binding AutomationId}"
+                                              AutomationProperties.Name="{Binding Label}"
+                                              Style="{StaticResource SettingsTabButtonStyle}"
+                                              Margin="0,0,8,8"
+                                              HorizontalAlignment="Left"
+                                              ToolTipService.ToolTip="{Binding Tooltip}">
+                                    <StackPanel Spacing="4"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center">
+                                        <FontIcon Glyph="{Binding IconGlyph}"
+                                                  FontSize="20"
+                                                  HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Label}"
+                                                   Style="{StaticResource SettingsCaptionStyle}"
+                                                   TextAlignment="Center"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </RadioButton>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -165,8 +133,7 @@
                                 Spacing="8">
                             <TextBlock x:Name="EnabledServicesHeaderText"
                                     Text="Enabled Services"
-                                    FontSize="18"
-                                    FontWeight="SemiBold"/>
+                                    Style="{StaticResource SettingsSectionTitleStyle}"/>
                             <FontIcon x:Name="EnabledServicesHelpIcon"
                                     Glyph="&#xE897;"
                                     FontSize="14"
@@ -175,8 +142,8 @@
                         </StackPanel>
                         <TextBlock x:Name="EnabledServicesDescriptionText"
                                 Text="Select which translation services to display in each window. Multiple services will run in parallel."
-                                   FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource SettingsBodyStyle}"
+                                Foreground="{ThemeResource EasydictSecondaryTextBrush}"
                                 TextWrapping="Wrap"/>
 
                         <StackPanel Orientation="Horizontal"
@@ -202,7 +169,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock x:Name="EnableInternationalServicesHeaderText"
                                                Text="Enable International Services"
-                                               FontSize="13"
+                                               Style="{StaticResource SettingsBodyStyle}"
                                                VerticalAlignment="Center"/>
                                     <ToggleSwitch x:Name="EnableInternationalServicesToggle"
                                                   Grid.Column="1"
@@ -212,8 +179,8 @@
                                 </Grid>
                                 <TextBlock x:Name="EnableInternationalServicesDescriptionText"
                                            Text="Some services require international network access."
-                                           FontSize="11"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Style="{StaticResource SettingsCaptionStyle}"
+                                           Foreground="{ThemeResource EasydictSecondaryTextBrush}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
@@ -226,8 +193,7 @@
                                 Spacing="8">
                             <TextBlock x:Name="ServiceConfigurationHeaderText"
                                     Text="Service Configuration"
-                                    FontSize="18"
-                                    FontWeight="SemiBold"/>
+                                    Style="{StaticResource SettingsSectionTitleStyle}"/>
                             <FontIcon x:Name="ServiceConfigHelpIcon"
                                     Glyph="&#xE897;"
                                     FontSize="14"
@@ -236,8 +202,8 @@
                         </StackPanel>
                         <TextBlock x:Name="ServiceConfigurationDescriptionText"
                                 Text="Configure API keys, endpoints, and models for each translation service."
-                                   FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                Style="{StaticResource SettingsBodyStyle}"
+                                Foreground="{ThemeResource EasydictSecondaryTextBrush}"/>
 
                         <!-- DeepL -->
                         <Expander AutomationProperties.AutomationId="DeepLServiceExpander"
@@ -260,12 +226,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
-                                            HorizontalAlignment="Left"
+                                <StackPanel MaxWidth="520"
+                                            HorizontalAlignment="Stretch"
                                             Spacing="4">
                                     <TextBlock x:Name="DeepLKeyHeaderText"
                                                Text="API Key (Optional)"
-                                               FontSize="14"/>
+                                               Style="{StaticResource SettingsBodyStyle}"/>
                                     <Grid>
                                         <PasswordBox x:Name="DeepLKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -571,7 +537,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="OpenAIKeyHeaderText"
@@ -665,7 +631,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="DeepSeekKeyHeaderText"
@@ -739,7 +705,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="GroqKeyHeaderText"
@@ -807,7 +773,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="ZhipuKeyHeaderText"
@@ -885,7 +851,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Margin="0,8,0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="KimiKeyHeaderText"
@@ -977,7 +943,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="GitHubModelsTokenHeaderText"
@@ -1050,7 +1016,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="GeminiKeyHeaderText"
@@ -1132,7 +1098,7 @@
                                         Width="450"
                                          PlaceholderText="https://your-api.example.com/v1/chat/completions"
                                         HorizontalAlignment="Left"/>
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="CustomOpenAIKeyHeaderText"
@@ -1208,7 +1174,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="OpenRouterKeyHeaderText"
@@ -1385,7 +1351,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="DoubaoKeyHeaderText"
@@ -1451,7 +1417,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="CaiyunKeyHeaderText"
@@ -1506,7 +1472,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="NiuTransKeyHeaderText"
@@ -1552,7 +1518,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="YoudaoAppKeyHeaderText"
@@ -1577,7 +1543,7 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="YoudaoAppSecretHeaderText"
@@ -1631,7 +1597,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="VolcanoAccessKeyIdHeaderText"
@@ -1656,7 +1622,7 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="VolcanoSecretAccessKeyHeaderText"
@@ -2490,14 +2456,14 @@
                                     <TextBox x:Name="MouseSelectionExcludedAppsBox"
                                              Header="Excluded apps"
                                              PlaceholderText="code, slack, discord"
-                                             Width="350"
+                                             MaxWidth="520"
                                              HorizontalAlignment="Left"/>
                                     <TextBlock x:Name="MouseSelectionExcludedAppsDescriptionText"
                                                Text="Process names to exclude, separated by commas."
                                                FontSize="11"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                TextWrapping="Wrap"
-                                               MaxWidth="350"
+                                               MaxWidth="520"
                                                HorizontalAlignment="Left"/>
                                 </StackPanel>
                                 <ToggleSwitch x:Name="AlwaysOnTopToggle"
@@ -2724,7 +2690,7 @@
                                         Spacing="12"
                                         Visibility="Collapsed">
                                     <ComboBox x:Name="PpOcrV6ModelCombo"
-                                            Width="350"
+                                            MaxWidth="520"
                                             SelectionChanged="OnPpOcrV6ModelChanged"/>
                                     <TextBlock x:Name="PpOcrV6DownloadSizeText"
                                             FontSize="12"
@@ -2761,7 +2727,7 @@
                                             Click="OnTestPpOcrV6Click"/>
                                     <TextBox x:Name="PpOcrV6TestStatusBox"
                                             IsReadOnly="True"
-                                            Width="350"
+                                            MaxWidth="520"
                                             MinHeight="32"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"
@@ -2772,7 +2738,7 @@
                                 <StackPanel x:Name="AdvancedOcrPanel"
                                         Spacing="12"
                                         Visibility="Collapsed">
-                                    <StackPanel Width="350"
+                                    <StackPanel MaxWidth="520"
                                                 HorizontalAlignment="Left"
                                                 Spacing="4">
                                         <TextBlock x:Name="OcrApiKeyHeaderText"
@@ -2800,19 +2766,19 @@
 
                                     <TextBox x:Name="OcrEndpointBox"
                                             Header="Endpoint"
-                                            Width="350"
+                                            MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             PlaceholderText="http://localhost:11434/api/generate"/>
 
                                     <TextBox x:Name="OcrModelBox"
                                             Header="Model"
-                                            Width="350"
+                                            MaxWidth="520"
                                             HorizontalAlignment="Left"
                                             PlaceholderText="glm-ocr"/>
 
                                     <TextBox x:Name="OcrSystemPromptBox"
                                             Header="System Prompt"
-                                            Width="350"
+                                            MaxWidth="520"
                                             Height="100"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"
@@ -2826,7 +2792,7 @@
                                         <TextBlock x:Name="OcrEnableThinkingDescriptionText"
                                                 Text="Only applies to models that support thinking. Leaving it off makes recognition much faster."
                                                 FontSize="12"
-                                                MaxWidth="350"
+                                                MaxWidth="520"
                                                 HorizontalAlignment="Left"
                                                 TextWrapping="Wrap"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -2839,7 +2805,7 @@
                                     <TextBox x:Name="OcrTestStatusBox"
                                             Header="Test Result"
                                             IsReadOnly="True"
-                                            Width="350"
+                                            MaxWidth="520"
                                             MinHeight="32"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"

@@ -82,9 +82,7 @@ public sealed partial class FixedWindow : Window
         var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
 
-        // Mica gives the persistent floating window a Fluent-native look. Falls through
-        // gracefully on hosts that don't support it.
-        TryApplyMicaBackdrop();
+        MinimalThemeService.ApplyWindowBackdrop(this);
 
         // Configure window appearance
         ConfigureWindow();
@@ -207,22 +205,6 @@ public sealed partial class FixedWindow : Window
         _compactWindowControls.RefreshTheme(Content as FrameworkElement);
     }
 
-    /// <summary>
-    /// Apply a Mica system backdrop. Mica respects ElementTheme automatically and is
-    /// supported on Windows 11 (Win10 and unsupported configurations silently keep
-    /// the solid theme background).
-    /// </summary>
-    private void TryApplyMicaBackdrop()
-    {
-        try
-        {
-            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
-        }
-        catch (System.Exception ex)
-        {
-            Debug.WriteLine($"[FixedWindow] Mica backdrop unavailable: {ex.Message}");
-        }
-    }
 
     /// <summary>
     /// Configure the compact fixed window chrome and apply the saved always-on-top state.
@@ -2151,19 +2133,14 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
-        if (this.Content is FrameworkElement root)
+        var usesMica = MinimalThemeService.ApplyWindowBackdrop(this);
+        if (Content is FrameworkElement root)
         {
             MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);
-            MinimalThemeService.ApplyFloatingWindowRootBackground(root);
+            MinimalThemeService.ApplyWindowRootBackground(root, usesMica);
         }
 
         var minimal = MinimalThemeService.IsActive;
-        MinimalThemeService.ApplyFloatingChrome(
-            Content as Grid,
-            WindowSurface,
-            SourceTextContainer,
-            minimal,
-            Content as FrameworkElement);
         ApplyButtonVisibility();
         ApplyCompactChromeLayout();
         var themeRoot = Content as FrameworkElement;
@@ -2176,15 +2153,6 @@ public sealed partial class FixedWindow : Window
         else
         {
             ServiceResultViewHost.RefreshThemeChrome(_resultControls, themeRoot);
-        }
-
-        if (minimal)
-        {
-            MinimalThemeService.ApplyWindowBackdrop(this);
-        }
-        else
-        {
-            TryApplyMicaBackdrop();
         }
     }
 

@@ -10,33 +10,33 @@
 
     <Border
         x:Name="RootBorder"
-        Background="{ThemeResource ResultViewBackgroundBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        Background="{ThemeResource EasydictCardBackgroundBrush}"
+        BorderBrush="{ThemeResource EasydictCardBorderBrush}"
         BorderThickness="{ThemeResource EasydictCardBorderThickness}"
         CornerRadius="{ThemeResource EasydictCardCornerRadius}"
-        Margin="0,0,0,4"
+        Margin="0,0,0,8"
         PointerEntered="OnControlPointerEntered"
         PointerExited="OnControlPointerExited">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="30"/>
+                <RowDefinition MinHeight="{ThemeResource EasydictResultHeaderMinHeight}"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Header Bar (30 DIPs, matches macOS EZResultViewMiniHeight) -->
+            <!-- Header Bar -->
             <Border
                 x:Name="HeaderBar"
                 AutomationProperties.AccessibilityView="Control"
                 Grid.Row="0"
-                Background="{ThemeResource ServiceResultHeaderBackgroundBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource EasydictResultHeaderBackgroundBrush}"
+                BorderBrush="{ThemeResource EasydictCardBorderBrush}"
                 BorderThickness="0,0,0,1"
                 CornerRadius="{ThemeResource EasydictCardCornerRadius}"
                 Canvas.ZIndex="10"
                 PointerPressed="OnHeaderPointerPressed"
                 PointerEntered="OnHeaderBarPointerEntered"
                 PointerExited="OnHeaderBarPointerExited">
-                <Grid Padding="8,0">
+                <Grid Padding="10,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -59,17 +59,17 @@
                     <TextBlock
                         x:Name="ServiceNameText"
                         Grid.Column="1"
-                        FontSize="12"
+                        FontSize="13"
                         FontWeight="SemiBold"
                         VerticalAlignment="Center"
-                        Foreground="{ThemeResource ServiceResultHeaderForegroundBrush}"/>
+                        Foreground="{ThemeResource EasydictPrimaryTextBrush}"/>
 
                     <!-- Status Text (timing/error) -->
                     <TextBlock
                         x:Name="StatusText"
                         Grid.Column="2"
-                        FontSize="10"
-                        Foreground="{ThemeResource ServiceResultHeaderSecondaryForegroundBrush}"
+                        FontSize="11"
+                        Foreground="{ThemeResource EasydictSecondaryTextBrush}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Margin="8,0"/>
@@ -90,7 +90,7 @@
                         Grid.Column="3"
                         Glyph="&#xE783;"
                         FontSize="12"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Foreground="{ThemeResource EasydictCriticalBrush}"
                         Visibility="Collapsed"
                         Margin="0,0,4,0"/>
 
@@ -99,16 +99,14 @@
                         x:Name="RetryButton"
                         Grid.Column="4"
                         Click="OnRetryClicked"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Width="24"
-                        Height="24"
-                        Padding="0"
+                        Style="{StaticResource EasydictIconButtonStyle}"
+                        ToolTipService.ToolTip="Retry"
+                        AutomationProperties.Name="Retry"
                         VerticalAlignment="Center"
                         Visibility="Collapsed">
                         <FontIcon Glyph="&#xE72C;"
                                 FontSize="12"
-                                Foreground="{ThemeResource ActionButtonIconBrush}"/>
+                                Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
                     </Button>
 
                     <!-- Expand/Collapse Arrow -->
@@ -117,7 +115,7 @@
                         Grid.Column="5"
                         Glyph="&#xE70D;"
                         FontSize="10"
-                        Foreground="{ThemeResource ServiceResultHeaderSecondaryForegroundBrush}"
+                        Foreground="{ThemeResource EasydictSecondaryTextBrush}"
                         VerticalAlignment="Center"/>
                 </Grid>
             </Border>
@@ -126,7 +124,7 @@
             <Border
                 x:Name="ContentArea"
                 Grid.Row="1"
-                Padding="10,8,10,10"
+                Padding="12,8"
                 Visibility="Visible">
                 <Grid>
                     <ScrollViewer
@@ -151,7 +149,7 @@
                                 Grid.Row="0"
                                 FontStyle="Italic"
                                 FontSize="12"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Foreground="{ThemeResource EasydictTertiaryTextBrush}"
                                 Visibility="Collapsed"/>
 
                             <!-- Phonetic Transcription Badges -->
@@ -181,7 +179,7 @@
                                 Grid.Row="3"
                                 TextWrapping="Wrap"
                                 IsTextSelectionEnabled="True"
-                                Foreground="{ThemeResource QueryTextBrush}"
+                                Foreground="{ThemeResource EasydictPrimaryTextBrush}"
                                 FontSize="13"/>
 
                             <!-- Dictionary HTML Rendering host (WebView2 is created lazily for MDX with MDD resources) -->
@@ -200,7 +198,7 @@
                                     x:Name="ErrorText"
                                     TextWrapping="Wrap"
                                     IsTextSelectionEnabled="True"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                    Foreground="{ThemeResource EasydictCriticalBrush}"
                                     FontSize="12"/>
                                 <StackPanel
                                     x:Name="FoundryLocalRecoveryPanel"
@@ -237,7 +235,7 @@
                                     x:Name="CorrectedText"
                                     TextWrapping="Wrap"
                                     IsTextSelectionEnabled="True"
-                                    Foreground="{ThemeResource QueryTextBrush}"
+                                    Foreground="{ThemeResource EasydictPrimaryTextBrush}"
                                     FontSize="13"/>
 
                                 <!-- Original text (secondary, muted) -->
@@ -299,48 +297,40 @@
                         <Button
                             x:Name="ReplaceButton"
                             Click="OnReplaceClicked"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Width="24"
-                            Height="24"
-                            Padding="0"
+                            Style="{StaticResource EasydictIconButtonStyle}"
+                            ToolTipService.ToolTip="Replace"
+                            AutomationProperties.Name="Replace"
                             Visibility="Collapsed">
                             <FontIcon x:Name="ReplaceIcon"
                                     Glyph="&#xE8AC;"
                                     FontSize="12"
-                                    Foreground="{ThemeResource ActionButtonIconBrush}"/>
+                                    Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
                         </Button>
 
                         <!-- TTS Play Button -->
                         <Button
                             x:Name="PlayButton"
                             Click="OnPlayClicked"
+                            Style="{StaticResource EasydictIconButtonStyle}"
                             ToolTipService.ToolTip="Play audio"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Width="24"
-                            Height="24"
-                            Padding="0">
+                            AutomationProperties.Name="Play audio">
                             <FontIcon x:Name="PlayIcon"
                                     Glyph="&#xE768;"
                                     FontSize="12"
-                                    Foreground="{ThemeResource ActionButtonIconBrush}"/>
+                                    Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
                         </Button>
 
                         <!-- Copy Button -->
                         <Button
                             x:Name="CopyButton"
                             Click="OnCopyClicked"
+                            Style="{StaticResource EasydictIconButtonStyle}"
                             ToolTipService.ToolTip="Copy"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Width="24"
-                            Height="24"
-                            Padding="0">
+                            AutomationProperties.Name="Copy">
                             <FontIcon x:Name="CopyIcon"
                                     Glyph="&#xE8C8;"
                                     FontSize="12"
-                                    Foreground="{ThemeResource ActionButtonIconBrush}"/>
+                                    Foreground="{ThemeResource EasydictIconForegroundBrush}"/>
                         </Button>
                     </StackPanel>
                 </Grid>

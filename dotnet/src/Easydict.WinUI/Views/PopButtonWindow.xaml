@@ -9,10 +9,10 @@
     Title="">
 
     <Grid x:Name="RootGrid"
-          Background="{ThemeResource PopButtonBackgroundBrush}"
-          CornerRadius="{ThemeResource EasydictCardCornerRadius}"
-          BorderBrush="{ThemeResource PopButtonBorderBrush}"
-          BorderThickness="1"
+          Background="{ThemeResource EasydictPopButtonBackgroundBrush}"
+          CornerRadius="{ThemeResource EasydictOverlayCornerRadius}"
+          BorderBrush="{ThemeResource EasydictPopButtonBorderBrush}"
+          BorderThickness="{ThemeResource EasydictCardBorderThickness}"
           Padding="0"
           Opacity="0.75">
 
@@ -21,10 +21,9 @@
                 Padding="0"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Background="Transparent"
-                BorderBrush="{ThemeResource PopButtonBorderBrush}"
-                BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
-                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                Style="{StaticResource EasydictIconButtonStyle}"
+                AutomationProperties.AutomationId="PopButtonTranslateButton"
+                AutomationProperties.Name="Translate"
                 Click="OnTranslateButtonClick"
                 PointerEntered="OnTranslateButtonPointerEntered"
                 PointerExited="OnTranslateButtonPointerExited"
@@ -34,8 +33,9 @@
                 PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
             <FontIcon x:Name="ModeIcon"
                       Glyph="&#xE8C1;"
+                      FontFamily="Segoe Fluent Icons"
                       FontSize="14"
-                      Foreground="{ThemeResource PopButtonForegroundBrush}" />
+                      Foreground="{ThemeResource EasydictPopButtonForegroundBrush}" />
         </Button>
     </Grid>
 </Window>

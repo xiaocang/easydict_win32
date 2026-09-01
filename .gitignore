@@ -5,6 +5,7 @@ dotnet/**/obj/
 dotnet/**/AppPackages/
 dotnet/**/BundleArtifacts/
 dotnet/**/TestResults/
+dotnet/src/Easydict.WindowsAI/.mono/
 
 # Publish output
 dotnet/publish/

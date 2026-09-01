@@ -387,6 +387,22 @@ public sealed class ThemeContrastTests : IDisposable
                 ?? FindVisibleComboItem(combo, "Windows Local AI")
                 ?? FindVisibleComboItem(combo, "DeepSeek");
             unavailableItem.Should().NotBeNull("at least one known unavailable long-doc service must be visible in the expanded dropdown");
+            var selectedItem = FindSelectedVisibleComboItem(combo)
+                ?? FindVisibleComboItem(combo, "Windows Local AI");
+            selectedItem.Should().NotBeNull("the expanded Long Doc service dropdown must expose the selected service item");
+
+            if (selectedItem!.BoundingRectangle.Height < 20)
+            {
+                var scrollAnchor = unavailableItem!.BoundingRectangle;
+                Mouse.MoveTo(new Point(scrollAnchor.Left + 30, scrollAnchor.Top + (scrollAnchor.Height / 2)));
+                Mouse.Scroll(-5);
+                Thread.Sleep(500);
+            }
+
+            unavailableItem = FindVisibleComboItem(combo, unavailableItem!.Name);
+            selectedItem = FindSelectedVisibleComboItem(combo);
+            unavailableItem.Should().NotBeNull("the unavailable Long Doc service item must remain visible after revealing the selection");
+            selectedItem.Should().NotBeNull("the selected Long Doc service item must be fully visible after scrolling it into view");
 
             var path = ScreenshotHelper.CaptureScreen(
                 $"{testCase.ScreenshotPrefix}_page-longdoc-service-dropdown");
@@ -402,14 +418,11 @@ public sealed class ThemeContrastTests : IDisposable
                 dpiScale,
                 relativeX: 0.06,
                 relativeY: 0.18,
-                relativeWidth: 0.46,
+                relativeWidth: 0.30,
                 relativeHeight: 0.64,
                 expectedLight: testCase.ExpectedLight,
                 minForegroundPixelRatio: 0.015);
 
-            var selectedItem = FindSelectedVisibleComboItem(combo)
-                ?? FindVisibleComboItem(combo, "Windows Local AI");
-            selectedItem.Should().NotBeNull("the expanded Long Doc service dropdown must expose the selected service item");
 
             AssertElementRelativeRegionMatchesForegroundPalette(
                 $"Long Doc selected service item '{selectedItem!.Name}'",
@@ -672,6 +685,13 @@ public sealed class ThemeContrastTests : IDisposable
         string? accentCheckBoxName = null,
         string? accentToggleAutomationId = null)
     {
+        var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
+        if (scrollViewer is not null)
+        {
+            ScrollHelper.ScrollToPercent(scrollViewer, 0, _output.WriteLine);
+            Thread.Sleep(500);
+        }
+
         var tab = FindRequired(window, tabAutomationId);
         InvokeOrClick(tab);
         Thread.Sleep(1200);

@@ -5,26 +5,54 @@
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
             <!-- Semantic Fluent 2 surfaces, text, and interaction brushes. -->
-            <StaticResource x:Key="EasydictWindowSurfaceBrush" ResourceKey="SolidBackgroundFillColorBaseBrush" />
-            <StaticResource x:Key="EasydictLayerFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
-            <StaticResource x:Key="EasydictCardBackgroundBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
-            <StaticResource x:Key="EasydictCardBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
-            <StaticResource x:Key="EasydictInputBackgroundBrush" ResourceKey="TextControlBackground" />
-            <StaticResource x:Key="EasydictInputBorderBrush" ResourceKey="TextControlBorderBrush" />
-            <StaticResource x:Key="EasydictPrimaryTextBrush" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="EasydictSecondaryTextBrush" ResourceKey="TextFillColorSecondaryBrush" />
-            <StaticResource x:Key="EasydictTertiaryTextBrush" ResourceKey="TextFillColorTertiaryBrush" />
-            <StaticResource x:Key="EasydictIconForegroundBrush" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="EasydictAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
-            <StaticResource x:Key="EasydictAccentForegroundBrush" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
-            <StaticResource x:Key="EasydictSuccessBrush" ResourceKey="SystemFillColorSuccessBrush" />
-            <StaticResource x:Key="EasydictCriticalBrush" ResourceKey="SystemFillColorCriticalBrush" />
-            <StaticResource x:Key="EasydictLinkBrush" ResourceKey="SystemFillColorAttentionBrush" />
-            <StaticResource x:Key="EasydictResultHeaderBackgroundBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
-            <StaticResource x:Key="EasydictResultHeaderPointerOverBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-            <StaticResource x:Key="EasydictPopButtonBackgroundBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
-            <StaticResource x:Key="EasydictPopButtonBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
-            <StaticResource x:Key="EasydictPopButtonForegroundBrush" ResourceKey="TextFillColorPrimaryBrush" />
+            <Color x:Key="EasydictControlPrimaryTextColor">#FF1A1A1A</Color>
+            <Color x:Key="EasydictControlSecondaryTextColor">#FF5D5A58</Color>
+            <Color x:Key="EasydictControlTertiaryTextColor">#FF8A8886</Color>
+            <Color x:Key="EasydictControlAccentColor">#FF0078D4</Color>
+            <Color x:Key="EasydictControlOnAccentColor">#FFFFFFFF</Color>
+            <Color x:Key="EasydictControlLinkColor">#FF005FB8</Color>
+            <Color x:Key="EasydictTabSelectedBackgroundColor">#B3FFFFFF</Color>
+            <Color x:Key="EasydictTabSelectedBorderColor">#FF0078D4</Color>
+            <SolidColorBrush x:Key="EasydictWindowSurfaceBrush"
+                             Color="{ThemeResource SolidBackgroundFillColorBase}" />
+            <SolidColorBrush x:Key="EasydictLayerFillBrush"
+                             Color="{ThemeResource LayerFillColorDefault}" />
+            <SolidColorBrush x:Key="EasydictCardBackgroundBrush"
+                             Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="EasydictCardBorderBrush"
+                             Color="{ThemeResource CardStrokeColorDefault}" />
+            <SolidColorBrush x:Key="EasydictInputBackgroundBrush"
+                             Color="{ThemeResource ControlFillColorDefault}" />
+            <SolidColorBrush x:Key="EasydictInputBorderBrush"
+                             Color="{ThemeResource ControlStrokeColorDefault}" />
+            <SolidColorBrush x:Key="EasydictPrimaryTextBrush"
+                             Color="{ThemeResource TextFillColorPrimary}" />
+            <SolidColorBrush x:Key="EasydictSecondaryTextBrush"
+                             Color="{ThemeResource TextFillColorSecondary}" />
+            <SolidColorBrush x:Key="EasydictTertiaryTextBrush"
+                             Color="{ThemeResource TextFillColorTertiary}" />
+            <SolidColorBrush x:Key="EasydictIconForegroundBrush"
+                             Color="{ThemeResource TextFillColorPrimary}" />
+            <SolidColorBrush x:Key="EasydictAccentBrush"
+                             Color="{StaticResource EasydictControlAccentColor}" />
+            <SolidColorBrush x:Key="EasydictAccentForegroundBrush"
+                             Color="{StaticResource EasydictControlOnAccentColor}" />
+            <SolidColorBrush x:Key="EasydictSuccessBrush"
+                             Color="{ThemeResource SystemFillColorSuccess}" />
+            <SolidColorBrush x:Key="EasydictCriticalBrush"
+                             Color="{ThemeResource SystemFillColorCritical}" />
+            <SolidColorBrush x:Key="EasydictLinkBrush"
+                             Color="{StaticResource EasydictControlLinkColor}" />
+            <SolidColorBrush x:Key="EasydictResultHeaderBackgroundBrush"
+                             Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="EasydictResultHeaderPointerOverBrush"
+                             Color="{ThemeResource SubtleFillColorSecondary}" />
+            <SolidColorBrush x:Key="EasydictPopButtonBackgroundBrush"
+                             Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="EasydictPopButtonBorderBrush"
+                             Color="{ThemeResource CardStrokeColorDefault}" />
+            <SolidColorBrush x:Key="EasydictPopButtonForegroundBrush"
+                             Color="{ThemeResource TextFillColorPrimary}" />
 
             <x:Double x:Key="EasydictSpacingXs">4</x:Double>
             <x:Double x:Key="EasydictSpacingSm">8</x:Double>
@@ -101,9 +129,9 @@
             <StaticResource x:Key="SettingsTabBackgroundBrush" ResourceKey="EasydictCardBackgroundBrush" />
             <StaticResource x:Key="SettingsTabBorderBrush" ResourceKey="EasydictCardBorderBrush" />
             <StaticResource x:Key="SettingsTabForegroundBrush" ResourceKey="EasydictPrimaryTextBrush" />
-            <StaticResource x:Key="SettingsTabSelectedBackgroundBrush" ResourceKey="EasydictAccentBrush" />
+            <StaticResource x:Key="SettingsTabSelectedBackgroundBrush" ResourceKey="EasydictCardBackgroundBrush" />
             <StaticResource x:Key="SettingsTabSelectedBorderBrush" ResourceKey="EasydictAccentBrush" />
-            <StaticResource x:Key="SettingsTabSelectedForegroundBrush" ResourceKey="EasydictAccentForegroundBrush" />
+            <StaticResource x:Key="SettingsTabSelectedForegroundBrush" ResourceKey="EasydictPrimaryTextBrush" />
             <StaticResource x:Key="PopButtonBackgroundBrush" ResourceKey="EasydictPopButtonBackgroundBrush" />
             <StaticResource x:Key="PopButtonBorderBrush" ResourceKey="EasydictPopButtonBorderBrush" />
             <StaticResource x:Key="PopButtonForegroundBrush" ResourceKey="EasydictPopButtonForegroundBrush" />
@@ -134,6 +162,15 @@
             <Color x:Key="EasydictDarkPopButtonBackgroundColor">#FF30343C</Color>
             <Color x:Key="EasydictDarkPopButtonBorderColor">#52FFFFFF</Color>
 
+            <Color x:Key="EasydictDarkAccentColor">#FF6CB8FF</Color>
+            <Color x:Key="EasydictControlPrimaryTextColor">#FFF4F6FA</Color>
+            <Color x:Key="EasydictControlSecondaryTextColor">#FFC5CAD3</Color>
+            <Color x:Key="EasydictControlTertiaryTextColor">#FF9097A3</Color>
+            <Color x:Key="EasydictControlAccentColor">#FF6CB8FF</Color>
+            <Color x:Key="EasydictControlOnAccentColor">#FF000000</Color>
+            <Color x:Key="EasydictControlLinkColor">#FF6CB8FF</Color>
+            <Color x:Key="EasydictTabSelectedBackgroundColor">#FF262A31</Color>
+            <Color x:Key="EasydictTabSelectedBorderColor">#FF6CB8FF</Color>
             <SolidColorBrush x:Key="EasydictWindowSurfaceBrush" Color="{StaticResource EasydictDarkWindowSurfaceColor}" />
             <SolidColorBrush x:Key="EasydictLayerFillBrush" Color="{StaticResource EasydictDarkLayerFillColor}" />
             <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{StaticResource EasydictDarkCardBackgroundColor}" />
@@ -144,7 +181,7 @@
             <SolidColorBrush x:Key="EasydictSecondaryTextBrush" Color="{StaticResource EasydictDarkSecondaryTextColor}" />
             <SolidColorBrush x:Key="EasydictTertiaryTextBrush" Color="{StaticResource EasydictDarkTertiaryTextColor}" />
             <SolidColorBrush x:Key="EasydictIconForegroundBrush" Color="{StaticResource EasydictDarkIconForegroundColor}" />
-            <StaticResource x:Key="EasydictAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
+            <SolidColorBrush x:Key="EasydictAccentBrush" Color="{StaticResource EasydictDarkAccentColor}" />
             <StaticResource x:Key="EasydictAccentForegroundBrush" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
             <SolidColorBrush x:Key="EasydictSuccessBrush" Color="{StaticResource EasydictDarkSuccessColor}" />
             <SolidColorBrush x:Key="EasydictCriticalBrush" Color="{StaticResource EasydictDarkCriticalColor}" />
@@ -163,6 +200,14 @@
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
+            <Color x:Key="EasydictControlPrimaryTextColor">{StaticResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="EasydictControlSecondaryTextColor">{StaticResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="EasydictControlTertiaryTextColor">{StaticResource SystemColorGrayTextColor}</Color>
+            <Color x:Key="EasydictControlAccentColor">{StaticResource SystemColorHighlightColor}</Color>
+            <Color x:Key="EasydictControlOnAccentColor">{StaticResource SystemColorHighlightTextColor}</Color>
+            <Color x:Key="EasydictControlLinkColor">{StaticResource SystemColorHotlightColor}</Color>
+            <Color x:Key="EasydictTabSelectedBackgroundColor">{StaticResource SystemColorWindowColor}</Color>
+            <Color x:Key="EasydictTabSelectedBorderColor">{StaticResource SystemColorHighlightColor}</Color>
             <StaticResource x:Key="EasydictWindowSurfaceBrush" ResourceKey="SystemColorWindowBrush" />
             <StaticResource x:Key="EasydictLayerFillBrush" ResourceKey="SystemColorWindowBrush" />
             <StaticResource x:Key="EasydictCardBackgroundBrush" ResourceKey="SystemColorWindowBrush" />

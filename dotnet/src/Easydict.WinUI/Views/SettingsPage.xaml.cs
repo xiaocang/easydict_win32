@@ -681,7 +681,7 @@ public sealed partial class SettingsPage : Page
 
     private bool ShouldShowSettingsTabSwitchProgress(SettingsTabId tabId)
     {
-        if (!_isInitialized || _settingsTabs.FirstOrDefault(tab => tab.IsSelected)?.Id == tabId)
+        if (!_isInitialized)
         {
             return false;
         }

@@ -91,6 +91,8 @@ public sealed class MemoryProfilingAutomationTests
         script.Should().Contain("WaitForExit(5000) | Out-Null");
         script.Should().Contain("catch");
         script.Should().Contain("throw");
+        script.TrimEnd().Should().EndWith("exit 0",
+            "a successful diagnostic collection must not leak a non-zero native tool exit code to CI");
     }
 
     [Fact]

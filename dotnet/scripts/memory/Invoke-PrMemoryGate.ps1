@@ -1083,3 +1083,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host "Memory gate passed."
+exit 0

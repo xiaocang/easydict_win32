@@ -171,6 +171,7 @@ public class SettingsPageSplitTabsTests
         var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
         var onSettingsTabClick = GetMethodBody(codeBehind, "OnSettingsTabClick");
         var selectSettingsTabAsync = GetMethodBody(codeBehind, "SelectSettingsTabAsync");
+        var shouldShowProgress = GetMethodBody(codeBehind, "ShouldShowSettingsTabSwitchProgress");
 
         xaml.Should().Contain("x:Name=\"SettingsTabSwitchRing\"");
         xaml.Should().Contain("<ProgressRing x:Name=\"SettingsTabSwitchRing\"");
@@ -186,6 +187,8 @@ public class SettingsPageSplitTabsTests
         codeBehind.Should().Contain("private bool IsSettingsTabReadyForImmediateSwitch(SettingsTabId tabId)");
         codeBehind.Should().Contain("return !IsSettingsTabReadyForImmediateSwitch(tabId);",
             "tab switches should only show loading while the target tab is still uninitialized");
+        shouldShowProgress.Should().NotContain("IsSelected",
+            "the Checked event updates tab selection before the async switch evaluates target readiness");
     }
 
     [Fact]
@@ -732,13 +735,12 @@ public class SettingsPageSplitTabsTests
         }
         foreach (var darkPaletteEntry in new Dictionary<string, string>
         {
-            ["EasydictDarkWindowSurfaceColor"] = "#FF1B1D22",
-            ["EasydictDarkLayerFillColor"] = "#E61E2127",
-            ["EasydictDarkCardBackgroundColor"] = "#F02A2E36",
-            ["EasydictDarkInputBackgroundColor"] = "#FF252931",
-            ["EasydictDarkPrimaryTextColor"] = "#FFF4F6FA",
-            ["EasydictDarkSecondaryTextColor"] = "#FFC5CAD3",
-            ["EasydictDarkLinkColor"] = "#FF6CB8FF"
+            ["EasydictControlPrimaryTextColor"] = "#FFF4F6FA",
+            ["EasydictControlSecondaryTextColor"] = "#FFC5CAD3",
+            ["EasydictControlTertiaryTextColor"] = "#FF9097A3",
+            ["EasydictControlLinkColor"] = "#FF6CB8FF",
+            ["EasydictTabSelectedBackgroundColor"] = "#FF262A31",
+            ["EasydictTabSelectedBorderColor"] = "#FF6CB8FF"
         })
         {
             colorsResources.Should().Contain(
@@ -772,6 +774,37 @@ public class SettingsPageSplitTabsTests
         appResources.Should().Contain("BasedOn=\"{StaticResource AccentButtonStyle}\"");
         appResources.Should().Contain("BasedOn=\"{StaticResource DefaultTextBoxStyle}\"");
         settingsResources.Should().Contain("TargetType=\"RadioButton\" BasedOn=\"{StaticResource DefaultToggleButtonStyle}\"");
+        foreach (var lightweightResource in new Dictionary<string, string>
+        {
+            ["ToggleSwitchHeaderForeground"] = "EasydictControlPrimaryTextColor",
+            ["ToggleSwitchHeaderForegroundDisabled"] = "EasydictControlTertiaryTextColor",
+            ["TextControlHeaderForeground"] = "EasydictControlPrimaryTextColor",
+            ["TextControlHeaderForegroundDisabled"] = "EasydictControlTertiaryTextColor",
+            ["ComboBoxHeaderForeground"] = "EasydictControlPrimaryTextColor",
+            ["ComboBoxHeaderForegroundDisabled"] = "EasydictControlTertiaryTextColor"
+        })
+        {
+            settingsResources.Should().Contain($"x:Key=\"{lightweightResource.Key}\"");
+            settingsResources.Should().Contain($"Color=\"{{ThemeResource {lightweightResource.Value}}}\"");
+        }
+        foreach (var tabStateResource in new[]
+        {
+            "ToggleButtonBackgroundChecked",
+            "ToggleButtonBackgroundCheckedPointerOver",
+            "ToggleButtonBackgroundCheckedPressed",
+            "ToggleButtonForegroundChecked",
+            "ToggleButtonForegroundCheckedPointerOver",
+            "ToggleButtonForegroundCheckedPressed",
+            "ToggleButtonBorderBrushChecked",
+            "ToggleButtonBorderBrushCheckedPointerOver",
+            "ToggleButtonBorderBrushCheckedPressed"
+        })
+        {
+            xaml.Should().Contain($"x:Key=\"{tabStateResource}\"");
+        }
+        xaml.Should().Contain("Color=\"{ThemeResource EasydictTabSelectedBackgroundColor}\"");
+        xaml.Should().Contain("Color=\"{ThemeResource EasydictControlPrimaryTextColor}\"");
+        xaml.Should().Contain("Color=\"{ThemeResource EasydictTabSelectedBorderColor}\"");
         settingsResources.Should().NotContain("<ControlTemplate");
         xaml.Should().Contain("ms-appx:///Themes/SettingsPageResources.xaml");
         xaml.Should().Contain("<RadioButton Click=\"OnSettingsTabClick\"");
@@ -795,7 +828,7 @@ public class SettingsPageSplitTabsTests
         var settingsResources = File.ReadAllText(SettingsPageResourcesPath);
 
         settingsResources.Should().Contain("SettingsLinkForegroundBrush");
-        settingsResources.Should().Contain("EasydictLinkBrush");
+        settingsResources.Should().Contain("EasydictControlLinkColor");
         settingsResources.Should().Contain("SettingsLinkButtonStyle");
 
         foreach (var automationId in new[]
@@ -930,6 +963,7 @@ public class SettingsPageSplitTabsTests
         {
             "private void",
             "private static void",
+            "private bool",
             "private async void",
             "private async Task",
             "private static async Task",

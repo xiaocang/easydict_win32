@@ -545,12 +545,6 @@ namespace Easydict.WinUI.Views
         }
 
 
-        private Brush? CreateThemeBrush(string colorKey)
-        {
-            return ThemeResourceService.GetColor(colorKey, this) is { } color
-                ? new SolidColorBrush(color)
-                : null;
-        }
 
 
         private void ApplyStatusChrome()
@@ -3230,10 +3224,8 @@ namespace Easydict.WinUI.Views
 
         private Brush? CreateLongDocUnavailableServiceForeground()
         {
-            return CreateThemeBrush("QueryTextColor")
-                ?? CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
-                ?? ThemeResourceService.GetBrush("ComboBoxForeground", this)
-                ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush", this);
+            return ThemeResourceService.GetBrush("EasydictSecondaryTextBrush", this)
+                ?? ThemeResourceService.GetBrush("TextFillColorSecondaryBrush", this);
         }
 
         private void InitializeLongDocOutputDefaults()

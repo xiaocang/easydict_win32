@@ -87,14 +87,36 @@
                                               AutomationProperties.AutomationId="{Binding AutomationId}"
                                               AutomationProperties.Name="{Binding Label}"
                                               Style="{StaticResource SettingsTabButtonStyle}"
+                                              Width="86"
+                                              Height="76"
                                               Margin="0,0,8,8"
                                               HorizontalAlignment="Left"
                                               ToolTipService.ToolTip="{Binding Tooltip}">
+                                    <RadioButton.Resources>
+                                        <SolidColorBrush x:Key="ToggleButtonBackgroundChecked"
+                                                         Color="{ThemeResource EasydictTabSelectedBackgroundColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver"
+                                                         Color="{ThemeResource EasydictTabSelectedBackgroundColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed"
+                                                         Color="{ThemeResource EasydictTabSelectedBackgroundColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonForegroundChecked"
+                                                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver"
+                                                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed"
+                                                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonBorderBrushChecked"
+                                                         Color="{ThemeResource EasydictTabSelectedBorderColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonBorderBrushCheckedPointerOver"
+                                                         Color="{ThemeResource EasydictTabSelectedBorderColor}"/>
+                                        <SolidColorBrush x:Key="ToggleButtonBorderBrushCheckedPressed"
+                                                         Color="{ThemeResource EasydictTabSelectedBorderColor}"/>
+                                    </RadioButton.Resources>
                                     <StackPanel Spacing="4"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center">
                                         <FontIcon Glyph="{Binding IconGlyph}"
-                                                  FontSize="20"
+                                                  FontSize="22"
                                                   HorizontalAlignment="Center"/>
                                         <TextBlock Text="{Binding Label}"
                                                    Style="{StaticResource SettingsCaptionStyle}"

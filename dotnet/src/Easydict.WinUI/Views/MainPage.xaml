@@ -740,7 +740,18 @@
                               Grid.Column="2"
                               Grid.ColumnSpan="2"
                               HorizontalAlignment="Stretch"
+                              MaxDropDownHeight="320"
                               ToolTipService.ToolTip="Translation Service">
+                        <ComboBox.Resources>
+                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelected"
+                                             Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedUnfocused"
+                                             Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed"
+                                             Color="{ThemeResource EasydictControlSecondaryTextColor}"/>
+                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver"
+                                             Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+                        </ComboBox.Resources>
                         <ComboBox.Header>
                             <StackPanel Orientation="Horizontal"
                                         Spacing="4">

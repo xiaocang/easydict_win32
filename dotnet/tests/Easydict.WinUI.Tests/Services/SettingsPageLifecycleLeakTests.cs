@@ -80,13 +80,13 @@ public class SettingsPageLifecycleLeakTests
     }
 
     [Fact]
-    public void SettingsPage_UsesNamedTopTabClickHandler()
+    public void SettingsPage_UsesNamedTopTabCheckedHandler()
     {
         var content = File.ReadAllText(SettingsPagePath);
-        content.Should().Contain("private async void OnSettingsTabClick",
-            "top settings tabs should use a named handler so tab selection remains auditable");
+        content.Should().Contain("private async void OnSettingsTabChecked",
+            "top settings tabs should use Checked so pointer, keyboard, and automation selection share one activation path");
         content.Should().Contain("await SelectSettingsTabAsync(tabId, resetScroll: true);",
-            "the named click handler should delegate selection to a single tab state updater");
+            "the named Checked handler should delegate selection to a single tab state updater");
         content.Should().NotContain("PointerEntered += OnNavIconPointerEntered;",
             "the old floating nav rail pointer handlers should stay removed");
         content.Should().NotContain("PointerExited += OnNavIconPointerExited;",

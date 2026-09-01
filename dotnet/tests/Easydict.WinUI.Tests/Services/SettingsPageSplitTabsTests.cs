@@ -153,7 +153,7 @@ public class SettingsPageSplitTabsTests
         var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
 
         xaml.Should().Contain("SettingsTabsHost");
-        xaml.Should().Contain("OnSettingsTabClick");
+        xaml.Should().Contain("OnSettingsTabChecked");
         xaml.Should().Contain("ToolTipService.ToolTip=\"{Binding Tooltip}\"");
         xaml.Should().NotContain("NavSidebar");
         xaml.Should().NotContain("NavIndicators");
@@ -169,7 +169,7 @@ public class SettingsPageSplitTabsTests
     {
         var xaml = File.ReadAllText(SettingsPageXamlPath);
         var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
-        var onSettingsTabClick = GetMethodBody(codeBehind, "OnSettingsTabClick");
+        var onSettingsTabChecked = GetMethodBody(codeBehind, "OnSettingsTabChecked");
         var selectSettingsTabAsync = GetMethodBody(codeBehind, "SelectSettingsTabAsync");
         var shouldShowProgress = GetMethodBody(codeBehind, "ShouldShowSettingsTabSwitchProgress");
 
@@ -179,7 +179,7 @@ public class SettingsPageSplitTabsTests
         xaml.Should().Contain("Visibility=\"Collapsed\"");
         xaml.Should().NotContain("x:Name=\"SettingsTabSwitchOverlay\"",
             "tab switching should show a lightweight inline indicator, not a masking overlay");
-        onSettingsTabClick.Should().Contain("await SelectSettingsTabAsync(tabId, resetScroll: true);");
+        onSettingsTabChecked.Should().Contain("await SelectSettingsTabAsync(tabId, resetScroll: true);");
         selectSettingsTabAsync.Should().Contain("ShouldShowSettingsTabSwitchProgress(tabId)");
         selectSettingsTabAsync.Should().Contain("ShowSettingsTabSwitchProgress();");
         selectSettingsTabAsync.Should().Contain("await Task.Delay(SettingsTabSwitchIndicatorDelayMs)");
@@ -705,6 +705,7 @@ public class SettingsPageSplitTabsTests
         var colorsResources = File.ReadAllText(ColorsResourcesPath);
         var minimalResources = File.ReadAllText(MinimalResourcesPath);
         var appResources = File.ReadAllText(Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml"));
+        var serviceResultItem = File.ReadAllText(ServiceResultItemCodeBehindPath);
 
         foreach (var semanticKey in new[]
         {
@@ -733,6 +734,12 @@ public class SettingsPageSplitTabsTests
             colorsResources.Should().Contain($"x:Key=\"{semanticKey}\"");
             minimalResources.Should().Contain($"x:Key=\"{semanticKey}\"");
         }
+        serviceResultItem.Should().Contain(
+            "FindServiceChromeBrush(\"EasydictResultHeaderBackgroundBrush\")",
+            "leaving a result header should restore its semantic background brush after hover");
+        serviceResultItem.Should().NotContain(
+            "FindServiceChromeColorOrBrush(\"EasydictResultHeaderBackgroundBrush\")",
+            "a brush resource cannot be restored through the color-only lookup path");
         foreach (var darkPaletteEntry in new Dictionary<string, string>
         {
             ["EasydictControlPrimaryTextColor"] = "#FFF4F6FA",
@@ -807,13 +814,13 @@ public class SettingsPageSplitTabsTests
         xaml.Should().Contain("Color=\"{ThemeResource EasydictTabSelectedBorderColor}\"");
         settingsResources.Should().NotContain("<ControlTemplate");
         xaml.Should().Contain("ms-appx:///Themes/SettingsPageResources.xaml");
-        xaml.Should().Contain("<RadioButton Click=\"OnSettingsTabClick\"");
-        xaml.Should().Contain("Checked=\"OnSettingsTabChecked\"");
+        xaml.Should().Contain("<RadioButton Checked=\"OnSettingsTabChecked\"");
+        xaml.Should().NotContain("Click=\"OnSettingsTabClick\"");
         xaml.Should().Contain("IsChecked=\"{Binding IsSelected, Mode=OneWay}\"");
         codeBehind.Should().Contain("sender is not RadioButton { Tag: SettingsTabId tabId }");
         codeBehind.Should().Contain("SettingsTab_{Id}");
         codeBehind.Should().Contain("ApplySettingsTabButtonSelection(tabId);");
-        codeBehind.Should().Contain("button.IsChecked = true;");
+        codeBehind.Should().NotContain("OnSettingsTabClick");
 
         foreach (var tab in ExpectedTabs)
         {

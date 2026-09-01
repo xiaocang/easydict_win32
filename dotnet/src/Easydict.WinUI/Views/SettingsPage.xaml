@@ -78,8 +78,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <RadioButton Click="OnSettingsTabClick"
-                                              Checked="OnSettingsTabChecked"
+                                <RadioButton Checked="OnSettingsTabChecked"
                                               GroupName="SettingsTabs"
                                               Loaded="OnSettingsTabButtonLoaded"
                                               Tag="{Binding Id}"

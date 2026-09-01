@@ -539,19 +539,7 @@ public sealed partial class SettingsPage : Page
         SelectSettingsTab(SettingsTabId.General, resetScroll: false);
     }
 
-    private async void OnSettingsTabClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not RadioButton { Tag: SettingsTabId tabId } button)
-        {
-            return;
-        }
-
-        ApplySettingsTabButtonSelection(tabId);
-        button.IsChecked = true;
-        await SelectSettingsTabAsync(tabId, resetScroll: true);
-    }
-
-    private void OnSettingsTabChecked(object sender, RoutedEventArgs e)
+    private async void OnSettingsTabChecked(object sender, RoutedEventArgs e)
     {
         if (_isApplyingSettingsTabButtonSelection
             || sender is not RadioButton { Tag: SettingsTabId tabId })
@@ -560,6 +548,7 @@ public sealed partial class SettingsPage : Page
         }
 
         ApplySettingsTabButtonSelection(tabId);
+        await SelectSettingsTabAsync(tabId, resetScroll: true);
     }
 
     private async void OnRateAppLinkClick(object sender, RoutedEventArgs e)

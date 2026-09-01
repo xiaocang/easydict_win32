@@ -1688,7 +1688,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             HeaderBar.BorderBrush = borderBrush;
         }
 
-        if (FindServiceChromeColorOrBrush("EasydictResultHeaderBackgroundBrush") is Brush brush)
+        if (FindServiceChromeBrush("EasydictResultHeaderBackgroundBrush") is Brush brush)
         {
             HeaderBar.Background = brush;
         }

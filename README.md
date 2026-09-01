@@ -145,7 +145,7 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Ollama (local LLM, default: llama3.2)
   - Windows Local AI (Phi Silica on Copilot+ PCs, OpenVINO fallback)
   - OpenRouter (unified gateway to 400+ models, free models available)
-  - OrcaRouter (unified gateway, free models available) [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
+  - OrcaRouter (OpenAI-compatible gateway at `https://api.orcarouter.ai/v1`, free models available) [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
   - Custom OpenAI-compatible services
   - Claude Code (local agent CLI, uses your Claude subscription — no API key)
   - Codex (local agent CLI, uses your ChatGPT subscription — no API key)

@@ -61,6 +61,13 @@ public class OrcaRouterServiceTests
     }
 
     [Fact]
+    public void DefaultConfiguration_UsesOfficialOpenAICompatibleEndpoints()
+    {
+        _service.Endpoint.Should().Be("https://api.orcarouter.ai/v1/chat/completions");
+        _service.ModelsEndpoint.Should().Be("https://api.orcarouter.ai/v1/models");
+    }
+
+    [Fact]
     public void ReferralUrl_MatchesMaintainerLink()
     {
         OrcaRouterService.ReferralUrl.Should().Be("https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6");

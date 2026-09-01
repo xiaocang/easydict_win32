@@ -145,7 +145,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
   - Ollama（本地 LLM，默认：llama3.2）
   - Windows Local AI（Copilot+ PC 上使用 Phi Silica，OpenVINO 回退）
   - OpenRouter（统一网关，可访问 400+ 模型，提供免费模型）
-  - OrcaRouter（统一网关，提供免费模型） [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
+  - OrcaRouter（OpenAI 兼容网关，API 基础地址为 `https://api.orcarouter.ai/v1`，提供免费模型） [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
   - 自定义 OpenAI 兼容服务
   - Claude Code（本地智能体 CLI，复用 Claude 订阅 — 无需 API Key）
   - Codex（本地智能体 CLI，复用 ChatGPT 订阅 — 无需 API Key）

@@ -11,6 +11,7 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.TranslationService.Services.AgentCli;
+using Easydict.TranslationService.Services.ModelCatalog;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Easydict.OpenVINO.Services;
 using Easydict.WindowsAI.Services;
@@ -171,7 +172,6 @@ public sealed partial class SettingsPage : Page
         [LocalAITranslationService.ServiceIdValue] = 40,
         ["ollama"] = 60,
         ["openai"] = 70,
-        ["builtin"] = 80,
         ["deepseek"] = 90,
         ["zhipu"] = 100,
         ["kimi"] = 105,
@@ -179,6 +179,8 @@ public sealed partial class SettingsPage : Page
         ["gemini"] = 120,
         ["github"] = 130,
         ["custom-openai"] = 140,
+        ["openrouter"] = 145,
+        ["orcarouter"] = 148,
         ["doubao"] = 150,
         ["caiyun"] = 160,
         ["niutrans"] = 170,
@@ -189,6 +191,7 @@ public sealed partial class SettingsPage : Page
 #endif
     };
     private readonly SettingsService _settings = SettingsService.Instance;
+    private readonly ModelCatalogCacheService _modelCatalogCache = new();
     private readonly PpOcrV6ModelStore _ppOcrV6ModelStore = new();
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _isInitialized;
@@ -201,6 +204,8 @@ public sealed partial class SettingsPage : Page
     private bool _suppressAgentCliToggleDialog; // Reentrancy guard while reverting an agent CLI toggle
     private bool _hasRefreshedClaudeCodeModels;
     private bool _hasRefreshedCodexModels;
+    private bool _hasRefreshedOpenRouterModels;
+    private bool _hasRefreshedOrcaRouterModels;
     private bool _isMainWindowReorderModeEnabled;
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
@@ -1408,11 +1413,18 @@ public sealed partial class SettingsPage : Page
         CustomOpenAIModelBox.Header = loc.GetString("Model");
         OllamaEndpointBox.Header = loc.GetString("EndpointOptional");
         OllamaModelCombo.Header = loc.GetString("Model");
-        BuiltInModelCombo.Header = loc.GetString("Model");
-        BuiltInApiKeyHeaderText.Text = loc.GetString("ApiKeyOptional");
-        BuiltInAIHintBar.Title = loc.GetString("Hint");
-        BuiltInAIHintBar.Message = loc.GetString("BuiltInAIHint");
-        BuiltInDescriptionText.Text = loc.GetString("BuiltInAIDescription");
+        OpenRouterKeyHeaderText.Text = loc.GetString("ApiKey");
+        OpenRouterModelCombo.Header = loc.GetString("Model");
+        OpenRouterDescriptionText.Text = loc.GetString("OpenRouterDescription");
+        OpenRouterGetKeyLink.Content = loc.GetString("GetApiKeyLink");
+        OpenRouterGetKeyLink.NavigateUri = new Uri(OpenRouterService.SignUpUrl);
+        RefreshOpenRouterModelsButton.Content = loc.GetString("Refresh");
+        OrcaRouterKeyHeaderText.Text = loc.GetString("ApiKey");
+        OrcaRouterModelCombo.Header = loc.GetString("Model");
+        OrcaRouterDescriptionText.Text = loc.GetString("OrcaRouterDescription");
+        OrcaRouterGetKeyLink.Content = loc.GetString("GetApiKeyLink");
+        OrcaRouterGetKeyLink.NavigateUri = new Uri(OrcaRouterService.ReferralUrl);
+        RefreshOrcaRouterModelsButton.Content = loc.GetString("Refresh");
         DoubaoKeyHeaderText.Text = loc.GetString("ApiKey");
         DoubaoEndpointBox.Header = loc.GetString("EndpointOptional");
         DoubaoModelBox.Header = loc.GetString("Model");
@@ -1459,7 +1471,8 @@ public sealed partial class SettingsPage : Page
         TestGeminiButton.Content = testButtonText;
         TestCustomOpenAIButton.Content = testButtonText;
         TestOllamaButton.Content = testButtonText;
-        TestBuiltInButton.Content = testButtonText;
+        TestOpenRouterButton.Content = testButtonText;
+        TestOrcaRouterButton.Content = testButtonText;
         TestDoubaoButton.Content = testButtonText;
         TestCaiyunButton.Content = testButtonText;
         TestNiuTransButton.Content = testButtonText;
@@ -1715,7 +1728,8 @@ public sealed partial class SettingsPage : Page
         yield return GitHubModelsTokenRevealButton;
         yield return GeminiKeyRevealButton;
         yield return CustomOpenAIKeyRevealButton;
-        yield return BuiltInApiKeyRevealButton;
+        yield return OpenRouterKeyRevealButton;
+        yield return OrcaRouterKeyRevealButton;
         yield return DoubaoKeyRevealButton;
         yield return CaiyunKeyRevealButton;
         yield return NiuTransKeyRevealButton;
@@ -2267,7 +2281,8 @@ public sealed partial class SettingsPage : Page
         OpenAIModelCombo.SelectionChanged += OnSettingChanged;
         OpenAIApiFormatCombo.SelectionChanged += OnOpenAIApiFormatChanged;
         OllamaModelCombo.SelectionChanged += OnSettingChanged;
-        BuiltInModelCombo.SelectionChanged += OnSettingChanged;
+        OpenRouterModelCombo.SelectionChanged += OnSettingChanged;
+        OrcaRouterModelCombo.SelectionChanged += OnSettingChanged;
         DeepSeekModelCombo.SelectionChanged += OnSettingChanged;
         GroqModelCombo.SelectionChanged += OnSettingChanged;
         ZhipuModelCombo.SelectionChanged += OnSettingChanged;
@@ -2336,7 +2351,8 @@ public sealed partial class SettingsPage : Page
         CustomOpenAIEndpointBox.TextChanged += OnSettingChanged;
         CustomOpenAIKeyBox.PasswordChanged += OnSettingChanged;
         CustomOpenAIModelBox.TextChanged += OnSettingChanged;
-        BuiltInApiKeyBox.PasswordChanged += OnSettingChanged;
+        OpenRouterKeyBox.PasswordChanged += OnSettingChanged;
+        OrcaRouterKeyBox.PasswordChanged += OnSettingChanged;
         DoubaoKeyBox.PasswordChanged += OnSettingChanged;
         DoubaoEndpointBox.TextChanged += OnSettingChanged;
         DoubaoModelBox.TextChanged += OnSettingChanged;
@@ -2389,7 +2405,8 @@ public sealed partial class SettingsPage : Page
         OpenAIModelCombo.SelectionChanged -= OnSettingChanged;
         OpenAIApiFormatCombo.SelectionChanged -= OnOpenAIApiFormatChanged;
         OllamaModelCombo.SelectionChanged -= OnSettingChanged;
-        BuiltInModelCombo.SelectionChanged -= OnSettingChanged;
+        OpenRouterModelCombo.SelectionChanged -= OnSettingChanged;
+        OrcaRouterModelCombo.SelectionChanged -= OnSettingChanged;
         DeepSeekModelCombo.SelectionChanged -= OnSettingChanged;
         GroqModelCombo.SelectionChanged -= OnSettingChanged;
         ZhipuModelCombo.SelectionChanged -= OnSettingChanged;
@@ -2455,7 +2472,8 @@ public sealed partial class SettingsPage : Page
         CustomOpenAIEndpointBox.TextChanged -= OnSettingChanged;
         CustomOpenAIKeyBox.PasswordChanged -= OnSettingChanged;
         CustomOpenAIModelBox.TextChanged -= OnSettingChanged;
-        BuiltInApiKeyBox.PasswordChanged -= OnSettingChanged;
+        OpenRouterKeyBox.PasswordChanged -= OnSettingChanged;
+        OrcaRouterKeyBox.PasswordChanged -= OnSettingChanged;
         DoubaoKeyBox.PasswordChanged -= OnSettingChanged;
         DoubaoEndpointBox.TextChanged -= OnSettingChanged;
         DoubaoModelBox.TextChanged -= OnSettingChanged;
@@ -2807,8 +2825,10 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(GetSelectedTag(LocalAIProviderCombo) ?? "Auto", _settings.LocalAIProvider)
             || !SameSetting(FoundryLocalEndpointBox.Text?.Trim() ?? "", _settings.FoundryLocalEndpoint)
             || !SameSetting(string.IsNullOrWhiteSpace(foundryLocalModel) ? FoundryLocalService.DefaultModel : foundryLocalModel, _settings.FoundryLocalModel)
-            || !SameSetting(GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414"), _settings.BuiltInAIModel)
-            || !SameSecret(BuiltInApiKeyBox.Password, _settings.BuiltInAIApiKey)
+            || !SameSetting(GetEditableComboValue(OpenRouterModelCombo, "openrouter/free"), _settings.OpenRouterModel)
+            || !SameSecret(OpenRouterKeyBox.Password, _settings.OpenRouterApiKey)
+            || !SameSetting(GetEditableComboValue(OrcaRouterModelCombo, "orcarouter/free"), _settings.OrcaRouterModel)
+            || !SameSecret(OrcaRouterKeyBox.Password, _settings.OrcaRouterApiKey)
             || !SameSecret(DoubaoKeyBox.Password, _settings.DoubaoApiKey)
             || !SameSetting(string.IsNullOrWhiteSpace(doubaoEndpoint) ? "https://ark.cn-beijing.volces.com/api/v3/responses" : doubaoEndpoint, _settings.DoubaoEndpoint)
             || !SameSetting(string.IsNullOrWhiteSpace(doubaoModel) ? "doubao-seed-translation-250915" : doubaoModel, _settings.DoubaoModel)
@@ -3054,9 +3074,13 @@ public sealed partial class SettingsPage : Page
             FoundryLocalEndpointBox.Text = _settings.FoundryLocalEndpoint;
             FoundryLocalModelBox.Text = _settings.FoundryLocalModel;
 
-            // Built-in AI settings
-            SetEditableComboValue(BuiltInModelCombo, _settings.BuiltInAIModel);
-            BuiltInApiKeyBox.Password = _settings.BuiltInAIApiKey ?? string.Empty;
+            // OpenRouter settings
+            SetEditableComboValue(OpenRouterModelCombo, _settings.OpenRouterModel);
+            OpenRouterKeyBox.Password = _settings.OpenRouterApiKey ?? string.Empty;
+
+            // OrcaRouter settings
+            SetEditableComboValue(OrcaRouterModelCombo, _settings.OrcaRouterModel);
+            OrcaRouterKeyBox.Password = _settings.OrcaRouterApiKey ?? string.Empty;
 
             // Doubao settings
             DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;
@@ -3253,7 +3277,8 @@ public sealed partial class SettingsPage : Page
             ["gemini"] = GeminiStatusText,
             ["custom-openai"] = CustomOpenAIStatusText,
             ["ollama"] = OllamaStatusText,
-            ["builtin"] = BuiltInStatusText,
+            ["openrouter"] = OpenRouterStatusText,
+            ["orcarouter"] = OrcaRouterStatusText,
             ["doubao"] = DoubaoStatusText,
             ["caiyun"] = CaiyunStatusText,
             ["niutrans"] = NiuTransStatusText,
@@ -4066,6 +4091,29 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
+    /// Repopulate an editable ComboBox from a fetched model catalog: <see cref="ModelCatalogEntry.DisplayLabel"/>
+    /// (which reads "id — name  (Free)") is shown, but <see cref="ModelCatalogEntry.Id"/> stays the
+    /// item's Tag, which is what settings persist and what <see cref="GetEditableComboValue"/> returns.
+    /// </summary>
+    private static void ReplaceEditableComboOptions(
+        ComboBox combo,
+        IReadOnlyList<ModelCatalogEntry> models,
+        string selectedValue)
+    {
+        combo.Items.Clear();
+        foreach (var model in models)
+        {
+            combo.Items.Add(new ComboBoxItem
+            {
+                Content = model.DisplayLabel,
+                Tag = model.Id,
+            });
+        }
+
+        SetEditableComboValue(combo, selectedValue);
+    }
+
+    /// <summary>
     /// Select the item whose Tag matches <paramref name="value"/> (case-insensitive),
     /// falling back to the item with Tag = <paramref name="defaultTag"/>.
     /// For non-editable combos.
@@ -4451,10 +4499,15 @@ public sealed partial class SettingsPage : Page
         _settings.OcrEnableThinking = ocrOptions.EnableThinking;
         SavePpOcrV6Settings();
 
-        // Save Built-in AI settings
-        _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
-        var builtInKey = BuiltInApiKeyBox.Password;
-        _settings.BuiltInAIApiKey = string.IsNullOrWhiteSpace(builtInKey) ? null : builtInKey;
+        // Save OpenRouter settings
+        _settings.OpenRouterModel = GetEditableComboValue(OpenRouterModelCombo, "openrouter/free");
+        var openRouterKey = OpenRouterKeyBox.Password;
+        _settings.OpenRouterApiKey = string.IsNullOrWhiteSpace(openRouterKey) ? null : openRouterKey;
+
+        // Save OrcaRouter settings
+        _settings.OrcaRouterModel = GetEditableComboValue(OrcaRouterModelCombo, "orcarouter/free");
+        var orcaRouterKey = OrcaRouterKeyBox.Password;
+        _settings.OrcaRouterApiKey = string.IsNullOrWhiteSpace(orcaRouterKey) ? null : orcaRouterKey;
 
         // Save Doubao settings
         var doubaoKey = DoubaoKeyBox.Password;
@@ -5131,7 +5184,8 @@ public sealed partial class SettingsPage : Page
             "github" => new GitHubModelsService(httpClient),
             "gemini" => new GeminiService(httpClient),
             "custom-openai" => new CustomOpenAIService(httpClient),
-            "builtin" => new BuiltInAIService(httpClient),
+            "openrouter" => new OpenRouterService(httpClient),
+            "orcarouter" => new OrcaRouterService(httpClient),
             "doubao" => new DoubaoService(httpClient),
             "caiyun" => new CaiyunService(httpClient),
             "niutrans" => new NiuTransService(httpClient),
@@ -5491,20 +5545,35 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Test Built-in AI configuration.
+    /// Test OpenRouter configuration.
     /// </summary>
-    private async void OnTestBuiltIn(object sender, RoutedEventArgs e)
+    private async void OnTestOpenRouter(object sender, RoutedEventArgs e)
     {
-        await TestServiceAsync("builtin", service =>
+        await TestServiceAsync("openrouter", service =>
         {
-            if (service is BuiltInAIService builtin)
+            if (service is OpenRouterService openRouter)
             {
-                var model = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
-                var apiKey = BuiltInApiKeyBox.Password;
-                var deviceId = SettingsService.Instance.DeviceId;
-                builtin.Configure(model, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, deviceId);
+                var apiKey = OpenRouterKeyBox.Password;
+                var model = GetEditableComboValue(OpenRouterModelCombo, "openrouter/free");
+                openRouter.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
             }
-        }, TestBuiltInButton, BuiltInStatusText);
+        }, TestOpenRouterButton, OpenRouterStatusText);
+    }
+
+    /// <summary>
+    /// Test OrcaRouter configuration.
+    /// </summary>
+    private async void OnTestOrcaRouter(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("orcarouter", service =>
+        {
+            if (service is OrcaRouterService orcaRouter)
+            {
+                var apiKey = OrcaRouterKeyBox.Password;
+                var model = GetEditableComboValue(OrcaRouterModelCombo, "orcarouter/free");
+                orcaRouter.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
+            }
+        }, TestOrcaRouterButton, OrcaRouterStatusText);
     }
 
     /// <summary>
@@ -5652,6 +5721,139 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex)
         {
             await ShowAgentCliErrorAsync(ex);
+        }
+    }
+
+    private async void OnOpenRouterExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (_hasRefreshedOpenRouterModels) return;
+
+        _hasRefreshedOpenRouterModels = true;
+        await RefreshRouterModelsAsync(
+            "openrouter",
+            OpenRouterModelCombo,
+            RefreshOpenRouterModelsButton,
+            "openrouter/free",
+            forceRefresh: false,
+            showErrorDialog: false,
+            FetchOpenRouterModelsAsync);
+    }
+
+    private async void OnRefreshOpenRouterModels(object sender, RoutedEventArgs e)
+    {
+        await RefreshRouterModelsAsync(
+            "openrouter",
+            OpenRouterModelCombo,
+            RefreshOpenRouterModelsButton,
+            "openrouter/free",
+            forceRefresh: true,
+            showErrorDialog: true,
+            FetchOpenRouterModelsAsync);
+    }
+
+    private static async Task<IReadOnlyList<ModelCatalogEntry>> FetchOpenRouterModelsAsync()
+    {
+        using var httpClient = new HttpClient();
+        var service = new OpenRouterService(httpClient);
+        return await service.FetchModelsAsync();
+    }
+
+    private async void OnOrcaRouterExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (_hasRefreshedOrcaRouterModels) return;
+
+        _hasRefreshedOrcaRouterModels = true;
+        await RefreshRouterModelsAsync(
+            "orcarouter",
+            OrcaRouterModelCombo,
+            RefreshOrcaRouterModelsButton,
+            "orcarouter/free",
+            forceRefresh: false,
+            showErrorDialog: false,
+            FetchOrcaRouterModelsAsync);
+    }
+
+    private async void OnRefreshOrcaRouterModels(object sender, RoutedEventArgs e)
+    {
+        await RefreshRouterModelsAsync(
+            "orcarouter",
+            OrcaRouterModelCombo,
+            RefreshOrcaRouterModelsButton,
+            "orcarouter/free",
+            forceRefresh: true,
+            showErrorDialog: true,
+            FetchOrcaRouterModelsAsync);
+    }
+
+    private async Task<IReadOnlyList<ModelCatalogEntry>> FetchOrcaRouterModelsAsync()
+    {
+        using var httpClient = new HttpClient();
+        var service = new OrcaRouterService(httpClient);
+        service.Configure(OrcaRouterKeyBox.Password);
+        return await service.FetchModelsAsync();
+    }
+
+    /// <summary>
+    /// Populates a router service's model dropdown from the on-disk catalog cache, refetching
+    /// from the network when the cache is missing/stale (or when <paramref name="forceRefresh"/>
+    /// is set, e.g. from an explicit Refresh button click). A failed lazy (non-forced) fetch
+    /// falls back to a stale cache, then to the dropdown's existing seed items, and stays
+    /// silent — opening Settings offline must never pop an error dialog. A failed forced
+    /// refresh shows the same "test failed" dialog used elsewhere on this page when
+    /// <paramref name="showErrorDialog"/> is set.
+    /// </summary>
+    private async Task RefreshRouterModelsAsync(
+        string serviceId,
+        ComboBox combo,
+        Button refreshButton,
+        string defaultModel,
+        bool forceRefresh,
+        bool showErrorDialog,
+        Func<Task<IReadOnlyList<ModelCatalogEntry>>> fetchAsync)
+    {
+        var selectedModel = GetEditableComboValue(combo, defaultModel);
+
+        if (!forceRefresh)
+        {
+            var fresh = await _modelCatalogCache.TryGetFreshAsync(serviceId);
+            if (fresh is { Count: > 0 })
+            {
+                ReplaceEditableComboOptions(combo, fresh, selectedModel);
+                return;
+            }
+        }
+
+        refreshButton.IsEnabled = false;
+        try
+        {
+            var models = await fetchAsync();
+            if (models.Count > 0)
+            {
+                ReplaceEditableComboOptions(combo, models, selectedModel);
+                await _modelCatalogCache.SaveAsync(serviceId, models);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Settings] Failed to refresh {serviceId} models: {ex.Message}");
+
+            var stale = await _modelCatalogCache.TryGetAnyAsync(serviceId);
+            if (stale is { Count: > 0 })
+            {
+                ReplaceEditableComboOptions(combo, stale, selectedModel);
+            }
+
+            if (showErrorDialog)
+            {
+                await ShowAgentCliErrorAsync(ex);
+            }
+        }
+        finally
+        {
+            if (!_isUnloaded)
+            {
+                refreshButton.IsEnabled = true;
+            }
         }
     }
 

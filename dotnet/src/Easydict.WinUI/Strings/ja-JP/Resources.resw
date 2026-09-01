@@ -384,11 +384,14 @@
   <data name="OllamaDescription" xml:space="preserve">
     <value>Ollamaはローカルで実行している必要があります。更新をクリックして利用可能なモデルを読み込みます。</value>
   </data>
-  <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>GLM（Zhipu AI）またはGroqの無料モデルを使用します。open.bigmodel.cn（GLM）またはconsole.groq.com（Groq）から独自のAPIキーを取得できます。</value>
+  <data name="OpenRouterDescription" xml:space="preserve">
+    <value>多数のプロバイダーから400以上のモデルにアクセスできる統合ゲートウェイ。無料モデルはドロップダウンの先頭に表示されます — 選択すれば無料で翻訳できます。</value>
   </data>
-  <data name="BuiltInAIHint" xml:space="preserve">
-    <value>内蔵キーには無料枠の制限があり、常に利用可能とは限りません。安定した利用のために、独自の無料APIキーを取得することをお勧めします。</value>
+  <data name="OrcaRouterDescription" xml:space="preserve">
+    <value>1つのAPIキーで150以上の上流モデルに適応的にルーティングします。無料モデルはドロップダウンの先頭に表示されます — 選択すれば無料で翻訳できます。</value>
+  </data>
+  <data name="GetApiKeyLink" xml:space="preserve">
+    <value>APIキーを取得</value>
   </data>
   <data name="Hint" xml:space="preserve">
     <value>ヒント</value>
@@ -556,9 +559,6 @@
   </data>
   <data name="ServiceOllama" xml:space="preserve">
     <value>Ollama（ローカル）</value>
-  </data>
-  <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>内蔵AI</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>

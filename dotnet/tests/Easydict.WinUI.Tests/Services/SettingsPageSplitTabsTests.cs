@@ -128,7 +128,8 @@ public class SettingsPageSplitTabsTests
         "GitHub",
         "Gemini",
         "CustomOpenAI",
-        "BuiltInAI",
+        // TODO: add "OpenRouter" and "OrcaRouter" once official service icons are supplied
+        // (Assets/ServiceIcons/{OpenRouter,OrcaRouter}.scale-*.png) — see .gitignore whitelist.
         "Doubao",
         "Caiyun",
         "NiuTrans",
@@ -605,6 +606,8 @@ public class SettingsPageSplitTabsTests
             ["caiyun"] = "x:Name=\"CaiyunKeyBox\"",
             ["niutrans"] = "x:Name=\"NiuTransKeyBox\"",
             ["volcano"] = "x:Name=\"VolcanoAccessKeyIdBox\"",
+            ["openrouter"] = "x:Name=\"OpenRouterKeyBox\"",
+            ["orcarouter"] = "x:Name=\"OrcaRouterKeyBox\"",
         };
 
     [Fact]

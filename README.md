@@ -124,7 +124,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
-- **Multiple Translation Services** (22 available services; Linguee currently unavailable)
+- **Multiple Translation Services** (23 available services; Linguee currently unavailable)
   - Google Translate (free, no API key required)
   - Google Dict (rich dictionary: phonetics, definitions, examples)
   - Bing Translate (free, no API key required)
@@ -144,7 +144,8 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Linguee Dictionary (currently unavailable; upstream sample API is offline and disabled by default)
   - Ollama (local LLM, default: llama3.2)
   - Windows Local AI (Phi Silica on Copilot+ PCs, OpenVINO fallback)
-  - BuiltIn AI (free, powered by Groq)
+  - OpenRouter (unified gateway to 400+ models, free models available)
+  - OrcaRouter (unified gateway, free models available) [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
   - Custom OpenAI-compatible services
   - Claude Code (local agent CLI, uses your Claude subscription — no API key)
   - Codex (local agent CLI, uses your ChatGPT subscription — no API key)
@@ -245,7 +246,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Google Dict | REST | ✅ | |
 | Ollama | OpenAI API | — | Requires local Ollama setup |
 | Windows Local AI | Local runtime | ✅ | TranslationManager routing tested; real inference requires Phi Silica, Foundry Local, or OpenVINO model |
-| BuiltIn AI | OpenAI API | — | Embedded key |
+| OpenRouter | OpenAI API | — | OpenAI-compatible, missing API key |
+| OrcaRouter | OpenAI API | — | OpenAI-compatible, missing API key |
 | Custom OpenAI | OpenAI API | — | OpenAI-compatible, user-defined endpoint |
 | Claude Code | Local CLI (stream-json) | — | Requires local `claude` CLI signed in |
 | Codex | Local CLI (JSONL) | — | Requires local `codex` CLI signed in |

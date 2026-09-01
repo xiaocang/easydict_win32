@@ -387,11 +387,14 @@
   <data name="OllamaDescription" xml:space="preserve">
     <value>Ollama must be running locally. Click Refresh to load available models.</value>
   </data>
-  <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>Uses GLM (Zhipu AI) or Groq free models. You can provide your own API key from open.bigmodel.cn (GLM) or console.groq.com (Groq).</value>
+  <data name="OpenRouterDescription" xml:space="preserve">
+    <value>Unified gateway to 400+ models from many providers. Free models are listed first in the dropdown — pick one to translate at no cost.</value>
   </data>
-  <data name="BuiltInAIHint" xml:space="preserve">
-    <value>The built-in key has limited free quota and is not guaranteed to always be available. For stable use, get your own free API key.</value>
+  <data name="OrcaRouterDescription" xml:space="preserve">
+    <value>Adaptive LLM router across 150+ upstream models from one API key. Free models are listed first in the dropdown — pick one to translate at no cost.</value>
+  </data>
+  <data name="GetApiKeyLink" xml:space="preserve">
+    <value>Get an API key</value>
   </data>
   <data name="Hint" xml:space="preserve">
     <value>Hint</value>
@@ -592,9 +595,6 @@
   </data>
   <data name="ServiceOllama" xml:space="preserve">
     <value>Ollama (Local)</value>
-  </data>
-  <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>Built-in AI</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>

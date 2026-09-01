@@ -99,7 +99,8 @@ public sealed class TranslationManager : IDisposable
         // Register streaming LLM services
         RegisterService(new OpenAIService(_httpClient));
         RegisterService(new OllamaService(_httpClient));
-        RegisterService(new BuiltInAIService(_httpClient));
+        RegisterService(new OpenRouterService(_httpClient));
+        RegisterService(new OrcaRouterService(_httpClient));
 
         // Register additional LLM services (Phase 2)
         RegisterService(new DeepSeekService(_httpClient));

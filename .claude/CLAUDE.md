@@ -131,7 +131,7 @@ make run
 
 ## Key Features
 
-- **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, custom OpenAI-compatible services, and local agent CLIs (Claude Code / Codex) that reuse the user's subscription without an API key
+- **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, OpenRouter, OrcaRouter (both with a live free-first model catalog), custom OpenAI-compatible services, and local agent CLIs (Claude Code / Codex) that reuse the user's subscription without an API key
 - **LLM Streaming Translation**: Real-time display of translation results
 - **Multiple Window Modes**: Main, Mini, Fixed windows
 - **Long Document Translation**: PDF/Text/Markdown translation with ML layout detection, formula protection, parallel processing, bilingual output, and translation cache
@@ -181,13 +181,14 @@ BaseTranslationService : ITranslationService            # Abstract base with val
 └── BaseOpenAIService : IStreamTranslationService       # Abstract base for OpenAI-compatible LLM services
     ├── OpenAIService
     ├── OllamaService
-    ├── BuiltInAIService
     ├── DeepSeekService
     ├── GroqService
     ├── ZhipuService
     ├── KimiService
     ├── GitHubModelsService
-    └── CustomOpenAIService
+    ├── CustomOpenAIService
+    ├── OpenRouterService : IModelCatalogProvider           # Fetches /models catalog, free-first
+    └── OrcaRouterService : IModelCatalogProvider            # Fetches /models catalog, free-first
 ```
 
 #### Adding a New Translation Service

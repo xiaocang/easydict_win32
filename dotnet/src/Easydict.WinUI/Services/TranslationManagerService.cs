@@ -235,9 +235,6 @@ public sealed class TranslationManagerService : IDisposable
 
         _settings.EnableInternationalServicesChanged += (_, _) => ReconfigureServices();
 
-        // Register device token in the background (same fire-and-forget pattern as InitializeRegionDefaultsAsync)
-        _ = Task.Run(() => EnsureDeviceRegisteredAsync());
-
         Debug.WriteLine("[TranslationManagerService] Initialized");
     }
 
@@ -331,15 +328,6 @@ public sealed class TranslationManagerService : IDisposable
         // fallback path if the worker exe is missing or cannot complete handshake.
         _localAIService?.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
 
-        // Configure BuiltIn AI
-        _translationManager.ConfigureService("builtin", service =>
-        {
-            if (service is BuiltInAIService builtin)
-            {
-                builtin.Configure(_settings.BuiltInAIModel, _settings.BuiltInAIApiKey, _settings.DeviceId, _settings.DeviceToken);
-            }
-        });
-
         // Configure DeepSeek
         _translationManager.ConfigureService("deepseek", service =>
         {
@@ -404,6 +392,28 @@ public sealed class TranslationManagerService : IDisposable
                     _settings.CustomOpenAIEndpoint,
                     _settings.CustomOpenAIApiKey,
                     _settings.CustomOpenAIModel);
+            }
+        });
+
+        // Configure OpenRouter
+        _translationManager.ConfigureService("openrouter", service =>
+        {
+            if (service is OpenRouterService openRouter)
+            {
+                openRouter.Configure(
+                    _settings.OpenRouterApiKey ?? "",
+                    model: _settings.OpenRouterModel);
+            }
+        });
+
+        // Configure OrcaRouter
+        _translationManager.ConfigureService("orcarouter", service =>
+        {
+            if (service is OrcaRouterService orcaRouter)
+            {
+                orcaRouter.Configure(
+                    _settings.OrcaRouterApiKey ?? "",
+                    model: _settings.OrcaRouterModel);
             }
         });
 
@@ -728,68 +738,6 @@ public sealed class TranslationManagerService : IDisposable
                 }
                 DisposeManagerSafely(oldManager);
             });
-        }
-    }
-
-    /// <summary>
-    /// Ensures the device has a valid HMAC token from the proxy server.
-    /// Short-circuits if a token is already persisted in settings.
-    /// On success, saves the token and reconfigures the BuiltIn AI service.
-    /// </summary>
-    private async Task EnsureDeviceRegisteredAsync()
-    {
-        if (!string.IsNullOrEmpty(_settings.DeviceToken))
-        {
-            Debug.WriteLine("[TranslationManagerService] Device token already present, skipping registration");
-            return;
-        }
-
-        Debug.WriteLine("[TranslationManagerService] Device token missing, attempting registration...");
-
-        BuiltInAIService? builtin;
-        lock (_lock)
-        {
-            builtin = _translationManager.Services.TryGetValue("builtin", out var svc)
-                ? svc as BuiltInAIService
-                : null;
-        }
-
-        if (builtin == null)
-        {
-            Debug.WriteLine("[TranslationManagerService] BuiltInAIService not found");
-            return;
-        }
-
-        try
-        {
-            var token = await builtin.RegisterDeviceAsync();
-            if (!string.IsNullOrEmpty(token))
-            {
-                _settings.DeviceToken = token;
-                _settings.Save();
-
-                // Reconfigure to include the new token
-                lock (_lock)
-                {
-                    _translationManager.ConfigureService("builtin", service =>
-                    {
-                        if (service is BuiltInAIService b)
-                        {
-                            b.Configure(_settings.BuiltInAIModel, _settings.BuiltInAIApiKey, _settings.DeviceId, _settings.DeviceToken);
-                        }
-                    });
-                }
-
-                Debug.WriteLine("[TranslationManagerService] Device registered and configured successfully");
-            }
-            else
-            {
-                Debug.WriteLine("[TranslationManagerService] Device registration returned no token");
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[TranslationManagerService] Device registration failed: {ex.Message}");
         }
     }
 

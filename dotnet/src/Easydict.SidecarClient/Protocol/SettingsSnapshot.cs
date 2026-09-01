@@ -108,17 +108,17 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("ollamaModel")]
     public string? OllamaModel { get; init; }
 
-    [JsonPropertyName("builtInAIModel")]
-    public string? BuiltInAIModel { get; init; }
+    [JsonPropertyName("openRouterApiKey")]
+    public string? OpenRouterApiKey { get; init; }
 
-    [JsonPropertyName("builtInAIApiKey")]
-    public string? BuiltInAIApiKey { get; init; }
+    [JsonPropertyName("openRouterModel")]
+    public string? OpenRouterModel { get; init; }
 
-    [JsonPropertyName("deviceId")]
-    public string? DeviceId { get; init; }
+    [JsonPropertyName("orcaRouterApiKey")]
+    public string? OrcaRouterApiKey { get; init; }
 
-    [JsonPropertyName("deviceToken")]
-    public string? DeviceToken { get; init; }
+    [JsonPropertyName("orcaRouterModel")]
+    public string? OrcaRouterModel { get; init; }
 
     // ── Local AI provider config (local-AI worker) ──────────────────────────
 

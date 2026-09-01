@@ -130,8 +130,15 @@
   <data name="GeminiDescription" xml:space="preserve"><value>Hent din API-nøgle fra aistudio.google.com. Du kan skrive et brugerdefineret modelnavn.</value></data>
   <data name="CustomOpenAIDescription" xml:space="preserve"><value>Konfigurer ethvert OpenAI-kompatibelt API-endpoint (f.eks. lokale LLM-servere, andre AI-udbydere).</value></data>
   <data name="OllamaDescription" xml:space="preserve"><value>Ollama skal køre lokalt. Klik Opdater for at indlæse tilgængelige modeller.</value></data>
-  <data name="BuiltInAIDescription" xml:space="preserve"><value>Bruger gratis GLM (Zhipu AI) eller Groq modeller. Du kan angive din egen API-nøgle fra open.bigmodel.cn (GLM) eller console.groq.com (Groq).</value></data>
-  <data name="BuiltInAIHint" xml:space="preserve"><value>Den indbyggede nøgle har en begrænset gratis kvote og er ikke garanteret altid at være tilgængelig. For stabil brug, hent din egen gratis API-nøgle.</value></data>
+  <data name="OpenRouterDescription" xml:space="preserve">
+    <value>Unified gateway to 400+ models from many providers. Free models are listed first in the dropdown — pick one to translate at no cost.</value>
+  </data>
+  <data name="OrcaRouterDescription" xml:space="preserve">
+    <value>Adaptive LLM router across 150+ upstream models from one API key. Free models are listed first in the dropdown — pick one to translate at no cost.</value>
+  </data>
+  <data name="GetApiKeyLink" xml:space="preserve">
+    <value>Get an API key</value>
+  </data>
   <data name="Hint" xml:space="preserve"><value>Tip</value></data>
   <data name="DoubaoDescription" xml:space="preserve"><value>ByteDances Doubao-oversættelsestjeneste. Hent din API-nøgle fra console.volcengine.com</value></data>
   <data name="CaiyunDescription" xml:space="preserve"><value>Hent din API-nøgle fra fanyi.caiyunapp.com</value></data>
@@ -194,7 +201,6 @@
   <data name="ServiceDeepL" xml:space="preserve"><value>DeepL</value></data>
   <data name="ServiceOpenAI" xml:space="preserve"><value>OpenAI</value></data>
   <data name="ServiceOllama" xml:space="preserve"><value>Ollama (lokal)</value></data>
-  <data name="ServiceBuiltIn" xml:space="preserve"><value>Indbygget AI</value></data>
   <data name="ServiceDeepSeek" xml:space="preserve"><value>DeepSeek</value></data>
   <data name="ServiceGroq" xml:space="preserve"><value>Groq</value></data>
   <data name="ServiceZhipu" xml:space="preserve"><value>Zhipu</value></data>

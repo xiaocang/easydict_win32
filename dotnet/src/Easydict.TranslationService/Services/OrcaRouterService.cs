@@ -70,6 +70,17 @@ public sealed class OrcaRouterService : BaseOpenAIService, IModelCatalogProvider
     }
 
     /// <summary>
+    /// Identifies Easydict in OrcaRouter's usage analytics.
+    /// </summary>
+    protected override void ConfigureHttpRequest(HttpRequestMessage request)
+    {
+        request.Headers.TryAddWithoutValidation(
+            "HTTP-Referer",
+            "https://github.com/xiaocang/easydict_win32");
+        request.Headers.TryAddWithoutValidation("X-Title", "Easydict for Windows");
+    }
+
+    /// <summary>
     /// Fetch OrcaRouter's live model catalog, free models sorted first.
     /// </summary>
     public Task<IReadOnlyList<ModelCatalogEntry>> FetchModelsAsync(CancellationToken cancellationToken = default)

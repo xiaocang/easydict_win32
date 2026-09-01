@@ -55,6 +55,29 @@ public class OrcaRouterServiceIntegrationTests : IDisposable
     }
 
     [SkippableFact]
+    public async Task TranslateStreamAsync_EnglishToChinese_ReturnsChineseTranslation()
+    {
+        Skip.If(string.IsNullOrEmpty(_apiKey), "ORCAROUTER_API_KEY not set");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello, world!",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        var chunks = new List<string>();
+        await foreach (var chunk in _service.TranslateStreamAsync(request))
+        {
+            chunks.Add(chunk);
+        }
+
+        chunks.Should().NotBeEmpty("streaming should return chunks");
+        string.Concat(chunks).Should().MatchRegex(@"[\u4e00-\u9fff]+",
+            "streamed translation should contain Chinese characters");
+    }
+
+    [SkippableFact]
     public async Task FetchModelsAsync_ReturnsNonEmptyCatalogWithFreeModelsFirst()
     {
         Skip.If(string.IsNullOrEmpty(_apiKey), "ORCAROUTER_API_KEY not set");

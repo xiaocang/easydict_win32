@@ -268,11 +268,14 @@
   <data name="OllamaDescription" xml:space="preserve">
     <value>Ollama deve essere in esecuzione localmente. Clicca Aggiorna per caricare i modelli disponibili.</value>
   </data>
-  <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>Usa modelli gratuiti GLM (Zhipu AI) o Groq. Puoi fornire la tua chiave API da open.bigmodel.cn (GLM) o console.groq.com (Groq).</value>
+  <data name="OpenRouterDescription" xml:space="preserve">
+    <value>Unified gateway to 400+ models from many providers. Free models are listed first in the dropdown — pick one to translate at no cost.</value>
   </data>
-  <data name="BuiltInAIHint" xml:space="preserve">
-    <value>La chiave integrata ha una quota gratuita limitata e non è garantito che sia sempre disponibile. Per un uso stabile, ottieni la tua chiave API gratuita.</value>
+  <data name="OrcaRouterDescription" xml:space="preserve">
+    <value>Adaptive LLM router across 150+ upstream models from one API key. Free models are listed first in the dropdown — pick one to translate at no cost.</value>
+  </data>
+  <data name="GetApiKeyLink" xml:space="preserve">
+    <value>Get an API key</value>
   </data>
   <data name="Hint" xml:space="preserve">
     <value>Suggerimento</value>
@@ -473,9 +476,6 @@
   </data>
   <data name="ServiceOllama" xml:space="preserve">
     <value>Ollama (Locale)</value>
-  </data>
-  <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>AI integrata</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>
@@ -1447,4 +1447,6 @@
   <data name="PpOcrV6TestNoText" xml:space="preserve"><value>Operazione riuscita: l’immagine è stata elaborata, ma non è stato riconosciuto alcun testo.</value></data>
   <data name="PpOcrV6TestError" xml:space="preserve"><value>[Errore] {0}</value></data>
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
+  <data name="FreeModelsBadge" xml:space="preserve"><value>Modelli gratuiti</value></data>
+  <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Ottieni una chiave API (link di riferimento)</value></data>
 </root>

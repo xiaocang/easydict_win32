@@ -118,6 +118,22 @@ internal static class WorkerTranslationManagerFactory
             }
         });
 
+        ConfigureIfPresent(manager, "openrouter", svc =>
+        {
+            if (svc is OpenRouterService openRouter && snapshot.OpenRouterApiKey is not null)
+            {
+                openRouter.Configure(snapshot.OpenRouterApiKey, model: snapshot.OpenRouterModel);
+            }
+        });
+
+        ConfigureIfPresent(manager, "orcarouter", svc =>
+        {
+            if (svc is OrcaRouterService orcaRouter && snapshot.OrcaRouterApiKey is not null)
+            {
+                orcaRouter.Configure(snapshot.OrcaRouterApiKey, model: snapshot.OrcaRouterModel);
+            }
+        });
+
         return manager;
     }
 

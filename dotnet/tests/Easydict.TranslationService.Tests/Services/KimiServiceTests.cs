@@ -126,4 +126,26 @@ public class KimiServiceTests
         await action.Should().ThrowAsync<TranslationException>()
             .Where(e => e.ErrorCode == TranslationErrorCode.InvalidApiKey);
     }
+    [Fact]
+    public async Task FetchModelsAsync_SendsBearerTokenAndParsesCatalog()
+    {
+        _service.Configure("test-key");
+        _mockHandler.EnqueueJsonResponse("""
+        {
+            "data": [
+                { "id": "kimi-k2-0905-preview" },
+                { "id": "kimi-k2-turbo-preview" }
+            ]
+        }
+        """);
+
+        var models = await _service.FetchModelsAsync();
+
+        models.Select(model => model.Id).Should().Equal(
+            "kimi-k2-0905-preview",
+            "kimi-k2-turbo-preview");
+        _mockHandler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/v1/models");
+        _mockHandler.LastRequest.Headers.Authorization!.Parameter.Should().Be("test-key");
+    }
+
 }

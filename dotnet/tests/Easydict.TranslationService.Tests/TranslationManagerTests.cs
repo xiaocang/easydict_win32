@@ -25,7 +25,8 @@ public class TranslationManagerTests : IDisposable
         _manager.Services.Should().ContainKey("deepl");
         _manager.Services.Should().ContainKey("openai");
         _manager.Services.Should().ContainKey("ollama");
-        _manager.Services.Should().ContainKey("builtin");
+        _manager.Services.Should().ContainKey("openrouter");
+        _manager.Services.Should().ContainKey("orcarouter");
     }
 
     [Fact]
@@ -125,7 +126,8 @@ public class TranslationManagerTests : IDisposable
     {
         _manager.IsStreamingService("openai").Should().BeTrue();
         _manager.IsStreamingService("ollama").Should().BeTrue();
-        _manager.IsStreamingService("builtin").Should().BeTrue();
+        _manager.IsStreamingService("openrouter").Should().BeTrue();
+        _manager.IsStreamingService("orcarouter").Should().BeTrue();
         _manager.IsStreamingService("deepseek").Should().BeTrue();
         _manager.IsStreamingService("groq").Should().BeTrue();
         _manager.IsStreamingService("gemini").Should().BeTrue();

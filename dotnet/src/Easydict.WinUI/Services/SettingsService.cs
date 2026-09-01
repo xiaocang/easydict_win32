@@ -130,23 +130,6 @@ public sealed class SettingsService
     // TranslationManagerService when configuring the service.
     public string OpenVinoDevice { get; set; } = "Auto";
 
-    // Built-in AI settings
-    public string BuiltInAIModel { get; set; } = "glm-4-flash-250414";
-    public string? BuiltInAIApiKey { get; set; }
-
-    /// <summary>
-    /// Hardware-bound device identifier for proxy rate limiting.
-    /// Derived from SystemIdentification (packaged) or MachineGuid (unpackaged).
-    /// Falls back to a persisted random GUID if both fail.
-    /// </summary>
-    public string DeviceId { get; set; } = "";
-
-    /// <summary>
-    /// HMAC-SHA256 token proving the device ID was registered with the proxy server.
-    /// Obtained via POST /v1/device/register on first launch, persisted thereafter.
-    /// </summary>
-    public string DeviceToken { get; set; } = "";
-
     // DeepSeek settings
     public string? DeepSeekApiKey { get; set; }
     public string DeepSeekModel { get; set; } = "deepseek-chat";
@@ -171,6 +154,14 @@ public sealed class SettingsService
     public string CustomOpenAIEndpoint { get; set; } = "";
     public string? CustomOpenAIApiKey { get; set; }
     public string CustomOpenAIModel { get; set; } = "gpt-3.5-turbo";
+
+    // OpenRouter settings
+    public string? OpenRouterApiKey { get; set; }
+    public string OpenRouterModel { get; set; } = "openrouter/free";
+
+    // OrcaRouter settings
+    public string? OrcaRouterApiKey { get; set; }
+    public string OrcaRouterModel { get; set; } = "orcarouter/free";
 
     // Gemini settings
     public string? GeminiApiKey { get; set; }
@@ -725,25 +716,6 @@ public sealed class SettingsService
         // OpenVINO local NLLB fallback settings
         OpenVinoDevice = GetValue(nameof(OpenVinoDevice), "Auto");
 
-        // Built-in AI settings
-        BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "glm-4-flash-250414");
-        BuiltInAIApiKey = GetSensitiveSetting(nameof(BuiltInAIApiKey));
-        // Try hardware-bound ID; fall back to persisted random UUID
-        var hardwareId = GetHardwareDeviceId();
-        if (!string.IsNullOrEmpty(hardwareId))
-        {
-            DeviceId = hardwareId;
-        }
-        else
-        {
-            DeviceId = GetValue(nameof(DeviceId), "");
-            if (string.IsNullOrEmpty(DeviceId))
-            {
-                DeviceId = Guid.NewGuid().ToString("N");
-            }
-        }
-        DeviceToken = GetValue(nameof(DeviceToken), "");
-
         // DeepSeek settings
         DeepSeekApiKey = GetSensitiveSetting(nameof(DeepSeekApiKey));
         DeepSeekModel = GetValue(nameof(DeepSeekModel), "deepseek-chat");
@@ -768,6 +740,14 @@ public sealed class SettingsService
         CustomOpenAIEndpoint = GetValue(nameof(CustomOpenAIEndpoint), "");
         CustomOpenAIApiKey = GetSensitiveSetting(nameof(CustomOpenAIApiKey));
         CustomOpenAIModel = GetValue(nameof(CustomOpenAIModel), "gpt-3.5-turbo");
+
+        // OpenRouter settings
+        OpenRouterApiKey = GetSensitiveSetting(nameof(OpenRouterApiKey));
+        OpenRouterModel = GetValue(nameof(OpenRouterModel), "openrouter/free");
+
+        // OrcaRouter settings
+        OrcaRouterApiKey = GetSensitiveSetting(nameof(OrcaRouterApiKey));
+        OrcaRouterModel = GetValue(nameof(OrcaRouterModel), "orcarouter/free");
 
         // Gemini settings
         GeminiApiKey = GetSensitiveSetting(nameof(GeminiApiKey));
@@ -920,6 +900,7 @@ public sealed class SettingsService
 
         // Service test status
         ServiceTestStatus = GetStringBoolDictionary(nameof(ServiceTestStatus));
+        PruneRetiredService("builtin");
 
         // International services: use optimistic default (true) during sync construction.
         // Actual region detection runs asynchronously via InitializeRegionDefaultsAsync().
@@ -1026,12 +1007,6 @@ public sealed class SettingsService
         // OpenVINO local NLLB fallback settings
         _settings[nameof(OpenVinoDevice)] = OpenVinoDevice;
 
-        // Built-in AI settings
-        _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
-        SaveSensitiveSetting(nameof(BuiltInAIApiKey), BuiltInAIApiKey, preserveUnmigratedSensitiveSettings);
-        _settings[nameof(DeviceId)] = DeviceId;
-        _settings[nameof(DeviceToken)] = DeviceToken;
-
         // DeepSeek settings
         SaveSensitiveSetting(nameof(DeepSeekApiKey), DeepSeekApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(DeepSeekModel)] = DeepSeekModel;
@@ -1056,6 +1031,14 @@ public sealed class SettingsService
         _settings[nameof(CustomOpenAIEndpoint)] = CustomOpenAIEndpoint;
         SaveSensitiveSetting(nameof(CustomOpenAIApiKey), CustomOpenAIApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(CustomOpenAIModel)] = CustomOpenAIModel;
+
+        // OpenRouter settings
+        SaveSensitiveSetting(nameof(OpenRouterApiKey), OpenRouterApiKey, preserveUnmigratedSensitiveSettings);
+        _settings[nameof(OpenRouterModel)] = OpenRouterModel;
+
+        // OrcaRouter settings
+        SaveSensitiveSetting(nameof(OrcaRouterApiKey), OrcaRouterApiKey, preserveUnmigratedSensitiveSettings);
+        _settings[nameof(OrcaRouterModel)] = OrcaRouterModel;
 
         // Gemini settings
         SaveSensitiveSetting(nameof(GeminiApiKey), GeminiApiKey, preserveUnmigratedSensitiveSettings);
@@ -1273,7 +1256,7 @@ public sealed class SettingsService
     public static readonly HashSet<string> InternationalOnlyServices = new(StringComparer.OrdinalIgnoreCase)
     {
         "google", "google_web", "deepl", "openai", "gemini",
-        "groq", "github", "builtin",
+        "groq", "github", "openrouter", "orcarouter",
 #if ENABLE_LINGUEE_SERVICE
         "linguee",
 #endif
@@ -1485,6 +1468,24 @@ public sealed class SettingsService
         }
     }
 
+    /// <summary>
+    /// Strips a retired service id from every enabled-service list, auto-query dictionary,
+    /// and test-status entry, so a stale id from an old settings.json (e.g. "builtin" after
+    /// its removal) can never reach the live <see cref="TranslationManager"/> registry lookup.
+    /// Idempotent and silent — does not force a save; the next natural Save() call persists it.
+    /// </summary>
+    private void PruneRetiredService(string serviceId)
+    {
+        RemoveFromList(MiniWindowEnabledServices, serviceId);
+        RemoveFromList(MainWindowEnabledServices, serviceId);
+        RemoveFromList(FixedWindowEnabledServices, serviceId);
+
+        RemoveDictionaryKey(MiniWindowServiceEnabledQuery, serviceId);
+        RemoveDictionaryKey(MainWindowServiceEnabledQuery, serviceId);
+        RemoveDictionaryKey(FixedWindowServiceEnabledQuery, serviceId);
+        RemoveDictionaryKey(ServiceTestStatus, serviceId);
+    }
+
     private void MigrateStandaloneOpenVinoService()
     {
         var hadOpenVino = ContainsInList(MiniWindowEnabledServices, LocalAITranslationService.LegacyOpenVinoServiceId)
@@ -1583,56 +1584,6 @@ public sealed class SettingsService
         existingKey = string.Empty;
         value = false;
         return false;
-    }
-
-    /// <summary>
-    /// Derives a stable device identifier from hardware.
-    /// 1. SystemIdentification (SMBIOS-based, requires package identity)
-    /// 2. Registry MachineGuid (unique per Windows installation)
-    /// Returns null if both fail (caller falls back to random GUID).
-    /// </summary>
-    private static string? GetHardwareDeviceId()
-    {
-        // Attempt 1: WinRT SystemIdentification (packaged/MSIX app)
-        try
-        {
-            var systemId = Windows.System.Profile.SystemIdentification.GetSystemIdForPublisher();
-            if (systemId?.Id != null && systemId.Id.Length > 0)
-            {
-                var reader = Windows.Storage.Streams.DataReader.FromBuffer(systemId.Id);
-                var bytes = new byte[systemId.Id.Length];
-                reader.ReadBytes(bytes);
-                // Hash to fixed-length hex string
-                var hash = System.Security.Cryptography.SHA256.HashData(bytes);
-                return Convert.ToHexString(hash).ToLowerInvariant();
-            }
-        }
-        catch
-        {
-            // Not available: unpackaged app, old Windows, or missing capability
-        }
-
-        // Attempt 2: Windows registry MachineGuid (works for unpackaged apps)
-        try
-        {
-            var machineGuid = Microsoft.Win32.Registry.GetValue(
-                @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography",
-                "MachineGuid",
-                null) as string;
-            if (!string.IsNullOrEmpty(machineGuid))
-            {
-                // Hash to avoid leaking raw MachineGuid
-                var hash = System.Security.Cryptography.SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(machineGuid));
-                return Convert.ToHexString(hash).ToLowerInvariant();
-            }
-        }
-        catch
-        {
-            // Registry access denied or unavailable
-        }
-
-        return null;
     }
 
     private T GetValue<T>(string key, T defaultValue)

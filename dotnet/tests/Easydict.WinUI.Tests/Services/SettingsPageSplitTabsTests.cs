@@ -112,7 +112,9 @@ public class SettingsPageSplitTabsTests
         "PhiSilicaPreparationProgress_DeliveryOptimizationEstimate",
         "PhiSilicaPreparationProgress_TimeUnknown",
         "PhiSilicaPreparationProgress_WindowsUpdateLink",
-        "WindowsLocalAI_Status_UnsupportedWindowsAIBaseline"
+        "WindowsLocalAI_Status_UnsupportedWindowsAIBaseline",
+        "FreeModelsBadge",
+        "GetApiKeyReferralLink"
     ];
 
     private static readonly string[] ExpectedServiceConfigurationIconAssets =
@@ -128,7 +130,8 @@ public class SettingsPageSplitTabsTests
         "GitHub",
         "Gemini",
         "CustomOpenAI",
-        "BuiltInAI",
+        "OpenRouter",
+        "OrcaRouter",
         "Doubao",
         "Caiyun",
         "NiuTrans",
@@ -579,6 +582,49 @@ public class SettingsPageSplitTabsTests
         }
     }
 
+    [Theory]
+    [InlineData("GitHubModels")]
+    [InlineData("OpenRouter")]
+    [InlineData("OrcaRouter")]
+    public void SettingsPage_FreeModelServicesShowLocalizedHeaderBadge(string serviceName)
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+
+        xaml.Should().Contain($"x:Name=\"{serviceName}FreeModelsBadgeText\"");
+        codeBehind.Should().Contain(
+            $"{serviceName}FreeModelsBadgeText.Text = loc.GetString(\"FreeModelsBadge\");");
+    }
+
+    [Fact]
+    public void SettingsPage_OrcaRouterDisclosesReferralLink()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+
+        xaml.Should().Contain("Content=\"Get an API key (referral link)\"");
+        codeBehind.Should().Contain(
+            "OrcaRouterGetKeyLink.Content = loc.GetString(\"GetApiKeyReferralLink\");");
+        codeBehind.Should().Contain(
+            "OpenRouterGetKeyLink.Content = loc.GetString(\"GetApiKeyLink\");");
+    }
+
+    [Theory]
+    [InlineData("FetchDeepSeekModelsAsync")]
+    [InlineData("FetchZhipuModelsAsync")]
+    [InlineData("FetchKimiModelsAsync")]
+    [InlineData("FetchOpenRouterModelsAsync")]
+    [InlineData("FetchOrcaRouterModelsAsync")]
+    public void SettingsPage_ModelCatalogFetchesUseProxyAwareSharedClient(string methodName)
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var method = GetMethodBody(codeBehind, methodName);
+
+        method.Should().Contain("TranslationManagerService.Instance.AcquireHandle()");
+        method.Should().Contain("handle.Manager.SharedHttpClient");
+        method.Should().NotContain("new HttpClient(");
+    }
+
     /// <summary>
     /// Maps each registered service that <see cref="ITranslationService.RequiresApiKey"/>
     /// to a token that must appear in SettingsPage.xaml, proving the service has a
@@ -605,6 +651,8 @@ public class SettingsPageSplitTabsTests
             ["caiyun"] = "x:Name=\"CaiyunKeyBox\"",
             ["niutrans"] = "x:Name=\"NiuTransKeyBox\"",
             ["volcano"] = "x:Name=\"VolcanoAccessKeyIdBox\"",
+            ["openrouter"] = "x:Name=\"OpenRouterKeyBox\"",
+            ["orcarouter"] = "x:Name=\"OrcaRouterKeyBox\"",
         };
 
     [Fact]
@@ -934,6 +982,9 @@ public class SettingsPageSplitTabsTests
             "private static void",
             "private async void",
             "private async Task",
+            "private static async Task",
+            "private async Task<IReadOnlyList<ModelCatalogEntry>>",
+            "private static async Task<IReadOnlyList<ModelCatalogEntry>>",
             "protected override void"
         };
         var start = prefixes

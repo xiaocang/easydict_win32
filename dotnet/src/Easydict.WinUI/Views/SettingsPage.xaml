@@ -647,7 +647,8 @@
                         <!-- DeepSeek -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
-                                Tag="DeepSeek">
+                                Tag="DeepSeek"
+                                Expanding="OnDeepSeekExpanding">
                             <Expander.Header>
                                 <Grid>
                                     <TextBlock Text="DeepSeek"
@@ -689,23 +690,32 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <ComboBox x:Name="DeepSeekModelCombo"
-                                        Header="Model"
-                                        Width="280"
-                                        IsEditable="True">
-                                    <ComboBoxItem Content="deepseek-chat"
-                                            Tag="deepseek-chat"/>
-                                    <ComboBoxItem Content="deepseek-reasoner"
-                                            Tag="deepseek-reasoner"/>
-                                </ComboBox>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="DeepSeekModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="deepseek-chat"
+                                                Tag="deepseek-chat"/>
+                                        <ComboBoxItem Content="deepseek-reasoner"
+                                                Tag="deepseek-reasoner"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshDeepSeekModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshDeepSeekModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestDeepSeekButton"
+                                            Content="Test"
+                                            Click="OnTestDeepSeek"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
                                 <TextBlock Text="Get your API key from platform.deepseek.com. You can type a custom model name."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
-                                <Button x:Name="TestDeepSeekButton"
-                                        Content="Test"
-                                        Click="OnTestDeepSeek"
-                                        Padding="8,4"/>
                             </StackPanel>
                         </Expander>
 
@@ -779,7 +789,8 @@
                         <!-- Zhipu (智谱) -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
-                                Tag="Zhipu">
+                                Tag="Zhipu"
+                                Expanding="OnZhipuExpanding">
                             <Expander.Header>
                                 <Grid>
                                     <TextBlock Text="Zhipu (智谱)"
@@ -821,34 +832,44 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <ComboBox x:Name="ZhipuModelCombo"
-                                        Header="Model"
-                                        Width="280"
-                                        IsEditable="True">
-                                    <ComboBoxItem Content="glm-4.5-flash"
-                                            Tag="glm-4.5-flash"/>
-                                    <ComboBoxItem Content="glm-4-flash-250414"
-                                            Tag="glm-4-flash-250414"/>
-                                    <ComboBoxItem Content="glm-4.7"
-                                            Tag="glm-4.7"/>
-                                    <ComboBoxItem Content="glm-4.5-air"
-                                            Tag="glm-4.5-air"/>
-                                </ComboBox>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="ZhipuModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="glm-4.5-flash"
+                                                Tag="glm-4.5-flash"/>
+                                        <ComboBoxItem Content="glm-4-flash-250414"
+                                                Tag="glm-4-flash-250414"/>
+                                        <ComboBoxItem Content="glm-4.7"
+                                                Tag="glm-4.7"/>
+                                        <ComboBoxItem Content="glm-4.5-air"
+                                                Tag="glm-4.5-air"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshZhipuModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshZhipuModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestZhipuButton"
+                                            Content="Test"
+                                            Click="OnTestZhipu"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
                                 <TextBlock Text="Get your API key from open.bigmodel.cn. You can type a custom model name."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
-                                <Button x:Name="TestZhipuButton"
-                                        Content="Test"
-                                        Click="OnTestZhipu"
-                                        Padding="8,4"/>
                             </StackPanel>
                         </Expander>
 
                         <!-- Kimi (Moonshot AI) -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
-                                Tag="Kimi">
+                                Tag="Kimi"
+                                Expanding="OnKimiExpanding">
                             <Expander.Header>
                                 <Grid>
                                     <TextBlock Text="Kimi (Moonshot AI)"
@@ -889,27 +910,36 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <ComboBox x:Name="KimiModelCombo"
-                                        Header="Model"
-                                        Width="280"
-                                        IsEditable="True">
-                                    <ComboBoxItem Content="kimi-k2-turbo-preview"
-                                            Tag="kimi-k2-turbo-preview"/>
-                                    <ComboBoxItem Content="kimi-k2-0905-preview"
-                                            Tag="kimi-k2-0905-preview"/>
-                                    <ComboBoxItem Content="kimi-latest"
-                                            Tag="kimi-latest"/>
-                                    <ComboBoxItem Content="moonshot-v1-8k"
-                                            Tag="moonshot-v1-8k"/>
-                                </ComboBox>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="KimiModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="kimi-k2-turbo-preview"
+                                                Tag="kimi-k2-turbo-preview"/>
+                                        <ComboBoxItem Content="kimi-k2-0905-preview"
+                                                Tag="kimi-k2-0905-preview"/>
+                                        <ComboBoxItem Content="kimi-latest"
+                                                Tag="kimi-latest"/>
+                                        <ComboBoxItem Content="moonshot-v1-8k"
+                                                Tag="moonshot-v1-8k"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshKimiModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshKimiModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestKimiButton"
+                                            Content="Test"
+                                            Click="OnTestKimi"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
                                 <TextBlock Text="Get your API key from platform.moonshot.cn. You can type a custom model name."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
-                                <Button x:Name="TestKimiButton"
-                                        Content="Test"
-                                        Click="OnTestKimi"
-                                        Padding="8,4"/>
                             </StackPanel>
                         </Expander>
 
@@ -919,9 +949,23 @@
                                 Tag="GitHub">
                             <Expander.Header>
                                 <Grid>
-                                    <TextBlock Text="GitHub Models"
-                                            FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                    <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock Text="GitHub Models"
+                                                FontWeight="SemiBold"
+                                                VerticalAlignment="Center"/>
+                                        <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                CornerRadius="9"
+                                                Padding="7,1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="GitHubModelsFreeModelsBadgeText"
+                                                    Text="Free models"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock x:Name="GitHubModelsStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1129,16 +1173,31 @@
                             </StackPanel>
                         </Expander>
 
-                        <!-- Built-in AI -->
+                        <!-- OpenRouter -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
-                                Tag="BuiltInAI">
+                                Tag="OpenRouter"
+                                Expanding="OnOpenRouterExpanding">
                             <Expander.Header>
                                 <Grid>
-                                    <TextBlock Text="Built-in AI"
-                                            FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
-                                    <TextBlock x:Name="BuiltInStatusText"
+                                    <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock Text="OpenRouter"
+                                                FontWeight="SemiBold"
+                                                VerticalAlignment="Center"/>
+                                        <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                CornerRadius="9"
+                                                Padding="7,1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="OpenRouterFreeModelsBadgeText"
+                                                    Text="Free models"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock x:Name="OpenRouterStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
                                                Foreground="{ThemeResource SystemFillColorSuccessBrush}"
@@ -1149,59 +1208,160 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <InfoBar x:Name="BuiltInAIHintBar"
-                                         IsOpen="True"
-                                        IsClosable="False"
-                                        Severity="Informational"
-                                         Title="Hint"
-                                         Message="The built-in key has limited free quota and is not guaranteed to always be available. For stable use, get your own free API key."/>
-                                <ComboBox x:Name="BuiltInModelCombo"
-                                        Header="Model"
-                                        Width="280"
-                                        IsEditable="True">
-                                    <ComboBoxItem Content="glm-4-flash-250414 (GLM)"
-                                            Tag="glm-4-flash-250414"/>
-                                    <ComboBoxItem Content="glm-4-flash (GLM)"
-                                            Tag="glm-4-flash"/>
-                                    <ComboBoxItem Content="llama-3.3-70b-versatile (Groq)"
-                                            Tag="llama-3.3-70b-versatile"/>
-                                    <ComboBoxItem Content="llama-3.1-8b-instant (Groq)"
-                                            Tag="llama-3.1-8b-instant"/>
-                                </ComboBox>
                                 <StackPanel Width="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
-                                    <TextBlock x:Name="BuiltInApiKeyHeaderText"
-                                               Text="API Key (Optional)"
+                                    <TextBlock x:Name="OpenRouterKeyHeaderText"
+                                               Text="API Key"
                                                FontSize="14"/>
                                     <Grid>
-                                        <PasswordBox x:Name="BuiltInApiKeyBox"
+                                        <PasswordBox x:Name="OpenRouterKeyBox"
                                                      HorizontalAlignment="Stretch"
                                                      Padding="12,5,40,5"
-                                                     PlaceholderText="Leave empty to use built-in key"
+                                                     PlaceholderText="sk-or-v1-..."
                                                      PasswordRevealMode="Hidden"/>
-                                        <Button x:Name="BuiltInApiKeyRevealButton"
-                                                AutomationProperties.AutomationId="BuiltInApiKeyRevealButton"
+                                        <Button x:Name="OpenRouterKeyRevealButton"
+                                                AutomationProperties.AutomationId="OpenRouterKeyRevealButton"
                                                 Style="{StaticResource SettingsInlineIconButtonStyle}"
                                                 HorizontalAlignment="Right"
                                                 VerticalAlignment="Center"
                                                 Margin="0,0,6,0"
-                                                Tag="{Binding ElementName=BuiltInApiKeyBox}"
+                                                Tag="{Binding ElementName=OpenRouterKeyBox}"
                                                 Click="OnPasswordRevealButtonClick">
                                             <FontIcon Glyph="&#xE890;"
                                                       FontSize="14"/>
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <TextBlock x:Name="BuiltInDescriptionText"
-                                           Text="Uses GLM (Zhipu AI) or Groq free models. You can provide your own API key from open.bigmodel.cn (GLM) or console.groq.com (Groq)."
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="OpenRouterModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="openrouter/free  (Free)"
+                                                Tag="openrouter/free"/>
+                                        <ComboBoxItem Content="openrouter/auto"
+                                                Tag="openrouter/auto"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshOpenRouterModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshOpenRouterModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestOpenRouterButton"
+                                            Content="Test"
+                                            Click="OnTestOpenRouter"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
+                                <TextBlock x:Name="OpenRouterDescriptionText"
+                                           Text="Unified gateway to 400+ models from many providers. Free models are listed first in the dropdown — pick one to translate at no cost."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
-                                <Button x:Name="TestBuiltInButton"
-                                        Content="Test"
-                                        Click="OnTestBuiltIn"
-                                        Padding="8,4"/>
+                                <HyperlinkButton x:Name="OpenRouterGetKeyLink"
+                                        Content="Get an API key"
+                                        FontSize="12"
+                                        Padding="0"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- OrcaRouter -->
+                        <Expander HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Tag="OrcaRouter"
+                                Expanding="OnOrcaRouterExpanding">
+                            <Expander.Header>
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock Text="OrcaRouter"
+                                                FontWeight="SemiBold"
+                                                VerticalAlignment="Center"/>
+                                        <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                CornerRadius="9"
+                                                Padding="7,1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="OrcaRouterFreeModelsBadgeText"
+                                                    Text="Free models"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock x:Name="OrcaRouterStatusText"
+                                            Text="✓"
+                                            FontWeight="SemiBold"
+                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                            HorizontalAlignment="Right"
+                                            Margin="0,0,8,0"
+                                               Visibility="Collapsed"/>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Spacing="12"
+                                    Padding="0,8">
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="OrcaRouterKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="OrcaRouterKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="sk-orca-..."
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="OrcaRouterKeyRevealButton"
+                                                AutomationProperties.AutomationId="OrcaRouterKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=OrcaRouterKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <ComboBox x:Name="OrcaRouterModelCombo"
+                                            Header="Model"
+                                            Width="280"
+                                            IsEditable="True">
+                                        <ComboBoxItem Content="orcarouter/free  (Free)"
+                                                Tag="orcarouter/free"/>
+                                        <ComboBoxItem Content="orcarouter/auto"
+                                                Tag="orcarouter/auto"/>
+                                        <ComboBoxItem Content="deepseek/deepseek-v4-flash-free  (Free)"
+                                                Tag="deepseek/deepseek-v4-flash-free"/>
+                                        <ComboBoxItem Content="deepseek/deepseek-v4-pro-free  (Free)"
+                                                Tag="deepseek/deepseek-v4-pro-free"/>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshOrcaRouterModelsButton"
+                                            Content="Refresh"
+                                            Click="OnRefreshOrcaRouterModels"
+                                            VerticalAlignment="Bottom"
+                                            Padding="12,6"/>
+                                    <Button x:Name="TestOrcaRouterButton"
+                                            Content="Test"
+                                            Click="OnTestOrcaRouter"
+                                            VerticalAlignment="Bottom"
+                                            Padding="8,4"/>
+                                </StackPanel>
+                                <TextBlock x:Name="OrcaRouterDescriptionText"
+                                           Text="Adaptive LLM router across 150+ upstream models from one API key. Free models are listed first in the dropdown — pick one to translate at no cost."
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+                                <HyperlinkButton x:Name="OrcaRouterGetKeyLink"
+                                        Content="Get an API key (referral link)"
+                                        FontSize="12"
+                                        Padding="0"/>
                             </StackPanel>
                         </Expander>
 

@@ -253,9 +253,15 @@ public class SettingsServiceTests
     }
 
     [Fact]
-    public void BuiltInAIModel_HasDefaultValue()
+    public void OpenRouterModel_HasDefaultValue()
     {
-        _settings.BuiltInAIModel.Should().NotBeNullOrEmpty();
+        _settings.OpenRouterModel.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void OrcaRouterModel_HasDefaultValue()
+    {
+        _settings.OrcaRouterModel.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -811,7 +817,8 @@ public class SettingsServiceTests
     [InlineData("gemini", true)]
     [InlineData("groq", true)]
     [InlineData("github", true)]
-    [InlineData("builtin", true)]
+    [InlineData("openrouter", true)]
+    [InlineData("orcarouter", true)]
 #if ENABLE_LINGUEE_SERVICE
     [InlineData("linguee", true)]
 #else

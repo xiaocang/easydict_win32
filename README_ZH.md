@@ -124,7 +124,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
-- **多种翻译服务**（22 种可用服务；Linguee 当前不可用）
+- **多种翻译服务**（23 种可用服务；Linguee 当前不可用）
   - Google 翻译（免费，无需 API Key）
   - Google 词典（丰富词典：音标、释义、例句）
   - 必应翻译（免费，无需 API Key）
@@ -144,7 +144,8 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
   - Linguee 词典（当前不可用；上游示例 API 已离线，默认禁用）
   - Ollama（本地 LLM，默认：llama3.2）
   - Windows Local AI（Copilot+ PC 上使用 Phi Silica，OpenVINO 回退）
-  - 内置 AI（免费，由 Groq 提供）
+  - OpenRouter（统一网关，可访问 400+ 模型，提供免费模型）
+  - OrcaRouter（统一网关，提供免费模型） [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
   - 自定义 OpenAI 兼容服务
   - Claude Code（本地智能体 CLI，复用 Claude 订阅 — 无需 API Key）
   - Codex（本地智能体 CLI，复用 ChatGPT 订阅 — 无需 API Key）
@@ -245,7 +246,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Google 词典 | REST | ✅ | |
 | Ollama | OpenAI API | — | 需要本地 Ollama 环境 |
 | Windows Local AI | 本地运行时 | ✅ | 已测试 TranslationManager 路由；真实推理需要 Phi Silica、Foundry Local 或 OpenVINO 模型 |
-| 内置 AI | OpenAI API | — | 内置密钥 |
+| OpenRouter | OpenAI API | — | OpenAI 兼容，缺少 API Key |
+| OrcaRouter | OpenAI API | — | OpenAI 兼容，缺少 API Key |
 | 自定义 OpenAI | OpenAI API | — | OpenAI 兼容，用户自定义端点 |
 | Claude Code | 本地 CLI（stream-json） | — | 需要本地已登录的 `claude` CLI |
 | Codex | 本地 CLI（JSONL） | — | 需要本地已登录的 `codex` CLI |

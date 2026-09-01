@@ -87,7 +87,8 @@ public class StartupPerformanceTests : IDisposable
             new DeepLService(httpClient),
             new OpenAIService(httpClient),
             new OllamaService(httpClient),
-            new BuiltInAIService(httpClient),
+            new OpenRouterService(httpClient),
+            new OrcaRouterService(httpClient),
             new DeepSeekService(httpClient),
             new GroqService(httpClient),
             new ZhipuService(httpClient),
@@ -102,13 +103,13 @@ public class StartupPerformanceTests : IDisposable
 
         _sw.Stop();
 
-        _output.WriteLine("=== All 17 Service Instantiation ===");
+        _output.WriteLine("=== All 18 Service Instantiation ===");
         _output.WriteLine($"  Service count: {services.Length}");
         _output.WriteLine($"  Elapsed (ms) : {_sw.ElapsedMilliseconds}");
         _output.WriteLine($"  Elapsed (µs) : {_sw.Elapsed.TotalMicroseconds:F0}");
 
-        services.Should().HaveCount(17);
-        _sw.ElapsedMilliseconds.Should().BeLessThan(50, "17 service instantiations should be < 50ms");
+        services.Should().HaveCount(18);
+        _sw.ElapsedMilliseconds.Should().BeLessThan(50, "18 service instantiations should be < 50ms");
     }
 
     // ──────────────────────────────────────────────
@@ -453,7 +454,8 @@ public class StartupPerformanceTests : IDisposable
             ["OpenAITemperature"] = 0.3,
             ["OllamaEndpoint"] = "http://localhost:11434/v1/chat/completions",
             ["OllamaModel"] = "llama3.2",
-            ["BuiltInAIModel"] = "llama-3.3-70b-versatile",
+            ["OpenRouterModel"] = "openrouter/free",
+            ["OrcaRouterModel"] = "orcarouter/free",
             ["DeepSeekApiKey"] = "fake-deepseek-key",
             ["DeepSeekModel"] = "deepseek-chat",
             ["GroqApiKey"] = "fake-groq-key",
@@ -528,7 +530,8 @@ public class StartupPerformanceTests : IDisposable
         GetValue(parsed, "OpenAITemperature", 0.3);
         GetValue(parsed, "OllamaEndpoint", "http://localhost:11434/v1/chat/completions");
         GetValue(parsed, "OllamaModel", "llama3.2");
-        GetValue(parsed, "BuiltInAIModel", "llama-3.3-70b-versatile");
+        GetValue(parsed, "OpenRouterModel", "openrouter/free");
+        GetValue(parsed, "OrcaRouterModel", "orcarouter/free");
         GetValue<string?>(parsed, "DeepSeekApiKey", null);
         GetValue(parsed, "DeepSeekModel", "deepseek-chat");
         GetValue<string?>(parsed, "GroqApiKey", null);
@@ -650,10 +653,15 @@ public class StartupPerformanceTests : IDisposable
             if (service is OllamaService ollama)
                 ollama.Configure("http://localhost:11434/v1/chat/completions", "llama3.2");
         });
-        manager.ConfigureService("builtin", service =>
+        manager.ConfigureService("openrouter", service =>
         {
-            if (service is BuiltInAIService builtin)
-                builtin.Configure("llama-3.3-70b-versatile");
+            if (service is OpenRouterService openRouter)
+                openRouter.Configure("fake-openrouter-key", model: "openrouter/free");
+        });
+        manager.ConfigureService("orcarouter", service =>
+        {
+            if (service is OrcaRouterService orcaRouter)
+                orcaRouter.Configure("fake-orcarouter-key", model: "orcarouter/free");
         });
         manager.ConfigureService("deepseek", service =>
         {

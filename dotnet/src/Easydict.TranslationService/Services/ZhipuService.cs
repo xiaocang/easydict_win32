@@ -1,11 +1,12 @@
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services.ModelCatalog;
 
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
 /// Zhipu AI (智谱) translation service using OpenAI-compatible API.
 /// </summary>
-public sealed class ZhipuService : BaseOpenAIService
+public sealed class ZhipuService : BaseOpenAIService, IModelCatalogProvider
 {
     private const string DefaultEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
     private const string DefaultModel = "glm-4.5-flash";
@@ -38,6 +39,15 @@ public sealed class ZhipuService : BaseOpenAIService
     public override string ApiKey => _apiKey;
     public override string Model => _model;
     public override double Temperature => _temperature;
+
+    public string ModelsEndpoint => "https://open.bigmodel.cn/api/paas/v4/models";
+
+    public Task<IReadOnlyList<ModelCatalogEntry>> FetchModelsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return OpenAiCompatibleModelCatalog.FetchAsync(
+            HttpClient, ModelsEndpoint, _apiKey, cancellationToken);
+    }
 
     /// <summary>
     /// Configure the Zhipu service with API credentials and options.

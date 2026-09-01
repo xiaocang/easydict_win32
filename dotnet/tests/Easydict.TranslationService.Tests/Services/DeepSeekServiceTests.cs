@@ -135,4 +135,24 @@ public class DeepSeekServiceTests
         await action.Should().ThrowAsync<TranslationException>()
             .Where(e => e.ErrorCode == TranslationErrorCode.InvalidApiKey);
     }
+    [Fact]
+    public async Task FetchModelsAsync_SendsBearerTokenAndParsesCatalog()
+    {
+        _service.Configure("test-key");
+        _mockHandler.EnqueueJsonResponse("""
+        {
+            "data": [
+                { "id": "deepseek-chat" },
+                { "id": "deepseek-reasoner" }
+            ]
+        }
+        """);
+
+        var models = await _service.FetchModelsAsync();
+
+        models.Select(model => model.Id).Should().Equal("deepseek-chat", "deepseek-reasoner");
+        _mockHandler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/models");
+        _mockHandler.LastRequest.Headers.Authorization!.Parameter.Should().Be("test-key");
+    }
+
 }

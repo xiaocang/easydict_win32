@@ -63,7 +63,8 @@ public class TranslationManagerServiceTests
             .ToList();
 
         serviceIds.Should().Contain("windows-local-ai");
-        serviceIds.Should().NotContain("builtin");
+        serviceIds.Should().Contain("openrouter");
+        serviceIds.Should().Contain("orcarouter");
     }
 
     [Fact]

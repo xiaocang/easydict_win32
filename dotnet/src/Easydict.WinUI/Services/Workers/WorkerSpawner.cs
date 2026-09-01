@@ -260,10 +260,10 @@ internal sealed class WorkerSpawner
             CustomOpenAIModel = settings.CustomOpenAIModel,
             OllamaEndpoint = settings.OllamaEndpoint,
             OllamaModel = settings.OllamaModel,
-            BuiltInAIModel = settings.BuiltInAIModel,
-            BuiltInAIApiKey = settings.BuiltInAIApiKey,
-            DeviceId = settings.DeviceId,
-            DeviceToken = settings.DeviceToken,
+            OpenRouterApiKey = settings.OpenRouterApiKey,
+            OpenRouterModel = settings.OpenRouterModel,
+            OrcaRouterApiKey = settings.OrcaRouterApiKey,
+            OrcaRouterModel = settings.OrcaRouterModel,
 
             // Local AI
             FoundryLocalEndpoint = settings.FoundryLocalEndpoint,

@@ -61,6 +61,13 @@ public class OrcaRouterServiceTests
     }
 
     [Fact]
+    public void DefaultConfiguration_UsesOfficialOpenAICompatibleEndpoints()
+    {
+        _service.Endpoint.Should().Be("https://api.orcarouter.ai/v1/chat/completions");
+        _service.ModelsEndpoint.Should().Be("https://api.orcarouter.ai/v1/models");
+    }
+
+    [Fact]
     public void ReferralUrl_MatchesMaintainerLink()
     {
         OrcaRouterService.ReferralUrl.Should().Be("https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6");
@@ -75,7 +82,7 @@ public class OrcaRouterServiceTests
     }
 
     [Fact]
-    public async Task TranslateStreamAsync_UsesOrcaRouterEndpoint()
+    public async Task TranslateStreamAsync_UsesEndpointAndAppAttributionHeaders()
     {
         _service.Configure("test-key");
         _mockHandler.EnqueueStreamingResponse(new[] { """{"choices":[{"delta":{"content":"Hi"}}]}""" });
@@ -90,6 +97,10 @@ public class OrcaRouterServiceTests
 
         var sentRequest = _mockHandler.LastRequest;
         sentRequest!.RequestUri!.Host.Should().Be("api.orcarouter.ai");
+        sentRequest.Headers.GetValues("HTTP-Referer").Should().ContainSingle(
+            "https://github.com/xiaocang/easydict_win32");
+        sentRequest.Headers.GetValues("X-Title").Should().ContainSingle(
+            "Easydict for Windows");
     }
 
     [Fact]

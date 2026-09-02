@@ -10,7 +10,8 @@ namespace Easydict.TranslationService.Services;
 /// </summary>
 public sealed class OrcaRouterService : BaseOpenAIService, IModelCatalogProvider
 {
-    private const string DefaultEndpoint = "https://api.orcarouter.ai/v1/chat/completions";
+    private const string ApiBaseUrl = "https://api.orcarouter.ai/v1";
+    private const string DefaultEndpoint = ApiBaseUrl + "/chat/completions";
     private const string DefaultModel = "orcarouter/free";
 
     /// <summary>
@@ -51,7 +52,7 @@ public sealed class OrcaRouterService : BaseOpenAIService, IModelCatalogProvider
     /// <summary>
     /// OrcaRouter's <c>/models</c> catalog endpoint. Requires the same Bearer key as translation.
     /// </summary>
-    public string ModelsEndpoint => "https://api.orcarouter.ai/v1/models";
+    public string ModelsEndpoint => ApiBaseUrl + "/models";
 
     /// <summary>
     /// Configure the OrcaRouter service with API credentials and options.
@@ -66,6 +67,17 @@ public sealed class OrcaRouterService : BaseOpenAIService, IModelCatalogProvider
         if (!string.IsNullOrEmpty(endpoint)) _endpoint = endpoint;
         if (!string.IsNullOrEmpty(model)) _model = model;
         if (temperature.HasValue) _temperature = Math.Clamp(temperature.Value, 0.0, 2.0);
+    }
+
+    /// <summary>
+    /// Identifies Easydict in OrcaRouter's usage analytics.
+    /// </summary>
+    protected override void ConfigureHttpRequest(HttpRequestMessage request)
+    {
+        request.Headers.TryAddWithoutValidation(
+            "HTTP-Referer",
+            "https://github.com/xiaocang/easydict_win32");
+        request.Headers.TryAddWithoutValidation("X-Title", "Easydict for Windows");
     }
 
     /// <summary>

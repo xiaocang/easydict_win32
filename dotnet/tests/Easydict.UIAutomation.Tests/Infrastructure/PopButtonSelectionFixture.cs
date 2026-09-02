@@ -1,6 +1,8 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Tools;
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Easydict.UIAutomation.Tests.Infrastructure;
 
@@ -11,7 +13,7 @@ namespace Easydict.UIAutomation.Tests.Infrastructure;
 public sealed class PopButtonSelectionFixture : IDisposable
 {
     public AppLauncher Launcher { get; }
-    public NotepadTestTarget? Notepad { get; }
+    public NotepadTestTarget Notepad { get; }
     public uint EasydictProcessId { get; }
     public bool SettingEnabled { get; }
 
@@ -23,22 +25,26 @@ public sealed class PopButtonSelectionFixture : IDisposable
 
     public PopButtonSelectionFixture()
     {
+        // Persist the setting before launch so App startup installs both low-level hooks.
+        // Toggling an already-running app only verifies the settings save path.
+        ConfigureMouseSelectionTranslate();
+
         // 1. Launch Easydict
         Launcher = new AppLauncher();
         Launcher.LaunchAuto(TimeSpan.FromSeconds(45));
         EasydictProcessId = (uint)Launcher.Application.ProcessId;
         Log($"Easydict launched, PID={EasydictProcessId}");
 
-        // 2. Enable MouseSelectionTranslate in Settings
+        // 2. Verify the persisted setting is visible in Settings.
         SettingEnabled = TryEnableMouseSelectionTranslate();
-
         if (!SettingEnabled)
         {
-            Log("WARNING: Could not enable MouseSelectionTranslate setting. " +
-                "Selection tests will verify infrastructure but popup may not appear.");
+            Launcher.Dispose();
+            throw new InvalidOperationException(
+                "MouseSelectionTranslate could not be enabled and saved; PopButton tests cannot exercise their contract.");
         }
 
-        // 3. Launch Notepad with known text
+        // 3. Launch Notepad with known text.
         try
         {
             Notepad = new NotepadTestTarget("Hello World test selection text for Easydict popup verification");
@@ -47,7 +53,8 @@ public sealed class PopButtonSelectionFixture : IDisposable
         }
         catch (Exception ex)
         {
-            Log($"WARNING: Failed to launch Notepad: {ex.Message}");
+            Launcher.Dispose();
+            throw new InvalidOperationException("Failed to launch the Notepad selection target.", ex);
         }
     }
 
@@ -88,46 +95,72 @@ public sealed class PopButtonSelectionFixture : IDisposable
                 return false;
             }
 
-            // Scroll to ~70% where the Behavior section is, then scan to find the toggle
+            // Scroll to ~70% where the Behavior section is, then scan to find the toggle.
             var toggle = ScrollHelper.ScrollToFind(
                 scrollViewer, startPercent: 70,
                 () => window.FindFirstDescendant(c => c.ByAutomationId("MouseSelectionTranslateToggle"))
                    ?? window.FindFirstDescendant(c => c.ByName("Mouse selection translate")),
                 Log);
-
-            if (toggle != null)
+            if (toggle == null)
             {
-                var toggleButton = toggle.AsToggleButton();
-                if (toggleButton != null &&
-                    toggleButton.ToggleState == FlaUI.Core.Definitions.ToggleState.Off)
-                {
-                    toggleButton.Toggle();
-                    Log("MouseSelectionTranslate toggle enabled (was Off → On)");
-                    Thread.Sleep(500);
-                }
-                else if (toggleButton != null)
-                {
-                    Log($"MouseSelectionTranslate toggle already On (state={toggleButton.ToggleState})");
-                }
-                else
-                {
-                    Log("Element found but could not be used as ToggleButton");
-                    return false;
-                }
-
-                ScreenshotHelper.CaptureWindow(window, "e2e_settings_toggle_enabled");
-                return true;
+                Log("MouseSelectionTranslate toggle not found after scrolling");
+                return false;
             }
 
-            Log("MouseSelectionTranslate toggle not found after scrolling");
-            ScreenshotHelper.CaptureWindow(window, "e2e_settings_toggle_not_found");
-            return false;
+            var toggleButton = toggle.AsToggleButton();
+            if (toggleButton == null)
+            {
+                Log("Element found but could not be used as ToggleButton");
+                return false;
+            }
+
+            if (toggleButton.ToggleState != FlaUI.Core.Definitions.ToggleState.On)
+            {
+                Log("MouseSelectionTranslate did not load as enabled");
+                return false;
+            }
+
+            if (ScrollHelper.TryGetVerticalScrollPercent(scrollViewer, out var currentPercent))
+            {
+                ScrollHelper.ScrollToPercent(scrollViewer, Math.Max(0, currentPercent - 10), Log);
+                Thread.Sleep(500);
+            }
+
+            ScreenshotHelper.CaptureWindow(window, "e2e_settings_toggle_enabled");
+
+            return true;
+
         }
         catch (Exception ex)
         {
             Log($"Error enabling MouseSelectionTranslate: {ex.Message}");
             return false;
         }
+    }
+
+
+    private static void ConfigureMouseSelectionTranslate()
+    {
+        var settingsPath = UiaSettingsIsolation.TryGetSettingsFilePath()
+            ?? throw new InvalidOperationException(
+                "PopButton UI automation requires an isolated settings directory.");
+
+        JsonObject root;
+        try
+        {
+            root = File.Exists(settingsPath)
+                ? JsonNode.Parse(File.ReadAllText(settingsPath)) as JsonObject ?? new JsonObject()
+                : new JsonObject();
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject();
+        }
+
+        root["MouseSelectionTranslate"] = true;
+        File.WriteAllText(
+            settingsPath,
+            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
     private void Log(string message)
@@ -138,7 +171,7 @@ public sealed class PopButtonSelectionFixture : IDisposable
 
     public void Dispose()
     {
-        Notepad?.Dispose();
+        Notepad.Dispose();
         Launcher.Dispose();
     }
 }

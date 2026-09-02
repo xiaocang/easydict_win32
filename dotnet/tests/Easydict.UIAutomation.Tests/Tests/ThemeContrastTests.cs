@@ -102,6 +102,21 @@ public sealed class ThemeContrastTests : IDisposable
         _output.WriteLine($"Light-on-dark-system settings screenshot saved: {path}");
 
         AssertSettingsLightPalette(window, path);
+        using (var settingsBitmap = new Bitmap(path))
+        {
+            AssertElementRelativeRegionMatchesForegroundPalette(
+                "Settings title",
+                FindRequired(window, "SettingsHeaderText"),
+                settingsBitmap,
+                ScreenshotHelper.GetWindowPhysicalBounds(window),
+                ScreenshotHelper.GetWindowDpiScale(window),
+                relativeX: 0.0,
+                relativeY: 0.0,
+                relativeWidth: 1.0,
+                relativeHeight: 1.0,
+                expectedLight: true,
+                minForegroundPixelRatio: 0.015);
+        }
         CaptureSettingsTabAndAssertElementLight(
             window,
             "SettingsTab_Services",
@@ -109,7 +124,8 @@ public sealed class ThemeContrastTests : IDisposable
             "42_settings_services_credentials_light_on_dark_system_contrast",
             "DeepL API key reveal button",
             "DeepLServiceExpander",
-            45);
+            45,
+            foregroundCheckBoxName: "Use Free API (no API key required for web translation)");
         CaptureSettingsTabAndAssertElementLight(
             window,
             "SettingsTab_Views",
@@ -684,7 +700,8 @@ public sealed class ThemeContrastTests : IDisposable
         bool assertElementForeground = false,
         string? forbiddenVisibleText = null,
         string? accentCheckBoxName = null,
-        string? accentToggleAutomationId = null)
+        string? accentToggleAutomationId = null,
+        string? foregroundCheckBoxName = null)
     {
         var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
         if (scrollViewer is not null)
@@ -761,6 +778,16 @@ public sealed class ThemeContrastTests : IDisposable
                 accentCheckBoxName);
         }
 
+        if (!string.IsNullOrWhiteSpace(foregroundCheckBoxName))
+        {
+            AssertCheckBoxLabelUsesLightForeground(
+                window,
+                bitmap,
+                windowBounds,
+                dpiScale,
+                foregroundCheckBoxName);
+        }
+
         if (!string.IsNullOrWhiteSpace(accentToggleAutomationId))
         {
             AssertToggleSwitchOnStateUsesAppAccent(
@@ -771,6 +798,7 @@ public sealed class ThemeContrastTests : IDisposable
                 accentToggleAutomationId);
         }
     }
+
 
     private void PrepareMainWindowForScreenshot(Window window)
     {
@@ -1122,9 +1150,7 @@ public sealed class ThemeContrastTests : IDisposable
         double dpiScale,
         string checkBoxName)
     {
-        var checkBox = window
-            .FindAllDescendants(cf => cf.ByName(checkBoxName))
-            .FirstOrDefault(element => !element.IsOffscreen && element.Patterns.Toggle.IsSupported);
+        var checkBox = FindVisibleSettingsCheckBox(window, checkBoxName);
 
         checkBox.Should().NotBeNull($"the checked Settings checkbox '{checkBoxName}' must be visible");
 
@@ -1138,7 +1164,56 @@ public sealed class ThemeContrastTests : IDisposable
             relativeY: 0.18,
             relativeWidth: 0.18,
             relativeHeight: 0.64);
+        AssertCheckBoxLabelUsesLightForeground(
+            window,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            checkBoxName);
     }
+    private static AutomationElement? FindVisibleSettingsCheckBox(
+        Window window,
+        string checkBoxName)
+    {
+        var windowBounds = window.BoundingRectangle;
+        return window.FindAllDescendants(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.CheckBox))
+            .FirstOrDefault(element =>
+            {
+                var bounds = element.BoundingRectangle;
+                return !element.IsOffscreen
+                    && bounds.Width > 0
+                    && bounds.Height >= 16
+                    && bounds.Top >= windowBounds.Top
+                    && bounds.Bottom <= windowBounds.Bottom - 2
+                    && element.Patterns.Toggle.IsSupported
+                    && element.Name.Contains(checkBoxName, StringComparison.Ordinal);
+            });
+    }
+
+    private void AssertCheckBoxLabelUsesLightForeground(
+        Window window,
+        Bitmap bitmap,
+        Rectangle windowBounds,
+        double dpiScale,
+        string checkBoxName)
+    {
+        var checkBox = FindVisibleSettingsCheckBox(window, checkBoxName);
+        checkBox.Should().NotBeNull($"the Settings checkbox '{checkBoxName}' must be visible");
+
+        AssertElementRelativeRegionMatchesForegroundPalette(
+            $"{checkBoxName} label",
+            checkBox!,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0.18,
+            relativeY: 0.00,
+            relativeWidth: 0.82,
+            relativeHeight: 1.00,
+            expectedLight: true,
+            minForegroundPixelRatio: 0.006);
+    }
+
 
     private void AssertToggleSwitchOnStateUsesAppAccent(
         Window window,

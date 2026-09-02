@@ -17,8 +17,8 @@ namespace Easydict.UIAutomation.Tests.Tests;
 ///   - Ctrl+Alt+S: OCR Translate (capture → OCR → show in MiniWindow)
 ///   - Ctrl+Alt+Shift+S: Silent OCR (capture → OCR → copy to clipboard)
 ///
-/// Both hotkeys launch the same ScreenCaptureWindow overlay (class name "EasydictScreenCapture"),
-/// a full-screen GDI+ window with a dark mask for region selection.
+/// Both hotkeys launch the same ScreenCaptureWindow overlay (class name prefix
+/// "EasydictScreenCapture_"), a full-screen GDI+ window with a dark mask for region selection.
 /// </summary>
 [Trait("Category", "UIAutomation")]
 [Collection("UIAutomation")]
@@ -48,53 +48,36 @@ public class OcrTests : IDisposable
     [Fact]
     public void OcrHotkey_ShouldShowCaptureOverlay()
     {
-        // Ensure app is ready
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
         var processId = (uint)_launcher.Application.ProcessId;
-
-        // Capture initial state
         var pathBefore = ScreenshotHelper.CaptureWindow(window, "40_ocr_before_hotkey");
         _output.WriteLine($"Screenshot saved: {pathBefore}");
 
-        // Press Ctrl+Alt+S to trigger OCR capture overlay
         _output.WriteLine("Pressing Ctrl+Alt+S to trigger OCR capture overlay...");
         UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_S);
 
-        // Wait for overlay to appear
         var overlayHwnd = ScreenCaptureOverlayFinder.WaitForOverlay(processId, OverlayTimeout);
+        overlayHwnd.Should().NotBe(
+            IntPtr.Zero,
+            "Ctrl+Alt+S should create the Easydict screen-capture overlay");
+        _output.WriteLine($"Screen capture overlay appeared at hwnd=0x{overlayHwnd:X}");
 
-        if (overlayHwnd != IntPtr.Zero)
-        {
-            _output.WriteLine("Screen capture overlay appeared");
+        var styles = ScreenCaptureOverlayFinder.GetStyleFlags(overlayHwnd);
+        styles.HasTopmost.Should().BeTrue("capture overlay should be topmost");
+        styles.HasToolWindow.Should().BeTrue("capture overlay should be a tool window");
 
-            // Verify overlay window styles
-            var styles = ScreenCaptureOverlayFinder.GetStyleFlags(overlayHwnd);
-            styles.HasTopmost.Should().BeTrue("capture overlay should be topmost");
-            styles.HasToolWindow.Should().BeTrue("capture overlay should be a tool window");
+        var rect = ScreenCaptureOverlayFinder.GetRect(overlayHwnd);
+        _output.WriteLine($"Overlay bounds: {rect.Width}x{rect.Height} at ({rect.Left},{rect.Top})");
+        rect.Width.Should().BeGreaterThan(500, "overlay should cover significant width");
+        rect.Height.Should().BeGreaterThan(300, "overlay should cover significant height");
 
-            // Verify overlay covers a significant screen area
-            var rect = ScreenCaptureOverlayFinder.GetRect(overlayHwnd);
-            _output.WriteLine($"Overlay bounds: {rect.Width}x{rect.Height} at ({rect.Left},{rect.Top})");
-            rect.Width.Should().BeGreaterThan(500, "overlay should cover significant width");
-            rect.Height.Should().BeGreaterThan(300, "overlay should cover significant height");
+        Thread.Sleep(500);
+        var pathOverlay = ScreenshotHelper.CaptureScreen("41_ocr_capture_overlay");
+        _output.WriteLine($"Overlay screenshot saved: {pathOverlay}");
 
-            // Capture full screen showing the overlay
-            Thread.Sleep(500); // Allow render
-            var pathOverlay = ScreenshotHelper.CaptureScreen("41_ocr_capture_overlay");
-            _output.WriteLine($"Overlay screenshot saved: {pathOverlay}");
-
-            // Dismiss overlay with Escape
-            DismissOverlay(processId);
-        }
-        else
-        {
-            _output.WriteLine("Capture overlay did not appear — hotkey may not be registered in CI");
-            ScreenshotHelper.CaptureScreen("41_ocr_overlay_not_found");
-        }
-
-        // Verify app is still running
+        DismissOverlay(processId);
         window.Should().NotBeNull();
     }
 
@@ -105,45 +88,32 @@ public class OcrTests : IDisposable
         Thread.Sleep(2000);
 
         var processId = (uint)_launcher.Application.ProcessId;
-
-        // Trigger OCR overlay
         _output.WriteLine("Pressing Ctrl+Alt+S to trigger OCR capture overlay...");
         UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_S);
 
         var overlayHwnd = ScreenCaptureOverlayFinder.WaitForOverlay(processId, OverlayTimeout);
+        overlayHwnd.Should().NotBe(
+            IntPtr.Zero,
+            "the overlay must appear before its Escape dismissal can be verified");
 
-        if (overlayHwnd != IntPtr.Zero)
+        _output.WriteLine("Overlay appeared — pressing Escape to cancel");
+        Thread.Sleep(300);
+        var pathOverlay = ScreenshotHelper.CaptureScreen("42_ocr_overlay_before_cancel");
+        _output.WriteLine($"Screenshot saved: {pathOverlay}");
+
+        DismissOverlay(processId);
+        ScreenCaptureOverlayFinder.Find(processId).Should()
+            .Be(IntPtr.Zero, "overlay should be dismissed after Escape");
+
+        Thread.Sleep(500);
+        var pathAfter = ScreenshotHelper.CaptureWindow(window, "43_ocr_after_cancel");
+        _output.WriteLine($"After cancel screenshot saved: {pathAfter}");
+
+        var result = VisualRegressionHelper.CompareWithBaseline(pathAfter, "43_ocr_after_cancel");
+        if (result != null)
         {
-            _output.WriteLine("Overlay appeared — pressing Escape to cancel");
-            Thread.Sleep(300);
-
-            // Capture overlay before cancel
-            var pathOverlay = ScreenshotHelper.CaptureScreen("42_ocr_overlay_before_cancel");
-            _output.WriteLine($"Screenshot saved: {pathOverlay}");
-
-            // Dismiss overlay
-            DismissOverlay(processId);
-
-            // Verify overlay is gone
-            var overlayAfter = ScreenCaptureOverlayFinder.Find(processId);
-            overlayAfter.Should().Be(IntPtr.Zero, "overlay should be dismissed after Escape");
-
-            // Verify main window is still accessible
-            Thread.Sleep(500);
-            var pathAfter = ScreenshotHelper.CaptureWindow(window, "43_ocr_after_cancel");
-            _output.WriteLine($"After cancel screenshot saved: {pathAfter}");
-
-            var result = VisualRegressionHelper.CompareWithBaseline(pathAfter, "43_ocr_after_cancel");
-            if (result != null)
-            {
-                _output.WriteLine(result.ToString());
-                result.Passed.Should().BeTrue(result.ToString());
-            }
-        }
-        else
-        {
-            _output.WriteLine("Overlay did not appear — skipping cancel test");
-            ScreenshotHelper.CaptureScreen("42_ocr_overlay_not_found_for_cancel");
+            _output.WriteLine(result.ToString());
+            result.Passed.Should().BeTrue(result.ToString());
         }
 
         window.Should().NotBeNull();
@@ -156,81 +126,58 @@ public class OcrTests : IDisposable
         Thread.Sleep(2000);
 
         var processId = (uint)_launcher.Application.ProcessId;
-
-        // Press Ctrl+Alt+Shift+S for silent OCR
         _output.WriteLine("Pressing Ctrl+Alt+Shift+S to trigger silent OCR...");
         SendSilentOcrHotkey();
 
         var overlayHwnd = ScreenCaptureOverlayFinder.WaitForOverlay(processId, OverlayTimeout);
+        overlayHwnd.Should().NotBe(
+            IntPtr.Zero,
+            "Ctrl+Alt+Shift+S should create the silent OCR capture overlay");
+        _output.WriteLine($"Silent OCR overlay appeared at hwnd=0x{overlayHwnd:X}");
 
-        if (overlayHwnd != IntPtr.Zero)
-        {
-            _output.WriteLine("Silent OCR overlay appeared");
+        var styles = ScreenCaptureOverlayFinder.GetStyleFlags(overlayHwnd);
+        styles.HasTopmost.Should().BeTrue("silent OCR overlay should be topmost");
 
-            // Verify same overlay properties as regular OCR
-            var styles = ScreenCaptureOverlayFinder.GetStyleFlags(overlayHwnd);
-            styles.HasTopmost.Should().BeTrue("silent OCR overlay should be topmost");
+        Thread.Sleep(500);
+        var pathOverlay = ScreenshotHelper.CaptureScreen("44_silent_ocr_overlay");
+        _output.WriteLine($"Silent OCR overlay screenshot saved: {pathOverlay}");
 
-            Thread.Sleep(500);
-            var pathOverlay = ScreenshotHelper.CaptureScreen("44_silent_ocr_overlay");
-            _output.WriteLine($"Silent OCR overlay screenshot saved: {pathOverlay}");
-
-            // Dismiss
-            DismissOverlay(processId);
-        }
-        else
-        {
-            _output.WriteLine("Silent OCR overlay did not appear");
-            ScreenshotHelper.CaptureScreen("44_silent_ocr_overlay_not_found");
-        }
-
+        DismissOverlay(processId);
         window.Should().NotBeNull();
     }
 
     [Fact]
     public void OcrWorkflow_ScreenshotSequence()
     {
-        // Document the complete OCR workflow with numbered screenshots.
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
         var processId = (uint)_launcher.Application.ProcessId;
-
-        // Step 1: Initial app state
         var step1 = ScreenshotHelper.CaptureWindow(window, "45_ocr_workflow_01_initial");
         _output.WriteLine($"Step 1 (Initial state): {step1}");
 
-        // Step 2: Full screen before OCR
         var step2 = ScreenshotHelper.CaptureScreen("45_ocr_workflow_02_fullscreen_before");
         _output.WriteLine($"Step 2 (Full screen before): {step2}");
 
-        // Step 3: Trigger OCR hotkey
         _output.WriteLine("Step 3: Pressing Ctrl+Alt+S...");
         UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_S);
 
         var overlayHwnd = ScreenCaptureOverlayFinder.WaitForOverlay(processId, OverlayTimeout);
+        overlayHwnd.Should().NotBe(
+            IntPtr.Zero,
+            "the workflow's overlay-active screenshot requires a visible capture overlay");
 
-        if (overlayHwnd != IntPtr.Zero)
-        {
-            Thread.Sleep(500);
-            var step3 = ScreenshotHelper.CaptureScreen("45_ocr_workflow_03_overlay_active");
-            _output.WriteLine($"Step 3 (Overlay active): {step3}");
+        Thread.Sleep(500);
+        var step3 = ScreenshotHelper.CaptureScreen("45_ocr_workflow_03_overlay_active");
+        _output.WriteLine($"Step 3 (Overlay active): {step3}");
 
-            // Step 4: Dismiss and capture result
-            DismissOverlay(processId);
-            Thread.Sleep(500);
+        DismissOverlay(processId);
+        Thread.Sleep(500);
 
-            var step4 = ScreenshotHelper.CaptureWindow(window, "45_ocr_workflow_04_after_dismiss");
-            _output.WriteLine($"Step 4 (After dismiss): {step4}");
-
-            var step5 = ScreenshotHelper.CaptureScreen("45_ocr_workflow_05_fullscreen_after");
-            _output.WriteLine($"Step 5 (Full screen after): {step5}");
-        }
-        else
-        {
-            _output.WriteLine("Overlay did not appear — capturing state for debugging");
-            ScreenshotHelper.CaptureScreen("45_ocr_workflow_03_overlay_not_found");
-        }
+        var step4 = ScreenshotHelper.CaptureWindow(window, "45_ocr_workflow_04_after_dismiss");
+        _output.WriteLine($"Step 4 (After dismiss): {step4}");
+        var step5 = ScreenshotHelper.CaptureScreen("45_ocr_workflow_05_fullscreen_after");
+        _output.WriteLine($"Step 5 (Full screen after): {step5}");
 
         _output.WriteLine("OCR workflow screenshot sequence completed");
         window.Should().NotBeNull();
@@ -239,50 +186,33 @@ public class OcrTests : IDisposable
     [Fact]
     public void OcrHotkey_SecondTriggerShouldWork()
     {
-        // Verify that OCR can be triggered again after dismissing the first overlay.
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
         var processId = (uint)_launcher.Application.ProcessId;
-
-        // First trigger
         _output.WriteLine("First OCR trigger...");
         UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_S);
 
         var overlayHwnd = ScreenCaptureOverlayFinder.WaitForOverlay(processId, OverlayTimeout);
+        overlayHwnd.Should().NotBe(IntPtr.Zero, "the first OCR trigger should show an overlay");
+        var path1 = ScreenshotHelper.CaptureScreen("46_ocr_first_trigger");
+        _output.WriteLine($"First trigger screenshot: {path1}");
 
-        if (overlayHwnd != IntPtr.Zero)
-        {
-            var path1 = ScreenshotHelper.CaptureScreen("46_ocr_first_trigger");
-            _output.WriteLine($"First trigger screenshot: {path1}");
+        DismissOverlay(processId);
+        Thread.Sleep(1000);
 
-            DismissOverlay(processId);
-            Thread.Sleep(1000);
+        _output.WriteLine("Second OCR trigger...");
+        UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_S);
 
-            // Second trigger
-            _output.WriteLine("Second OCR trigger...");
-            UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_S);
+        var overlayHwnd2 = ScreenCaptureOverlayFinder.WaitForOverlay(processId, OverlayTimeout);
+        overlayHwnd2.Should().NotBe(
+            IntPtr.Zero,
+            "the OCR overlay should be reusable after the first overlay is dismissed");
+        _output.WriteLine($"Second overlay appeared at hwnd=0x{overlayHwnd2:X}");
 
-            var overlayHwnd2 = ScreenCaptureOverlayFinder.WaitForOverlay(processId, OverlayTimeout);
-
-            if (overlayHwnd2 != IntPtr.Zero)
-            {
-                _output.WriteLine("Second overlay appeared successfully");
-                var path2 = ScreenshotHelper.CaptureScreen("47_ocr_second_trigger");
-                _output.WriteLine($"Second trigger screenshot: {path2}");
-
-                DismissOverlay(processId);
-            }
-            else
-            {
-                _output.WriteLine("Second overlay did not appear");
-                ScreenshotHelper.CaptureScreen("47_ocr_second_trigger_failed");
-            }
-        }
-        else
-        {
-            _output.WriteLine("First overlay did not appear — skipping re-trigger test");
-        }
+        var path2 = ScreenshotHelper.CaptureScreen("47_ocr_second_trigger");
+        _output.WriteLine($"Second trigger screenshot: {path2}");
+        DismissOverlay(processId);
 
         window.Should().NotBeNull();
     }
@@ -314,10 +244,7 @@ public class OcrTests : IDisposable
         }
 
         var dismissed = ScreenCaptureOverlayFinder.WaitForDismiss(processId, DismissTimeout);
-        if (!dismissed)
-        {
-            _output.WriteLine("WARNING: Overlay did not dismiss within timeout");
-        }
+        dismissed.Should().BeTrue("the capture overlay should dismiss within the timeout");
     }
 
     /// <summary>

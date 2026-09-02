@@ -5,12 +5,12 @@ namespace Easydict.UIAutomation.Tests.Infrastructure;
 
 /// <summary>
 /// Finds the ScreenCaptureWindow overlay by enumerating top-level windows and matching
-/// the window class name "EasydictScreenCapture". The overlay uses WS_EX_TOPMOST | WS_EX_TOOLWINDOW
-/// styles and covers the entire virtual screen.
+/// the uniquely suffixed window class name used by <c>ScreenCaptureWindow</c>. The overlay uses
+/// WS_EX_TOPMOST | WS_EX_TOOLWINDOW styles and covers the entire virtual screen.
 /// </summary>
 public static class ScreenCaptureOverlayFinder
 {
-    private const string CaptureWindowClassName = "EasydictScreenCapture";
+    private const string CaptureWindowClassPrefix = "EasydictScreenCapture_";
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_TOPMOST = 0x00000008;
@@ -67,7 +67,7 @@ public static class ScreenCaptureOverlayFinder
             if (len <= 0) return true;
 
             var className = new string(classNameBuffer, 0, len);
-            if (className == CaptureWindowClassName)
+            if (className.StartsWith(CaptureWindowClassPrefix, StringComparison.Ordinal))
             {
                 found = hwnd;
                 return false; // Stop enumeration

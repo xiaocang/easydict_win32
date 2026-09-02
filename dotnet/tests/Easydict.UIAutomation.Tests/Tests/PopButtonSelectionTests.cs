@@ -1,4 +1,6 @@
 using System.Drawing;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.AutomationElements;
@@ -50,6 +52,41 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
     /// </summary>
     private const int DragDistance = 180;
 
+    private const uint InputMouse = 0;
+    private const uint MouseEventMove = 0x0001;
+    private const uint MouseEventLeftDown = 0x0002;
+    private const uint MouseEventLeftUp = 0x0004;
+    private const uint MouseEventVirtualDesk = 0x4000;
+    private const uint MouseEventAbsolute = 0x8000;
+    private const int SmXVirtualScreen = 76;
+    private const int SmYVirtualScreen = 77;
+    private const int SmCxVirtualScreen = 78;
+    private const int SmCyVirtualScreen = 79;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Input
+    {
+        public uint Type;
+        public MouseInput Mouse;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MouseInput
+    {
+        public int Dx;
+        public int Dy;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public IntPtr ExtraInfo;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint cInputs, Input[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
     public PopButtonSelectionTests(PopButtonSelectionFixture fixture, ITestOutputHelper output)
     {
         _fixture = fixture;
@@ -65,14 +102,7 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
     [Fact]
     public void DragSelect_InNotepad_PopButtonAppears()
     {
-        if (_fixture.Notepad == null)
-        {
-            _output.WriteLine("SKIP: Notepad not available");
-            return;
-        }
-
-        // Arrange: Get text area bounds
-        _fixture.Notepad.BringToForeground();
+        BringNotepadToForeground();
         var bounds = _fixture.Notepad.GetTextBounds();
         _output.WriteLine($"Text area bounds: {bounds}");
 
@@ -80,142 +110,80 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
         var startY = bounds.Top + TextAreaPadding;
         var endX = startX + DragDistance;
         var endY = startY;
-
         _output.WriteLine($"Simulating drag from ({startX},{startY}) to ({endX},{endY})");
 
-        // Act: Simulate drag-select with intermediate moves (realistic for WH_MOUSE_LL)
         SimulateDragSelect(startX, startY, endX, endY);
+        var releasePoint = PopButtonFinder.GetCursorPosition();
 
-        // Assert: PopButton should appear
-        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
-
-        // Screenshot for debugging regardless of result
+        var popHwnd = RequirePopButton(PopButtonTimeout, "a Notepad drag selection");
         var screenshotPath = ScreenshotHelper.CaptureScreen("e2e_drag_select_result");
         _output.WriteLine($"Screenshot: {screenshotPath}");
+        _output.WriteLine($"PopButton found at hwnd=0x{popHwnd:X}");
 
-        if (popHwnd != IntPtr.Zero)
+        var rect = PopButtonFinder.GetRect(popHwnd);
+        _output.WriteLine($"PopButton rect: Left={rect.Left} Top={rect.Top} W={rect.Width} H={rect.Height}");
+
+        var dx = Math.Abs(rect.CenterX - releasePoint.X);
+        var dy = Math.Abs(rect.CenterY - releasePoint.Y);
+        _output.WriteLine($"Distance from physical mouse release {releasePoint}: dx={dx} dy={dy}");
+        dx.Should().BeLessThan(80, "PopButton X should be near mouse release X");
+        dy.Should().BeLessThan(80, "PopButton Y should be near mouse release Y");
+
+        var styles = PopButtonFinder.GetStyleFlags(popHwnd);
+        styles.HasNoActivate.Should().BeTrue("PopButton must have WS_EX_NOACTIVATE");
+        styles.HasToolWindow.Should().BeTrue("PopButton must have WS_EX_TOOLWINDOW");
+        styles.HasTopmost.Should().BeTrue("PopButton must have WS_EX_TOPMOST");
+        rect.Width.Should().BeInRange(20, 128, "PopButton width should be 30 logical pixels at the active DPI");
+        rect.Height.Should().BeInRange(20, 128, "PopButton height should be 30 logical pixels at the active DPI");
+
+        var popScreenshot = ScreenshotHelper.CaptureScreen("e2e_pop_button_visible");
+        var vrResult = VisualRegressionHelper.CompareWithBaseline(
+            popScreenshot, "e2e_pop_button_visible", thresholdPercent: 8.0);
+        if (vrResult != null)
         {
-            _output.WriteLine($"PopButton found at hwnd=0x{popHwnd:X}");
-
-            // Verify position is near mouse release point
-            var rect = PopButtonFinder.GetRect(popHwnd);
-            _output.WriteLine($"PopButton rect: Left={rect.Left} Top={rect.Top} " +
-                              $"W={rect.Width} H={rect.Height}");
-
-            // The popup should appear near the mouse release point
-            // ShowAt offsets by (+8*scale, -32*scale) from the mouse point
-            var dx = Math.Abs(rect.CenterX - endX);
-            var dy = Math.Abs(rect.CenterY - endY);
-            _output.WriteLine($"Distance from mouse release: dx={dx} dy={dy}");
-
-            dx.Should().BeLessThan(80, "PopButton X should be near mouse release X");
-            dy.Should().BeLessThan(80, "PopButton Y should be near mouse release Y");
-
-            // Verify window styles
-            var styles = PopButtonFinder.GetStyleFlags(popHwnd);
-            styles.HasNoActivate.Should().BeTrue("PopButton must have WS_EX_NOACTIVATE");
-            styles.HasToolWindow.Should().BeTrue("PopButton must have WS_EX_TOOLWINDOW");
-            styles.HasTopmost.Should().BeTrue("PopButton must have WS_EX_TOPMOST");
-
-            // Verify size is approximately 30x30 (scaled for DPI)
-            rect.Width.Should().BeInRange(20, 50, "PopButton width should be ~30px (DPI-scaled)");
-            rect.Height.Should().BeInRange(20, 50, "PopButton height should be ~30px (DPI-scaled)");
-
-            // Visual regression: capture and compare popup screenshot
-            var popScreenshot = ScreenshotHelper.CaptureScreen("e2e_pop_button_visible");
-            var vrResult = VisualRegressionHelper.CompareWithBaseline(
-                popScreenshot, "e2e_pop_button_visible", thresholdPercent: 8.0);
-            if (vrResult != null)
-            {
-                _output.WriteLine(vrResult.ToString());
-            }
-            else
-            {
-                _output.WriteLine("No baseline found - screenshot saved as candidate");
-            }
+            _output.WriteLine(vrResult.ToString());
         }
         else
         {
-            _output.WriteLine("PopButton did not appear. This may be expected if the setting " +
-                              "could not be enabled or hooks are not active in this environment.");
-            // Don't fail hard — the infrastructure is verified even if the popup doesn't show
-            // in environments where global hooks or text selection don't work
+            _output.WriteLine("No baseline found - screenshot saved as candidate");
         }
     }
 
     [Fact]
     public void DoubleClick_InNotepad_PopButtonAppears()
     {
-        if (_fixture.Notepad == null)
-        {
-            _output.WriteLine("SKIP: Notepad not available");
-            return;
-        }
-
-        // Arrange: Click position on a word in Notepad
-        _fixture.Notepad.BringToForeground();
+        BringNotepadToForeground();
         var bounds = _fixture.Notepad.GetTextBounds();
-        var clickX = bounds.Left + 40;
-        var clickY = bounds.Top + TextAreaPadding;
-        var clickPoint = new Point(clickX, clickY);
+        var clickPoint = new Point(bounds.Left + 40, bounds.Top + TextAreaPadding);
+        _output.WriteLine($"Simulating double-click at ({clickPoint.X},{clickPoint.Y})");
 
-        _output.WriteLine($"Simulating double-click at ({clickX},{clickY})");
-
-        // Act: Double-click to select a word
-        // Multi-click has additional delay: GetDoubleClickTime() + 50ms before firing
         Mouse.DoubleClick(clickPoint);
 
-        // Assert: PopButton should appear (longer timeout for multi-click detection)
-        var popHwnd = PopButtonFinder.WaitForPopButton(
-            _fixture.EasydictProcessId, TimeSpan.FromSeconds(5));
-
+        var popHwnd = RequirePopButton(
+            TimeSpan.FromSeconds(5),
+            "a Notepad double-click selection");
         var screenshotPath = ScreenshotHelper.CaptureScreen("e2e_double_click_result");
         _output.WriteLine($"Screenshot: {screenshotPath}");
-
-        if (popHwnd != IntPtr.Zero)
-        {
-            _output.WriteLine($"PopButton found after double-click at hwnd=0x{popHwnd:X}");
-            PopButtonFinder.IsVisible(popHwnd).Should().BeTrue("PopButton should be visible");
-        }
-        else
-        {
-            _output.WriteLine("PopButton did not appear after double-click. " +
-                              "May be expected if setting not enabled or hooks inactive.");
-        }
+        PopButtonFinder.IsVisible(popHwnd).Should().BeTrue("PopButton should be visible");
     }
 
     [Fact]
     public void PopButton_AutoDismisses_After5Seconds()
     {
-        if (_fixture.Notepad == null)
-        {
-            _output.WriteLine("SKIP: Notepad not available");
-            return;
-        }
-
-        // Arrange + Act: Trigger popup via drag select
-        _fixture.Notepad.BringToForeground();
+        BringNotepadToForeground();
         var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
-        if (popHwnd == IntPtr.Zero)
-        {
-            _output.WriteLine("SKIP: PopButton did not appear, cannot test auto-dismiss");
-            return;
-        }
-
+        var popHwnd = RequirePopButton(PopButtonTimeout, "the auto-dismiss scenario");
         _output.WriteLine($"PopButton visible at hwnd=0x{popHwnd:X}, waiting for auto-dismiss...");
 
-        // Assert: Still visible at ~4 seconds
         Thread.Sleep(4000);
         var stillVisible = PopButtonFinder.IsVisible(popHwnd);
         _output.WriteLine($"After 4s: visible={stillVisible}");
         stillVisible.Should().BeTrue("PopButton should still be visible before 5s timeout");
 
-        // Assert: Dismissed after 5+ seconds total
         Thread.Sleep(2000);
         var dismissed = !PopButtonFinder.IsVisible(popHwnd);
         _output.WriteLine($"After 6s: dismissed={dismissed}");
@@ -225,33 +193,18 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
     [Fact]
     public void PopButton_DismissesOnScroll()
     {
-        if (_fixture.Notepad == null)
-        {
-            _output.WriteLine("SKIP: Notepad not available");
-            return;
-        }
-
-        // Arrange: Trigger popup
-        _fixture.Notepad.BringToForeground();
+        BringNotepadToForeground();
         var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
-        if (popHwnd == IntPtr.Zero)
-        {
-            _output.WriteLine("SKIP: PopButton did not appear, cannot test scroll dismiss");
-            return;
-        }
+        var popHwnd = RequirePopButton(PopButtonTimeout, "the scroll-dismiss scenario");
+        _output.WriteLine("PopButton visible, sending scroll...");
 
-        _output.WriteLine($"PopButton visible, sending scroll...");
-
-        // Act: Scroll the mouse wheel
         Mouse.Scroll(3);
         Thread.Sleep(500);
 
-        // Assert: PopButton should be dismissed
         var dismissed = !PopButtonFinder.IsVisible(popHwnd);
         _output.WriteLine($"After scroll: dismissed={dismissed}");
         dismissed.Should().BeTrue("PopButton should dismiss on mouse scroll");
@@ -260,71 +213,47 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
     [Fact]
     public void PopButton_DismissesOnRightClick()
     {
-        if (_fixture.Notepad == null)
-        {
-            _output.WriteLine("SKIP: Notepad not available");
-            return;
-        }
-
-        // Arrange: Trigger popup
-        _fixture.Notepad.BringToForeground();
+        BringNotepadToForeground();
         var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
-        if (popHwnd == IntPtr.Zero)
-        {
-            _output.WriteLine("SKIP: PopButton did not appear, cannot test right-click dismiss");
-            return;
-        }
+        var popHwnd = RequirePopButton(PopButtonTimeout, "the right-click-dismiss scenario");
+        _output.WriteLine("PopButton visible, sending right-click...");
 
-        _output.WriteLine($"PopButton visible, sending right-click...");
-
-        // Act: Right-click somewhere away from the popup
         var rect = PopButtonFinder.GetRect(popHwnd);
         Mouse.RightClick(new Point(rect.Left + 100, rect.Top + 100));
         Thread.Sleep(500);
 
-        // Assert: PopButton should be dismissed
         var dismissed = !PopButtonFinder.IsVisible(popHwnd);
         _output.WriteLine($"After right-click: dismissed={dismissed}");
         dismissed.Should().BeTrue("PopButton should dismiss on right-click");
+
+        // RightClick opens Notepad's native context menu. Close it so the shared
+        // selection target starts the next workflow without a menu owning focus.
+        Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
+        Keyboard.Release(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
+        Thread.Sleep(300);
     }
 
     [Fact]
     public void PopButton_DismissesOnKeyPress()
     {
-        if (_fixture.Notepad == null)
-        {
-            _output.WriteLine("SKIP: Notepad not available");
-            return;
-        }
-
-        // Arrange: Trigger popup
-        _fixture.Notepad.BringToForeground();
+        BringNotepadToForeground();
         var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
-        if (popHwnd == IntPtr.Zero)
-        {
-            _output.WriteLine("SKIP: PopButton did not appear, cannot test key dismiss");
-            return;
-        }
+        var popHwnd = RequirePopButton(PopButtonTimeout, "the key-dismiss scenario");
+        _output.WriteLine("PopButton visible, pressing Escape...");
 
-        _output.WriteLine($"PopButton visible, pressing Escape...");
-
-        // Act: Press a key (Escape is safe — won't type anything)
         Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
         Thread.Sleep(50);
         Keyboard.Release(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
         Thread.Sleep(500);
 
-        // Assert: PopButton should be dismissed
         var dismissed = !PopButtonFinder.IsVisible(popHwnd);
         _output.WriteLine($"After key press: dismissed={dismissed}");
         dismissed.Should().BeTrue("PopButton should dismiss on key press");
@@ -333,108 +262,92 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
     [Fact]
     public void PopButton_Click_OpensMiniWindow()
     {
-        if (_fixture.Notepad == null)
-        {
-            _output.WriteLine("SKIP: Notepad not available");
-            return;
-        }
-
-        // Arrange: Trigger popup via drag select
-        _fixture.Notepad.BringToForeground();
+        BringNotepadToForeground();
         var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
-        if (popHwnd == IntPtr.Zero)
-        {
-            _output.WriteLine("SKIP: PopButton did not appear, cannot test click → mini window");
-            return;
-        }
-
+        var popHwnd = RequirePopButton(PopButtonTimeout, "the click-to-mini-window scenario");
         _output.WriteLine($"PopButton visible at hwnd=0x{popHwnd:X}, clicking...");
 
-        // Act: Click the PopButton center
         var rect = PopButtonFinder.GetRect(popHwnd);
         Mouse.Click(new Point(rect.CenterX, rect.CenterY));
         _output.WriteLine($"Clicked PopButton at ({rect.CenterX},{rect.CenterY})");
 
-        // Wait for mini window to appear
-        Thread.Sleep(2000);
-
-        // Assert: Mini window should open
-        var miniWindow = UITestHelper.FindSecondaryWindow(
-            _fixture.Launcher.Application, _fixture.Launcher.Automation, "Mini", _output);
+        var miniWindow = Retry.WhileNull(
+            () => UITestHelper.FindSecondaryWindow(
+                _fixture.Launcher.Application,
+                _fixture.Launcher.Automation,
+                "Mini",
+                _output),
+            TimeSpan.FromSeconds(5)).Result;
 
         var screenshotPath = ScreenshotHelper.CaptureScreen("e2e_pop_button_click_mini_window");
         _output.WriteLine($"Screenshot: {screenshotPath}");
-
-        if (miniWindow != null)
-        {
-            _output.WriteLine($"Mini window found: \"{miniWindow.Title}\" " +
-                              $"size={miniWindow.BoundingRectangle.Width}x{miniWindow.BoundingRectangle.Height}");
-
-            ScreenshotHelper.CaptureWindow(miniWindow, "e2e_mini_window_after_popup_click");
-
-            // PopButton should be hidden after click
-            PopButtonFinder.IsVisible(popHwnd).Should().BeFalse(
-                "PopButton should hide after being clicked");
-        }
-        else
-        {
-            _output.WriteLine("Mini window not found via GetAllTopLevelWindows. " +
-                              "This may be expected if the PopButton click did not register.");
-        }
+        miniWindow.Should().NotBeNull("clicking a visible PopButton should open the Mini window");
+        _output.WriteLine($"Mini window found: \"{miniWindow!.Title}\" size={miniWindow.BoundingRectangle.Width}x{miniWindow.BoundingRectangle.Height}");
+        ScreenshotHelper.CaptureWindow(miniWindow, "e2e_mini_window_after_popup_click");
+        PopButtonFinder.IsVisible(popHwnd).Should().BeFalse("PopButton should hide after being clicked");
     }
 
     [Fact]
     public void DragSelect_ScreenshotSequence_FullWorkflow()
     {
-        // Capture a complete screenshot sequence documenting the selection flow,
-        // even when the popup doesn't appear (useful for CI artifact review).
-
         var window = _fixture.Launcher.GetMainWindow();
-
-        // Step 1: Initial Easydict state
         var step1 = ScreenshotHelper.CaptureWindow(window, "e2e_workflow_01_easydict_initial");
         _output.WriteLine($"Step 1 (Easydict): {step1}");
 
-        // Step 2: Notepad with text
-        if (_fixture.Notepad != null)
+        BringNotepadToForeground();
+        var step2 = ScreenshotHelper.CaptureScreen("e2e_workflow_02_notepad_ready");
+        _output.WriteLine($"Step 2 (Notepad): {step2}");
+
+        var bounds = _fixture.Notepad.GetTextBounds();
+        var startX = bounds.Left + TextAreaPadding;
+        var startY = bounds.Top + TextAreaPadding;
+        SimulateDragSelect(startX, startY, startX + DragDistance, startY);
+
+        var popHwnd = RequirePopButton(PopButtonTimeout, "the screenshot workflow");
+        var step3 = ScreenshotHelper.CaptureScreen("e2e_workflow_03_pop_button_visible");
+        _output.WriteLine($"Step 3 (PopButton visible): {step3}");
+
+        var vrResult = VisualRegressionHelper.CompareWithBaseline(
+            step3, "e2e_workflow_03_pop_button_visible", thresholdPercent: 10.0);
+        if (vrResult != null)
         {
-            _fixture.Notepad.BringToForeground();
-            Thread.Sleep(300);
-            var step2 = ScreenshotHelper.CaptureScreen("e2e_workflow_02_notepad_ready");
-            _output.WriteLine($"Step 2 (Notepad): {step2}");
-
-            // Step 3: After drag select
-            var bounds = _fixture.Notepad.GetTextBounds();
-            var startX = bounds.Left + TextAreaPadding;
-            var startY = bounds.Top + TextAreaPadding;
-            SimulateDragSelect(startX, startY, startX + DragDistance, startY);
-
-            // Wait for potential popup
-            Thread.Sleep(1500);
-            var step3 = ScreenshotHelper.CaptureScreen("e2e_workflow_03_after_selection");
-            _output.WriteLine($"Step 3 (After selection): {step3}");
-
-            // Visual regression for the full workflow state
-            var vrResult = VisualRegressionHelper.CompareWithBaseline(
-                step3, "e2e_workflow_03_after_selection", thresholdPercent: 10.0);
-            if (vrResult != null)
-            {
-                _output.WriteLine(vrResult.ToString());
-            }
-            else
-            {
-                _output.WriteLine("No baseline — saved as candidate");
-            }
+            _output.WriteLine(vrResult.ToString());
+        }
+        else
+        {
+            _output.WriteLine("No baseline — saved as candidate");
         }
 
-        // Step 4: Full screen context
-        var step4 = ScreenshotHelper.CaptureScreen("e2e_workflow_04_full_screen");
-        _output.WriteLine($"Step 4 (Full screen): {step4}");
+        var popRect = PopButtonFinder.GetRect(popHwnd);
+        Mouse.Click(new Point(popRect.CenterX, popRect.CenterY));
+        var miniWindow = Retry.WhileNull(
+            () => UITestHelper.FindSecondaryWindow(
+                _fixture.Launcher.Application,
+                _fixture.Launcher.Automation,
+                "Mini",
+                _output),
+            TimeSpan.FromSeconds(5)).Result;
+        miniWindow.Should().NotBeNull("the full workflow should end in a visible Mini window");
+
+        var step4 = ScreenshotHelper.CaptureScreen("e2e_workflow_04_mini_window_visible");
+        _output.WriteLine($"Step 4 (Mini window visible): {step4}");
+    }
+
+    private IntPtr RequirePopButton(TimeSpan timeout, string scenario)
+    {
+        var hwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, timeout);
+        if (hwnd == IntPtr.Zero)
+        {
+            var diagnosticPath = ScreenshotHelper.CaptureScreen("e2e_pop_button_missing_after_selection");
+            _output.WriteLine($"PopButton missing diagnostic: {diagnosticPath}");
+        }
+
+        hwnd.Should().NotBe(IntPtr.Zero, $"MouseSelectionTranslate is enabled, so {scenario} should show the PopButton");
+        return hwnd;
     }
 
     /// <summary>
@@ -442,27 +355,73 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
     /// Intermediate moves ensure WH_MOUSE_LL receives enough WM_MOUSEMOVE messages
     /// for the DragDetector to detect the drag threshold being exceeded.
     /// </summary>
+    private void BringNotepadToForeground()
+    {
+        _fixture.Notepad.BringToForeground();
+        Thread.Sleep(300);
+    }
+
     private void SimulateDragSelect(int startX, int startY, int endX, int endY)
     {
-        Mouse.MoveTo(new Point(startX, startY));
+        // FlaUI documents Mouse.Position/MoveTo as direct cursor positioning. That is
+        // appropriate for UIA targeting but does not exercise WH_MOUSE_LL move callbacks.
+        // Inject the actual move sequence so the end-to-end test covers the global hook.
+        SendMouseMove(startX, startY);
         Thread.Sleep(100);
 
-        Mouse.Down(MouseButton.Left);
+        SendMouseInput(MouseEventLeftDown);
         Thread.Sleep(50);
 
-        // Generate intermediate move events (step every 10px)
         var totalDistance = Math.Abs(endX - startX) + Math.Abs(endY - startY);
         var steps = Math.Max(totalDistance / 10, 2);
         for (int i = 1; i <= steps; i++)
         {
             var t = (double)i / steps;
-            var x = (int)(startX + (endX - startX) * t);
-            var y = (int)(startY + (endY - startY) * t);
-            Mouse.MoveTo(new Point(x, y));
+            SendMouseMove(
+                (int)(startX + (endX - startX) * t),
+                (int)(startY + (endY - startY) * t));
             Thread.Sleep(10);
         }
 
         Thread.Sleep(50);
-        Mouse.Up(MouseButton.Left);
+        SendMouseInput(MouseEventLeftUp);
+    }
+
+    private static void SendMouseMove(int x, int y)
+    {
+        var virtualLeft = GetSystemMetrics(SmXVirtualScreen);
+        var virtualTop = GetSystemMetrics(SmYVirtualScreen);
+        var virtualWidth = GetSystemMetrics(SmCxVirtualScreen);
+        var virtualHeight = GetSystemMetrics(SmCyVirtualScreen);
+
+        if (virtualWidth <= 1 || virtualHeight <= 1)
+            throw new InvalidOperationException("Virtual screen dimensions are invalid.");
+
+        var normalizedX = (int)Math.Round((x - virtualLeft) * 65535d / (virtualWidth - 1));
+        var normalizedY = (int)Math.Round((y - virtualTop) * 65535d / (virtualHeight - 1));
+        SendMouseInput(
+            MouseEventMove | MouseEventAbsolute | MouseEventVirtualDesk,
+            normalizedX,
+            normalizedY);
+    }
+
+    private static void SendMouseInput(uint flags, int dx = 0, int dy = 0)
+    {
+        var inputs = new[]
+        {
+            new Input
+            {
+                Type = InputMouse,
+                Mouse = new MouseInput
+                {
+                    Dx = dx,
+                    Dy = dy,
+                    Flags = flags
+                }
+            }
+        };
+
+        if (SendInput(1, inputs, Marshal.SizeOf<Input>()) != 1)
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "SendInput failed.");
     }
 }

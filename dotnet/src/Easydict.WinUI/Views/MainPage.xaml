@@ -742,16 +742,6 @@
                               HorizontalAlignment="Stretch"
                               MaxDropDownHeight="320"
                               ToolTipService.ToolTip="Translation Service">
-                        <ComboBox.Resources>
-                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelected"
-                                             Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
-                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedUnfocused"
-                                             Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
-                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed"
-                                             Color="{ThemeResource EasydictControlSecondaryTextColor}"/>
-                            <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver"
-                                             Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
-                        </ComboBox.Resources>
                         <ComboBox.Header>
                             <StackPanel Orientation="Horizontal"
                                         Spacing="4">
@@ -762,7 +752,7 @@
                                 <FontIcon x:Name="LongDocServiceHint"
                                           Glyph="&#xE897;"
                                           FontSize="11"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                          Foreground="{ThemeResource EasydictTertiaryTextBrush}"/>
                             </StackPanel>
                         </ComboBox.Header>
                     </ComboBox>
@@ -811,7 +801,7 @@
                                 <FontIcon x:Name="LongDocInputModeHint"
                                           Glyph="&#xE897;"
                                           FontSize="11"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                          Foreground="{ThemeResource EasydictTertiaryTextBrush}"/>
                             </StackPanel>
                         </ComboBox.Header>
                         <ComboBoxItem Content="Text"
@@ -840,7 +830,7 @@
                                 <FontIcon x:Name="LongDocOutputModeHint"
                                           Glyph="&#xE897;"
                                           FontSize="11"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                          Foreground="{ThemeResource EasydictTertiaryTextBrush}"/>
                             </StackPanel>
                         </ComboBox.Header>
                         <ComboBoxItem Content="Mono"
@@ -874,7 +864,7 @@
                                 <FontIcon x:Name="LongDocConcurrencyHint"
                                           Glyph="&#xE897;"
                                           FontSize="11"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                          Foreground="{ThemeResource EasydictTertiaryTextBrush}"/>
                             </StackPanel>
                         </NumberBox.Header>
                     </NumberBox>
@@ -901,7 +891,7 @@
                                 <FontIcon x:Name="LongDocPageRangeHint"
                                           Glyph="&#xE897;"
                                           FontSize="11"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                          Foreground="{ThemeResource EasydictTertiaryTextBrush}"/>
                             </StackPanel>
                         </TextBox.Header>
                     </TextBox>
@@ -932,7 +922,7 @@
                                 Text="Translation Result"
                                 FontSize="13"
                                 FontWeight="SemiBold"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                Foreground="{ThemeResource EasydictSecondaryTextBrush}"/>
 
                             <Button x:Name="LongDocRetryButton"
                                     Grid.Column="1"
@@ -951,7 +941,7 @@
                             <TextBlock x:Name="LongDocOutputFolderLabel"
                                        Text="Output Folder"
                                        FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                       Foreground="{ThemeResource EasydictSecondaryTextBrush}"/>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -962,7 +952,7 @@
                                            Text="(same as input file folder)"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                           Foreground="{ThemeResource EasydictSecondaryTextBrush}"/>
                                 <Button x:Name="LongDocOutputBrowseButton"
                                         Grid.Column="1"
                                         Content="Browse..."
@@ -972,7 +962,7 @@
                             <TextBlock x:Name="LongDocOutputNamingHint"
                                        Text="Output: {filename}_translated.pdf"
                                        FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       Foreground="{ThemeResource EasydictTertiaryTextBrush}"
                                        FontStyle="Italic"/>
                         </StackPanel>
                     </Grid>
@@ -984,7 +974,7 @@
                     Grid.Row="3"
                     Text="Idle"
                     FontSize="12"
-                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Foreground="{ThemeResource EasydictTertiaryTextBrush}"
                     TextWrapping="Wrap"
                     Margin="0,4,0,0"/>
 
@@ -1046,12 +1036,12 @@
                                                Grid.Column="1"
                                                Text="{Binding TimeAgo}"
                                                FontSize="11"
-                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                               Foreground="{ThemeResource EasydictTertiaryTextBrush}"/>
                                     <TextBlock Grid.Row="1"
                                                Grid.Column="0"
                                                Text="{Binding DisplayText}"
                                                FontSize="11"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               Foreground="{ThemeResource EasydictSecondaryTextBrush}"
                                                TextTrimming="CharacterEllipsis"/>
                                 </Grid>
                             </DataTemplate>

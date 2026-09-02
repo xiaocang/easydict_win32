@@ -83,6 +83,7 @@
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="Padding" Value="8" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -90,20 +91,20 @@
     </Style>
 
     <Style TargetType="ToggleSwitch" BasedOn="{StaticResource DefaultToggleSwitchStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource EasydictPrimaryTextBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
 
     <Style x:Key="SettingsPageTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource EasydictPrimaryTextBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
     <Style x:Key="SettingsSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource EasydictPrimaryTextBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
     <Style x:Key="SettingsBodyStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource EasydictPrimaryTextBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
     <Style x:Key="SettingsCaptionStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource EasydictSecondaryTextBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
     <Style x:Key="SettingsFieldStyle" TargetType="Control">
         <Setter Property="MinHeight" Value="{ThemeResource EasydictStandardControlHeight}" />

@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -40,9 +41,14 @@ public class DictionaryWebViewRenderingTests : IDisposable
     }
 
     [Fact]
-    public void MainWindow_GoogleDictionary_CapturesResultOrFallback()
+    public void MainWindow_GoogleDictionary_CapturesResultFallbackOrError()
     {
         var window = _launcher.GetMainWindow();
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(0, 0, 900, 900))
+            .Should()
+            .BeTrue("the dictionary UI screenshot needs enough vertical space to expose the result state");
+        window.SetForeground();
+        Thread.Sleep(500);
         Thread.Sleep(2000);
 
         var inputBox = UITestHelper.FindInputTextBox(window);
@@ -77,46 +83,66 @@ public class DictionaryWebViewRenderingTests : IDisposable
         var fallbackText = dictionaryPanel == null
             ? TryFindVisibleDescendant(window, "ResultText")
             : null;
-        if (dictionaryPanel == null && fallbackText == null)
+        var errorText = dictionaryPanel == null && fallbackText == null
+            ? TryFindVisibleDescendant(window, "ErrorText")
+            : null;
+
+        if (dictionaryPanel == null && fallbackText == null && errorText == null)
         {
-            var errorText = TryFindVisibleDescendant(window, "ErrorText");
             var diagnosticPath = ScreenshotHelper.CaptureWindow(
                 window,
-                "51_dictionary_query_error_diagnostic");
+                "51_dictionary_query_missing_state_diagnostic");
             _output.WriteLine($"Dictionary query diagnostic screenshot saved: {diagnosticPath}");
-            _output.WriteLine($"Visible service error: {errorText?.Name ?? "<none>"}");
         }
 
-        (dictionaryPanel != null || fallbackText != null).Should().BeTrue(
-            "Google Dictionary should expose rich definitions or a visible plain-text dictionary fallback");
+        (dictionaryPanel != null || fallbackText != null || errorText != null).Should().BeTrue(
+            "Google Dictionary should expose rich definitions, a visible plain-text dictionary fallback, or an explicit service error");
+
         if (fallbackText != null)
         {
             fallbackText.Name.Should().NotBeNullOrWhiteSpace(
                 "the dictionary fallback must contain visible result text");
         }
 
-        var pathAfterTranslate = ScreenshotHelper.CaptureWindow(
-            window,
-            "51_dictionary_result_after_query");
-        _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
-        File.Exists(pathAfterTranslate).Should().BeTrue("the post-query screenshot should be written");
+        if (errorText != null)
+        {
+            errorText.Name.Should().NotBeNullOrWhiteSpace(
+                "a failed live dictionary request must expose a visible error instead of leaving the result area blank");
+        }
 
-        var resultElement = dictionaryPanel ?? fallbackText!;
-        var pathElement = ScreenshotHelper.CaptureElement(resultElement, "52_dictionary_result_element");
+        var isErrorState = errorText != null;
+        var resultElement = dictionaryPanel ?? fallbackText ?? errorText!;
+        TryScrollIntoView(resultElement);
+
+        var pathAfterQuery = ScreenshotHelper.CaptureWindow(
+            window,
+            isErrorState
+                ? "51_dictionary_query_error"
+                : "51_dictionary_result_after_query");
+        _output.WriteLine($"Dictionary query screenshot saved: {pathAfterQuery}");
+        File.Exists(pathAfterQuery).Should().BeTrue("the post-query screenshot should be written");
+        var pathElement = ScreenshotHelper.CaptureElement(
+            resultElement,
+            isErrorState
+                ? "52_dictionary_error_element"
+                : "52_dictionary_result_element");
         _output.WriteLine($"Dictionary result element screenshot saved: {pathElement}");
         File.Exists(pathElement).Should().BeTrue("the visible dictionary result state should be captured");
 
-        var comparison = VisualRegressionHelper.CompareWithBaseline(
-            pathAfterTranslate,
-            "dictionary_result_main_window",
-            VisualRegressionHelper.ThresholdText);
-        if (comparison == null)
+        if (!isErrorState)
         {
-            _output.WriteLine("No baseline found - screenshot saved as baseline candidate for manual review.");
-        }
-        else
-        {
-            _output.WriteLine(comparison.ToString());
+            var comparison = VisualRegressionHelper.CompareWithBaseline(
+                pathAfterQuery,
+                "dictionary_result_main_window",
+                VisualRegressionHelper.ThresholdText);
+            if (comparison == null)
+            {
+                _output.WriteLine("No baseline found - screenshot saved as baseline candidate for manual review.");
+            }
+            else
+            {
+                _output.WriteLine(comparison.ToString());
+            }
         }
     }
 
@@ -152,6 +178,22 @@ public class DictionaryWebViewRenderingTests : IDisposable
         root["MainWindowEnabledServices"] = JsonNode.Parse("[\"google_web\"]");
         root["MainWindowServiceEnabledQuery"] = JsonNode.Parse("{\"google_web\":true}");
         File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void TryScrollIntoView(AutomationElement element)
+    {
+        try
+        {
+            if (element.Patterns.ScrollItem.IsSupported)
+            {
+                element.Patterns.ScrollItem.Pattern.ScrollIntoView();
+                Thread.Sleep(800);
+            }
+        }
+        catch (COMException)
+        {
+            // The state assertion above remains authoritative when the host cannot scroll.
+        }
     }
 
     private static AutomationElement? TryFindVisibleDescendant(AutomationElement root, string automationId)

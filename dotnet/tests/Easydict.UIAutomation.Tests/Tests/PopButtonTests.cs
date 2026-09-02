@@ -114,11 +114,13 @@ public class PopButtonTests : IDisposable
         WaitForSettingsGeneralContent(window).Should()
             .NotBeNull("Settings General tab must be visible before capturing workflow settings state");
 
-        var step2 = ScreenshotHelper.CaptureWindow(window, "pop_button_workflow_02_settings");
-        _output.WriteLine($"Step 2 (Settings page): {step2}");
+        var toggle = FindMouseSelectionTranslateToggle(window);
+        toggle.Should().NotBeNull("the workflow should expose the Mouse selection translate setting");
+        var step2 = ScreenshotHelper.CaptureWindow(window, "pop_button_workflow_02_toggle_visible");
+        _output.WriteLine($"Step 2 (Mouse selection setting): {step2}");
 
-        // Step 3: Capture full screen context
-        var step3 = ScreenshotHelper.CaptureScreen("pop_button_workflow_03_full_screen");
+        // Step 3: Capture full-screen context with the setting still visible.
+        var step3 = ScreenshotHelper.CaptureScreen("pop_button_workflow_03_toggle_visible_full_screen");
         _output.WriteLine($"Step 3 (Full screen): {step3}");
 
         window.Should().NotBeNull();
@@ -133,22 +135,28 @@ public class PopButtonTests : IDisposable
         }
 
         var toggle = Finder();
-        if (IsVisible(toggle))
-        {
-            return toggle;
-        }
-
         var scrollViewer = UITestHelper.FindByAutomationIdOrName(window, "MainScrollViewer");
-        if (scrollViewer == null)
+        if (!IsVisible(toggle) && scrollViewer != null)
         {
-            return toggle;
+            toggle = ScrollHelper.ScrollToFind(
+                scrollViewer,
+                startPercent: 70,
+                Finder,
+                _output.WriteLine);
         }
 
-        return ScrollHelper.ScrollToFind(
-            scrollViewer,
-            startPercent: 70,
-            Finder,
-            _output.WriteLine);
+        if (IsVisible(toggle)
+            && scrollViewer != null
+            && ScrollHelper.TryGetVerticalScrollPercent(scrollViewer, out var currentPercent))
+        {
+            // Scroll back slightly so the ToggleSwitch header, not only its lower content,
+            // is inside the screenshot viewport.
+            ScrollHelper.ScrollToPercent(scrollViewer, Math.Max(0, currentPercent - 10), _output.WriteLine);
+            Thread.Sleep(500);
+            toggle = Finder();
+        }
+
+        return IsVisible(toggle) ? toggle : null;
     }
 
     private static AutomationElement? WaitForSettingsGeneralContent(Window window)

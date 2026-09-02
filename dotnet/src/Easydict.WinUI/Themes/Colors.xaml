@@ -26,13 +26,13 @@
             <SolidColorBrush x:Key="EasydictInputBorderBrush"
                              Color="{ThemeResource ControlStrokeColorDefault}" />
             <SolidColorBrush x:Key="EasydictPrimaryTextBrush"
-                             Color="{ThemeResource TextFillColorPrimary}" />
+                             Color="{StaticResource EasydictControlPrimaryTextColor}" />
             <SolidColorBrush x:Key="EasydictSecondaryTextBrush"
-                             Color="{ThemeResource TextFillColorSecondary}" />
+                             Color="{StaticResource EasydictControlSecondaryTextColor}" />
             <SolidColorBrush x:Key="EasydictTertiaryTextBrush"
-                             Color="{ThemeResource TextFillColorTertiary}" />
+                             Color="{StaticResource EasydictControlTertiaryTextColor}" />
             <SolidColorBrush x:Key="EasydictIconForegroundBrush"
-                             Color="{ThemeResource TextFillColorPrimary}" />
+                             Color="{StaticResource EasydictControlPrimaryTextColor}" />
             <SolidColorBrush x:Key="EasydictAccentBrush"
                              Color="{StaticResource EasydictControlAccentColor}" />
             <SolidColorBrush x:Key="EasydictAccentForegroundBrush"

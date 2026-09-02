@@ -20,6 +20,13 @@
             <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter"/>
             <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter"/>
             <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter"/>
+            <!-- Settings content must resolve against the explicit app palette rather
+                 than a cached system-theme control template. -->
+            <Style TargetType="CheckBox"
+                   BasedOn="{StaticResource DefaultCheckBoxStyle}">
+                <Setter Property="Foreground"
+                        Value="{ThemeResource TextFillColorPrimaryBrush}"/>
+            </Style>
         </ResourceDictionary>
     </Page.Resources>
 
@@ -62,6 +69,7 @@
                         <TextBlock x:Name="SettingsHeaderText"
                                    Text="Settings"
                                    Style="{StaticResource SettingsPageTitleStyle}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>

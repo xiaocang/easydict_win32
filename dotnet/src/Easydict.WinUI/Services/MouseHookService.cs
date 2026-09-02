@@ -50,9 +50,10 @@ public sealed partial class MouseHookService : IDisposable
 
     [LibraryImport("user32.dll")]
     private static partial IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
     [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr GetModuleHandle(string? lpModuleName);
+
+
 
     [LibraryImport("user32.dll")]
     private static partial IntPtr WindowFromPoint(POINT pt);

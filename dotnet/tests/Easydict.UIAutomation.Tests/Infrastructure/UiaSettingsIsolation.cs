@@ -5,6 +5,7 @@ namespace Easydict.UIAutomation.Tests.Infrastructure;
 internal static class UiaSettingsIsolation
 {
     private const string ExePathEnvironmentVariable = "EASYDICT_EXE_PATH";
+    private const string PackageFamilyNameEnvironmentVariable = "EASYDICT_PACKAGE_FAMILY_NAME";
     private const string SettingsDirectoryEnvironmentVariable = "EASYDICT_SETTINGS_DIR";
 
     public static void ApplyTo(ProcessStartInfo startInfo)
@@ -27,6 +28,19 @@ internal static class UiaSettingsIsolation
         var settingsDirectory = Environment.GetEnvironmentVariable(SettingsDirectoryEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(settingsDirectory))
         {
+            return EnsureDirectory(settingsDirectory);
+        }
+
+        var packageFamilyName = Environment.GetEnvironmentVariable(PackageFamilyNameEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(packageFamilyName))
+        {
+            settingsDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Packages",
+                packageFamilyName,
+                "LocalCache",
+                "Local",
+                "Easydict");
             return EnsureDirectory(settingsDirectory);
         }
 

@@ -79,7 +79,7 @@ public sealed class ThemeContrastTests : IDisposable
     [Fact]
     public void SettingsPage_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightControls()
     {
-        SnapshotAndSetPersistedAppTheme("Light");
+        SnapshotAndSetPersistedAppTheme("Dark");
         SnapshotAndSetPersistedCheckedAccentService();
         ForceWindowsTheme(light: false);
 
@@ -89,10 +89,10 @@ public sealed class ThemeContrastTests : IDisposable
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
+        var themeCombo = FindAppThemeCombo(window);
+        themeCombo.Select(1);
         WaitForPersistedAppTheme("Light", TimeSpan.FromSeconds(5))
-            .Should().Be("Light", "explicit Light must persist before screenshot validation");
-        FindAppThemeCombo(window);
-
+            .Should().Be("Light", "selecting explicit Light at runtime must persist before screenshot validation");
         Thread.Sleep(1200);
         PrepareSettingsWindowForScreenshot(window);
 
@@ -147,6 +147,7 @@ public sealed class ThemeContrastTests : IDisposable
             "46a_settings_about_light_on_dark_system_contrast",
             "about GitHub link",
             assertElementForeground: true);
+        CaptureUnsavedChangesDialogAndAssertLight(window);
     }
 
     [Fact]
@@ -460,7 +461,7 @@ public sealed class ThemeContrastTests : IDisposable
         SettingsTabScreenshot tab)
     {
         var tabElement = FindRequired(window, tab.TabAutomationId);
-        InvokeOrClick(tabElement);
+        ActivateSettingsTab(tabElement);
         Thread.Sleep(1200);
         PrepareSettingsWindowForScreenshot(window);
         ExpandSettingsExpanderIfNeeded(window, tab.ExpanderAutomationId);
@@ -693,7 +694,7 @@ public sealed class ThemeContrastTests : IDisposable
         }
 
         var tab = FindRequired(window, tabAutomationId);
-        InvokeOrClick(tab);
+        ActivateSettingsTab(tab);
         Thread.Sleep(1200);
         PrepareSettingsWindowForScreenshot(window);
         ExpandSettingsExpanderIfNeeded(window, expanderAutomationId);
@@ -945,6 +946,72 @@ public sealed class ThemeContrastTests : IDisposable
             dontSaveButton.Click();
             Thread.Sleep(1000);
         }
+    }
+
+    private void CaptureUnsavedChangesDialogAndAssertLight(Window window)
+    {
+        ActivateSettingsTab(FindRequired(window, "SettingsTab_General"));
+        Thread.Sleep(800);
+        PrepareSettingsWindowForScreenshot(window);
+
+        var toggle = FindRequired(window, "MinimizeToTrayToggle");
+        toggle.Patterns.Toggle.IsSupported.Should().BeTrue(
+            "the tray setting must be toggleable to create an unsaved Settings change");
+        toggle.Patterns.Toggle.Pattern.Toggle();
+
+        var backButton = FindRequired(window, "BackButton");
+        InvokeOrClick(backButton);
+
+        var dontSaveButton = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SecondaryButton"))
+                ?? window.FindFirstDescendant(cf => cf.ByName("Don't Save")),
+            TimeSpan.FromSeconds(5)).Result;
+        dontSaveButton.Should().NotBeNull(
+            "leaving Settings after a toggle change must show the unsaved-changes confirmation");
+
+        var message = Retry.WhileNull(
+            () => window.FindFirstDescendant(
+                cf => cf.ByName("You have unsaved changes. Do you want to save them before leaving?")),
+            TimeSpan.FromSeconds(5)).Result;
+        message.Should().NotBeNull("the unsaved-changes dialog message must be visible");
+
+        var path = ScreenshotHelper.CaptureWindowPhysical(
+            window,
+            "46b_settings_unsaved_dialog_light_on_dark_system_contrast");
+        _output.WriteLine($"Light-on-dark-system Settings dialog screenshot saved: {path}");
+
+        using var bitmap = new Bitmap(path);
+        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+
+        AssertElementRegionMatchesPalette(
+            "unsaved-changes secondary button",
+            dontSaveButton!,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0.08,
+            relativeY: 0.12,
+            relativeWidth: 0.84,
+            relativeHeight: 0.76,
+            expectedLight: true,
+            minLightBrightness: 150,
+            maxDarkBrightness: 130);
+        AssertElementRelativeRegionMatchesForegroundPalette(
+            "unsaved-changes dialog message",
+            message!,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0,
+            relativeY: 0,
+            relativeWidth: 1,
+            relativeHeight: 1,
+            expectedLight: true,
+            minForegroundPixelRatio: 0.01);
+
+        InvokeOrClick(dontSaveButton!);
+        Thread.Sleep(500);
     }
 
     private void AssertSettingsLightPalette(Window window, string screenshotPath)
@@ -2122,6 +2189,24 @@ public sealed class ThemeContrastTests : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, content);
         }
+    }
+
+    private void ActivateSettingsTab(AutomationElement tab)
+    {
+        try
+        {
+            if (tab.Patterns.SelectionItem.IsSupported)
+            {
+                tab.Patterns.SelectionItem.Pattern.Select();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Settings tab SelectionItem activation failed: {ex.Message}");
+        }
+
+        InvokeOrClick(tab);
     }
 
     private static void InvokeOrClick(AutomationElement element)

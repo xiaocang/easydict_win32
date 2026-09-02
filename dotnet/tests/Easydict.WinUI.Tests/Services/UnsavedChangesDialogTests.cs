@@ -190,10 +190,14 @@ public class UnsavedChangesDialogTests
             "dialogs must attach to the settings page XamlRoot");
         content.Should().Contain("dialog.RequestedTheme = ResolveDialogRequestedTheme()",
             "ContentDialog popup chrome should follow the current settings page theme");
-        content.Should().Contain("ActualTheme switch",
-            "System theme should resolve from the page's current actual theme");
-        content.Should().Contain("MinimalThemeService.ToElementTheme(_settings.AppTheme)",
-            "dialogs need a fallback when ActualTheme has not resolved yet");
+        content.Should().Contain("var configuredTheme = MinimalThemeService.ToElementTheme(_settings.AppTheme)",
+            "explicit app themes should determine dialog chrome before consulting inherited page state");
+        content.Should().Contain("return configuredTheme == ElementTheme.Default",
+            "dialogs should fall back only when the configured theme cannot be resolved");
+        content.Should().Contain("? ActualTheme",
+            "the page's actual theme should provide the unresolved-theme fallback");
+        content.Should().Contain(": configuredTheme",
+            "a resolved configured theme should remain authoritative");
     }
 
     [Fact]

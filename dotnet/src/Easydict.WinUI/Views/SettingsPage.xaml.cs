@@ -6073,12 +6073,10 @@ public sealed partial class SettingsPage : Page
             return ElementTheme.Default;
         }
 
-        return ActualTheme switch
-        {
-            ElementTheme.Dark => ElementTheme.Dark,
-            ElementTheme.Light => ElementTheme.Light,
-            _ => MinimalThemeService.ToElementTheme(_settings.AppTheme)
-        };
+        var configuredTheme = MinimalThemeService.ToElementTheme(_settings.AppTheme);
+        return configuredTheme == ElementTheme.Default
+            ? ActualTheme
+            : configuredTheme;
     }
 
     #endregion

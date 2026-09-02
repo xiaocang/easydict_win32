@@ -112,9 +112,9 @@ internal static class WorkerTranslationManagerFactory
             if (svc is CustomOpenAIService custom && snapshot.CustomOpenAIApiKey is not null)
             {
                 custom.Configure(
-                    snapshot.CustomOpenAIApiKey,
-                    snapshot.CustomOpenAIEndpoint,
-                    snapshot.CustomOpenAIModel);
+                    endpoint: snapshot.CustomOpenAIEndpoint ?? string.Empty,
+                    apiKey: snapshot.CustomOpenAIApiKey,
+                    model: snapshot.CustomOpenAIModel);
             }
         });
 

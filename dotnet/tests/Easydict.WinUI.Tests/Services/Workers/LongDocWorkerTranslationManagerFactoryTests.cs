@@ -67,4 +67,20 @@ public sealed class LongDocWorkerTranslationManagerFactoryTests
         service.Model.Should().Be("orcarouter/auto");
         service.Endpoint.Should().Be("https://api.orcarouter.ai/v1/chat/completions");
     }
+
+    [Fact]
+    public void Build_ConfiguresCustomOpenAiEndpointAndApiKey()
+    {
+        using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot
+        {
+            CustomOpenAIEndpoint = "http://127.0.0.1:51234/v1/chat/completions",
+            CustomOpenAIApiKey = "test-key",
+            CustomOpenAIModel = "uia-test-model",
+        });
+
+        var service = manager.Services["custom-openai"].Should().BeOfType<CustomOpenAIService>().Which;
+        service.Endpoint.Should().Be("http://127.0.0.1:51234/v1/chat/completions");
+        service.ApiKey.Should().Be("test-key");
+        service.Model.Should().Be("uia-test-model");
+    }
 }

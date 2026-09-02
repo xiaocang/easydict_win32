@@ -163,19 +163,10 @@ public class LongDocTranslationTests : IDisposable
         var concurrencyBox = FindControl(window, "LongDocConcurrencyBox");
         concurrencyBox.Should().NotBeNull("LongDocConcurrencyBox must exist");
 
-        // Click the control to focus it
-        concurrencyBox!.Click();
-        Thread.Sleep(300);
-
-        // Select all existing text and type new value
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-        Thread.Sleep(100);
-        Keyboard.Type("8");
-        Thread.Sleep(300);
-
-        // Press Tab to commit the value
-        Keyboard.Press(VirtualKeyShort.TAB);
-        Thread.Sleep(300);
+        SetEditableControlValue(concurrencyBox!, "8");
+        ReadEditableControlValue(concurrencyBox!).Should().Be(
+            "8",
+            "the concurrency NumberBox must commit the requested value before capture");
 
         CaptureAndCompare(window, "longdoc_07_concurrency_8");
     }
@@ -190,15 +181,10 @@ public class LongDocTranslationTests : IDisposable
         var pageRangeBox = FindControl(window, "LongDocPageRangeBox");
         pageRangeBox.Should().NotBeNull("LongDocPageRangeBox must exist");
 
-        // Click to focus and type page range
-        pageRangeBox!.Click();
-        Thread.Sleep(300);
-
-        // Clear any existing text
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-        Thread.Sleep(100);
-        Keyboard.Type("1-5,8,10-12");
-        Thread.Sleep(300);
+        SetEditableControlValue(pageRangeBox!, "1-5,8,10-12");
+        ReadEditableControlValue(pageRangeBox!).Should().Be(
+            "1-5,8,10-12",
+            "the page-range field must contain the requested range before capture");
 
         CaptureAndCompare(window, "longdoc_08_page_range");
     }
@@ -258,49 +244,82 @@ public class LongDocTranslationTests : IDisposable
         WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
-        // 1. Change Input Mode to "Text"
-        var inputModeCombo = FindComboBox(window, "LongDocInputModeCombo");
-        if (inputModeCombo != null)
-        {
-            SelectComboItem(inputModeCombo, "Text", 0);
-            Thread.Sleep(500);
-        }
 
-        // 2. Change Output Mode to "Bilingual"
-        var outputModeCombo = FindComboBox(window, "LongDocOutputModeCombo");
-        if (outputModeCombo != null)
-        {
-            SelectComboItem(outputModeCombo, "Bilingual", 1);
-            Thread.Sleep(500);
-        }
+        var inputPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-longdoc-{Guid.NewGuid():N}.txt");
+        var outputPath = Path.Combine(
+            Path.GetDirectoryName(inputPath)!,
+            $"{Path.GetFileNameWithoutExtension(inputPath)}_translated.txt");
 
-        // 3. Set concurrency to 8
-        var concurrencyBox = FindControl(window, "LongDocConcurrencyBox");
-        if (concurrencyBox != null)
+        try
         {
-            concurrencyBox.Click();
-            Thread.Sleep(200);
-            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-            Thread.Sleep(100);
-            Keyboard.Type("8");
-            Keyboard.Press(VirtualKeyShort.TAB);
-            Thread.Sleep(300);
-        }
+            File.WriteAllText(
+                inputPath,
+                "Easydict translates this short document through the complete long-document workflow.");
 
-        // 4. Set page range
-        var pageRangeBox = FindControl(window, "LongDocPageRangeBox");
-        if (pageRangeBox != null)
+            var inputModeCombo = FindComboBox(window, "LongDocInputModeCombo");
+            inputModeCombo.Should().NotBeNull("LongDocInputModeCombo must exist");
+            SelectComboItem(inputModeCombo!, "Text", 0);
+
+            var outputModeCombo = FindComboBox(window, "LongDocOutputModeCombo");
+            outputModeCombo.Should().NotBeNull("LongDocOutputModeCombo must exist");
+            SelectComboItem(outputModeCombo!, "Bilingual", 1);
+
+
+            var concurrencyBox = FindControl(window, "LongDocConcurrencyBox");
+            concurrencyBox.Should().NotBeNull("LongDocConcurrencyBox must exist");
+            SetEditableControlValue(concurrencyBox!, "8");
+            ReadEditableControlValue(concurrencyBox!).Should().Be("8");
+
+            var browseButton = FindControl(window, "LongDocBrowseButton");
+            browseButton.Should().NotBeNull("LongDocBrowseButton must exist");
+            browseButton!.Click();
+            SelectFileFromOpenDialog(inputPath);
+
+            var fileDisplay = Retry.WhileNull(
+                () =>
+                {
+                    var candidate = FindByAutomationIdOrName(window, "LongDocFilePathDisplay");
+                    return candidate?.Name == Path.GetFileName(inputPath) ? candidate : null;
+                },
+                TimeSpan.FromSeconds(10)).Result;
+            fileDisplay.Should().NotBeNull("the selected text file should appear in the long-document input");
+
+            var translateButton = FindControl(window, "LongDocTranslateButton");
+            translateButton.Should().NotBeNull("LongDocTranslateButton must exist");
+            translateButton!.Click();
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(90);
+            AutomationElement? status = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                status = FindByAutomationIdOrName(window, "LongDocStatusText");
+                var statusText = status?.Name ?? string.Empty;
+                if (statusText.StartsWith("Completed:", StringComparison.Ordinal)
+                    || statusText.StartsWith("Failed:", StringComparison.Ordinal)
+                    || statusText.StartsWith("Partial success:", StringComparison.Ordinal))
+                {
+                    break;
+                }
+
+                Thread.Sleep(500);
+            }
+
+            status.Should().NotBeNull("the long-document workflow should expose a terminal status");
+            status!.Name.Should().StartWith(
+                "Completed:",
+                "the selected text file should be translated and exported successfully");
+            File.Exists(outputPath).Should().BeTrue(
+                "a completed long-document workflow should write its translated output");
+
+            CaptureAndCompare(window, "longdoc_11_full_workflow_completed");
+        }
+        finally
         {
-            pageRangeBox.Click();
-            Thread.Sleep(200);
-            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-            Thread.Sleep(100);
-            Keyboard.Type("1-3");
-            Thread.Sleep(300);
+            File.Delete(inputPath);
+            File.Delete(outputPath);
         }
-
-        // Final composite screenshot showing all modified controls
-        CaptureAndCompare(window, "longdoc_11_full_workflow");
     }
 
     #region Helpers
@@ -485,6 +504,61 @@ public class LongDocTranslationTests : IDisposable
 
         Thread.Sleep(300);
     }
+    private static void SetEditableControlValue(AutomationElement control, string value)
+    {
+        var editor = control.ControlType == ControlType.Edit
+            ? control
+            : control.FindFirstDescendant(cf => cf.ByControlType(ControlType.Edit));
+        editor.Should().NotBeNull($"{control.AutomationId} should contain an editable text field");
+
+        var textBox = editor!.AsTextBox();
+        textBox.Text = value;
+        Keyboard.Type(VirtualKeyShort.TAB);
+        Thread.Sleep(300);
+    }
+
+    private static string ReadEditableControlValue(AutomationElement control)
+    {
+        var editor = control.ControlType == ControlType.Edit
+            ? control
+            : control.FindFirstDescendant(cf => cf.ByControlType(ControlType.Edit));
+        editor.Should().NotBeNull($"{control.AutomationId} should contain an editable text field");
+        return editor!.AsTextBox().Text;
+    }
+
+    private void SelectFileFromOpenDialog(string filePath)
+    {
+        var desktop = _launcher.Automation.GetDesktop();
+        var fileNameEdit = Retry.WhileNull(
+            () => desktop.FindFirstDescendant(cf => cf.ByAutomationId("1148"))
+                ?? desktop.FindAllDescendants(cf => cf.ByControlType(ControlType.Edit))
+                    .FirstOrDefault(element =>
+                    {
+                        var name = element.Name ?? string.Empty;
+                        return name.Contains("File name", StringComparison.OrdinalIgnoreCase)
+                            || name.Contains("Filename", StringComparison.OrdinalIgnoreCase)
+                            || name.Contains("文件名", StringComparison.Ordinal);
+                    }),
+            TimeSpan.FromSeconds(10)).Result;
+
+        if (fileNameEdit != null)
+        {
+            _output.WriteLine(
+                $"Selecting long-document input through picker edit '{fileNameEdit.AutomationId}' / '{fileNameEdit.Name}'");
+            fileNameEdit.Focus();
+            fileNameEdit.AsTextBox().Text = filePath;
+            Keyboard.Press(VirtualKeyShort.ENTER);
+            return;
+        }
+
+        _output.WriteLine("File-name edit was not exposed through UIA; falling back to the picker address bar.");
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+        Thread.Sleep(200);
+        Keyboard.Type(filePath);
+        Keyboard.Press(VirtualKeyShort.ENTER);
+    }
+
+
 
     private void CaptureAndCompare(Window window, string screenshotName)
     {
@@ -589,6 +663,10 @@ public class LongDocTranslationTests : IDisposable
         Thread.Sleep(500);
         window.SetForeground();
         Thread.Sleep(300);
+
+        var preparedBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        Mouse.MoveTo(new Point(preparedBounds.Left + 12, preparedBounds.Top + 12));
+        Thread.Sleep(1200);
 
         var bounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
         var visible = Rectangle.Intersect(bounds, ScreenshotHelper.GetVirtualScreenBounds());

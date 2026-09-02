@@ -1,12 +1,13 @@
 using System.Diagnostics;
+using System.Drawing;
 using System.Runtime.InteropServices;
 
 namespace Easydict.UIAutomation.Tests.Infrastructure;
 
 /// <summary>
 /// Finds the PopButton window by enumerating all top-level windows and filtering by
-/// process ID, extended window styles (WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE),
-/// and size (≤ 50x50 physical pixels to account for DPI scaling of the 30x30 logical popup).
+/// process ID and its unique extended-style combination
+/// (WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE).
 ///
 /// FlaUI's GetAllTopLevelWindows() may miss the PopButton because WS_EX_TOOLWINDOW windows
 /// are excluded from the taskbar and some enumeration APIs. Using EnumWindows directly
@@ -19,11 +20,6 @@ public static class PopButtonFinder
     private const int WS_EX_TOPMOST = 0x00000008;
     private const int WS_EX_NOACTIVATE = 0x08000000;
 
-    /// <summary>
-    /// Maximum physical pixel size for the PopButton window.
-    /// At 150% DPI, 30 logical pixels = 45 physical pixels; 50 provides margin.
-    /// </summary>
-    private const int MaxPopButtonSize = 50;
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -45,6 +41,10 @@ public static class PopButtonFinder
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT
     {
@@ -54,6 +54,20 @@ public static class PopButtonFinder
         public int Height => Bottom - Top;
         public int CenterX => (Left + Right) / 2;
         public int CenterY => (Top + Bottom) / 2;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    public static Point GetCursorPosition()
+    {
+        return GetCursorPos(out var point)
+            ? new Point(point.X, point.Y)
+            : Point.Empty;
     }
 
     /// <summary>
@@ -76,17 +90,13 @@ public static class PopButtonFinder
             bool hasTopmost = (exStyle & WS_EX_TOPMOST) != 0;
             bool hasNoActivate = (exStyle & WS_EX_NOACTIVATE) != 0;
 
-            if (hasToolWindow && hasTopmost && hasNoActivate)
+            if (hasToolWindow && hasTopmost && hasNoActivate
+                && GetWindowRect(hwnd, out RECT rect)
+                && rect.Width > 0
+                && rect.Height > 0)
             {
-                if (GetWindowRect(hwnd, out RECT rect))
-                {
-                    if (rect.Width > 0 && rect.Height > 0 &&
-                        rect.Width <= MaxPopButtonSize && rect.Height <= MaxPopButtonSize)
-                    {
-                        found = hwnd;
-                        return false; // Stop enumeration
-                    }
-                }
+                found = hwnd;
+                return false; // Stop enumeration
             }
             return true;
         }, IntPtr.Zero);

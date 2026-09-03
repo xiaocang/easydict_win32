@@ -596,21 +596,47 @@ public class LongDocTranslationTests : IDisposable
                     }),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (fileNameEdit != null)
+        if (fileNameEdit == null)
         {
-            _output.WriteLine(
-                $"Selecting long-document input through picker edit '{fileNameEdit.AutomationId}' / '{GetElementName(fileNameEdit)}'");
-            fileNameEdit.Focus();
-            fileNameEdit.AsTextBox().Text = filePath;
+            _output.WriteLine("File-name edit was not exposed through UIA; falling back to the picker address bar.");
+            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+            Thread.Sleep(200);
+            Keyboard.Type(filePath);
             Keyboard.Press(VirtualKeyShort.ENTER);
             return;
         }
 
-        _output.WriteLine("File-name edit was not exposed through UIA; falling back to the picker address bar.");
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
-        Thread.Sleep(200);
-        Keyboard.Type(filePath);
-        Keyboard.Press(VirtualKeyShort.ENTER);
+        _output.WriteLine(
+            $"Selecting long-document input through picker edit '{fileNameEdit.AutomationId}' / '{GetElementName(fileNameEdit)}'");
+        fileNameEdit.Focus();
+        fileNameEdit.AsTextBox().Text = filePath;
+
+        var pickerWindow = GetPickerWindow(fileNameEdit);
+        pickerWindow.Should().NotBeNull("the file-name field must belong to the open-file picker");
+
+        var openButton = Retry.WhileNull(
+            () => pickerWindow!.FindAllDescendants(cf => cf.ByControlType(ControlType.Button))
+                .FirstOrDefault(button => button.IsEnabled
+                    && (button.AutomationId == "1"
+                        || string.Equals(GetElementName(button), "Open", StringComparison.OrdinalIgnoreCase))),
+            TimeSpan.FromSeconds(5)).Result;
+        openButton.Should().NotBeNull("the open-file picker must expose its Open button");
+
+        _output.WriteLine("Confirming long-document input through the picker Open button");
+        openButton!.Click();
+    }
+
+    private static AutomationElement? GetPickerWindow(AutomationElement element)
+    {
+        for (AutomationElement? current = element; current != null; current = current.Parent)
+        {
+            if (current.ControlType == ControlType.Window)
+            {
+                return current;
+            }
+        }
+
+        return null;
     }
 
 

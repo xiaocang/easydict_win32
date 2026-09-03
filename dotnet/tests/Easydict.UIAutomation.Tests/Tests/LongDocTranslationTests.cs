@@ -608,11 +608,7 @@ public class LongDocTranslationTests : IDisposable
 
         _output.WriteLine(
             $"Selecting long-document input through picker edit '{fileNameEdit.AutomationId}' / '{GetElementName(fileNameEdit)}'");
-        fileNameEdit.Focus();
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-        Keyboard.Type(filePath);
-        Keyboard.Type(VirtualKeyShort.TAB);
-        Thread.Sleep(300);
+        SetEditableControlValue(fileNameEdit, filePath);
 
         var pickerValue = ReadEditableControlValue(fileNameEdit);
         _output.WriteLine($"Picker file-name value after keyboard input: '{pickerValue}'");

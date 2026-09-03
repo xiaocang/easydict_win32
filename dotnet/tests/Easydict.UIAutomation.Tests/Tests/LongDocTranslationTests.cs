@@ -614,6 +614,12 @@ public class LongDocTranslationTests : IDisposable
         Keyboard.Type(VirtualKeyShort.TAB);
         Thread.Sleep(300);
 
+        var pickerValue = ReadEditableControlValue(fileNameEdit);
+        _output.WriteLine($"Picker file-name value after keyboard input: '{pickerValue}'");
+        pickerValue.Should().Contain(
+            Path.GetFileName(filePath),
+            "the file-name field must receive the requested input before confirmation");
+
         var pickerWindow = GetPickerWindow(fileNameEdit);
         pickerWindow.Should().NotBeNull("the file-name field must belong to the open-file picker");
 

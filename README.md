@@ -233,7 +233,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OpenAI | OpenAI API | ✅ | |
 | DeepSeek | OpenAI API | ✅ | |
 | Gemini | Gemini API | ✅ | Custom SSE streaming |
-| Zhipu AI | OpenAI API | ✅ | GLM models |
+| Zhipu AI | OpenAI API | — | Temporarily skipped: no API key configured |
 | Kimi | OpenAI API | — | OpenAI-compatible (Moonshot AI), missing API key |
 | Volcano Engine | REST | ✅ | HMAC-SHA256 signing |
 | Groq | OpenAI API | ✅ | OpenAI-compatible |
@@ -247,7 +247,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Ollama | OpenAI API | — | Requires local Ollama setup |
 | Windows Local AI | Local runtime | ✅ | TranslationManager routing tested; real inference requires Phi Silica, Foundry Local, or OpenVINO model |
 | OpenRouter | OpenAI API | — | OpenAI-compatible, missing API key |
-| OrcaRouter | OpenAI API | — | OpenAI-compatible, missing API key |
+| OrcaRouter | OpenAI API | ✅ | Integration coverage: streaming translation, non-streaming translation, and live model catalog (free models first) |
 | Custom OpenAI | OpenAI API | — | OpenAI-compatible, user-defined endpoint |
 | Claude Code | Local CLI (stream-json) | — | Requires local `claude` CLI signed in |
 | Codex | Local CLI (JSONL) | — | Requires local `codex` CLI signed in |

@@ -233,7 +233,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OpenAI | OpenAI API | ✅ | |
 | DeepSeek | OpenAI API | ✅ | |
 | Gemini | Gemini API | ✅ | 自定义 SSE 流式协议 |
-| 智谱 AI | OpenAI API | ✅ | GLM 模型 |
+| 智谱 AI | OpenAI API | — | 暂时跳过：未配置 API Key |
 | Kimi | OpenAI API | — | OpenAI 兼容（月之暗面），缺少 API Key |
 | 火山翻译 | REST | ✅ | HMAC-SHA256 签名 |
 | Groq | OpenAI API | ✅ | OpenAI 兼容 |
@@ -247,7 +247,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Ollama | OpenAI API | — | 需要本地 Ollama 环境 |
 | Windows Local AI | 本地运行时 | ✅ | 已测试 TranslationManager 路由；真实推理需要 Phi Silica、Foundry Local 或 OpenVINO 模型 |
 | OpenRouter | OpenAI API | — | OpenAI 兼容，缺少 API Key |
-| OrcaRouter | OpenAI API | — | OpenAI 兼容，缺少 API Key |
+| OrcaRouter | OpenAI API | ✅ | 测试覆盖：流式翻译、非流式翻译和实时模型目录（免费模型优先） |
 | 自定义 OpenAI | OpenAI API | — | OpenAI 兼容，用户自定义端点 |
 | Claude Code | 本地 CLI（stream-json） | — | 需要本地已登录的 `claude` CLI |
 | Codex | 本地 CLI（JSONL） | — | 需要本地已登录的 `codex` CLI |

@@ -49,7 +49,7 @@ internal static class PickerFactory
         IReadOnlyList<string> fileTypeFilter,
         string? commitButtonText = null)
         => OpenPickerAsync(
-            window, settingsIdentifier, fileTypeFilter, commitButtonText,
+            window, settingsIdentifier, fileTypeFilter, commitButtonText, null,
             async picker => (await picker.PickSingleFileAsync())?.Path,
             async hwnd =>
             {
@@ -64,13 +64,18 @@ internal static class PickerFactory
     /// Optional text for the picker's confirm button (e.g. "Import"). Pass null to use the
     /// system default ("Open"). The dialog title is derived by the OS from picker type.
     /// </param>
+    /// <param name="suggestedStartFolder">
+    /// Optional initial folder for the Windows App SDK picker. After the user selects a folder,
+    /// the picker remembers that location instead.
+    /// </param>
     public static Task<IReadOnlyList<string>> PickMultipleFilesAsync(
         Window window,
         string settingsIdentifier,
         IReadOnlyList<string> fileTypeFilter,
-        string? commitButtonText = null)
+        string? commitButtonText = null,
+        string? suggestedStartFolder = null)
         => OpenPickerAsync<IReadOnlyList<string>>(
-            window, settingsIdentifier, fileTypeFilter, commitButtonText,
+            window, settingsIdentifier, fileTypeFilter, commitButtonText, suggestedStartFolder,
             async picker =>
             {
                 var results = await picker.PickMultipleFilesAsync();
@@ -87,6 +92,7 @@ internal static class PickerFactory
         string settingsIdentifier,
         IReadOnlyList<string> fileTypeFilter,
         string? commitButtonText,
+        string? suggestedStartFolder,
         Func<NewPickers.FileOpenPicker, Task<TResult>> pickWithNew,
         Func<IntPtr, Task<TResult>> pickWithLegacy)
     {
@@ -99,6 +105,7 @@ internal static class PickerFactory
                 SettingsIdentifier = settingsIdentifier,
             };
             if (!string.IsNullOrEmpty(commitButtonText)) picker.CommitButtonText = commitButtonText;
+            if (!string.IsNullOrEmpty(suggestedStartFolder)) picker.SuggestedStartFolder = suggestedStartFolder;
             foreach (var ext in fileTypeFilter) picker.FileTypeFilter.Add(ext);
             return await pickWithNew(picker);
         }

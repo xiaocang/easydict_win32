@@ -3690,10 +3690,12 @@ namespace Easydict.WinUI.Views
                 var mainWindow = App.MainWindow;
                 if (mainWindow is null) return;
 
+                var suggestedStartFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 var paths = await Services.Storage.PickerFactory.PickMultipleFilesAsync(
                     mainWindow,
                     Services.Storage.PickerFactory.SettingsIdentifiers.LongDocImport,
-                    filter);
+                    filter,
+                    suggestedStartFolder: suggestedStartFolder);
 
                 if (paths == null || paths.Count == 0) return;
 

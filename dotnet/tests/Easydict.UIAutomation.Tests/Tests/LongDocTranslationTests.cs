@@ -255,7 +255,7 @@ public class LongDocTranslationTests : IDisposable
 
 
         var inputPath = Path.Combine(
-            Path.GetTempPath(),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             $"easydict-longdoc-{Guid.NewGuid():N}.txt");
         var outputPath = Path.Combine(
             Path.GetDirectoryName(inputPath)!,
@@ -610,7 +610,7 @@ public class LongDocTranslationTests : IDisposable
             $"Selecting long-document input through picker edit '{fileNameEdit.AutomationId}' / '{GetElementName(fileNameEdit)}'");
         fileNameEdit.Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-        Keyboard.Type(filePath);
+        Keyboard.Type(Path.GetFileName(filePath));
         Keyboard.Type(VirtualKeyShort.TAB);
         Thread.Sleep(300);
 

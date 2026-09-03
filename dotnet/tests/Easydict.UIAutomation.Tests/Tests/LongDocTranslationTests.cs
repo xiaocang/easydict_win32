@@ -610,7 +610,7 @@ public class LongDocTranslationTests : IDisposable
             $"Selecting long-document input through picker edit '{fileNameEdit.AutomationId}' / '{GetElementName(fileNameEdit)}'");
         fileNameEdit.Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-        Keyboard.Type(Path.GetFileName(filePath));
+        Keyboard.Type(filePath);
         Keyboard.Type(VirtualKeyShort.TAB);
         Thread.Sleep(300);
 

@@ -440,6 +440,7 @@ namespace Easydict.WinUI.Views
             }
 
             ApplyMainLayoutChrome(minimal, compact);
+            RefreshLongDocServiceItemChrome();
             ApplyStatusChrome();
             ApplyStatusSummaryChrome();
             ApplyTranslateButtonsChrome();
@@ -3175,12 +3176,9 @@ namespace Easydict.WinUI.Views
                     Tag = service.ServiceId,
                     FontStyle = isReady ? Windows.UI.Text.FontStyle.Normal : Windows.UI.Text.FontStyle.Italic,
                 };
-                if (!isReady)
-                {
-                    item.Foreground = CreateLongDocUnavailableServiceForeground();
-                }
                 LongDocServiceCombo.Items.Add(item);
             }
+            RefreshLongDocServiceItemChrome();
 
             // Prefer first ready (configured + tested) service
             var firstReady = LongDocServiceCombo.Items.OfType<ComboBoxItem>()
@@ -3208,18 +3206,26 @@ namespace Easydict.WinUI.Views
 
         private void RefreshLongDocServiceItemChrome()
         {
+            var availableForeground = CreateLongDocAvailableServiceForeground();
             var unavailableForeground = CreateLongDocUnavailableServiceForeground();
             foreach (var item in LongDocServiceCombo.Items.OfType<ComboBoxItem>())
             {
-                if (item.FontStyle == Windows.UI.Text.FontStyle.Italic)
+                var foreground = item.FontStyle == Windows.UI.Text.FontStyle.Italic
+                    ? unavailableForeground
+                    : availableForeground;
+                if (foreground is null)
                 {
-                    item.Foreground = unavailableForeground;
+                    continue;
                 }
-                else
-                {
-                    item.ClearValue(Control.ForegroundProperty);
-                }
+
+                item.Foreground = foreground;
             }
+        }
+
+        private Brush? CreateLongDocAvailableServiceForeground()
+        {
+            return ThemeResourceService.GetBrush("EasydictPrimaryTextBrush", this)
+                ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush", this);
         }
 
         private Brush? CreateLongDocUnavailableServiceForeground()
@@ -3712,18 +3718,14 @@ namespace Easydict.WinUI.Views
 
         private void UpdateLongDocFileDisplay()
         {
-            if (_longDocFileItems.Count == 0)
+            var displayText = _longDocFileItems.Count switch
             {
-                LongDocFilePathDisplay.Text = "No file selected";
-            }
-            else if (_longDocFileItems.Count == 1)
-            {
-                LongDocFilePathDisplay.Text = _longDocFileItems[0].FileName;
-            }
-            else
-            {
-                LongDocFilePathDisplay.Text = $"{_longDocFileItems.Count} files selected";
-            }
+                0 => "No file selected",
+                1 => _longDocFileItems[0].FileName,
+                _ => $"{_longDocFileItems.Count} files selected"
+            };
+            LongDocFilePathDisplay.Text = displayText;
+            AutomationProperties.SetName(LongDocFilePathDisplay, displayText);
 
             LongDocFileItemsControl.ItemsSource = _longDocFileItems;
             LongDocFileItemsControl.Visibility = _longDocFileItems.Count >= 2

@@ -14,6 +14,24 @@
 
     <Page.Resources>
         <views:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <SolidColorBrush x:Key="ComboBoxItemForeground"
+                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver"
+                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed"
+                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundDisabled"
+                         Color="{ThemeResource EasydictControlTertiaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected"
+                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedUnfocused"
+                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed"
+                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver"
+                         Color="{ThemeResource EasydictControlPrimaryTextColor}"/>
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedDisabled"
+                         Color="{ThemeResource EasydictControlTertiaryTextColor}"/>
     </Page.Resources>
 
     <Border x:Name="MainWindowBorder"
@@ -609,6 +627,7 @@
                                 <TextBlock x:Name="LongDocFilePathDisplay"
                                            Grid.Column="0"
                                            Text="No file selected"
+                                           AutomationProperties.Name="No file selected"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

@@ -609,7 +609,10 @@ public class LongDocTranslationTests : IDisposable
         _output.WriteLine(
             $"Selecting long-document input through picker edit '{fileNameEdit.AutomationId}' / '{GetElementName(fileNameEdit)}'");
         fileNameEdit.Focus();
-        fileNameEdit.AsTextBox().Text = filePath;
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
+        Keyboard.Type(filePath);
+        Keyboard.Type(VirtualKeyShort.TAB);
+        Thread.Sleep(300);
 
         var pickerWindow = GetPickerWindow(fileNameEdit);
         pickerWindow.Should().NotBeNull("the file-name field must belong to the open-file picker");

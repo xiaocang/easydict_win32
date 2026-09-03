@@ -293,6 +293,12 @@ public class LongDocTranslationTests : IDisposable
                     return candidate?.Name == Path.GetFileName(inputPath) ? candidate : null;
                 },
                 TimeSpan.FromSeconds(10)).Result;
+
+            if (fileDisplay == null)
+            {
+                var screenshotPath = ScreenshotHelper.CaptureScreen("longdoc_11_picker_selection_failed");
+                _output.WriteLine($"Screenshot saved: {screenshotPath}");
+            }
             fileDisplay.Should().NotBeNull("the selected text file should appear in the long-document input");
 
             var translateButton = FindControl(window, "LongDocTranslateButton");

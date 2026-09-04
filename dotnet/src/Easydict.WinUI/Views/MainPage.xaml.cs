@@ -44,6 +44,7 @@ namespace Easydict.WinUI.Views
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private readonly LatestPlaybackTaskObserver _sourcePlaybackObserver = new();
         private bool _isLoaded;
+        private bool? _isWideQuickTranslateLayout;
         private bool _isQuerying;
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
@@ -104,6 +105,7 @@ namespace Easydict.WinUI.Views
         private const int ModeSwitchRenderDelayMs = 50;
         private const int ModeSwitchMinimumDurationMs = 180;
         private const int PageNavigationRenderDelayMs = 50;
+        private const double QuickTranslateWideLayoutMinWidth = 500;
         private static readonly TimeSpan MinimalLanguageDetectionTimeout = TimeSpan.FromMilliseconds(800);
 
         private Services.LongDocumentTranslationService LongDocumentService =>
@@ -287,6 +289,7 @@ namespace Easydict.WinUI.Views
             // Apply quick-action button visibility + pin state from settings (issue #172)
             ApplyButtonVisibility();
             UpdatePinState();
+            UpdateQuickTranslateLayoutState(QuickContentGrid.ActualWidth);
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: "OnPageLoaded");
@@ -305,6 +308,10 @@ namespace Easydict.WinUI.Views
                 ApplyThemeChrome();
             }
             SyncLocalModelPreparationProgressFromCoordinator();
+            if (_currentMode == QueryMode.Translation)
+            {
+                QueueInputFocusAndSelectAll();
+            }
 #if PORTABLE_UPDATE_CHECK
             StartPortableUpdateCheck();
 #endif
@@ -402,6 +409,63 @@ namespace Easydict.WinUI.Views
 
             var minimal = MinimalThemeService.IsActive;
             var compact = IsCompactChrome;
+
+            // Default TextBox visual states resolve from the Windows theme, not
+            // necessarily the app's explicit theme. Feed the focused-state
+            // resources from the selected Easydict palette.
+            var appTheme = SettingsService.Instance.AppTheme;
+            var themeDictionaryName = ThemeResourceService.IsHighContrastActive()
+                ? "HighContrast"
+                : string.Equals(appTheme, "Dark", StringComparison.OrdinalIgnoreCase)
+                    ? "Dark"
+                    : string.Equals(appTheme, "Light", StringComparison.OrdinalIgnoreCase)
+                        || MinimalThemeService.IsMinimal(appTheme)
+                        ? "Light"
+                        : SystemThemeProbe.IsSystemDark() == true
+                            ? "Dark"
+                            : "Light";
+            InputTextBox.RequestedTheme = string.Equals(
+                appTheme,
+                "System",
+                StringComparison.OrdinalIgnoreCase)
+                ? Microsoft.UI.Xaml.ElementTheme.Default
+                : MinimalThemeService.ToElementTheme(appTheme);
+
+            if (ThemeResourceService.TryGetResource<Brush>(
+                    "EasydictInputBackgroundBrush",
+                    themeDictionaryName,
+                    out var inputBackground))
+            {
+                InputTextBox.Background = inputBackground;
+                InputTextBox.Resources["TextControlBackgroundFocused"] = inputBackground;
+                InputTextBox.Resources["TextControlBackgroundPointerOver"] = inputBackground;
+            }
+
+            if (ThemeResourceService.TryGetResource<Brush>(
+                    "EasydictPrimaryTextBrush",
+                    themeDictionaryName,
+                    out var inputForeground))
+            {
+                InputTextBox.Foreground = inputForeground;
+                InputTextBox.Resources["TextControlForegroundFocused"] = inputForeground;
+                InputTextBox.Resources["TextControlForegroundPointerOver"] = inputForeground;
+            }
+
+            if (ThemeResourceService.TryGetResource<Brush>(
+                    "EasydictTertiaryTextBrush",
+                    themeDictionaryName,
+                    out var placeholderForeground))
+            {
+                InputTextBox.PlaceholderForeground = placeholderForeground;
+                InputTextBox.Resources["TextControlPlaceholderForegroundFocused"] = placeholderForeground;
+                InputTextBox.Resources["TextControlPlaceholderForegroundPointerOver"] = placeholderForeground;
+            }
+
+            if (InputTextBox.FocusState != Microsoft.UI.Xaml.FocusState.Unfocused)
+            {
+                Microsoft.UI.Xaml.VisualStateManager.GoToState(InputTextBox, "Normal", useTransitions: false);
+                Microsoft.UI.Xaml.VisualStateManager.GoToState(InputTextBox, "Focused", useTransitions: false);
+            }
             ModeIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             ModeSelectorButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             ModeSubtitle.Visibility = compact || _currentMode != QueryMode.LongDocument
@@ -726,20 +790,23 @@ namespace Easydict.WinUI.Views
                 text = _isQuerying ? "Cancel" : "Translate";
             }
 
+            TranslateButtonText.Text = text;
+            TranslateButtonNarrowText.Text = text;
+
             ApplyTranslateButtonChrome(
                 TranslateButton,
                 _translateButtonDefaultContent,
                 minimal,
                 text,
-                normalWidth: 40,
-                normalHeight: 40);
+                normalWidth: double.NaN,
+                normalHeight: 36);
             ApplyTranslateButtonChrome(
                 TranslateButtonNarrow,
                 _translateButtonNarrowDefaultContent,
                 minimal,
                 text,
-                normalWidth: 40,
-                normalHeight: 40);
+                normalWidth: double.NaN,
+                normalHeight: 36);
             ApplyTranslateButtonChrome(
                 LongDocTranslateButton,
                 _longDocTranslateButtonDefaultContent,
@@ -771,8 +838,10 @@ namespace Easydict.WinUI.Views
             button.Content = normalContent;
             button.Width = normalWidth;
             button.Height = normalHeight;
-            button.MinWidth = 0;
-            button.Padding = new Thickness(0);
+            button.MinWidth = double.IsNaN(normalWidth) ? 96 : 0;
+            button.Padding = double.IsNaN(normalWidth)
+                ? new Thickness(12, 6, 12, 6)
+                : new Thickness(0);
         }
 
         private async void OnPageUnloaded(object sender, RoutedEventArgs e)
@@ -996,6 +1065,22 @@ namespace Easydict.WinUI.Views
             // Output placeholder
             PlaceholderText.Text = loc.GetString("TranslationPlaceholder");
 
+            InputTitleText.Text = loc.GetString("SourceText") ?? "Source text";
+            var sourceLanguageLabel = GetLanguageFieldLabel(
+                loc.GetString("SourceLanguageTooltip"),
+                "Source language");
+            var targetLanguageLabel = GetLanguageFieldLabel(
+                loc.GetString("TargetLanguageTooltip"),
+                "Target language");
+            SourceLanguageLabel.Text = sourceLanguageLabel;
+            SourceLanguageLabelNarrow.Text = sourceLanguageLabel;
+            TargetLanguageLabel.Text = targetLanguageLabel;
+            TargetLanguageLabelNarrow.Text = targetLanguageLabel;
+            AutomationProperties.SetName(SourceLangCombo, sourceLanguageLabel);
+            AutomationProperties.SetName(SourceLangComboNarrow, sourceLanguageLabel);
+            AutomationProperties.SetName(TargetLangCombo, targetLanguageLabel);
+            AutomationProperties.SetName(TargetLangComboNarrow, targetLanguageLabel);
+
             SyncLocalModelPreparationProgressFromCoordinator();
 
             // Tooltips
@@ -1038,6 +1123,18 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LongDocOutputModeHint, loc.GetString("LongDoc_OutputModeHelpTip"));
             ToolTipService.SetToolTip(LongDocConcurrencyHint, loc.GetString("LongDoc_ConcurrencyHelpTip"));
             ToolTipService.SetToolTip(LongDocPageRangeHint, loc.GetString("LongDoc_PageRangeHelpTip"));
+        }
+
+        private static string GetLanguageFieldLabel(string? localizedText, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(localizedText))
+            {
+                return fallback;
+            }
+
+            var label = localizedText.Trim();
+            var sentenceTerminator = label.IndexOfAny(['.', '。']);
+            return sentenceTerminator > 0 ? label[..sentenceTerminator] : label;
         }
 
         private void PopulateLongDocLanguageCombos(LocalizationService loc)
@@ -1562,6 +1659,29 @@ namespace Easydict.WinUI.Views
             MemoryDiagnostics.LogSnapshot("MainPage.ReleaseServiceResultControls complete");
             LogObjectState("ReleaseServiceResultControls complete");
 #endif
+        }
+
+        private void OnQuickContentGridSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateQuickTranslateLayoutState(e.NewSize.Width);
+        }
+
+        private void UpdateQuickTranslateLayoutState(double availableWidth)
+        {
+            if (availableWidth <= 0)
+            {
+                return;
+            }
+
+            var isWide = availableWidth >= QuickTranslateWideLayoutMinWidth;
+            if (_isWideQuickTranslateLayout == isWide)
+            {
+                return;
+            }
+
+            ActionBarWide.Visibility = isWide ? Visibility.Visible : Visibility.Collapsed;
+            ActionBarNarrow.Visibility = isWide ? Visibility.Collapsed : Visibility.Visible;
+            _isWideQuickTranslateLayout = isWide;
         }
 
         private void OnQuickTranslateContentViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)

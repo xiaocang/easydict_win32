@@ -22,7 +22,7 @@
             <SolidColorBrush x:Key="EasydictCardBorderBrush"
                              Color="{ThemeResource CardStrokeColorDefault}" />
             <SolidColorBrush x:Key="EasydictInputBackgroundBrush"
-                             Color="{ThemeResource ControlFillColorDefault}" />
+                             Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="EasydictInputBorderBrush"
                              Color="{ThemeResource ControlStrokeColorDefault}" />
             <SolidColorBrush x:Key="EasydictPrimaryTextBrush"

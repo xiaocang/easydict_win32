@@ -752,14 +752,26 @@ public class SettingsServiceTests
     [Fact]
     public void SelectedLanguages_HasDefaultValue()
     {
-        _settings.SelectedLanguages.Should().NotBeNull();
-        _settings.SelectedLanguages.Should().Contain("zh");
-        _settings.SelectedLanguages.Should().Contain("en");
-        _settings.SelectedLanguages.Should().Contain("ja");
-        _settings.SelectedLanguages.Should().Contain("ko");
-        _settings.SelectedLanguages.Should().Contain("fr");
-        _settings.SelectedLanguages.Should().Contain("de");
-        _settings.SelectedLanguages.Should().Contain("es");
+        using var testDirectory = new TemporaryDirectory();
+        var previousSettingsDirectory = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", testDirectory.Path);
+            var settings = CreateIsolatedSettingsService();
+
+            settings.SelectedLanguages.Should().NotBeNull();
+            settings.SelectedLanguages.Should().Contain("zh");
+            settings.SelectedLanguages.Should().Contain("en");
+            settings.SelectedLanguages.Should().Contain("ja");
+            settings.SelectedLanguages.Should().Contain("ko");
+            settings.SelectedLanguages.Should().Contain("fr");
+            settings.SelectedLanguages.Should().Contain("de");
+            settings.SelectedLanguages.Should().Contain("es");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previousSettingsDirectory);
+        }
     }
 
     [Fact]

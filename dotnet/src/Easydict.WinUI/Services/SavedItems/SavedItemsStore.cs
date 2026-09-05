@@ -315,9 +315,9 @@ public sealed class SavedItemsStore
             )
             SELECT q.id, q.mode, q.source_text, q.source_language, q.target_language,
                    q.source_kind, q.created_utc, q.success_result_count, q.relevance_rank,
-                   CASE WHEN @provider <> '' THEN selected_provider.provider_id WHEN @search = '' OR q.source_search_text LIKE @contains ESCAPE '\' OR mr.id IS NULL THEN q.preview_provider_id ELSE mr.provider_id END AS preview_provider_id,
-                   CASE WHEN @provider <> '' THEN selected_provider.provider_name WHEN @search = '' OR q.source_search_text LIKE @contains ESCAPE '\' OR mr.id IS NULL THEN q.preview_provider_name ELSE mr.provider_name END AS preview_provider_name,
-                   CASE WHEN @provider <> '' THEN selected_provider.preview_text WHEN @search = '' OR q.source_search_text LIKE @contains ESCAPE '\' OR mr.id IS NULL THEN q.preview_text ELSE mr.preview_text END AS preview_text
+                   CASE WHEN @provider <> '' THEN selected_provider.provider_id WHEN @search = '' OR mr.id IS NULL THEN q.preview_provider_id ELSE mr.provider_id END AS preview_provider_id,
+                   CASE WHEN @provider <> '' THEN selected_provider.provider_name WHEN @search = '' OR mr.id IS NULL THEN q.preview_provider_name ELSE mr.provider_name END AS preview_provider_name,
+                   CASE WHEN @provider <> '' THEN selected_provider.preview_text WHEN @search = '' OR mr.id IS NULL THEN q.preview_text ELSE mr.preview_text END AS preview_text
             FROM ranked q
             LEFT JOIN matching_results mr ON mr.query_id = q.id AND mr.match_order = 1
             LEFT JOIN saved_results selected_provider ON selected_provider.query_id = q.id AND selected_provider.provider_id = @provider

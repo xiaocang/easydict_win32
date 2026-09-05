@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:controls="using:Easydict.WinUI.Views.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     AutomationProperties.AccessibilityView="Control"
     mc:Ignorable="d">
@@ -19,9 +20,10 @@
         PointerExited="OnControlPointerExited">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="30"/>
+                <RowDefinition x:Name="HeaderRow" Height="30"/>
                 <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+</Grid.RowDefinitions>
 
             <!-- Header Bar (30 DIPs, matches macOS EZResultViewMiniHeight) -->
             <Border
@@ -39,9 +41,9 @@
                 <Grid Padding="8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -59,6 +61,7 @@
                     <!-- Service Name -->
                     <TextBlock
                         x:Name="ServiceNameText"
+                        TextTrimming="CharacterEllipsis"
                         Grid.Column="1"
                         FontSize="12"
                         FontWeight="SemiBold"
@@ -146,6 +149,10 @@
                 Padding="10,8,10,10"
                 Visibility="Visible">
                 <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     <ScrollViewer
                         x:Name="ResultContentScrollViewer"
                         VerticalScrollBarVisibility="Disabled"
@@ -361,6 +368,13 @@
                                       Foreground="{ThemeResource ActionButtonIconBrush}"/>
                         </Button>
 
+                        <Button x:Name="SavedMoreButton" Width="32" Height="32" Padding="0" Visibility="Collapsed">
+                            <Button.Flyout><MenuFlyout>
+                                <MenuFlyoutItem x:Name="SavedCopySourceMenuItem" Click="OnCopySavedSource"/>
+                                <MenuFlyoutItem x:Name="SavedCollapseMenuItem" Click="OnSavedCollapseClicked"/>
+                            </MenuFlyout></Button.Flyout>
+                            <FontIcon Glyph="&#xE712;" FontSize="14"/>
+                        </Button>
                         <!-- Copy Button -->
                         <Button
                             x:Name="CopyButton"
@@ -379,6 +393,7 @@
                     </StackPanel>
                 </Grid>
             </Border>
+            <controls:ResultMessageView x:Name="ResultFeedback" Grid.Row="2" IsOpen="False"/>
         </Grid>
     </Border>
 </UserControl>

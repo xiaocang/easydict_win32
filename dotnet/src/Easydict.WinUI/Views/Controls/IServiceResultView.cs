@@ -34,6 +34,8 @@ public interface IServiceResultView
     event EventHandler<ServiceQueryResult>? FavoriteRequested;
 
     event EventHandler? CopyCompleted;
+    event EventHandler<ResultRenderingEventArgs>? RenderingStatusChanged;
+    ResultMessageView Feedback { get; }
 
     void RefreshDemotionState();
 

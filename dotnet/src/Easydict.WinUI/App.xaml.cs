@@ -1535,10 +1535,13 @@ namespace Easydict.WinUI
 
             var elementTheme = MinimalThemeService.ToElementTheme(theme);
             ApplyMainWindowTitleBarChrome(theme, elementTheme);
+            WindowIconService.SetWindowIcon(Instance._appWindow);
+            Instance._trayIconService?.RefreshThemeIcon();
 
             if (Instance._window?.Content is Frame frame)
             {
                 ApplyFrameTheme(frame, theme, forceThemeResourceRefresh);
+                if (frame.Content is SavedItemsPage savedPage) savedPage.RefreshSavedAppearance();
             }
             else if (Instance._window?.Content is FrameworkElement mainRoot)
             {
@@ -1565,6 +1568,8 @@ namespace Easydict.WinUI
             {
                 mainPage.ApplyAppearance();
             }
+            if (Instance._window?.Content is Frame savedFrame && savedFrame.Content is SavedItemsPage savedPage)
+                savedPage.RefreshSavedAppearance();
 
             MiniWindowService.Instance.ApplyAppearance();
             FixedWindowService.Instance.ApplyAppearance();
@@ -1683,11 +1688,6 @@ namespace Easydict.WinUI
 
         private void QueueSystemThemeRefresh()
         {
-            if (!IsSystemTheme(SettingsService.Instance.AppTheme))
-            {
-                return;
-            }
-
             if (Interlocked.Exchange(ref _systemThemeRefreshQueued, 1) == 1)
             {
                 return;
@@ -1706,6 +1706,8 @@ namespace Easydict.WinUI
         private void RefreshSystemThemeIfChanged()
         {
             _systemThemeRefreshQueued = 0;
+            // Taskbar theme changes must apply even with an explicit app theme.
+            _trayIconService?.RefreshThemeIcon();
 
             if (!IsSystemTheme(SettingsService.Instance.AppTheme))
             {

@@ -39,6 +39,8 @@ internal static class ServiceResultViewHost
         {
             control.CopyCompleted += copyCompleted;
         }
+        control.RenderingStatusChanged += OnRenderingStatusChanged;
+        if (copyCompleted is null) control.CopyCompleted += OnCopyCompleted;
         control.ServiceResult = result;
         ApplyAutomationProperties(control, result);
         control.RefreshThemeChrome();
@@ -72,6 +74,20 @@ internal static class ServiceResultViewHost
         resultsPanel.Items.Add(control.Element);
         control.RefreshThemeChrome();
         return control;
+    }
+
+    private static void OnRenderingStatusChanged(object? sender, ResultRenderingEventArgs e)
+    {
+        if (sender is not IServiceResultView view) return;
+        if (e.IsFallback) view.Feedback.Show("FluentDictionaryFallback", error: true);
+        else view.Feedback.Cleanup();
+    }
+
+    private static void OnCopyCompleted(object? sender, EventArgs e)
+    {
+        if (sender is not IServiceResultView view) return;
+        var failed = e is ResultCopyEventArgs { Error: not null };
+        view.Feedback.Show(failed ? "FluentCopyFailed" : "FluentCopied", error: failed, transient: !failed);
     }
 
     private static void ApplyAutomationProperties(IServiceResultView control, ServiceQueryResult result)
@@ -152,6 +168,8 @@ internal static class ServiceResultViewHost
             {
                 control.CopyCompleted -= copyCompleted;
             }
+            control.RenderingStatusChanged -= OnRenderingStatusChanged;
+            control.CopyCompleted -= OnCopyCompleted;
             control.Cleanup();
         }
 

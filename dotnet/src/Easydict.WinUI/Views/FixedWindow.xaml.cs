@@ -499,7 +499,7 @@ public sealed partial class FixedWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionFallbackNotice",
                 "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
-            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+            DetectedLangText.Visibility = Visibility.Visible;
             RequestResize();
             return;
         }
@@ -509,7 +509,7 @@ public sealed partial class FixedWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionActiveNotice",
                 "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
-            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+            DetectedLangText.Visibility = Visibility.Visible;
             RequestResize();
             return;
         }
@@ -1627,7 +1627,7 @@ public sealed partial class FixedWindow : Window
             DetectedLangText.Text = string.Format(
                 LocalizationService.Instance.GetString("DetectedLanguage"),
                 displayName);
-            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+            DetectedLangText.Visibility = Visibility.Visible;
         }
         else
         {
@@ -1724,7 +1724,9 @@ public sealed partial class FixedWindow : Window
         {
             RefreshDetectedLanguageChrome();
         }
-        StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        StatusText.Visibility = Visibility.Visible;
+        WindowSurface.Padding = new Thickness(compact ? 8 : 12);
+        RefreshDetectedLanguageChrome();
         DispatcherQueue.TryEnqueue(() => _titleBarHelper?.UpdateDragRegions());
     }
 
@@ -2225,6 +2227,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
+        WindowIconService.SetWindowIcon(_appWindow);
         if (this.Content is FrameworkElement root)
         {
             MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);

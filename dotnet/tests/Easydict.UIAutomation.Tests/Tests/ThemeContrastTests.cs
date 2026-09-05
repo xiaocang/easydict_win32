@@ -77,6 +77,37 @@ public sealed class ThemeContrastTests : IDisposable
     }
 
     [Fact]
+    public void SettingsPage_ExplicitDarkTheme_OnLightWindowsTheme_ShouldRenderDarkControls()
+    {
+        SnapshotAndSetPersistedAppTheme("Light");
+        SnapshotAndSetPersistedUiLanguage("zh-CN");
+        ForceWindowsTheme(light: true);
+        _launcher = new AppLauncher();
+        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var window = _launcher.GetMainWindow();
+        FindAppThemeCombo(window).Select(2);
+        WaitForPersistedAppTheme("Dark", TimeSpan.FromSeconds(5)).Should().Be("Dark");
+        foreach (var width in new[] { 1280, 640 })
+        {
+            SavedItemsVisualTests.Resize(window, width);
+            Thread.Sleep(1000);
+            var path = ScreenshotHelper.CaptureWindowPhysical(window, $"settings-dark-on-light-{width}");
+            _output.WriteLine(path);
+            AssertSettingsPalette(window, path, expectedLight: false);
+        }
+        ForceWindowsTheme(light: false);
+        Thread.Sleep(1200);
+        using (new PerMonitorDpiScope())
+            _output.WriteLine(ScreenshotHelper.CaptureScreen("icons-app-dark-shell-dark"));
+        ForceWindowsTheme(light: true);
+        Thread.Sleep(1200);
+        var switchedPath = ScreenshotHelper.CaptureWindowPhysical(window, "settings-dark-after-system-light-switch");
+        AssertSettingsPalette(window, switchedPath, expectedLight: false);
+        using (new PerMonitorDpiScope())
+            _output.WriteLine(ScreenshotHelper.CaptureScreen("icons-app-dark-shell-light"));
+    }
+
+    [Fact]
     public void SettingsPage_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightControls()
     {
         SnapshotAndSetPersistedAppTheme("Light");
@@ -573,7 +604,9 @@ public sealed class ThemeContrastTests : IDisposable
 
     private void PrepareSettingsWindowForScreenshot(Window window)
     {
-        ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(0, 0, 900, 900));
+        var scale = ScreenshotHelper.GetWindowDpiScale(window);
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window,
+            new Rectangle(0, 0, (int)(1280 * scale) + 16, (int)(800 * scale) + 40));
         Thread.Sleep(500);
         window.SetForeground();
         MovePointerAwayFromTabs(window);
@@ -981,16 +1014,23 @@ public sealed class ThemeContrastTests : IDisposable
             minLightBrightness: 150,
             maxDarkBrightness: 130);
 
+        AssertElementRegionMatchesPalette(
+            "General settings row background",
+            FindRequired(window, "MinimizeToTrayLabel"),
+            bitmap, windowBounds, dpiScale,
+            relativeX: 0.90, relativeY: 0.20, relativeWidth: 0.08, relativeHeight: 0.60,
+            expectedLight: expectedLight, minLightBrightness: 150, maxDarkBrightness: 130);
+
         AssertElementRelativeRegionMatchesForegroundPalette(
             "General MinimizeToTrayToggle header",
-            FindRequired(window, "MinimizeToTrayToggle"),
+            FindRequired(window, "MinimizeToTrayLabel"),
             bitmap,
             windowBounds,
             dpiScale,
             relativeX: 0.00,
             relativeY: 0.00,
             relativeWidth: 0.90,
-            relativeHeight: 0.45,
+            relativeHeight: 1.0,
             expectedLight: expectedLight,
             minForegroundPixelRatio: 0.008);
     }

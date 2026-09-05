@@ -73,7 +73,7 @@
 
             <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="OverlayCornerRadius">10</CornerRadius>
-            <CornerRadius x:Key="EasydictCardCornerRadius">6</CornerRadius>
+            <CornerRadius x:Key="EasydictCardCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="EasydictRoundButtonCornerRadius">18</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
@@ -277,7 +277,7 @@
 
             <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="OverlayCornerRadius">10</CornerRadius>
-            <CornerRadius x:Key="EasydictCardCornerRadius">6</CornerRadius>
+            <CornerRadius x:Key="EasydictCardCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="EasydictRoundButtonCornerRadius">18</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
@@ -481,120 +481,120 @@
             <Thickness x:Key="FloatingInputMargin">0,0,0,4</Thickness>
             <Thickness x:Key="EasydictCardPadding">8</Thickness>
 
-            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
-            <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
-            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="{StaticResource QueryViewBackgroundColor}" />
-            <SolidColorBrush x:Key="QueryTextBrush" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{StaticResource TitleBarBackgroundColor}" />
-            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="{StaticResource ResultViewBackgroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderBackgroundBrush" Color="{StaticResource ServiceResultHeaderBackgroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderHoverBackgroundBrush" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="{StaticResource ServiceResultHeaderForegroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
-            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
-            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource EasydictCardBorderColor}" />
-            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#000000" />
-            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#000000" />
-            <SolidColorBrush x:Key="ButtonBackground" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ButtonForeground" Color="#000000" />
-            <SolidColorBrush x:Key="ButtonBorderBrush" Color="#000000" />
-            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#000000" />
-            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#000000" />
-            <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#000000" />
-            <SolidColorBrush x:Key="ComboBoxForeground" Color="#000000" />
-            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#000000" />
-            <SolidColorBrush x:Key="TextControlForeground" Color="#000000" />
-            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#000000" />
-            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ComboBoxHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="TextControlHeaderForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="TextControlHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="TextControlHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="SliderHeaderForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="SliderHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="SliderHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="RadioButtonsHeaderForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="RadioButtonsHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchContentForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchContentForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ToggleSwitchHeaderDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ExpanderForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderForegroundPressed" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderHeaderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderChevronPointerOverForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="ExpanderChevronPressedForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminate" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePointerOver" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePressed" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
-            <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
-            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
-            <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
-            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
-            <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
-            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
-            <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
-            <SolidColorBrush x:Key="StatusIndicatorForegroundBrush" Color="{StaticResource StatusIndicatorForegroundColor}" />
-            <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="{StaticResource StatusConnectedColor}" />
-            <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="{StaticResource StatusErrorColor}" />
-            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
-            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{StaticResource AccentForegroundColor}" />
-            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}" />
-            <SolidColorBrush x:Key="AccentPointerOverBrush" Color="{StaticResource AccentPointerOverColor}" />
-            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
-            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
-            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
-            <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource PosTagBackgroundColor}" />
-            <SolidColorBrush x:Key="PosTagTextBrush" Color="{StaticResource PosTagTextColor}" />
-            <SolidColorBrush x:Key="ExampleTextBrush" Color="{StaticResource ExampleTextColor}" />
-            <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="{StaticResource SettingsTabBackgroundColor}" />
-            <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="{StaticResource SettingsTabBorderColor}" />
-            <SolidColorBrush x:Key="SettingsTabForegroundBrush" Color="{StaticResource SettingsTabForegroundColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedBackgroundBrush" Color="{StaticResource SettingsTabSelectedBackgroundColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedBorderBrush" Color="{StaticResource SettingsTabSelectedBorderColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedForegroundBrush" Color="{StaticResource SettingsTabSelectedForegroundColor}" />
-            <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="{StaticResource PopButtonBackgroundColor}" />
-            <SolidColorBrush x:Key="PopButtonBorderBrush" Color="{StaticResource PopButtonBorderColor}" />
-            <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="{StaticResource PopButtonForegroundColor}" />
-            <SolidColorBrush x:Key="FloatingWindowBackgroundBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
-            <SolidColorBrush x:Key="FloatingWindowBorderBrush" Color="{StaticResource FloatingWindowBorderColor}" />
-            <SolidColorBrush x:Key="FloatingInputBackgroundBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
-            <SolidColorBrush x:Key="FloatingInputBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
-            <SolidColorBrush x:Key="FloatingIconForegroundBrush" Color="{StaticResource FloatingIconForegroundColor}" />
-            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
-            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="{StaticResource EasydictCardBorderColor}" />
+            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="MainBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="QueryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ServiceResultHeaderBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ServiceResultHeaderHoverBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ButtonHoverBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ButtonBackground" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ButtonForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextControlForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundThemeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundThemeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundThemeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForegroundDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForegroundDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchForegroundThemeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchDisabledForegroundThemeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundThemeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderDisabledForegroundThemeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPointerOver" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPressed" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderDisabledForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderDisabledForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPointerOverForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPressedForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminate" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePointerOver" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePressed" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="BlueAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="BlueTintBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ListBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="StatusIndicatorForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentPointerOverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PosTagTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ExampleTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SettingsTabForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SettingsTabSelectedBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SettingsTabSelectedBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SettingsTabSelectedForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PopButtonBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="FloatingInputBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="FloatingInputBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="FloatingIconForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

@@ -54,8 +54,9 @@ public sealed class SavedItemsTests : IDisposable
         Retry.WhileNull(
             () => UITestHelper.FindByAutomationIdOrName(window, "SavedItemsEmptyStateText"),
             TimeSpan.FromSeconds(10)).Result.Should().NotBeNull("an empty database shows the native empty state");
-        UITestHelper.FindByAutomationIdOrName(window, "SavedItemsHistoryKindTabs")
-            .Should().NotBeNull("wide history uses the category tabs");
+        (UITestHelper.FindByAutomationIdOrName(window, "SavedItemsHistoryKindTabs") ??
+         UITestHelper.FindByAutomationIdOrName(window, "SavedItemsHistoryKindCombo"))
+            .Should().NotBeNull("categories remain reachable at the available list width in every language");
         UITestHelper.FindByAutomationIdOrName(window, "SavedItemsBackButton")
             .Should().NotBeNull("saved-items navigation exposes a deterministic Back action");
         var screenshot = ScreenshotHelper.CaptureWindow(window, "saved_items_history_empty_fluent2");
@@ -223,7 +224,16 @@ public sealed class SavedItemsTests : IDisposable
     [Fact]
     public void HistorySettings_PersistImmediatelyAcrossRestart()
     {
+        using var dpiScope = new PerMonitorDpiScope();
         var controls = OpenHistorySettings(_launcher);
+        var scrollViewer = UITestHelper.FindByAutomationIdOrName(_launcher.GetMainWindow(), "MainScrollViewer")!;
+        ScrollHelper.ScrollToFind(scrollViewer, 70, () =>
+        {
+            var clear = UITestHelper.FindByAutomationIdOrName(_launcher.GetMainWindow(), "ClearHistoryButton");
+            return clear is { IsOffscreen: false } && clear.BoundingRectangle.Bottom < scrollViewer.BoundingRectangle.Bottom - 16
+                ? clear : null;
+        }, _output.WriteLine).Should().NotBeNull();
+        _output.WriteLine(ScreenshotHelper.CaptureWindow(_launcher.GetMainWindow(), "fluent2_history_privacy_settings"));
         var retentionPattern = controls.Retention.Patterns.RangeValue.PatternOrDefault;
         retentionPattern.Should().NotBeNull();
         retentionPattern!.SetValue(7);

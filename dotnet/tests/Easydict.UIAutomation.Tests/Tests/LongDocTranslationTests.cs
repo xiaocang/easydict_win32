@@ -434,6 +434,7 @@ public class LongDocTranslationTests : IDisposable
 
     private AutomationElement? FindControl(Window window, string name)
     {
+        ExpandAdvancedOptionsIfNeeded(window, name);
         var control = Retry.WhileNull(
             () => FindByAutomationIdOrName(window, name),
             TimeSpan.FromSeconds(10)).Result;
@@ -448,6 +449,7 @@ public class LongDocTranslationTests : IDisposable
 
     private ComboBox? FindComboBox(Window window, string name)
     {
+        ExpandAdvancedOptionsIfNeeded(window, name);
         var combo = Retry.WhileNull(
             () => FindByAutomationIdOrName(window, name)?.AsComboBox(),
             TimeSpan.FromSeconds(5)).Result;
@@ -458,6 +460,13 @@ public class LongDocTranslationTests : IDisposable
         }
 
         return combo;
+    }
+
+    private static void ExpandAdvancedOptionsIfNeeded(Window window, string name)
+    {
+        if (name is not ("LongDocInputModeCombo" or "LongDocConcurrencyBox" or "LongDocPageRangeBox")) return;
+        var expander = FindByAutomationIdOrName(window, "LongDocMoreOptions");
+        expander?.Patterns.ExpandCollapse.Pattern.Expand();
     }
 
     /// <summary>

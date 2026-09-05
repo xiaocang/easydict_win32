@@ -485,6 +485,64 @@ public sealed class SavedItemsStoreTests : IAsyncLifetime
             .Should().ContainSingle(item => item.Id == unicode.Id);
     }
 
+    [Theory]
+    [InlineData(200)]
+    [InlineData(5000)]
+    public async Task LargeHistory_PagesTwentyFiveWithoutDuplicatesOrMissingRows(int count)
+    {
+        // Seed in one transaction; exercise production queries and cursor logic for every page.
+        await using (var connection = new SqliteConnection($"Data Source={Path.Combine(_directory, "saved_items.db")}"))
+        {
+            await connection.OpenAsync();
+            await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync();
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                WITH RECURSIVE rows(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM rows WHERE n < @count)
+                INSERT INTO saved_queries
+                SELECT printf('00000000-0000-0000-0000-%012d',n), 'translation', 'source ' || n,
+                    'SOURCE ' || n, 'en', 'zh', 'manual', @created, 1, 'provider', 'Provider', 'result', 1
+                FROM rows;
+                INSERT INTO saved_results
+                SELECT '1' || substr(id,2), id, 'provider', 'Provider', 'PROVIDER', 0, 'translation',
+                    'result', 'RESULT', 'result', '{}', 'RESULT', 123, created_utc FROM saved_queries;
+                """;
+            command.Parameters.AddWithValue("@count", count);
+            command.Parameters.AddWithValue("@created", DateTimeOffset.UtcNow.ToString("O"));
+            await command.ExecuteNonQueryAsync();
+            await transaction.CommitAsync();
+        }
+        SavedItemsCursor? cursor = null;
+        var ids = new HashSet<Guid>();
+        var pages = 0;
+        do
+        {
+            var page = await _store.ListHistoryAsync(new HistoryListRequest(Cursor: cursor, PageSize: 25));
+            page.Items.Should().HaveCount(25);
+            foreach (var row in page.Items) ids.Add(row.Id).Should().BeTrue("a cursor must never return the same query twice");
+            cursor = page.NextCursor;
+            (++pages).Should().BeLessThanOrEqualTo(count / 25);
+        } while (cursor is not null);
+        ids.Should().HaveCount(count);
+    }
+
+    [Fact]
+    public async Task HistoryPreview_ProviderFilterThenResultMatchThenDefaultEvenWhenSourceMatches()
+    {
+        var draft = CreateTranslationDraft("needle", "primary", "Primary", "default body", true);
+        draft.TryAddTranslation("secondary", "Secondary", 1, new TranslationResult
+        {
+            OriginalText = "needle", TranslatedText = "needle in second result", ServiceName = "Secondary"
+        }).Should().BeTrue();
+        await _store.UpsertTrackedSnapshotAsync(draft.Snapshot(), true);
+        (await _store.ListHistoryAsync(new HistoryListRequest("needle"))).Items.Single()
+            .PreviewProviderId.Should().Be("secondary");
+        (await _store.ListHistoryAsync(new HistoryListRequest("needle", ProviderId: "primary"))).Items.Single()
+            .PreviewProviderId.Should().Be("primary");
+        (await _store.ListHistoryAsync(new HistoryListRequest())).Items.Single()
+            .PreviewProviderId.Should().Be("primary");
+    }
+
     [Fact]
     public async Task Favorites_FilterTagsWithOrSemanticsAndKeepResultPreviewFixed()
     {

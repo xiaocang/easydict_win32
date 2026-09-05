@@ -717,7 +717,7 @@
     <value>紧凑模式</value>
   </data>
   <data name="CompactModeDescription" xml:space="preserve">
-    <value>隐藏标题、状态、提示图标和辅助快捷按钮，让翻译界面更紧凑。</value>
+    <value>缩小留白，同时保留语言、进度和关键操作。</value>
   </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>快捷操作按钮</value>
@@ -1471,7 +1471,7 @@
   <data name="SavedItemsRefresh" xml:space="preserve"><value>刷新</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>暂无已完成的查询。</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>暂无收藏。</value></data>
-  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>选择一条保存的查询</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>选择一条记录</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>从历史记录中删除</value></data>
   <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>返回翻译</value></data>
   <data name="SavedItemsAddFavorite" xml:space="preserve"><value>添加到收藏</value></data>
@@ -1490,4 +1490,65 @@
   <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>最近 30 天</value></data>
   <data name="SavedItemsAllProviders" xml:space="preserve"><value>所有服务</value></data>
   <data name="SavedItemsRetry" xml:space="preserve"><value>重试</value></data>
+  <data name="HistoryClearDescription" xml:space="preserve"><value>将移除可见的历史记录。收藏不会被删除。</value></data>
+  <data name="HistoryClearLabel" xml:space="preserve"><value>清除历史记录</value></data>
+  <data name="HistoryClearTitle" xml:space="preserve"><value>清除历史记录？</value></data>
+  <data name="HistoryCleared" xml:space="preserve"><value>历史记录已清除，收藏已保留。</value></data>
+  <data name="HistoryEnabledLabel" xml:space="preserve"><value>保存查询历史</value></data>
+  <data name="HistoryPrivacyDescription" xml:space="preserve"><value>保存成功的翻译、词典、语法纠错和 OCR 查询。关闭后停止新增历史，但保留已有记录。长文档不进入历史和收藏。</value></data>
+  <data name="HistoryPrivacyTitle" xml:space="preserve"><value>历史记录与隐私</value></data>
+  <data name="HistoryRetentionDescription" xml:space="preserve"><value>默认保留 30 天，可设为 1–3650 天。收藏不受保留期限和清除历史操作影响。</value></data>
+  <data name="HistoryRetentionLabel" xml:space="preserve"><value>历史保留天数</value></data>
+  <data name="HistoryRetentionUpdated" xml:space="preserve"><value>历史保留期限已更新。</value></data>
+  <data name="SavedItemsAllResults" xml:space="preserve"><value>全部结果（{0}）</value></data>
+  <data name="SavedItemsApply" xml:space="preserve"><value>应用</value></data>
+  <data name="SavedItemsBackToList" xml:space="preserve"><value>返回列表</value></data>
+  <data name="SavedItemsClearSearch" xml:space="preserve"><value>清除搜索和筛选</value></data>
+  <data name="SavedItemsCollapse" xml:space="preserve"><value>折叠结果</value></data>
+  <data name="SavedItemsCollapseResult" xml:space="preserve"><value>折叠结果</value></data>
+  <data name="SavedItemsCompare" xml:space="preserve"><value>对比</value></data>
+  <data name="SavedItemsCompareCount" xml:space="preserve"><value>对比（{0}/2）</value></data>
+  <data name="SavedItemsCopyError" xml:space="preserve"><value>复制失败：{0}</value></data>
+  <data name="SavedItemsCopySource" xml:space="preserve"><value>复制原文</value></data>
+  <data name="SavedItemsDeleteHistoryConfirm" xml:space="preserve"><value>从历史记录中删除这次查询？收藏不会被删除。</value></data>
+  <data name="SavedItemsDiscard" xml:space="preserve"><value>放弃修改</value></data>
+  <data name="SavedItemsEarlier" xml:space="preserve"><value>更早</value></data>
+  <data name="SavedItemsEdit" xml:space="preserve"><value>编辑备注和标签</value></data>
+  <data name="SavedItemsEditFavorite" xml:space="preserve"><value>编辑备注和标签</value></data>
+  <data name="SavedItemsFilters" xml:space="preserve"><value>筛选</value></data>
+  <data name="SavedItemsLoadError" xml:space="preserve"><value>无法加载记录：{0}</value></data>
+  <data name="SavedItemsMetadataSaved" xml:space="preserve"><value>收藏信息已保存。</value></data>
+  <data name="SavedItemsNoNote" xml:space="preserve"><value>暂无备注</value></data>
+  <data name="SavedItemsNoSearchResults" xml:space="preserve"><value>没有匹配的记录。请更换搜索词或清除筛选。</value></data>
+  <data name="SavedItemsNoSelectionDescription" xml:space="preserve"><value>选择一条记录，查看原文和翻译结果。</value></data>
+  <data name="SavedItemsOtherResults" xml:space="preserve"><value>同次查询的其他结果</value></data>
+  <data name="SavedItemsOtherResultsCount" xml:space="preserve"><value>同次查询的其他结果（{0}）</value></data>
+  <data name="SavedItemsPinnedOnly" xml:space="preserve"><value>仅显示置顶</value></data>
+  <data name="SavedItemsProvider" xml:space="preserve"><value>翻译服务</value></data>
+  <data name="SavedItemsQueryFavorites" xml:space="preserve"><value>整次查询</value></data>
+  <data name="SavedItemsRemoveFavoriteConfirm" xml:space="preserve"><value>移除这条收藏？</value></data>
+  <data name="SavedItemsRerun" xml:space="preserve"><value>重新翻译</value></data>
+  <data name="SavedItemsReset" xml:space="preserve"><value>重置</value></data>
+  <data name="SavedItemsResultCopied" xml:space="preserve"><value>已复制结果。</value></data>
+  <data name="SavedItemsResultCount" xml:space="preserve"><value>{0} 个结果</value></data>
+  <data name="SavedItemsResultFavorites" xml:space="preserve"><value>单个结果</value></data>
+  <data name="SavedItemsReturnToTranslation" xml:space="preserve"><value>返回翻译</value></data>
+  <data name="SavedItemsSelectDescription" xml:space="preserve"><value>在左侧选择一条记录，查看原文和翻译结果。</value></data>
+  <data name="SavedItemsSource" xml:space="preserve"><value>原文</value></data>
+  <data name="SavedItemsSourceClipboard" xml:space="preserve"><value>剪贴板</value></data>
+  <data name="SavedItemsSourceCopied" xml:space="preserve"><value>已复制原文。</value></data>
+  <data name="SavedItemsSourceHistoryRerun" xml:space="preserve"><value>历史重译</value></data>
+  <data name="SavedItemsSourceManual" xml:space="preserve"><value>手动输入</value></data>
+  <data name="SavedItemsSourceOcr" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsSourceSelection" xml:space="preserve"><value>划词</value></data>
+  <data name="SavedItemsTimeRange" xml:space="preserve"><value>时间范围</value></data>
+  <data name="SavedItemsToggleResult" xml:space="preserve"><value>展开或折叠结果</value></data>
+  <data name="SavedItemsUnreadableResult" xml:space="preserve"><value>无法读取这条保存的结果。</value></data>
+  <data name="SavedItemsUnsavedDescription" xml:space="preserve"><value>这条收藏的备注或标签有尚未保存的修改。</value></data>
+  <data name="SavedItemsUnsavedTitle" xml:space="preserve"><value>保存修改？</value></data>
+  <data name="SavedItemsYesterday" xml:space="preserve"><value>昨天</value></data>
+  <data name="FluentMoreOptions" xml:space="preserve"><value>更多选项</value></data>
+  <data name="FluentCopyFailed" xml:space="preserve"><value>复制失败，请重试。</value></data>
+  <data name="FluentCopied" xml:space="preserve"><value>已复制</value></data>
+  <data name="FluentDictionaryFallback" xml:space="preserve"><value>富词典内容暂时无法显示，已切换为文字版本。</value></data>
 </root>

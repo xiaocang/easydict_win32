@@ -249,15 +249,19 @@
         <Message Importance="high" Text="[Localization] Checking for resources.pri..." />
         <Message Importance="high" Text="[Localization] WindowsPackageType=$(WindowsPackageType)" />
         <Message Importance="high" Text="[Localization] OutDir=$(OutDir)" />
-        <Warning Condition="!Exists('$(OutDir)resources.pri')"
-                 Text="[Localization] ⚠ resources.pri NOT found in $(OutDir). Localization will show keys instead of values!" />
-        <Message Condition="Exists('$(OutDir)resources.pri')"
+        <Warning Condition="!Exists('$(OutDir)resources.pri') And !Exists('$(OutDir)$(TargetName).pri')"
+                 Text="[Localization] No PRI resource file found in $(OutDir)." />
+        <Message Condition="Exists('$(OutDir)resources.pri') Or Exists('$(OutDir)$(TargetName).pri')"
                  Importance="high"
-                 Text="[Localization] ✓ resources.pri found - localization will work correctly" />
+                 Text="[Localization] PRI resources found" />
     </Target>
 
     <ItemGroup>
         <!-- MSIX Package Assets - copy to output for winapp package -->
+        <Content Include="Assets\Branding\Dark\*.ico;Assets\Branding\Dark\*.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
         <Content Include="Assets\*.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
@@ -286,7 +290,7 @@
     <Target Name="GenerateAppIconIco"
             Condition="$([MSBuild]::IsOSPlatform('Windows'))"
             BeforeTargets="BeforeBuild"
-            Inputs="$(ProjectDir)Assets\Branding\AppIconSource.png"
+            Inputs="$(ProjectDir)Assets\Branding\AppIconSource.png;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1;$(ProjectDir)..\..\scripts\IconRasterizer.cs"
             Outputs="&quot;$(IntermediateOutputPath)AppIcon.ico&quot;">
         <Exec
             Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\Branding\AppIconSource.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />

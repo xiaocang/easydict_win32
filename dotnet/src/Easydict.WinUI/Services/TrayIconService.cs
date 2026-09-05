@@ -16,6 +16,8 @@ public sealed class TrayIconService : IDisposable
     private readonly AppWindow? _appWindow;
     private TaskbarIcon? _taskbarIcon;
     private bool _isDisposed;
+    private System.Drawing.Icon? _ownedIcon;
+    private bool? _iconDark;
 
     /// <summary>
     /// Event fired when "Translate Clipboard" is clicked.
@@ -72,27 +74,7 @@ public sealed class TrayIconService : IDisposable
         // Handle left click to show window
         _taskbarIcon.LeftClickCommand = new RelayCommand(ShowWindow);
 
-        // Use .ico file for tray icon - this is more reliable than BitmapImage with H.NotifyIcon
-        var iconPath = GetTrayIconPath();
-        if (!string.IsNullOrEmpty(iconPath))
-        {
-            try
-            {
-                _taskbarIcon.Icon = new System.Drawing.Icon(iconPath);
-                Debug.WriteLine($"[TrayIcon] Loaded icon from: {iconPath}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[TrayIcon] Failed to load icon: {ex.Message}");
-                // Fall back to IconSource with BitmapImage
-                _taskbarIcon.IconSource = CreateTrayIconSource();
-            }
-        }
-        else
-        {
-            // Fall back to IconSource with BitmapImage
-            _taskbarIcon.IconSource = CreateTrayIconSource();
-        }
+        RefreshThemeIcon();
 
         // Force create the tray icon when created programmatically (not via XAML).
         // This is required by H.NotifyIcon for the icon to appear in the system tray.
@@ -102,8 +84,39 @@ public sealed class TrayIconService : IDisposable
     }
 
     /// <summary>
-    /// Get the path to the tray icon (.ico file preferred, .png as fallback).
+    /// Refresh the icon against the shell palette, independently of the app theme.
     /// </summary>
+    internal void RefreshThemeIcon()
+    {
+        if (_isDisposed || _taskbarIcon is null) return;
+        var dark = ThemedIconService.IsTaskbarDark;
+        if (_iconDark == dark) return;
+        System.Drawing.Icon? next = null;
+        try
+        {
+            next = dark && File.Exists(ThemedIconService.DarkIconPath)
+                ? new System.Drawing.Icon(ThemedIconService.DarkIconPath)
+                : GetTrayIconPath() is { } path ? new System.Drawing.Icon(path) : null;
+            if (next is null)
+            {
+                _taskbarIcon.IconSource = CreateTrayIconSource();
+                return;
+            }
+            _taskbarIcon.Icon = next;
+            var previous = _ownedIcon;
+            _ownedIcon = next;
+            next = null;
+            previous?.Dispose();
+            _iconDark = dark;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[TrayIcon] Theme refresh failed: {ex.Message}");
+            if (_ownedIcon is null) _taskbarIcon.IconSource = CreateTrayIconSource();
+        }
+        finally { next?.Dispose(); }
+    }
+
     private static string? GetTrayIconPath()
     {
         var baseDir = AppContext.BaseDirectory;
@@ -394,6 +407,8 @@ public sealed class TrayIconService : IDisposable
 
         _taskbarIcon?.Dispose();
         _taskbarIcon = null;
+        _ownedIcon?.Dispose();
+        _ownedIcon = null;
     }
 }
 

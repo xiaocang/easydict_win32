@@ -13,6 +13,7 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!-- Easydict Color Theme -->
                 <ResourceDictionary Source="Themes/Colors.xaml" />
+                <ResourceDictionary Source="Themes/FluentPresentation.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Accent and Status Colors are now theme-aware via Themes/Colors.xaml -->
@@ -33,7 +34,7 @@
 
             <Style x:Key="CardStyle" TargetType="Border" BasedOn="{StaticResource EasydictElevatedSurfaceStyle}" />
 
-            <Style x:Key="EasydictInputPillStyle" TargetType="Border">
+            <Style x:Key="EasydictInputPillStyle" TargetType="Border" BasedOn="{StaticResource FluentInputCardStyle}">
                 <Setter Property="Background" Value="{ThemeResource TextControlBackground}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource TextControlBorderBrush}" />
                 <Setter Property="BorderThickness" Value="{ThemeResource EasydictCardBorderThickness}" />

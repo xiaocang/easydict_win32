@@ -83,7 +83,6 @@ namespace Easydict.WinUI.Views
         // only valid after the page is loaded onto a dispatcher.
         private StreamingTextCoalescer? _streamingCoalescer;
         private object? _translateButtonDefaultContent;
-        private object? _translateButtonNarrowDefaultContent;
         private object? _longDocTranslateButtonDefaultContent;
         private bool? _lastStatusConnected;
         private string _lastStatusText = "Disconnected";
@@ -164,40 +163,13 @@ namespace Easydict.WinUI.Views
                 System.Diagnostics.Debug.WriteLine("[MainPage] Memory A/B mode = A (cached MainPage lifecycle)");
             }
 
+            InitializeFluentLayout();
             this.Loaded += OnPageLoaded;
             this.Unloaded += OnPageUnloaded;
             this.ActualThemeChanged += OnActualThemeChanged;
             PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged += OnPhiSilicaPreparationProgressChanged;
 
-            // Sync selection between Wide and Narrow layout ComboBoxes
-            SourceLangCombo.SelectionChanged += (s, e) =>
-            {
-                var wasSuppressed = _suppressSourceLanguageSelectionChanged;
-                _suppressSourceLanguageSelectionChanged = true;
-                try { SyncComboSelection(SourceLangCombo, SourceLangComboNarrow); }
-                finally { _suppressSourceLanguageSelectionChanged = wasSuppressed; }
-            };
-            SourceLangComboNarrow.SelectionChanged += (s, e) =>
-            {
-                var wasSuppressed = _suppressSourceLanguageSelectionChanged;
-                _suppressSourceLanguageSelectionChanged = true;
-                try { SyncComboSelection(SourceLangComboNarrow, SourceLangCombo); }
-                finally { _suppressSourceLanguageSelectionChanged = wasSuppressed; }
-            };
-            TargetLangCombo.SelectionChanged += (s, e) =>
-            {
-                var wasSuppressed = _suppressTargetLanguageSelectionChanged;
-                _suppressTargetLanguageSelectionChanged = true;
-                try { SyncComboSelection(TargetLangCombo, TargetLangComboNarrow); }
-                finally { _suppressTargetLanguageSelectionChanged = wasSuppressed; }
-            };
-            TargetLangComboNarrow.SelectionChanged += (s, e) =>
-            {
-                var wasSuppressed = _suppressTargetLanguageSelectionChanged;
-                _suppressTargetLanguageSelectionChanged = true;
-                try { SyncComboSelection(TargetLangComboNarrow, TargetLangCombo); }
-                finally { _suppressTargetLanguageSelectionChanged = wasSuppressed; }
-            };
+            // One language bar is retained across responsive layouts.
             // Subscribe to clipboard events from App
             App.ClipboardTextReceived += OnClipboardTextReceived;
 
@@ -411,26 +383,16 @@ namespace Easydict.WinUI.Views
             var minimal = MinimalThemeService.IsActive;
             var compact = IsCompactChrome;
             ModeEmojiIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-            ModeSelectorButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ModeSelectorButton.Visibility = Visibility.Visible;
             ModeSubtitle.Visibility = compact || _currentMode != QueryMode.LongDocument
                 ? Visibility.Collapsed
                 : Visibility.Visible;
             InputHelpIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-            SourcePlayButton.Visibility = (!compact && SettingsService.Instance.ShowSourcePlayButton)
+            SourcePlayButton.Visibility = SettingsService.Instance.ShowSourcePlayButton
                 ? Visibility.Visible : Visibility.Collapsed;
             ResultsTitleText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-            if (compact)
-            {
-                DetectedLanguageText.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                RefreshDetectedLanguageChrome();
-            }
+            RefreshDetectedLanguageChrome();
             LangHelpIcon.Visibility = compact || _currentMode != QueryMode.Translation
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-            LangHelpIconNarrow.Visibility = compact || _currentMode != QueryMode.Translation
                 ? Visibility.Collapsed
                 : Visibility.Visible;
             QuickInputHeaderGrid.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
@@ -449,6 +411,7 @@ namespace Easydict.WinUI.Views
 
             ApplyMainWindowBorderChrome(minimal);
             ApplyMainLayoutChrome(minimal, compact);
+            UpdateFluentLayout();
             ApplyStatusChrome();
             ApplyStatusSummaryChrome();
             ApplyTranslateButtonsChrome();
@@ -476,8 +439,6 @@ namespace Easydict.WinUI.Views
                 QuickContentGrid.Padding = new Thickness(4);
                 LongDocContentGrid.Padding = new Thickness(4);
                 ActionBarWide.Margin = new Thickness(0, 4, 0, 4);
-                ActionBarNarrow.Margin = new Thickness(0, 4, 0, 4);
-                ActionBarNarrow.Spacing = 4;
 
                 QuickInputCard.Margin = new Thickness(0, 0, 0, 2);
                 QuickOutputCard.Margin = new Thickness(0, 2, 0, 0);
@@ -501,13 +462,10 @@ namespace Easydict.WinUI.Views
                 SettingsButton.Height = compact ? 28 : 32;
                 SwapLanguageButton.Width = 32;
                 SwapLanguageButton.Height = 32;
-                SwapLanguageButtonNarrow.Width = 32;
-                SwapLanguageButtonNarrow.Height = 32;
                 SourcePlayButton.Width = 24;
                 SourcePlayButton.Height = 24;
                 SourcePlayIcon.FontSize = 12;
                 TranslateButton.Margin = new Thickness(0);
-                TranslateButtonNarrow.Margin = new Thickness(0);
                 LongDocTranslateButton.Margin = new Thickness(0);
                 return;
             }
@@ -516,8 +474,6 @@ namespace Easydict.WinUI.Views
             QuickContentGrid.Padding = new Thickness(0);
             LongDocContentGrid.Padding = new Thickness(0);
             ActionBarWide.Margin = compact ? new Thickness(0) : new Thickness(0, 4, 0, 4);
-            ActionBarNarrow.Margin = compact ? new Thickness(0) : new Thickness(0, 4, 0, 4);
-            ActionBarNarrow.Spacing = 4;
 
             QuickInputCard.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 0, 4);
             QuickOutputCard.Margin = new Thickness(0);
@@ -541,13 +497,10 @@ namespace Easydict.WinUI.Views
             SettingsButton.Height = compact ? 28 : 32;
             SwapLanguageButton.Width = 32;
             SwapLanguageButton.Height = 32;
-            SwapLanguageButtonNarrow.Width = 32;
-            SwapLanguageButtonNarrow.Height = 32;
             SourcePlayButton.Width = 24;
             SourcePlayButton.Height = 24;
             SourcePlayIcon.FontSize = 12;
             TranslateButton.Margin = new Thickness(4, 0, 0, 0);
-            TranslateButtonNarrow.Margin = new Thickness(0);
             LongDocTranslateButton.Margin = new Thickness(0);
         }
 
@@ -672,8 +625,6 @@ namespace Easydict.WinUI.Views
 
             ApplyComboBoxChrome(SourceLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
             ApplyComboBoxChrome(TargetLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(SourceLangComboNarrow, comboBackground, comboHoverBackground, comboForeground, comboBorder);
-            ApplyComboBoxChrome(TargetLangComboNarrow, comboBackground, comboHoverBackground, comboForeground, comboBorder);
             ApplyComboBoxChrome(LongDocSourceLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
             ApplyComboBoxChrome(LongDocTargetLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
             ApplyComboBoxChrome(LongDocServiceCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
@@ -691,8 +642,6 @@ namespace Easydict.WinUI.Views
 
             ClearComboBoxChrome(SourceLangCombo);
             ClearComboBoxChrome(TargetLangCombo);
-            ClearComboBoxChrome(SourceLangComboNarrow);
-            ClearComboBoxChrome(TargetLangComboNarrow);
             ClearComboBoxChrome(LongDocSourceLangCombo);
             ClearComboBoxChrome(LongDocTargetLangCombo);
             ClearComboBoxChrome(LongDocServiceCombo);
@@ -705,7 +654,6 @@ namespace Easydict.WinUI.Views
             ModeChevronIcon.ClearValue(FontIcon.ForegroundProperty);
             ModeSubtitle.ClearValue(TextBlock.ForegroundProperty);
             LangHelpIcon.ClearValue(FontIcon.ForegroundProperty);
-            LangHelpIconNarrow.ClearValue(FontIcon.ForegroundProperty);
             InputHelpIcon.ClearValue(FontIcon.ForegroundProperty);
         }
 
@@ -722,7 +670,6 @@ namespace Easydict.WinUI.Views
                 ModeChevronIcon.Foreground = secondaryForeground;
                 ModeSubtitle.Foreground = secondaryForeground;
                 LangHelpIcon.Foreground = secondaryForeground;
-                LangHelpIconNarrow.Foreground = secondaryForeground;
                 InputHelpIcon.Foreground = secondaryForeground;
             }
         }
@@ -917,10 +864,7 @@ namespace Easydict.WinUI.Views
         private void ApplyStatusSummaryChrome()
         {
             StatusSummaryText.Text = _lastStatusSummaryText;
-            StatusSummaryText.Visibility =
-                !IsCompactChrome || _lastStatusSummaryIsImportant
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+            StatusSummaryText.Visibility = string.IsNullOrEmpty(_lastStatusSummaryText) ? Visibility.Collapsed : Visibility.Visible;
             ApplyQuickFooterChrome(IsCompactChrome);
         }
 
@@ -933,7 +877,7 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            var showFooter = _lastStatusSummaryIsImportant
+            var showFooter = !string.IsNullOrEmpty(_lastStatusSummaryText)
                 || LocalModelPreparationProgressPanel.Visibility == Visibility.Visible;
             QuickFooterGrid.Visibility = showFooter ? Visibility.Visible : Visibility.Collapsed;
             QuickFooterGrid.Margin = showFooter ? new Thickness(0, 2, 0, 0) : new Thickness(0);
@@ -1009,7 +953,6 @@ namespace Easydict.WinUI.Views
         private void ApplyTranslateButtonsChrome()
         {
             _translateButtonDefaultContent ??= TranslateButton.Content;
-            _translateButtonNarrowDefaultContent ??= TranslateButtonNarrow.Content;
             _longDocTranslateButtonDefaultContent ??= LongDocTranslateButton.Content;
 
             var minimal = MinimalThemeService.IsActive;
@@ -1024,13 +967,6 @@ namespace Easydict.WinUI.Views
             ApplyTranslateButtonChrome(
                 TranslateButton,
                 _translateButtonDefaultContent,
-                minimal,
-                text,
-                normalWidth: 40,
-                normalHeight: 40);
-            ApplyTranslateButtonChrome(
-                TranslateButtonNarrow,
-                _translateButtonNarrowDefaultContent,
                 minimal,
                 text,
                 normalWidth: 40,
@@ -1232,11 +1168,7 @@ namespace Easydict.WinUI.Views
                 {
                     TargetLangCombo.SelectedIndex = targetIndex;
                 }
-                var targetIndexNarrow = LanguageComboHelper.FindLanguageIndex(TargetLangComboNarrow, TranslationLanguage.Auto);
-                if (targetIndexNarrow >= 0)
-                {
-                    TargetLangComboNarrow.SelectedIndex = targetIndexNarrow;
-                }
+
 
                 _targetLanguageSelector.Reset();
             }
@@ -1283,9 +1215,7 @@ namespace Easydict.WinUI.Views
             try
             {
                 LanguageComboHelper.PopulateSourceCombo(SourceLangCombo, loc);
-                LanguageComboHelper.PopulateSourceCombo(SourceLangComboNarrow, loc);
                 LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
-                LanguageComboHelper.PopulateTargetCombo(TargetLangComboNarrow, loc);
 
                 if (_longDocFeaturesInitialized || _currentMode == QueryMode.LongDocument)
                 {
@@ -1332,24 +1262,18 @@ namespace Easydict.WinUI.Views
             AutomationProperties.SetName(CompactHistoryMenuItem, historyText);
             AutomationProperties.SetName(CompactFavoritesMenuItem, favoritesText);
             ToolTipService.SetToolTip(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
-            ToolTipService.SetToolTip(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
             var sourcePlayTooltip = loc.GetString("PlaySourceTextTooltip");
             ToolTipService.SetToolTip(SourcePlayButton, sourcePlayTooltip);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                 SourcePlayButton,
                 sourcePlayTooltip);
             ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
-            ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
-            ToolTipService.SetToolTip(SourceLangComboNarrow, loc.GetString("SourceLanguageTooltip"));
             ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
-            ToolTipService.SetToolTip(TargetLangComboNarrow, loc.GetString("TargetLanguageTooltip"));
 
             // Help icon tooltips
             ToolTipService.SetToolTip(LangHelpIcon, loc.GetString("LanguagePickerHelpTip"));
-            ToolTipService.SetToolTip(LangHelpIconNarrow, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(InputHelpIcon, loc.GetString("InputHelpTip"));
 
             // Long doc language combo tooltips
@@ -1428,16 +1352,12 @@ namespace Easydict.WinUI.Views
                 TargetLangCombo.Visibility = Visibility.Visible;
                 SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
                 LangHelpIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-                TargetLangComboNarrow.Visibility = Visibility.Visible;
-                SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
-                LangHelpIconNarrow.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
 
                 InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
                 ResultsTitleText.Text = loc.GetString("TranslationResults")
                     ?? "Translation Results";
                 PlaceholderText.Text = loc.GetString("TranslationPlaceholder");
                 ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
-                ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             }
 
             // Localize menu item texts. Minimal mode avoids emoji decoration.
@@ -1922,7 +1842,7 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            ServiceResultViewHost.UpdateStickyHeaders(_resultControls, QuickTranslateContent);
+            ServiceResultViewHost.UpdateStickyHeaders(_resultControls, _quickWideLayout ? QuickResultsScrollViewer : QuickTranslateContent);
         }
 
         /// <summary>
@@ -2054,9 +1974,7 @@ namespace Easydict.WinUI.Views
                 ? loc.GetString("TranslateButton_Grammar_Tooltip")
                 : loc.GetString("TranslateTooltip");
             ToolTipService.SetToolTip(TranslateButton, translateTooltip);
-            ToolTipService.SetToolTip(TranslateButtonNarrow, translateTooltip);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButtonNarrow, translateTooltip);
 
             if (reinitializeServiceResults && previousMode != _currentQuickQueryMode)
             {
@@ -2087,7 +2005,7 @@ namespace Easydict.WinUI.Views
                 DetectedLanguageText.Text = loc.GetStringOrDefault(
                     "GrammarCorrectionFallbackNotice",
                     "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
-                DetectedLanguageText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+                DetectedLanguageText.Visibility = Visibility.Visible;
                 return;
             }
 
@@ -2096,7 +2014,7 @@ namespace Easydict.WinUI.Views
                 DetectedLanguageText.Text = loc.GetStringOrDefault(
                     "GrammarCorrectionActiveNotice",
                     "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
-                DetectedLanguageText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+                DetectedLanguageText.Visibility = Visibility.Visible;
                 return;
             }
 
@@ -2439,18 +2357,14 @@ namespace Easydict.WinUI.Views
 
             var tooltip = loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip");
             ToolTipService.SetToolTip(TranslateButton, tooltip);
-            ToolTipService.SetToolTip(TranslateButtonNarrow, tooltip);
 
             // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
             var glyph = loading ? "\uE711" : "\uE8C1";
             TranslateIcon.Glyph = glyph;
-            TranslateIconNarrow.Glyph = glyph;
 
             // Hide progress rings (cancel icon replaces them)
             LoadingRing.IsActive = false;
             LoadingRing.Visibility = Visibility.Collapsed;
-            LoadingRingNarrow.IsActive = false;
-            LoadingRingNarrow.Visibility = Visibility.Collapsed;
 
             ApplyTranslateButtonsChrome();
         }
@@ -3493,7 +3407,7 @@ namespace Easydict.WinUI.Views
                 DetectedLanguageText.Text = string.Format(
                     LocalizationService.Instance.GetString("DetectedLanguage"),
                     displayName);
-                DetectedLanguageText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+                DetectedLanguageText.Visibility = Visibility.Visible;
             }
             else
             {
@@ -3520,11 +3434,7 @@ namespace Easydict.WinUI.Views
                 {
                     TargetLangCombo.SelectedIndex = targetIndex;
                 }
-                var targetIndexNarrow = LanguageComboHelper.FindLanguageIndex(TargetLangComboNarrow, targetLang);
-                if (targetIndexNarrow >= 0)
-                {
-                    TargetLangComboNarrow.SelectedIndex = targetIndexNarrow;
-                }
+
             }
             finally
             {
@@ -3574,8 +3484,6 @@ namespace Easydict.WinUI.Views
             {
                 var srcIdx = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, newSource);
                 if (srcIdx >= 0) SourceLangCombo.SelectedIndex = srcIdx;
-                var srcIdxNarrow = LanguageComboHelper.FindLanguageIndex(SourceLangComboNarrow, newSource);
-                if (srcIdxNarrow >= 0) SourceLangComboNarrow.SelectedIndex = srcIdxNarrow;
             }
             finally
             {
@@ -3623,8 +3531,6 @@ namespace Easydict.WinUI.Views
             {
                 LanguageComboHelper.RebuildTargetCombo(
                     TargetLangCombo, currentTarget, loc, out var newTarget);
-                LanguageComboHelper.RebuildTargetCombo(
-                    TargetLangComboNarrow, currentTarget, loc, out _);
 
                 // If target changed due to reversal, mark manual selection
                 if (newTarget != currentTarget)
@@ -4645,7 +4551,6 @@ namespace Easydict.WinUI.Views
 
             var showSwap = !compact && settings.ShowSwapButton && _currentMode == QueryMode.Translation;
             SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
-            SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ApplySavedItemsHeaderVisibility()
@@ -4679,6 +4584,7 @@ namespace Easydict.WinUI.Views
             catch (Exception ex)
             {
                 Debug.WriteLine($"[MainPage] Failed to navigate to settings: {ex.Message}");
+                CrashDiagnostics.LogException("MainPage.NavigateSettings", ex, isTerminating: false, isHandled: true);
                 HidePageNavigationLoading();
             }
         }
@@ -4742,11 +4648,6 @@ namespace Easydict.WinUI.Views
                     SourceLangCombo.SelectedIndex = sourceIndex;
                 }
 
-                var narrowSourceIndex = LanguageComboHelper.FindLanguageIndex(SourceLangComboNarrow, sourceLanguage);
-                if (narrowSourceIndex >= 0)
-                {
-                    SourceLangComboNarrow.SelectedIndex = narrowSourceIndex;
-                }
             }
             finally
             {

@@ -23,9 +23,9 @@ public class AppearanceServiceTests
     private readonly SettingsService _settings = SettingsService.Instance;
 
     [Theory]
-    [InlineData(1.0, 13.0)]
-    [InlineData(0.85, 11.05)]
-    [InlineData(1.4, 18.2)]
+    [InlineData(1.0, 14.0)]
+    [InlineData(0.85, 11.9)]
+    [InlineData(1.4, 19.6)]
     public void ResultFontSize_ScalesWithSetting(double scale, double expected)
     {
         var original = _settings.ResultFontScale;
@@ -65,7 +65,7 @@ public class AppearanceServiceTests
         {
             _settings.ResultFontScale = 1.0;
             var snapshot = AppearanceService.CurrentSnapshot();
-            snapshot.ResultFontSize.Should().BeApproximately(13.0, 0.001);
+            snapshot.ResultFontSize.Should().BeApproximately(14.0, 0.001);
             snapshot.ServiceNameFontSize.Should().BeApproximately(12.0, 0.001);
             snapshot.StatusFontSize.Should().BeApproximately(10.0, 0.001);
         }

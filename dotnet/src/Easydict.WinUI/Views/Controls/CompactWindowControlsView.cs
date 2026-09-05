@@ -18,12 +18,12 @@ internal sealed class CompactWindowControlsView
     private readonly Border _separator;
     private readonly FontIcon _closeIcon;
 
-    public CompactWindowControlsView()
+    public CompactWindowControlsView(bool showMore = false)
     {
         Root = new Grid
         {
             Width = 44,
-            Height = 66,
+            Height = showMore ? 66 : 44,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0),
@@ -42,12 +42,17 @@ internal sealed class CompactWindowControlsView
         Root.Children.Add(_surface);
 
         var layout = new Grid { Margin = new Thickness(1) };
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(showMore ? 1 : 0, GridUnitType.Star) });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         Root.Children.Add(layout);
 
         MoreButton = CreateSegmentButton(new FontIcon { Glyph = "\uE712", FontSize = 9 });
+        MoreButton.Visibility = showMore ? Visibility.Visible : Visibility.Collapsed;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(MoreButton, "MiniCompactMoreButton");
+        var moreLabel = LocalizationService.Instance.GetStringOrDefault("SavedItemsMore", "More");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(MoreButton, moreLabel);
+        ToolTipService.SetToolTip(MoreButton, moreLabel);
         Grid.SetRow(MoreButton, 0);
         layout.Children.Add(MoreButton);
 

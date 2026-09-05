@@ -9,13 +9,16 @@ param(
     [string]$OutputTrayPng,
 
     [Parameter(Mandatory = $false)]
-    [int[]]$Sizes = @(16, 24, 32, 48, 64, 128, 256)
+    [int[]]$Sizes = @(16, 24, 32, 48, 64, 128, 256),
+    [switch]$DarkMode,
+    [string]$OutputPngDirectory
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Add-Type -AssemblyName System.Drawing
+Add-Type -Path "$PSScriptRoot/IconRasterizer.cs" -ReferencedAssemblies System.Drawing
 
 function New-PngBytes {
     param(
@@ -26,27 +29,14 @@ function New-PngBytes {
         [int]$Size
     )
 
-    $bitmap = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $bitmap = [Easydict.IconTools.IconRasterizer]::Render($Source, $Size, $DarkMode.IsPresent)
+    $ms = New-Object System.IO.MemoryStream
     try {
-        $graphics.Clear([System.Drawing.Color]::Transparent)
-        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-        $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
-
-        $graphics.DrawImage($Source, 0, 0, $Size, $Size)
-
-        $ms = New-Object System.IO.MemoryStream
         $bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
         return ,$ms.ToArray()
     }
-    finally {
-        $graphics.Dispose()
-        $bitmap.Dispose()
-    }
+    finally { $ms.Dispose(); $bitmap.Dispose() }
 }
-
 function Write-Ico {
     param(
         [Parameter(Mandatory = $true)]
@@ -123,7 +113,12 @@ $sourceImage = [System.Drawing.Image]::FromFile($sourceFull)
 try {
     $pngImages = @()
     foreach ($s in $Sizes) {
-        $pngImages += ,(New-PngBytes -Source $sourceImage -Size $s)
+        $bytes = New-PngBytes -Source $sourceImage -Size $s
+        $pngImages += ,$bytes
+        if ($OutputPngDirectory) {
+            New-Item -ItemType Directory -Force -Path $OutputPngDirectory | Out-Null
+            [System.IO.File]::WriteAllBytes((Join-Path $OutputPngDirectory "Icon-$s.png"), $bytes)
+        }
     }
 
     $outDir = Split-Path -Parent $outputFull
@@ -137,30 +132,9 @@ try {
     if ($PSBoundParameters.ContainsKey('OutputTrayPng') -and -not [string]::IsNullOrWhiteSpace($OutputTrayPng)) {
         Write-Host "Generating TrayIcon.png..."
 
-        $traySize = 32
-        $trayBitmap = New-Object System.Drawing.Bitmap $traySize, $traySize, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-        $trayGraphics = [System.Drawing.Graphics]::FromImage($trayBitmap)
-        try {
-            $trayGraphics.Clear([System.Drawing.Color]::Transparent)
-            $trayGraphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-            $trayGraphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-            $trayGraphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-            $trayGraphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
-
-            $trayGraphics.DrawImage($sourceImage, 0, 0, $traySize, $traySize)
-
-            $trayDir = Split-Path -Parent $OutputTrayPng
-            if (-not [string]::IsNullOrWhiteSpace($trayDir)) {
-                New-Item -ItemType Directory -Force -Path $trayDir | Out-Null
-            }
-
-            $trayBitmap.Save($OutputTrayPng, [System.Drawing.Imaging.ImageFormat]::Png)
-            Write-Host "TrayIcon.png saved to: $OutputTrayPng"
-        }
-        finally {
-            $trayGraphics.Dispose()
-            $trayBitmap.Dispose()
-        }
+        $trayDir = Split-Path -Parent $OutputTrayPng
+        if ($trayDir) { New-Item -ItemType Directory -Force -Path $trayDir | Out-Null }
+        [System.IO.File]::WriteAllBytes($OutputTrayPng, (New-PngBytes -Source $sourceImage -Size 32))
     }
 }
 finally {

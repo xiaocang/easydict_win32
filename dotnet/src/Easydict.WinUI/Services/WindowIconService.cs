@@ -24,6 +24,11 @@ public static class WindowIconService
 
         try
         {
+            if (ThemedIconService.IsWindowDark && File.Exists(ThemedIconService.DarkIconPath))
+            {
+                appWindow.SetIcon(ThemedIconService.DarkIconPath);
+                return;
+            }
             // Primary path: Try to load icon from embedded resource
             var iconId = GetEmbeddedIconId();
             if (iconId != null)

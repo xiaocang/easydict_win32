@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:local="using:Easydict.WinUI.Views"
+    xmlns:local="using:Easydict.WinUI.Views" xmlns:controls="using:Easydict.WinUI.Views.Controls"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
@@ -20,65 +20,70 @@
             <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter"/>
             <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter"/>
             <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter"/>
-        </ResourceDictionary>
-    </Page.Resources>
+            <ItemsPanelTemplate x:Key="SettingsRailItemsPanel">
+                <StackPanel Spacing="6"/>
+            </ItemsPanelTemplate>
+            <ItemsPanelTemplate x:Key="SettingsCompactTabsPanel">
+                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="7"/>
+            </ItemsPanelTemplate>
+<DataTemplate x:Key="SettingsRailItemTemplate">
+                                <Button Click="OnSettingsTabClick"
+                                        Loaded="OnSettingsTabButtonLoaded"
+                                        Tag="{Binding Id}"
+                                        AutomationProperties.AutomationId="{Binding AutomationId}"
+                                        AutomationProperties.Name="{Binding Label}"
+                                        Style="{StaticResource SettingsTabButtonStyle}"
+                                        Width="192"
+                                        Height="40"
+                                        Margin="0"
+                                        Padding="0"
+                                        Background="{Binding Background}"
+                                        BorderBrush="{Binding BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                                        Foreground="{Binding Foreground}"
+                                        HorizontalAlignment="Left"
+                                        ToolTipService.ToolTip="{Binding Tooltip}">
+                                    <Grid>
+                                        <StackPanel Spacing="12" Orientation="Horizontal"
+                                                    HorizontalAlignment="Left" Margin="12,0"
+                                                    VerticalAlignment="Center">
+                                            <FontIcon Glyph="{Binding IconGlyph}"
+                                                      FontSize="16"
+                                                      Foreground="{Binding Foreground}"
+                                                      HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Label}"
+                                                       FontSize="12"
+                                                       Foreground="{Binding Foreground}"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
 
-    <Grid>
-        <!-- Loading overlay (visible initially, hidden after init) -->
-        <StackPanel x:Name="LoadingOverlay"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    IsHitTestVisible="False"
-                    Spacing="12">
-            <ProgressRing x:Name="LoadingOverlayRing"
-                    IsActive="True"
-                    Width="32"
-                    Height="32"/>
-        </StackPanel>
+                                        <Border
+                                            Background="{Binding SelectedBackground}"
+                                            BorderBrush="{Binding SelectedBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                                            Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-        <ScrollViewer x:Name="MainScrollViewer"
-                Padding="24"
-                HorizontalScrollBarVisibility="Disabled"
-                Visibility="Collapsed">
-            <StackPanel x:Name="SettingsContentRoot"
-                    Spacing="24"
-                    Width="{Binding ViewportWidth, ElementName=MainScrollViewer}"
-                    MaxWidth="1040"
-                    HorizontalAlignment="Center">
-                <!-- Header -->
-                <Grid x:Name="HeaderSection">
-                    <StackPanel Orientation="Horizontal"
-                            Spacing="12">
-                        <Button x:Name="BackButton"
-                                AutomationProperties.AutomationId="BackButton"
-                                AutomationProperties.Name="Back"
-                                Click="OnBackClick"
-                                Style="{StaticResource SettingsAccentButtonStyle}"
-                                Padding="8">
-                            <FontIcon Glyph="&#xE72B;"
-                                    FontSize="16"
-                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                        </Button>
-                        <TextBlock x:Name="SettingsHeaderText"
-                                Text="Settings"
-                                FontSize="28"
-                                FontWeight="SemiBold"
-                                VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- Settings Tabs -->
-                <Grid>
-                    <ItemsControl x:Name="SettingsTabsHost"
-                                  HorizontalAlignment="Stretch">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal"
-                                               MaximumRowsOrColumns="7"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
+                                        <StackPanel Spacing="12" Orientation="Horizontal"
+                                                    HorizontalAlignment="Left" Margin="12,0"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <FontIcon Glyph="{Binding IconGlyph}"
+                                                      FontSize="16"
+                                                      Foreground="{Binding SelectedForeground}"
+                                                      HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Label}"
+                                                       FontSize="12"
+                                                       Foreground="{Binding SelectedForeground}"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+<DataTemplate x:Key="SettingsCompactTabItemTemplate">
                                 <Button Click="OnSettingsTabClick"
                                         Loaded="OnSettingsTabButtonLoaded"
                                         Tag="{Binding Id}"
@@ -135,8 +140,64 @@
                                     </Grid>
                                 </Button>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <Grid>
+        <!-- Loading overlay (visible initially, hidden after init) -->
+        <StackPanel x:Name="LoadingOverlay"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsHitTestVisible="False"
+                    Spacing="12">
+            <ProgressRing x:Name="LoadingOverlayRing"
+                    IsActive="True"
+                    Width="32"
+                    Height="32"/>
+        </StackPanel>
+
+        <ScrollViewer x:Name="MainScrollViewer" HorizontalContentAlignment="Left"
+                Padding="24"
+                HorizontalScrollBarVisibility="Disabled"
+                Visibility="Collapsed">
+            <Grid x:Name="SettingsContentRoot" MaxWidth="1280" HorizontalAlignment="Left" RowSpacing="16" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="SettingsNavigationColumn" Width="192"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <!-- Header -->
+                <Grid x:Name="HeaderSection" Grid.ColumnSpan="2">
+                    <StackPanel Orientation="Horizontal"
+                            Spacing="12">
+                        <Button x:Name="BackButton"
+                                AutomationProperties.AutomationId="BackButton"
+                                AutomationProperties.Name="Back"
+                                Click="OnBackClick"
+                                Style="{StaticResource SettingsAccentButtonStyle}"
+                                Padding="8">
+                            <FontIcon Glyph="&#xE72B;"
+                                    FontSize="16"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                        </Button>
+                        <TextBlock x:Name="SettingsHeaderText"
+                                Text="Settings"
+                                FontSize="24"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Settings Tabs -->
+                <ScrollViewer x:Name="SettingsNavigationScrollViewer" Grid.Row="1"
+                              AutomationProperties.AutomationId="SettingsNavigationScrollViewer"
+                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
+                <Grid x:Name="SettingsNavigationRail" VerticalAlignment="Top">
+                    <ItemsControl x:Name="SettingsTabsHost" HorizontalAlignment="Left" ItemsPanel="{StaticResource SettingsRailItemsPanel}" ItemTemplate="{StaticResource SettingsRailItemTemplate}"/>
 
                     <Grid IsHitTestVisible="False"
                           HorizontalAlignment="Stretch"
@@ -154,7 +215,10 @@
                                       AutomationProperties.Name="Loading settings tab"/>
                     </Grid>
                 </Grid>
-
+                </ScrollViewer>
+                <ScrollViewer x:Name="SettingsDetailsScrollViewer" Grid.Row="1" Grid.Column="1"
+                              AutomationProperties.AutomationId="SettingsDetailsScrollViewer"
+                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
                 <Grid x:Name="TabContentHost">
                     <StackPanel x:Name="ServicesTabContent"
                                 Spacing="24">
@@ -166,7 +230,7 @@
                             <TextBlock x:Name="EnabledServicesHeaderText"
                                     Text="Enabled Services"
                                     FontSize="18"
-                                    FontWeight="SemiBold"/>
+                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             <FontIcon x:Name="EnabledServicesHelpIcon"
                                     Glyph="&#xE897;"
                                     FontSize="14"
@@ -203,7 +267,7 @@
                                     <TextBlock x:Name="EnableInternationalServicesHeaderText"
                                                Text="Enable International Services"
                                                FontSize="13"
-                                               VerticalAlignment="Center"/>
+                                               VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <ToggleSwitch x:Name="EnableInternationalServicesToggle"
                                                   Grid.Column="1"
                                                   Toggled="OnEnableInternationalServicesToggled"
@@ -227,7 +291,7 @@
                             <TextBlock x:Name="ServiceConfigurationHeaderText"
                                     Text="Service Configuration"
                                     FontSize="18"
-                                    FontWeight="SemiBold"/>
+                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             <FontIcon x:Name="ServiceConfigHelpIcon"
                                     Glyph="&#xE897;"
                                     FontSize="14"
@@ -248,7 +312,7 @@
                                 <Grid>
                                     <TextBlock Text="DeepL"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="DeepLStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -260,12 +324,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="DeepLKeyHeaderText"
                                                Text="API Key (Optional)"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="DeepLKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -309,12 +373,12 @@
                                     <TextBlock x:Name="WindowsLocalAITitleText"
                                                Text="Windows Local AI"
                                                FontWeight="SemiBold"
-                                               HorizontalAlignment="Left"/>
+                                               HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="WindowsLocalAIStatusBadge"
                                                FontWeight="SemiBold"
                                                HorizontalAlignment="Right"
                                                Margin="0,0,8,0"
-                                               Visibility="Collapsed"/>
+                                               Visibility="Collapsed" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 </Grid>
                             </Expander.Header>
                             <StackPanel Spacing="12"
@@ -337,10 +401,10 @@
                                             <StackPanel Orientation="Horizontal"
                                                         Spacing="8">
                                                 <TextBlock x:Name="LocalAIProviderWindowsAILabelText"
-                                                           Text="Phi Silica (Copilot+ PC)"/>
+                                                           Text="Phi Silica (Copilot+ PC)" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                                 <TextBlock x:Name="LocalAIProviderWindowsAIRatingText"
                                                            Text="★★★★★"
-                                                           ToolTipService.ToolTip="Best quality when available."/>
+                                                           ToolTipService.ToolTip="Best quality when available." Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             </StackPanel>
                                         </ComboBoxItem>
                                         <ComboBoxItem x:Name="LocalAIProviderFoundryLocalItem"
@@ -348,10 +412,10 @@
                                             <StackPanel Orientation="Horizontal"
                                                         Spacing="8">
                                                 <TextBlock x:Name="LocalAIProviderFoundryLocalLabelText"
-                                                           Text="Foundry Local"/>
+                                                           Text="Foundry Local" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                                 <TextBlock x:Name="LocalAIProviderFoundryLocalRatingText"
                                                            Text="★★★★"
-                                                           ToolTipService.ToolTip="Good local LLM fallback."/>
+                                                           ToolTipService.ToolTip="Good local LLM fallback." Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             </StackPanel>
                                         </ComboBoxItem>
                                         <ComboBoxItem x:Name="LocalAIProviderOpenVINOItem"
@@ -359,10 +423,10 @@
                                             <StackPanel Orientation="Horizontal"
                                                         Spacing="8">
                                                 <TextBlock x:Name="LocalAIProviderOpenVINOLabelText"
-                                                           Text="OpenVINO (NLLB-200)"/>
+                                                           Text="OpenVINO (NLLB-200)" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                                 <TextBlock x:Name="LocalAIProviderOpenVINORatingText"
                                                            Text="★★"
-                                                           ToolTipService.ToolTip="Basic offline translation fallback."/>
+                                                           ToolTipService.ToolTip="Basic offline translation fallback." Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             </StackPanel>
                                         </ComboBoxItem>
                                     </ComboBox>
@@ -378,10 +442,10 @@
                                                 Spacing="8">
                                         <TextBlock x:Name="WindowsLocalAISectionTitleText"
                                                    Text="Phi Silica"
-                                                   FontWeight="SemiBold"/>
+                                                   FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         <TextBlock x:Name="WindowsLocalAISectionRatingText"
                                                    Text="★★★★★"
-                                                   ToolTipService.ToolTip="Best quality when available."/>
+                                                   ToolTipService.ToolTip="Best quality when available." Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     </StackPanel>
                                     <InfoBar x:Name="WindowsLocalAIStatusBar"
                                              AutomationProperties.AutomationId="WindowsLocalAIStatusBar"
@@ -422,10 +486,10 @@
                                                 Spacing="8">
                                         <TextBlock x:Name="FoundryLocalTitleText"
                                                    Text="Foundry Local"
-                                                   FontWeight="SemiBold"/>
+                                                   FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         <TextBlock x:Name="FoundryLocalRatingText"
                                                    Text="★★★★"
-                                                   ToolTipService.ToolTip="Good local LLM fallback."/>
+                                                   ToolTipService.ToolTip="Good local LLM fallback." Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     </StackPanel>
                                     <TextBox x:Name="FoundryLocalEndpointBox"
                                              Header="Endpoint (optional)"
@@ -466,16 +530,16 @@
                                                     HorizontalAlignment="Left">
                                             <TextBlock x:Name="OpenVinoTitleText"
                                                        Text="OpenVINO (local NLLB)"
-                                                       FontWeight="SemiBold"/>
+                                                       FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             <TextBlock x:Name="OpenVinoRatingText"
                                                        Text="★★"
-                                                       ToolTipService.ToolTip="Basic offline translation fallback."/>
+                                                       ToolTipService.ToolTip="Basic offline translation fallback." Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         </StackPanel>
                                         <TextBlock x:Name="OpenVinoStatusBadge"
                                                    FontWeight="SemiBold"
                                                    HorizontalAlignment="Right"
                                                    Margin="0,0,8,0"
-                                                   Visibility="Collapsed"/>
+                                                   Visibility="Collapsed" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     </Grid>
                                     <InfoBar x:Name="OpenVinoStatusBar"
                                              IsOpen="True"
@@ -511,7 +575,7 @@
                                 <Grid>
                                     <TextBlock Text="Ollama (Local LLM)"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="OllamaStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -559,7 +623,7 @@
                                 <Grid>
                                     <TextBlock Text="OpenAI"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="OpenAIStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -571,12 +635,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="OpenAIKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="OpenAIKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -653,7 +717,7 @@
                                 <Grid>
                                     <TextBlock Text="DeepSeek"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="DeepSeekStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -665,12 +729,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="DeepSeekKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="DeepSeekKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -727,7 +791,7 @@
                                 <Grid>
                                     <TextBlock Text="Groq"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="GroqStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -739,12 +803,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="GroqKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="GroqKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -795,7 +859,7 @@
                                 <Grid>
                                     <TextBlock Text="Zhipu (智谱)"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="ZhipuStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -807,12 +871,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="ZhipuKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="ZhipuKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -874,7 +938,7 @@
                                 <Grid>
                                     <TextBlock Text="Kimi (Moonshot AI)"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="KimiStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -885,12 +949,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Margin="0,8,0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="KimiKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="KimiKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -954,7 +1018,7 @@
                                             HorizontalAlignment="Left">
                                         <TextBlock Text="GitHub Models"
                                                 FontWeight="SemiBold"
-                                                VerticalAlignment="Center"/>
+                                                VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
                                                 CornerRadius="9"
                                                 Padding="7,1"
@@ -977,12 +1041,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="GitHubModelsTokenHeaderText"
                                                Text="GitHub Token"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="GitHubModelsTokenBox"
                                                      HorizontalAlignment="Stretch"
@@ -1038,7 +1102,7 @@
                                 <Grid>
                                     <TextBlock Text="Gemini"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="GeminiStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1050,12 +1114,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="GeminiKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="GeminiKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1115,7 +1179,7 @@
                                 <Grid>
                                     <TextBlock Text="Custom OpenAI Compatible"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="CustomOpenAIStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1132,12 +1196,12 @@
                                         Width="450"
                                          PlaceholderText="https://your-api.example.com/v1/chat/completions"
                                         HorizontalAlignment="Left"/>
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="CustomOpenAIKeyHeaderText"
                                                Text="API Key (Optional)"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="CustomOpenAIKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1185,7 +1249,7 @@
                                             HorizontalAlignment="Left">
                                         <TextBlock Text="OpenRouter"
                                                 FontWeight="SemiBold"
-                                                VerticalAlignment="Center"/>
+                                                VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
                                                 CornerRadius="9"
                                                 Padding="7,1"
@@ -1208,12 +1272,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="OpenRouterKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="OpenRouterKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1279,7 +1343,7 @@
                                             HorizontalAlignment="Left">
                                         <TextBlock Text="OrcaRouter"
                                                 FontWeight="SemiBold"
-                                                VerticalAlignment="Center"/>
+                                                VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         <Border Background="{ThemeResource AccentFillColorSecondaryBrush}"
                                                 CornerRadius="9"
                                                 Padding="7,1"
@@ -1302,12 +1366,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="OrcaRouterKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="OrcaRouterKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1373,7 +1437,7 @@
                                 <Grid>
                                     <TextBlock Text="Doubao (豆包)"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="DoubaoStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1385,12 +1449,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="DoubaoKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="DoubaoKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1439,7 +1503,7 @@
                                 <Grid>
                                     <TextBlock Text="Caiyun (彩云小译)"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="CaiyunStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1451,12 +1515,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="CaiyunKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="CaiyunKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1494,7 +1558,7 @@
                                 <Grid>
                                     <TextBlock Text="NiuTrans (小牛翻译)"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="NiuTransStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1506,12 +1570,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="NiuTransKeyHeaderText"
                                                Text="API Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="NiuTransKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1548,16 +1612,16 @@
                                 Tag="Youdao">
                             <Expander.Header>
                                 <TextBlock Text="Youdao (有道翻译)"
-                                        FontWeight="SemiBold"/>
+                                        FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="YoudaoAppKeyHeaderText"
                                                Text="App Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="YoudaoAppKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1577,12 +1641,12 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="YoudaoAppSecretHeaderText"
                                                Text="App Secret"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="YoudaoAppSecretBox"
                                                      HorizontalAlignment="Stretch"
@@ -1602,8 +1666,17 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <ToggleSwitch x:Name="YoudaoUseOfficialApiToggle"
-                                        Header="Use Official API"/>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=YoudaoUseOfficialApiToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="YoudaoUseOfficialApiToggle"
+                                        Header="Use Official API">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <TextBlock Text="Youdao provides phonetic transcriptions for English words. Without API keys, uses free web dictionary. With API keys, enables official API for higher limits. Get API keys from ai.youdao.com"
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -1619,7 +1692,7 @@
                                 <Grid>
                                     <TextBlock Text="Volcano Engine (火山翻译)"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="VolcanoStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1631,12 +1704,12 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="VolcanoAccessKeyIdHeaderText"
                                                Text="Access Key ID"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="VolcanoAccessKeyIdBox"
                                                      HorizontalAlignment="Stretch"
@@ -1656,12 +1729,12 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
-                                <StackPanel Width="350"
+                                <StackPanel MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             Spacing="4">
                                     <TextBlock x:Name="VolcanoSecretAccessKeyHeaderText"
                                                Text="Secret Access Key"
-                                               FontSize="14"/>
+                                               FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Grid>
                                         <PasswordBox x:Name="VolcanoSecretAccessKeyBox"
                                                      HorizontalAlignment="Stretch"
@@ -1702,7 +1775,7 @@
                                 <Grid>
                                     <TextBlock Text="Claude Code"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="ClaudeCodeStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1714,8 +1787,17 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <ToggleSwitch x:Name="ClaudeCodeEnabledToggle"
-                                        Header="Enable Claude Code"/>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ClaudeCodeEnabledToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ClaudeCodeEnabledToggle"
+                                        Header="Enable Claude Code">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <ComboBox x:Name="ClaudeCodeModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -1766,7 +1848,7 @@
                                 <Grid>
                                     <TextBlock Text="Codex"
                                             FontWeight="SemiBold"
-                                            HorizontalAlignment="Left"/>
+                                            HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <TextBlock x:Name="CodexStatusText"
                                             Text="✓"
                                             FontWeight="SemiBold"
@@ -1778,8 +1860,17 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <ToggleSwitch x:Name="CodexEnabledToggle"
-                                        Header="Enable Codex"/>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=CodexEnabledToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="CodexEnabledToggle"
+                                        Header="Enable Codex">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <ComboBox x:Name="CodexModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -1839,7 +1930,7 @@
                             <StackPanel Spacing="8">
                                 <TextBlock x:Name="FreeServicesHeaderText"
                                         Text="Free Services (No Configuration Required)"
-                                        FontWeight="SemiBold"/>
+                                        FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 <StackPanel Orientation="Horizontal"
                                             Spacing="16">
                                     <StackPanel Orientation="Horizontal"
@@ -1851,7 +1942,7 @@
                                                VerticalAlignment="Center"
                                                AutomationProperties.AccessibilityView="Raw"/>
                                         <TextBlock Text="Google Translate"
-                                                   VerticalAlignment="Center"/>
+                                                   VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     </StackPanel>
                                     <StackPanel x:Name="LingueeFreeServicePanel"
                                                 Orientation="Horizontal"
@@ -1864,7 +1955,7 @@
                                                VerticalAlignment="Center"
                                                AutomationProperties.AccessibilityView="Raw"/>
                                         <TextBlock Text="Linguee Dictionary"
-                                                   VerticalAlignment="Center"/>
+                                                   VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <TextBlock x:Name="FreeServicesDescriptionText"
@@ -1887,7 +1978,7 @@
                             <TextBlock x:Name="WindowResultsHeaderText"
                                        Text="Window Results"
                                        FontSize="18"
-                                       FontWeight="SemiBold"/>
+                                       FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             <TextBlock x:Name="WindowResultsDescriptionText"
                                        Text="Choose which results appear in each window and whether each result queries automatically."
                                        FontSize="12"
@@ -1908,12 +1999,12 @@
                                                        Text="Main Window"
                                                        FontWeight="SemiBold"
                                                        FontSize="13"
-                                                       VerticalAlignment="Center"/>
+                                                       VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             <Button x:Name="MainWindowReorderModeButton"
                                                     Grid.Column="1"
                                                     Click="OnToggleMainWindowReorderModeClicked"
                                                     Padding="6,1"
-                                                    MinHeight="24"
+                                                    MinHeight="32"
                                                     FontSize="11"
                                                     VerticalAlignment="Center"/>
                                         </Grid>
@@ -1921,7 +2012,7 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}"
-                                                          MinHeight="28"
+                                                          MinHeight="32"
                                                           Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*"/>
@@ -1936,7 +2027,7 @@
                                                             Tag="{Binding ServiceId}"
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
-                                                            MinHeight="28"
+                                                            MinHeight="32"
                                                             VerticalAlignment="Center"/>
                                                         <ToggleSwitch
                                                             Grid.Column="1"
@@ -1953,8 +2044,8 @@
                                                             Tag="{Binding ServiceId}"
                                                             ToolTipService.ToolTip="Move up"
                                                             Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            Width="28"
-                                                            Height="28"
+                                                            Width="32"
+                                                            Height="32"
                                                             Padding="0"
                                                             Margin="4,0,0,0">
                                                             <FontIcon Glyph="&#xE70E;"
@@ -1966,8 +2057,8 @@
                                                             Tag="{Binding ServiceId}"
                                                             ToolTipService.ToolTip="Move down"
                                                             Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            Width="28"
-                                                            Height="28"
+                                                            Width="32"
+                                                            Height="32"
                                                             Padding="0"
                                                             Margin="2,0,0,0">
                                                             <FontIcon Glyph="&#xE70D;"
@@ -1993,12 +2084,12 @@
                                                        Text="Mini Window"
                                                        FontWeight="SemiBold"
                                                        FontSize="13"
-                                                       VerticalAlignment="Center"/>
+                                                       VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             <Button x:Name="MiniWindowReorderModeButton"
                                                     Grid.Column="1"
                                                     Click="OnToggleMiniWindowReorderModeClicked"
                                                     Padding="6,1"
-                                                    MinHeight="24"
+                                                    MinHeight="32"
                                                     FontSize="11"
                                                     VerticalAlignment="Center"/>
                                         </Grid>
@@ -2006,7 +2097,7 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}"
-                                                          MinHeight="28"
+                                                          MinHeight="32"
                                                           Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*"/>
@@ -2021,7 +2112,7 @@
                                                             Tag="{Binding ServiceId}"
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
-                                                            MinHeight="28"
+                                                            MinHeight="32"
                                                             VerticalAlignment="Center"/>
                                                         <ToggleSwitch
                                                             Grid.Column="1"
@@ -2038,8 +2129,8 @@
                                                             Tag="{Binding ServiceId}"
                                                             ToolTipService.ToolTip="Move up"
                                                             Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            Width="28"
-                                                            Height="28"
+                                                            Width="32"
+                                                            Height="32"
                                                             Padding="0"
                                                             Margin="4,0,0,0">
                                                             <FontIcon Glyph="&#xE70E;"
@@ -2051,8 +2142,8 @@
                                                             Tag="{Binding ServiceId}"
                                                             ToolTipService.ToolTip="Move down"
                                                             Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            Width="28"
-                                                            Height="28"
+                                                            Width="32"
+                                                            Height="32"
                                                             Padding="0"
                                                             Margin="2,0,0,0">
                                                             <FontIcon Glyph="&#xE70D;"
@@ -2078,12 +2169,12 @@
                                                        Text="Fixed Window"
                                                        FontWeight="SemiBold"
                                                        FontSize="13"
-                                                       VerticalAlignment="Center"/>
+                                                       VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             <Button x:Name="FixedWindowReorderModeButton"
                                                     Grid.Column="1"
                                                     Click="OnToggleFixedWindowReorderModeClicked"
                                                     Padding="6,1"
-                                                    MinHeight="24"
+                                                    MinHeight="32"
                                                     FontSize="11"
                                                     VerticalAlignment="Center"/>
                                         </Grid>
@@ -2091,7 +2182,7 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}"
-                                                          MinHeight="28"
+                                                          MinHeight="32"
                                                           Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*"/>
@@ -2106,7 +2197,7 @@
                                                             Tag="{Binding ServiceId}"
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
-                                                            MinHeight="28"
+                                                            MinHeight="32"
                                                             VerticalAlignment="Center"/>
                                                         <ToggleSwitch
                                                             Grid.Column="1"
@@ -2123,8 +2214,8 @@
                                                             Tag="{Binding ServiceId}"
                                                             ToolTipService.ToolTip="Move up"
                                                             Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            Width="28"
-                                                            Height="28"
+                                                            Width="32"
+                                                            Height="32"
                                                             Padding="0"
                                                             Margin="4,0,0,0">
                                                             <FontIcon Glyph="&#xE70E;"
@@ -2136,8 +2227,8 @@
                                                             Tag="{Binding ServiceId}"
                                                             ToolTipService.ToolTip="Move down"
                                                             Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            Width="28"
-                                                            Height="28"
+                                                            Width="32"
+                                                            Height="32"
                                                             Padding="0"
                                                             Margin="2,0,0,0">
                                                             <FontIcon Glyph="&#xE70D;"
@@ -2162,7 +2253,7 @@
                         <TextBlock x:Name="LanguagePreferencesHeaderText"
                                 Text="Language Preferences"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
 
                 <Border Style="{StaticResource SettingsSectionStyle}">
@@ -2196,10 +2287,19 @@
                                 </TextBlock>
 
                                 <!-- Auto-Select Toggle -->
-                                <ToggleSwitch
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=AutoSelectTargetToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch
                                     x:Name="AutoSelectTargetToggle"
                                     Header="Automatically select target language based on detected source"
-                                    IsOn="True"/>
+                                    IsOn="True">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
 
                                 <!-- UI Language -->
                                 <ComboBox
@@ -2254,7 +2354,7 @@
                             <Expander.Header>
                                 <TextBlock x:Name="AvailableLanguagesHeaderText"
                                         Text="Available Languages"
-                                        FontWeight="SemiBold"/>
+                                        FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </Expander.Header>
                             <StackPanel Spacing="8"
                                     Padding="4">
@@ -2289,7 +2389,7 @@
                             <TextBlock x:Name="HotkeysHeaderText"
                                     Text="Hotkeys"
                                     FontSize="18"
-                                    FontWeight="SemiBold"/>
+                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             <FontIcon x:Name="HotkeysHelpIcon"
                                     Glyph="&#xE897;"
                                     FontSize="14"
@@ -2447,7 +2547,7 @@
                                 AutomationProperties.AutomationId="SettingsGeneralBehaviorHeader"
                                 Text="Behavior"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="12">
@@ -2474,15 +2574,51 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
 
-                                <ToggleSwitch x:Name="MinimizeToTrayToggle"
-                                        Header="Minimize to system tray"/>
-                                <ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle"
-                                        Header="Start minimized to tray"/>
-                                <ToggleSwitch x:Name="ClipboardMonitorToggle"
-                                        Header="Monitor clipboard for text"/>
-                                <ToggleSwitch x:Name="MouseSelectionTranslateToggle"
+                                <controls:FluentSettingRow>
+<TextBlock AutomationProperties.AutomationId="MinimizeToTrayLabel" Text="{Binding Header, ElementName=MinimizeToTrayToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="MinimizeToTrayToggle"
+                                        Header="Minimize to system tray">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=MinimizeToTrayOnStartupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle"
+                                        Header="Start minimized to tray">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ClipboardMonitorToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ClipboardMonitorToggle"
+                                        Header="Monitor clipboard for text">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=MouseSelectionTranslateToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="MouseSelectionTranslateToggle"
                                         AutomationProperties.AutomationId="MouseSelectionTranslateToggle"
-                                        Header="Mouse selection translate"/>
+                                        Header="Mouse selection translate">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <StackPanel x:Name="MouseSelectionExcludedAppsPanel"
                                         Spacing="4"
                                         Margin="44,0,0,0"
@@ -2490,7 +2626,7 @@
                                     <TextBox x:Name="MouseSelectionExcludedAppsBox"
                                              Header="Excluded apps"
                                              PlaceholderText="code, slack, discord"
-                                             Width="350"
+                                             MaxWidth="350"
                                              HorizontalAlignment="Left"/>
                                     <TextBlock x:Name="MouseSelectionExcludedAppsDescriptionText"
                                                Text="Process names to exclude, separated by commas."
@@ -2500,19 +2636,46 @@
                                                MaxWidth="350"
                                                HorizontalAlignment="Left"/>
                                 </StackPanel>
-                                <ToggleSwitch x:Name="AlwaysOnTopToggle"
-                                        Header="Always on top"/>
-                                <ToggleSwitch x:Name="LaunchAtStartupToggle"
-                                        Header="Launch at Windows startup"/>
-                                <ToggleSwitch x:Name="HideEmptyServiceResultsToggle"
-                                        Header="Hide dictionaries with no result"/>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=AlwaysOnTopToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="AlwaysOnTopToggle"
+                                        Header="Always on top">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=LaunchAtStartupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="LaunchAtStartupToggle"
+                                        Header="Launch at Windows startup">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=HideEmptyServiceResultsToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="HideEmptyServiceResultsToggle"
+                                        Header="Hide dictionaries with no result">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <ToggleSwitch x:Name="EnableLocalDictionarySuggestionsToggle">
                                     <ToggleSwitch.Header>
                                         <StackPanel Orientation="Horizontal"
                                                     Spacing="6">
                                             <TextBlock x:Name="EnableLocalDictionarySuggestionsLabelText"
                                                        Text="Enable custom dictionary input suggestions"
-                                                       VerticalAlignment="Center"/>
+                                                       VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                             <TextBlock x:Name="ExperimentalLabelText"
                                                        Text="Experimental"
                                                        FontSize="11"
@@ -2531,11 +2694,20 @@
                                            Visibility="Collapsed"/>
 
                                 <!-- Compact mode (issue #172) -->
-                                <ToggleSwitch x:Name="CompactModeToggle"
-                                        Header="Compact mode"/>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=CompactModeToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="CompactModeToggle"
+                                        Header="Compact mode">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <TextBlock
                                     x:Name="CompactModeDescriptionText"
-                                    Text="Hide secondary chrome and helper actions for a tighter translation surface."
+                                    Text="Reduce spacing while keeping language, progress and key actions visible."
                                     FontSize="12"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     TextWrapping="Wrap"/>
@@ -2544,7 +2716,7 @@
                                 <TextBlock
                                     x:Name="ResultFontSizeLabel"
                                     Text="Result font size"
-                                    FontWeight="SemiBold"/>
+                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 <Slider
                                     x:Name="ResultFontScaleSlider"
                                     Minimum="0.85"
@@ -2563,15 +2735,51 @@
                                 <TextBlock
                                     x:Name="QuickActionsHeaderText"
                                     Text="Quick action buttons"
-                                    FontWeight="SemiBold"/>
-                                <ToggleSwitch x:Name="ShowOcrButtonToggle"
-                                        Header="Show OCR button"/>
-                                <ToggleSwitch x:Name="ShowPinButtonToggle"
-                                        Header="Show pin button"/>
-                                <ToggleSwitch x:Name="ShowSourcePlayButtonToggle"
-                                        Header="Show play button"/>
-                                <ToggleSwitch x:Name="ShowSwapButtonToggle"
-                                        Header="Show swap button"/>
+                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ShowOcrButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ShowOcrButtonToggle"
+                                        Header="Show OCR button">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ShowPinButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ShowPinButtonToggle"
+                                        Header="Show pin button">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ShowSourcePlayButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ShowSourcePlayButtonToggle"
+                                        Header="Show play button">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ShowSwapButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ShowSwapButtonToggle"
+                                        Header="Show swap button">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -2580,19 +2788,24 @@
                                 Spacing="12">
                         <TextBlock x:Name="HistoryPrivacyHeaderText"
                                    Text="History &amp; privacy"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"/>
+                                   FontSize="16"
+                                   FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="12">
-                                <ToggleSwitch x:Name="HistoryEnabledToggle"
+                                <controls:FluentSettingRow>
+                                    <TextBlock x:Name="HistoryEnabledTitleText" FontSize="14" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <ToggleSwitch x:Name="HistoryEnabledToggle" Grid.Column="1"
                                               AutomationProperties.AutomationId="HistoryEnabledToggle"
                                               Header="Save query history"
                                               Toggled="OnHistoryEnabledToggled"/>
-                                <TextBlock Text="Stores completed translation, dictionary, grammar, and OCR queries. Long documents are never saved."
+                                </controls:FluentSettingRow>
+                                <TextBlock x:Name="HistoryPrivacyDescriptionText" Text="Stores successful queries. Turning this off stops new history and keeps existing records. Long documents are never saved."
                                            FontSize="12"
                                            TextWrapping="Wrap"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                <NumberBox x:Name="HistoryRetentionDaysBox"
+                                <controls:FluentSettingRow>
+                                    <TextBlock x:Name="HistoryRetentionTitleText" FontSize="14" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <NumberBox x:Name="HistoryRetentionDaysBox" Grid.Column="1"
                                            AutomationProperties.AutomationId="HistoryRetentionDaysBox"
                                            Header="History retention (days)"
                                            Minimum="1"
@@ -2601,11 +2814,13 @@
                                            LargeChange="30"
                                            SpinButtonPlacementMode="Compact"
                                            ValueChanged="OnHistoryRetentionDaysValueChanged"/>
-                                <TextBlock Text="Favorites are kept when history expires or is cleared."
+                                </controls:FluentSettingRow>
+                                <TextBlock x:Name="HistoryRetentionDescriptionText" Text="Default: 30 days (1–3650). Favorites are kept when history expires or is cleared."
                                            FontSize="12"
                                            TextWrapping="Wrap"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 <TextBlock x:Name="HistoryRetentionValidationText"
+                                           AutomationProperties.LiveSetting="Polite"
                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                            TextWrapping="Wrap"
                                            Visibility="Collapsed"/>
@@ -2623,18 +2838,18 @@
                         <TextBlock x:Name="TtsSettingsHeaderText"
                                    Text="TTS Output Settings"
                                    FontSize="18"
-                                   FontWeight="SemiBold" />
+                                   FontWeight="SemiBold"  Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <StackPanel Spacing="4">
                                     <TextBlock x:Name="TtsSpeedLabelText"
-                                               Text="TTS Reading Speed (0.5x - 3.0x)" />
+                                               Text="TTS Reading Speed (0.5x - 3.0x)"  Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Slider x:Name="TtsSpeedSlider"
                                             Minimum="0.5" Maximum="3.0" StepFrequency="0.5"
                                             Value="1.0" Width="250" HorizontalAlignment="Left" />
                                 </StackPanel>
                                 <StackPanel Spacing="4">
-                                    <TextBlock x:Name="TtsVoiceLabelText" />
+                                    <TextBlock x:Name="TtsVoiceLabelText"  Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <ComboBox x:Name="TtsVoiceCombo"
@@ -2662,13 +2877,22 @@
                                                       Glyph="&#xE768;"
                                                       FontSize="14" />
                                             <TextBlock x:Name="TtsVoicePreviewButtonText"
-                                                       Text="Play sample" />
+                                                       Text="Play sample"  Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
-                                <ToggleSwitch x:Name="AutoPlayTranslationToggle"
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=AutoPlayTranslationToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="AutoPlayTranslationToggle"
                                               Header="Auto-play translation"
-                                              IsOn="False" />
+                                              IsOn="False" >
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -2742,7 +2966,7 @@
                         <TextBlock x:Name="OcrSettingsHeaderText"
                                 Text="OCR (Text Recognition) Settings"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
@@ -2766,7 +2990,7 @@
                                         Spacing="12"
                                         Visibility="Collapsed">
                                     <ComboBox x:Name="PpOcrV6ModelCombo"
-                                            Width="350"
+                                            MaxWidth="350"
                                             SelectionChanged="OnPpOcrV6ModelChanged"/>
                                     <TextBlock x:Name="PpOcrV6DownloadSizeText"
                                             FontSize="12"
@@ -2777,7 +3001,7 @@
                                             TextWrapping="Wrap"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                     <TextBlock x:Name="PpOcrV6ModelStatusText"
-                                            FontSize="13"/>
+                                            FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                     <Button x:Name="PpOcrV6DownloadButton"
                                             HorizontalAlignment="Left"
                                             Click="OnDownloadPpOcrV6ModelClick"/>
@@ -2803,7 +3027,7 @@
                                             Click="OnTestPpOcrV6Click"/>
                                     <TextBox x:Name="PpOcrV6TestStatusBox"
                                             IsReadOnly="True"
-                                            Width="350"
+                                            MaxWidth="350"
                                             MinHeight="32"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"
@@ -2814,12 +3038,12 @@
                                 <StackPanel x:Name="AdvancedOcrPanel"
                                         Spacing="12"
                                         Visibility="Collapsed">
-                                    <StackPanel Width="350"
+                                    <StackPanel MaxWidth="350"
                                                 HorizontalAlignment="Left"
                                                 Spacing="4">
                                         <TextBlock x:Name="OcrApiKeyHeaderText"
                                                    Text="API Key (Optional)"
-                                                   FontSize="14"/>
+                                                   FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         <Grid>
                                             <PasswordBox x:Name="OcrApiKeyBox"
                                                          HorizontalAlignment="Stretch"
@@ -2842,19 +3066,19 @@
 
                                     <TextBox x:Name="OcrEndpointBox"
                                             Header="Endpoint"
-                                            Width="350"
+                                            MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             PlaceholderText="http://localhost:11434/api/generate"/>
 
                                     <TextBox x:Name="OcrModelBox"
                                             Header="Model"
-                                            Width="350"
+                                            MaxWidth="350"
                                             HorizontalAlignment="Left"
                                             PlaceholderText="glm-ocr"/>
 
                                     <TextBox x:Name="OcrSystemPromptBox"
                                             Header="System Prompt"
-                                            Width="350"
+                                            MaxWidth="350"
                                             Height="100"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"
@@ -2862,9 +3086,18 @@
                                             PlaceholderText="Enter system prompt for OCR..."/>
 
                                     <StackPanel Spacing="4">
-                                        <ToggleSwitch x:Name="OcrEnableThinkingToggle"
+                                        <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=OcrEnableThinkingToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="OcrEnableThinkingToggle"
                                                 AutomationProperties.AutomationId="OcrEnableThinkingToggle"
-                                                Header="Enable model thinking"/>
+                                                Header="Enable model thinking">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                         <TextBlock x:Name="OcrEnableThinkingDescriptionText"
                                                 Text="Only applies to models that support thinking. Leaving it off makes recognition much faster."
                                                 FontSize="12"
@@ -2881,7 +3114,7 @@
                                     <TextBox x:Name="OcrTestStatusBox"
                                             Header="Test Result"
                                             IsReadOnly="True"
-                                            Width="350"
+                                            MaxWidth="350"
                                             MinHeight="32"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"
@@ -2897,7 +3130,7 @@
                         <TextBlock x:Name="LayoutDetectionHeaderText"
                                 Text="Layout Detection"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         <TextBlock x:Name="LayoutDetectionDescriptionText"
                                    Text="ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas."
                                    FontSize="12"
@@ -2931,7 +3164,7 @@
                                             VerticalAlignment="Center">
                                         <TextBlock x:Name="OnnxModelStatusText"
                                                 Text="ONNX Model: Not Downloaded"
-                                                VerticalAlignment="Center"/>
+                                                VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                         <FontIcon x:Name="OnnxModelStatusIcon"
                                                 Glyph="&#xE946;"
                                                 FontSize="14"
@@ -2989,7 +3222,7 @@
                         <TextBlock x:Name="CjkFontHeaderText"
                                 Text="CJK Font"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         <TextBlock x:Name="CjkFontDescriptionText"
                                    Text="Download CJK fonts for proper Chinese, Japanese, and Korean text rendering in PDF output."
                                    FontSize="12"
@@ -3031,7 +3264,7 @@
                         <TextBlock x:Name="FormulaDetectionHeaderText"
                                 Text="Formula Detection"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         <TextBlock x:Name="FormulaDetectionDescriptionText"
                                    Text="Advanced formula detection uses font names and Unicode math characters to protect formulas from translation."
                                    FontSize="12"
@@ -3067,7 +3300,7 @@
                         <TextBlock x:Name="TranslationCacheHeaderText"
                                 Text="Translation Cache"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         <TextBlock x:Name="TranslationCacheDescriptionText"
                                    Text="Cache translated segments locally to speed up repeated translations and save API costs."
                                    FontSize="12"
@@ -3076,9 +3309,18 @@
 
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
-                                <ToggleSwitch x:Name="TranslationCacheToggle"
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=TranslationCacheToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="TranslationCacheToggle"
                                         Header="Enable Translation Cache"
-                                              Toggled="OnTranslationCacheToggled"/>
+                                              Toggled="OnTranslationCacheToggled">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <StackPanel Orientation="Horizontal"
                                         Spacing="12">
                                     <Button x:Name="ClearCacheButton"
@@ -3105,7 +3347,7 @@
                         <TextBlock x:Name="CustomPromptHeaderText"
                                 Text="Custom Translation Prompt"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         <TextBlock x:Name="CustomPromptDescriptionText"
                                    Text="Add custom instructions for LLM-based translation services (OpenAI, DeepSeek, Gemini, etc.)."
                                    FontSize="12"
@@ -3138,19 +3380,37 @@
                         <TextBlock x:Name="HttpProxyHeaderText"
                                 Text="HTTP Proxy"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
-                                <ToggleSwitch x:Name="ProxyEnabledToggle"
-                                        Header="Use HTTP Proxy"/>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ProxyEnabledToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ProxyEnabledToggle"
+                                        Header="Use HTTP Proxy">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <TextBox x:Name="ProxyUriBox"
                                         Header="Proxy URL"
                                         Width="300"
                                          PlaceholderText="http://127.0.0.1:7890"/>
-                                <ToggleSwitch x:Name="ProxyBypassLocalToggle"
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ProxyBypassLocalToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ProxyBypassLocalToggle"
                                         Header="Bypass proxy for localhost"
-                                        IsOn="True"/>
+                                        IsOn="True">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
                                 <TextBlock Text="Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -3162,9 +3422,8 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Spacer to make room for floating save button -->
-                <Border Height="80"/>
-            </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </ScrollViewer>
 
         <!-- Floating Save Button (fixed at bottom-right) -->

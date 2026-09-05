@@ -1362,7 +1362,7 @@
     <value>Mode compact</value>
   </data>
   <data name="CompactModeDescription" xml:space="preserve">
-    <value>Masque les titres, l&apos;état, les icônes d&apos;aide et les actions rapides secondaires pour une interface de traduction plus compacte.</value>
+    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
   </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>Boutons d'action rapide</value>
@@ -1493,4 +1493,65 @@
   <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>30 derniers jours</value></data>
   <data name="SavedItemsAllProviders" xml:space="preserve"><value>Tous les fournisseurs</value></data>
   <data name="SavedItemsRetry" xml:space="preserve"><value>Réessayer</value></data>
+  <data name="HistoryClearDescription" xml:space="preserve"><value>Visible history will be removed. Favorites will not be deleted.</value></data>
+  <data name="HistoryClearLabel" xml:space="preserve"><value>Clear history</value></data>
+  <data name="HistoryClearTitle" xml:space="preserve"><value>Clear history?</value></data>
+  <data name="HistoryCleared" xml:space="preserve"><value>History cleared. Favorites were kept.</value></data>
+  <data name="HistoryEnabledLabel" xml:space="preserve"><value>Save query history</value></data>
+  <data name="HistoryPrivacyDescription" xml:space="preserve"><value>Saves successful translation, dictionary, grammar correction and OCR queries. Turning this off stops new history and keeps existing records. Long documents are excluded from history and favorites.</value></data>
+  <data name="HistoryPrivacyTitle" xml:space="preserve"><value>History &amp; privacy</value></data>
+  <data name="HistoryRetentionDescription" xml:space="preserve"><value>Default: 30 days. Choose 1–3650 days. Favorites are kept when history expires or is cleared.</value></data>
+  <data name="HistoryRetentionLabel" xml:space="preserve"><value>Keep history (days)</value></data>
+  <data name="HistoryRetentionUpdated" xml:space="preserve"><value>History retention updated.</value></data>
+  <data name="SavedItemsAllResults" xml:space="preserve"><value>All results ({0})</value></data>
+  <data name="SavedItemsApply" xml:space="preserve"><value>Apply</value></data>
+  <data name="SavedItemsClearSearch" xml:space="preserve"><value>Clear search and filters</value></data>
+  <data name="SavedItemsCollapseResult" xml:space="preserve"><value>Collapse result</value></data>
+  <data name="SavedItemsCompare" xml:space="preserve"><value>Compare</value></data>
+  <data name="SavedItemsCompareCount" xml:space="preserve"><value>Compare ({0}/2)</value></data>
+  <data name="SavedItemsCopyError" xml:space="preserve"><value>Unable to copy: {0}</value></data>
+  <data name="SavedItemsCopySource" xml:space="preserve"><value>Copy source</value></data>
+  <data name="SavedItemsDeleteHistoryConfirm" xml:space="preserve"><value>Delete this query from history? Favorites will not be deleted.</value></data>
+  <data name="SavedItemsDiscard" xml:space="preserve"><value>Discard</value></data>
+  <data name="SavedItemsEdit" xml:space="preserve"><value>Edit note and tags</value></data>
+  <data name="SavedItemsFilters" xml:space="preserve"><value>Filters</value></data>
+  <data name="SavedItemsLoadError" xml:space="preserve"><value>Unable to load saved items: {0}</value></data>
+  <data name="SavedItemsMetadataSaved" xml:space="preserve"><value>Favorite details saved.</value></data>
+  <data name="SavedItemsNoNote" xml:space="preserve"><value>No note</value></data>
+  <data name="SavedItemsNoSearchResults" xml:space="preserve"><value>No matching records. Try another search or clear your filters.</value></data>
+  <data name="SavedItemsOtherResults" xml:space="preserve"><value>Other results</value></data>
+  <data name="SavedItemsOtherResultsCount" xml:space="preserve"><value>Other results from this query ({0})</value></data>
+  <data name="SavedItemsPinnedOnly" xml:space="preserve"><value>Pinned only</value></data>
+  <data name="SavedItemsProvider" xml:space="preserve"><value>Provider</value></data>
+  <data name="SavedItemsQueryFavorites" xml:space="preserve"><value>Whole queries</value></data>
+  <data name="SavedItemsRemoveFavoriteConfirm" xml:space="preserve"><value>Remove this favorite?</value></data>
+  <data name="SavedItemsRerun" xml:space="preserve"><value>Translate again</value></data>
+  <data name="SavedItemsReset" xml:space="preserve"><value>Reset</value></data>
+  <data name="SavedItemsResultCopied" xml:space="preserve"><value>Result copied.</value></data>
+  <data name="SavedItemsResultCount" xml:space="preserve"><value>{0} results</value></data>
+  <data name="SavedItemsResultFavorites" xml:space="preserve"><value>Individual results</value></data>
+  <data name="SavedItemsSelectDescription" xml:space="preserve"><value>Choose a record on the left to read its source and results.</value></data>
+  <data name="SavedItemsSource" xml:space="preserve"><value>Source text</value></data>
+  <data name="SavedItemsSourceClipboard" xml:space="preserve"><value>Clipboard</value></data>
+  <data name="SavedItemsSourceCopied" xml:space="preserve"><value>Source copied.</value></data>
+  <data name="SavedItemsSourceHistoryRerun" xml:space="preserve"><value>From history</value></data>
+  <data name="SavedItemsSourceManual" xml:space="preserve"><value>Typed input</value></data>
+  <data name="SavedItemsSourceOcr" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsSourceSelection" xml:space="preserve"><value>Selected text</value></data>
+  <data name="SavedItemsTimeRange" xml:space="preserve"><value>Time range</value></data>
+  <data name="SavedItemsToggleResult" xml:space="preserve"><value>Expand or collapse result</value></data>
+  <data name="SavedItemsUnreadableResult" xml:space="preserve"><value>This saved result cannot be read.</value></data>
+  <data name="SavedItemsUnsavedDescription" xml:space="preserve"><value>This favorite has changes to its note or tags.</value></data>
+  <data name="SavedItemsUnsavedTitle" xml:space="preserve"><value>Save your changes?</value></data>
+  <data name="SavedItemsYesterday" xml:space="preserve"><value>Yesterday</value></data>
+  <data name="SavedItemsBackToList" xml:space="preserve"><value>Back to list</value></data>
+  <data name="SavedItemsCollapse" xml:space="preserve"><value>Collapse result</value></data>
+  <data name="SavedItemsEarlier" xml:space="preserve"><value>Earlier</value></data>
+  <data name="SavedItemsEditFavorite" xml:space="preserve"><value>Edit note and tags</value></data>
+  <data name="SavedItemsNoSelectionDescription" xml:space="preserve"><value>Choose a record to read its source and results.</value></data>
+  <data name="SavedItemsReturnToTranslation" xml:space="preserve"><value>Go to translation</value></data>
+  <data name="FluentMoreOptions" xml:space="preserve"><value>More options</value></data>
+  <data name="FluentCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
+  <data name="FluentCopied" xml:space="preserve"><value>Copied</value></data>
+  <data name="FluentDictionaryFallback" xml:space="preserve"><value>Rich dictionary content could not be displayed. A text version is shown.</value></data>
 </root>

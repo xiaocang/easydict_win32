@@ -24,6 +24,8 @@ public sealed partial class SavedItemsPage : Page
     private readonly List<IServiceResultView> _detailResultControls = [];
     private readonly List<IServiceResultView> _otherResultControls = [];
     private readonly Dictionary<ServiceQueryResult, Guid> _resultIds = new();
+    private readonly HashSet<Guid> _pendingResultFavorites = [];
+    private int _favoriteStateGeneration;
     private readonly List<ResultChoice> _resultChoices = [];
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _searchTimer;
     private CancellationTokenSource? _loadCts;
@@ -44,6 +46,7 @@ public sealed partial class SavedItemsPage : Page
     private bool _isPageLoaded;
     private bool _isInitialized;
     private bool _isLoadingNextPage;
+    private bool _nextPageQueued;
     private bool _showingNarrowDetail;
     private bool _updatingFavoriteMetadata;
     private bool _updatingKindSelectors;
@@ -62,14 +65,27 @@ public sealed partial class SavedItemsPage : Page
         _searchTimer.Tick += OnSearchTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        _dayTimer = DispatcherQueue.CreateTimer();
+        _dayTimer.Interval = TimeSpan.FromSeconds(30);
+        _dayTimer.Tick += OnDayTimerTick;
+        _messageTimer = DispatcherQueue.CreateTimer();
+        _messageTimer.Interval = TimeSpan.FromSeconds(3);
+        _messageTimer.Tick += (_, _) => { _messageTimer.Stop(); PageInfoBar.IsOpen = false; };
+        ActualThemeChanged += OnSavedThemeChanged;
         _isInitialized = true;
+#if WINUI_TEST
+        InitializeSavedItemsDiagnostics();
+#endif
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
         if (e.Parameter is SavedItemsNavigationRequest request)
+        {
+            if (_section != request.Section) _showingNarrowDetail = false;
             _section = request.Section;
+        }
 
         ApplySectionState();
         if (_isPageLoaded)
@@ -78,7 +94,7 @@ public sealed partial class SavedItemsPage : Page
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
-        _showingNarrowDetail = false;
+        CaptureSectionState();
         base.OnNavigatedFrom(e);
     }
 
@@ -88,10 +104,17 @@ public sealed partial class SavedItemsPage : Page
             return;
 
         _isPageLoaded = true;
+        _searchHighlightBackground = _searchHighlightForeground = null;
+        ApplyLocalization();
+        SyncComboSelection(KindCombo, _historyKindTag);
+        SyncComboSelection(FavoriteKindCombo, _favoriteKindTag);
+        SyncRadioSelection(HistoryKindTabs, _historyKindTag);
+        SyncRadioSelection(FavoriteKindTabs, _favoriteKindTag);
         SavedItemsService.Instance.Changed += OnSavedItemsChanged;
         ApplySectionState();
         UpdateResponsiveLayout();
-        await LoadAsync();
+        _dayTimer.Start();
+        await RestoreSectionAsync();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -102,29 +125,53 @@ public sealed partial class SavedItemsPage : Page
         _isPageLoaded = false;
         SavedItemsService.Instance.Changed -= OnSavedItemsChanged;
         _searchTimer.Stop();
+        _dayTimer.Stop();
+        _messageTimer.Stop();
         _loadCts?.Cancel();
         _loadCts?.Dispose();
         _loadCts = null;
         Interlocked.Increment(ref _detailGeneration);
         ReleaseResultViews();
+        _activeDetail = null;
+        _activeFavoriteDetail = null;
+        _pendingOtherResults = [];
     }
 
     private void OnSavedItemsChanged(object? sender, SavedItemsChangedEventArgs e)
     {
-        if (!_isPageLoaded)
+        if (!_isPageLoaded || _savingFavoriteMetadata || HasUnsavedFavoriteChanges)
             return;
 
         DispatcherQueue.TryEnqueue(async () =>
         {
-            if (_isPageLoaded)
-                await LoadAsync();
+            if (_isPageLoaded && !_savingFavoriteMetadata && !HasUnsavedFavoriteChanges)
+            {
+                // Keep live controls for a favorite change to the displayed history
+                // query. Expired queries still reload: removing their last favorite
+                // can delete them from the store.
+                if (_section == SavedItemsSection.History && e.Kind == SavedItemsChangeKind.Favorite &&
+                    _activeDetail is { } active && e.QueryId == active.Query.Id &&
+                    active.Query.CreatedUtc >= DateTimeOffset.UtcNow.AddDays(-Math.Clamp(SettingsService.Instance.HistoryRetentionDays, 1, 3650)))
+                {
+                    try { await RefreshFavoriteStatesAsync(); }
+                    catch (Exception exception)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SavedItems] Favorite refresh failed: {exception}");
+                        ShowError(exception.Message);
+                    }
+                    return;
+                }
+                CaptureSectionState();
+                await RestoreSectionAsync();
+            }
         });
     }
 
-    private void OnSearchTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    private async void OnSearchTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
         sender.Stop();
-        _ = LoadAsync();
+        if (await ConfirmLeaveFavoriteAsync()) await LoadAsync();
+        else SavedItemsSearchBox.Text = _appliedSearch;
     }
 
     private async Task LoadAsync()
@@ -141,7 +188,6 @@ public sealed partial class SavedItemsPage : Page
         var cancellationToken = _loadCts.Token;
         _nextCursor = null;
         SetLoading(true);
-        PageInfoBar.IsOpen = false;
 
         try
         {
@@ -150,8 +196,12 @@ public sealed partial class SavedItemsPage : Page
             if (generation != _loadGeneration || cancellationToken.IsCancellationRequested)
                 return;
 
+            _appliedSearch = SavedItemsSearchBox.Text ?? string.Empty;
+            _restoringSelection = true;
             _items.Clear();
             AddRows(page.Items);
+            _restoringSelection = false;
+            _lastDataRevision = SavedItemsService.Instance.Revision;
             _nextCursor = page.NextCursor;
             UpdateEmptyState();
 
@@ -183,6 +233,9 @@ public sealed partial class SavedItemsPage : Page
                 exception.Message);
             RetryLoadButton.Visibility = Visibility.Visible;
             EmptyBackButton.Visibility = Visibility.Collapsed;
+            ClearSearchButton.Visibility = Visibility.Collapsed;
+            EmptyStateIcon.Glyph = "\uE783";
+            SavedItemsList.Visibility = Visibility.Collapsed;
             ShowError(exception.Message);
         }
         finally
@@ -247,12 +300,12 @@ public sealed partial class SavedItemsPage : Page
                 item.Id,
                 null,
                 item.SourceText,
-                $"{item.PreviewProviderName} · {item.SourceLanguage} → {item.TargetLanguage} · {KindLabel(item.Kind)} · {item.SuccessResultCount}",
+                $"{item.PreviewProviderName} · {item.SourceLanguage} → {item.TargetLanguage} · {KindLabel(item.Kind)} · {ResultCountLabel(item.SuccessResultCount)}",
                 item.PreviewText,
-                item.CreatedUtc.LocalDateTime.ToString("g"),
+                FormatListTime(item.CreatedUtc),
                 [],
                 item.CreatedUtc,
-                string.Empty)).ToArray();
+                string.Empty) { IconGlyph = item.Kind == SavedQueryKind.Ocr ? "\uE8A7" : item.Kind == SavedQueryKind.GrammarCorrection ? "\uE8F2" : "\uE8A5" }).ToArray();
             return new SavedItemsPageResult<SavedItemsRow>(rows, page.NextCursor);
         }
 
@@ -267,17 +320,17 @@ public sealed partial class SavedItemsPage : Page
             cancellationToken);
         var favoriteRows = favoritesPage.Items.Select(item =>
         {
-            var pin = item.IsPinned ? "📌 " : string.Empty;
+            var pin = string.Empty;
             return new SavedItemsRow(
                 item.QueryId,
                 item.Id,
                 item.SourceText,
-                $"{pin}{item.ProviderName} · {item.SourceLanguage} → {item.TargetLanguage} · {KindLabel(item.QueryKind)} · {FavoriteTargetLabel(item.TargetKind)} · {item.SuccessResultCount}",
+                $"{pin}{item.ProviderName} · {item.SourceLanguage} → {item.TargetLanguage} · {KindLabel(item.QueryKind)} · {FavoriteTargetLabel(item.TargetKind)} · {ResultCountLabel(item.SuccessResultCount)}",
                 item.PreviewText,
-                item.CreatedUtc.LocalDateTime.ToString("g"),
+                FormatListTime(item.CreatedUtc),
                 item.Tags,
                 item.CreatedUtc,
-                string.Empty);
+                string.Empty) { IconGlyph = item.IsPinned ? "\uE718" : "\uE734" };
         }).ToArray();
         return new SavedItemsPageResult<SavedItemsRow>(favoriteRows, favoritesPage.NextCursor);
     }
@@ -289,36 +342,50 @@ public sealed partial class SavedItemsPage : Page
             string.IsNullOrWhiteSpace(SavedItemsSearchBox.Text);
         foreach (var row in rows)
         {
-            var groupTitle = groupHistory && (previous is null || previous.Value.LocalDateTime.Date != row.CreatedUtc.LocalDateTime.Date)
+            var groupTitle = groupHistory && (previous is null || SavedItemsPresentation.DateGroup(previous.Value, DateTimeOffset.Now, TimeZoneInfo.Local) != SavedItemsPresentation.DateGroup(row.CreatedUtc, DateTimeOffset.Now, TimeZoneInfo.Local))
                 ? GetHistoryGroupTitle(row.CreatedUtc)
                 : string.Empty;
-            _items.Add(row with { GroupTitle = groupTitle });
+            _items.Add(new SavedItemsRow(row.QueryId, row.FavoriteId, row.SourceText,
+                row.Metadata, row.PreviewText, FormatListTime(row.CreatedUtc), row.Tags,
+                row.CreatedUtc, groupTitle) { IconGlyph = row.IconGlyph });
             previous = row.CreatedUtc;
         }
     }
 
     private static string GetHistoryGroupTitle(DateTimeOffset createdUtc)
     {
-        var day = createdUtc.LocalDateTime.Date;
-        var today = DateTime.Today;
-        if (day == today)
-            return L("SavedItemsToday", "Today");
-        if (day == today.AddDays(-1))
-            return L("SavedItemsYesterday", "Yesterday");
-        if (day >= today.AddDays(-6))
-            return L("SavedItemsLastSevenDays", "Last 7 days");
-        return L("SavedItemsEarlier", "Earlier");
+        var key = SavedItemsPresentation.DateGroup(createdUtc, DateTimeOffset.Now, TimeZoneInfo.Local);
+        return L(key, key switch
+        {
+            "SavedItemsToday" => "Today",
+            "SavedItemsYesterday" => "Yesterday",
+            "SavedItemsLastSevenDays" => "Last 7 days",
+            _ => "Earlier"
+        });
+    }
+
+    private static string ResultCountLabel(int count) => string.Format(L("SavedItemsResultCount", "{0} results"), count);
+
+    private static string FormatListTime(DateTimeOffset created)
+    {
+        var day = created.LocalDateTime;
+        if (day.Date == DateTime.Today) return day.ToString("t");
+        if (day.Date == DateTime.Today.AddDays(-1)) return L("SavedItemsYesterday", "Yesterday");
+        return day.ToString("d");
     }
 
     private void UpdateEmptyState()
     {
         EmptyState.Visibility = _items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         SavedItemsList.Visibility = _items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        EmptyStateText.Text = _section == SavedItemsSection.History
+        var filtered = !string.IsNullOrWhiteSpace(SavedItemsSearchBox.Text) || HasActiveFilters;
+        ClearSearchButton.Visibility = filtered ? Visibility.Visible : Visibility.Collapsed;
+        EmptyStateIcon.Glyph = filtered ? "\uE721" : _section == SavedItemsSection.Favorites ? "\uE734" : "\uE81C";
+        EmptyStateText.Text = filtered ? L("SavedItemsNoSearchResults", "No matching records. Try another search or clear your filters.") : _section == SavedItemsSection.History
             ? L("SavedItemsNoHistory", "No completed queries yet.")
             : L("SavedItemsNoFavorites", "No favorites yet.");
         RetryLoadButton.Visibility = Visibility.Collapsed;
-        EmptyBackButton.Visibility = Visibility.Visible;
+        EmptyBackButton.Visibility = filtered ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void SetLoading(bool isLoading)
@@ -339,9 +406,9 @@ public sealed partial class SavedItemsPage : Page
         }
     }
 
-    private async void OnHistoryKindChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnHistoryKindChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs e)
     {
-        if (!_isInitialized || _updatingKindSelectors || HistoryKindTabs.SelectedItem is not RadioButton selected)
+        if (!_isInitialized || _updatingKindSelectors || HistoryKindTabs.SelectedItem is not SelectorBarItem selected)
             return;
 
         _historyKindTag = selected.Tag?.ToString() ?? string.Empty;
@@ -359,11 +426,16 @@ public sealed partial class SavedItemsPage : Page
         await LoadAsync();
     }
 
-    private async void OnFavoriteKindChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnFavoriteKindChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs e)
     {
-        if (!_isInitialized || _updatingKindSelectors || FavoriteKindTabs.SelectedItem is not RadioButton selected)
+        if (!_isInitialized || _updatingKindSelectors || FavoriteKindTabs.SelectedItem is not SelectorBarItem selected)
             return;
 
+        if (!await ConfirmLeaveFavoriteAsync())
+        {
+            SyncRadioSelection(FavoriteKindTabs, _favoriteKindTag);
+            return;
+        }
         _favoriteKindTag = selected.Tag?.ToString() ?? string.Empty;
         SyncComboSelection(FavoriteKindCombo, _favoriteKindTag);
         await LoadAsync();
@@ -374,6 +446,11 @@ public sealed partial class SavedItemsPage : Page
         if (!_isInitialized || _updatingKindSelectors || FavoriteKindCombo.SelectedItem is not ComboBoxItem selected)
             return;
 
+        if (!await ConfirmLeaveFavoriteAsync())
+        {
+            SyncComboSelection(FavoriteKindCombo, _favoriteKindTag);
+            return;
+        }
         _favoriteKindTag = selected.Tag?.ToString() ?? string.Empty;
         SyncRadioSelection(FavoriteKindTabs, _favoriteKindTag);
         await LoadAsync();
@@ -385,7 +462,7 @@ public sealed partial class SavedItemsPage : Page
         try
         {
             comboBox.SelectedItem = comboBox.Items.OfType<ComboBoxItem>()
-                .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), tag, StringComparison.Ordinal));
+                .FirstOrDefault(item => string.Equals(item.Tag?.ToString() ?? string.Empty, tag, StringComparison.Ordinal));
         }
         finally
         {
@@ -393,13 +470,13 @@ public sealed partial class SavedItemsPage : Page
         }
     }
 
-    private void SyncRadioSelection(RadioButtons radioButtons, string tag)
+    private void SyncRadioSelection(SelectorBar radioButtons, string tag)
     {
         _updatingKindSelectors = true;
         try
         {
-            radioButtons.SelectedItem = radioButtons.Items.OfType<RadioButton>()
-                .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), tag, StringComparison.Ordinal));
+            radioButtons.SelectedItem = radioButtons.Items.OfType<SelectorBarItem>()
+                .FirstOrDefault(item => string.Equals(item.Tag?.ToString() ?? string.Empty, tag, StringComparison.Ordinal));
         }
         finally
         {
@@ -457,6 +534,8 @@ public sealed partial class SavedItemsPage : Page
 
     private async void OnApplyFiltersClicked(object sender, RoutedEventArgs e)
     {
+        FilterFlyout.Hide();
+        if (!await ConfirmLeaveFavoriteAsync()) return;
         _timeRangeTag = (TimeRangeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
         _providerId = (ProviderCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
         _appliedTags = FavoriteTagsFilterList.SelectedItems.Cast<string>().ToArray();
@@ -482,13 +561,18 @@ public sealed partial class SavedItemsPage : Page
     {
         if (_section == section)
             return;
-
+        if (!await ConfirmLeaveFavoriteAsync())
+        {
+            ApplySectionState();
+            return;
+        }
+        CaptureSectionState();
         _section = section;
         _showingNarrowDetail = false;
         ApplySectionState();
         UpdateResponsiveLayout();
         if (_isPageLoaded)
-            await LoadAsync();
+            await RestoreSectionAsync();
     }
 
     private void ApplySectionState()
@@ -503,8 +587,7 @@ public sealed partial class SavedItemsPage : Page
         AutomationProperties.SetHelpText(PageTitleText, $"SavedItemsSection:{_section}");
         HistoryRailButton.IsEnabled = true;
         FavoritesRailButton.IsEnabled = true;
-        HistoryRailButton.Opacity = _section == SavedItemsSection.History ? 1 : 0.72;
-        FavoritesRailButton.Opacity = _section == SavedItemsSection.Favorites ? 1 : 0.72;
+        SavedNavigation.SelectedItem = _section == SavedItemsSection.History ? HistoryRailButton : FavoritesRailButton;
         UpdateFilterBadge();
         UpdateResponsiveLayout();
     }
@@ -523,12 +606,17 @@ public sealed partial class SavedItemsPage : Page
     {
         if (!_isInitialized)
             return;
+#if WINUI_TEST
+        AutomationProperties.SetItemStatus(ReturnToTranslationButton, FormattableString.Invariant($"PageWidth={ActualWidth:F1};Dpi={XamlRoot?.RasterizationScale ?? 1:F2}"));
+#endif
 
         var narrow = ActualWidth < NarrowBreakpoint;
         var collapseRail = ActualWidth < 640;
-        RailColumn.Width = collapseRail ? new GridLength(0) : new GridLength(56);
-        NavigationRail.Visibility = collapseRail ? Visibility.Collapsed : Visibility.Visible;
+        SavedNavigation.PaneDisplayMode = collapseRail ? NavigationViewPaneDisplayMode.LeftMinimal : NavigationViewPaneDisplayMode.LeftCompact;
+        SavedNavigation.IsPaneToggleButtonVisible = collapseRail;
+        ReturnToTranslationButton.Margin = new Thickness(collapseRail ? 56 : 16, 12, 16, 0);
         RootGrid.Padding = new Thickness(narrow ? 16 : 24);
+        RootGrid.ColumnSpacing = narrow ? 0 : 16;
         if (narrow)
         {
             ListColumn.Width = _showingNarrowDetail ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
@@ -546,7 +634,9 @@ public sealed partial class SavedItemsPage : Page
             DetailBackButton.Visibility = Visibility.Collapsed;
         }
 
-        var showNarrowSelector = narrow && !_showingNarrowDetail;
+        var categories = _section == SavedItemsSection.History ? HistoryKindTabs : FavoriteKindTabs;
+        var showNarrowSelector = ListPane.ActualWidth < RequiredSelectorWidth(categories);
+        UpdateResultsLayout();
         HistoryKindTabs.Visibility = _section == SavedItemsSection.History && !showNarrowSelector
             ? Visibility.Visible : Visibility.Collapsed;
         KindCombo.Visibility = _section == SavedItemsSection.History && showNarrowSelector
@@ -559,8 +649,28 @@ public sealed partial class SavedItemsPage : Page
 
     private void OnListContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (!args.InRecycleQueue && args.ItemIndex >= _items.Count - 5)
-            _ = LoadNextPageAsync();
+        if (!args.InRecycleQueue && args.Item is SavedItemsRow row)
+        {
+            AutomationProperties.SetName(args.ItemContainer, $"{row.SourceText}. {row.Metadata}. {row.PreviewText}");
+            var container = args.ItemContainer;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isPageLoaded) RefreshListHighlights(container);
+            });
+        }
+        if (!args.InRecycleQueue && args.ItemIndex >= _items.Count - 5 && !_nextPageQueued)
+        {
+            // SQLite can complete synchronously. Never mutate ItemsSource while
+            // WinUI is realizing/recycling containers inside a layout pass.
+            _nextPageQueued = true;
+            var generation = _loadGeneration;
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                _nextPageQueued = false;
+                if (_isPageLoaded && generation == _loadGeneration)
+                    await LoadNextPageAsync();
+            });
+        }
     }
 
     private void OnSavedItemsListKeyDown(object sender, KeyRoutedEventArgs e)
@@ -580,9 +690,21 @@ public sealed partial class SavedItemsPage : Page
 
     private async void OnItemSelected(object sender, SelectionChangedEventArgs e)
     {
-        if (SavedItemsList.SelectedItem is not SavedItemsRow row)
+        if (_restoringSelection || SavedItemsList.SelectedItem is not SavedItemsRow row)
             return;
-
+        if (HasUnsavedFavoriteChanges && _displayedRow?.StableId != row.StableId)
+        {
+            _restoringSelection = true;
+            SavedItemsList.SelectedItem = _displayedRow;
+            _restoringSelection = false;
+            if (!await ConfirmLeaveFavoriteAsync()) return;
+            _restoringSelection = true;
+            SavedItemsList.SelectedItem = row;
+            _restoringSelection = false;
+        }
+        _displayedRow = row;
+        foreach (var item in _items)
+            item.IsSelected = ReferenceEquals(item, row);
         var generation = Interlocked.Increment(ref _detailGeneration);
         try
         {
@@ -604,19 +726,18 @@ public sealed partial class SavedItemsPage : Page
                 detail is null)
                 return;
 
-            _activeDetail = detail;
-            _activeFavoriteDetail = favoriteDetail;
-            _selectedFavoriteId = favoriteDetail?.Favorite.Id;
-            _favoriteStates = await SavedItemsService.Instance.GetFavoriteStatesAsync(row.QueryId);
+            var favoriteStates = await SavedItemsService.Instance.GetFavoriteStatesAsync(row.QueryId);
             if (generation != _detailGeneration)
                 return;
 
+            _activeDetail = detail;
+            _activeFavoriteDetail = favoriteDetail;
+            _selectedFavoriteId = favoriteDetail?.Favorite.Id;
+            _favoriteStates = favoriteStates;
             PopulateDetail(row, detail, favoriteDetail);
-            if (ActualWidth < NarrowBreakpoint)
-            {
-                _showingNarrowDetail = true;
-                UpdateResponsiveLayout();
-            }
+            DetailSourceText.FontSize = 14 * AppearanceService.FontScale;
+            _showingNarrowDetail = true;
+            UpdateResponsiveLayout();
         }
         catch (Exception exception)
         {
@@ -631,19 +752,28 @@ public sealed partial class SavedItemsPage : Page
         FavoriteDetail? favoriteDetail)
     {
         ReleaseResultViews();
-        DetailTitleText.Text = favoriteDetail is null
-            ? detail.Query.PreviewProviderName
-            : $"{FavoriteTargetLabel(favoriteDetail.Favorite.TargetKind)} · {favoriteDetail.Favorite.ProviderName}";
+        NoSelectionPanel.Visibility = Visibility.Collapsed;
+        DetailPanel.Visibility = Visibility.Visible;
+        OtherResultsExpander.IsExpanded = false;
+        CompareResultsButton.IsChecked = false;
+        _resultChoices.Clear();
+        _updatingResultSelector = true;
+        ResultProviderTabs.Items.Clear();
+        ResultProviderCombo.ItemsSource = null;
+        _updatingResultSelector = false;
+        FavoriteEditorPanel.Visibility = Visibility.Collapsed;
+        FavoriteSummaryPanel.Visibility = Visibility.Visible;
+        DetailTitleText.Text = L("SavedItemsSource", "Source text");
         DetailSourceText.Text = detail.Query.SourceText;
         DetailMetadataText.Text =
-            $"{detail.Query.SourceLanguage} → {detail.Query.TargetLanguage} · {KindLabel(detail.Query.Kind)} · {detail.Query.CreatedUtc.LocalDateTime:F} · {detail.Query.SourceKind}";
+            $"{detail.Query.SourceLanguage} → {detail.Query.TargetLanguage} · {KindLabel(detail.Query.Kind)} · {detail.Query.CreatedUtc.LocalDateTime:F} · {L("SavedItemsSource" + detail.Query.SourceKind, detail.Query.SourceKind.ToString())}";
 
         CopySourceButton.Visibility = Visibility.Visible;
         RerunQueryButton.Visibility = Visibility.Visible;
         DeleteHistoryButton.Visibility = _section == SavedItemsSection.History ? Visibility.Visible : Visibility.Collapsed;
         DetailMoreButton.Visibility = DeleteHistoryButton.Visibility;
         ToggleQueryFavoriteButton.Visibility = _section == SavedItemsSection.History ? Visibility.Visible : Visibility.Collapsed;
-        ToggleQueryFavoriteButton.Content = _favoriteStates.IsQueryFavorited
+        ToggleQueryFavoriteButton.Label = _favoriteStates.IsQueryFavorited
             ? L("SavedItemsRemoveFavorite", "Remove favorite")
             : L("SavedItemsAddFavorite", "Add to favorites");
         RemoveFavoriteButton.Visibility = favoriteDetail is null ? Visibility.Collapsed : Visibility.Visible;
@@ -661,6 +791,8 @@ public sealed partial class SavedItemsPage : Page
                 foreach (var tag in favoriteDetail.Favorite.Tags)
                     _favoriteTags.Add(tag);
                 _savedFavoriteTags = favoriteDetail.Favorite.Tags.ToArray();
+                FavoriteNoteSummary.Text = string.IsNullOrWhiteSpace(_savedFavoriteNote) ? L("SavedItemsNoNote", "No note") : _savedFavoriteNote;
+                FavoriteTagsSummary.Text = string.Join(" · ", _savedFavoriteTags);
                 FavoriteTagsBox.Text = string.Empty;
             }
             finally
@@ -677,12 +809,14 @@ public sealed partial class SavedItemsPage : Page
             if (targetResult is not null)
                 AddSavedResult(targetResult, DetailResults, _detailResultControls);
             var otherResults = detail.Results.Where(result => result.Id != favoriteResultId).ToArray();
+            OtherResultsExpander.Header = string.Format(L("SavedItemsOtherResultsCount", "Other results from this query ({0})"), otherResults.Length);
             OtherResultsExpander.Visibility = otherResults.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-            foreach (var result in otherResults)
-                AddSavedResult(result, OtherDetailResults, _otherResultControls);
+            _pendingOtherResults = otherResults;
+            UpdateResultsLayout();
             return;
         }
 
+        _pendingOtherResults = [];
         OtherResultsExpander.Visibility = Visibility.Collapsed;
         ResultSelectionPanel.Visibility = detail.Results.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         _resultChoices.Clear();
@@ -693,6 +827,8 @@ public sealed partial class SavedItemsPage : Page
         _updatingResultSelector = true;
         try
         {
+            foreach (var choice in _resultChoices)
+                ResultProviderTabs.Items.Add(new SelectorBarItem { Text = choice.DisplayName, Tag = choice });
             ResultSelector.ItemsSource = null;
             ResultSelector.ItemsSource = _resultChoices;
             ResultSelector.SelectionMode = ListViewSelectionMode.Single;
@@ -755,6 +891,9 @@ public sealed partial class SavedItemsPage : Page
             isSavedItemView: true,
             copyCompleted: OnSavedResultCopied);
         _resultIds[serviceResult] = result.Id;
+#if WINUI_TEST
+        ObservedResults.Add(new WeakReference<IServiceResultView>(view));
+#endif
         view.SetFavoriteState(true, _favoriteStates.FavoritedResultIds.Contains(result.Id));
     }
 
@@ -810,7 +949,10 @@ public sealed partial class SavedItemsPage : Page
 
     private void OnSavedResultCopied(object? sender, EventArgs e)
     {
-        ShowInfo(L("SavedItemsResultCopied", "Result copied."));
+        if (e is ResultCopyEventArgs { Error: { } error })
+            ShowError(string.Format(L("SavedItemsCopyError", "Unable to copy: {0}"), error.Message));
+        else
+            ShowInfo(L("SavedItemsResultCopied", "Result copied."));
     }
 
     private void OnSavedResultQueryRequested(object? sender, ServiceQueryResult result)
@@ -820,7 +962,14 @@ public sealed partial class SavedItemsPage : Page
     private async void OnSavedResultFavoriteRequested(object? sender, ServiceQueryResult result)
     {
         if (_activeDetail is null || !_resultIds.TryGetValue(result, out var resultId))
+        {
+            System.Diagnostics.Debug.WriteLine($"[SavedItems] Result favorite ignored: activeDetail={_activeDetail is not null}, provider={result.ServiceId}, generation={_detailGeneration}");
             return;
+        }
+
+        var queryId = _activeDetail.Query.Id;
+        if (!_pendingResultFavorites.Add(resultId)) return;
+        System.Diagnostics.Debug.WriteLine($"[SavedItems] Result favorite requested: query={queryId}, result={resultId}");
 
         var control = _detailResultControls.Concat(_otherResultControls)
             .FirstOrDefault(item => ReferenceEquals(item.ServiceResult, result));
@@ -828,23 +977,39 @@ public sealed partial class SavedItemsPage : Page
             element.IsEnabled = false;
         try
         {
-            await SavedItemsService.Instance.ToggleStoredResultFavoriteAsync(_activeDetail.Query.Id, resultId);
-            _favoriteStates = await SavedItemsService.Instance.GetFavoriteStatesAsync(_activeDetail.Query.Id);
-            foreach (var view in _detailResultControls.Concat(_otherResultControls))
-            {
-                if (view.ServiceResult is { } viewResult && _resultIds.TryGetValue(viewResult, out var id))
-                    view.SetFavoriteState(true, _favoriteStates.FavoritedResultIds.Contains(id));
-            }
+            await SavedItemsService.Instance.ToggleStoredResultFavoriteAsync(queryId, resultId);
+            System.Diagnostics.Debug.WriteLine($"[SavedItems] Result favorite persisted: query={queryId}, result={resultId}");
+            if (_activeDetail?.Query.Id == queryId)
+                await RefreshFavoriteStatesAsync();
         }
         catch (Exception exception)
         {
+            System.Diagnostics.Debug.WriteLine($"[SavedItems] Result favorite failed: query={queryId}, result={resultId}: {exception}");
             ShowError(exception.Message);
         }
         finally
         {
+            _pendingResultFavorites.Remove(resultId);
             if (control?.Element is Control resultElement)
                 resultElement.IsEnabled = true;
         }
+    }
+
+    private async Task RefreshFavoriteStatesAsync()
+    {
+        if (!_isPageLoaded || _activeDetail is not { } detail) return;
+        var detailGeneration = _detailGeneration;
+        var stateGeneration = ++_favoriteStateGeneration;
+        var states = await SavedItemsService.Instance.GetFavoriteStatesAsync(detail.Query.Id);
+        if (!_isPageLoaded || detailGeneration != _detailGeneration ||
+            stateGeneration != _favoriteStateGeneration || !ReferenceEquals(detail, _activeDetail)) return;
+        _favoriteStates = states;
+        ToggleQueryFavoriteButton.Label = states.IsQueryFavorited
+            ? L("SavedItemsRemoveFavorite", "Remove favorite")
+            : L("SavedItemsAddFavorite", "Add to favorites");
+        foreach (var view in _detailResultControls.Concat(_otherResultControls))
+            if (view.ServiceResult is { } result && _resultIds.TryGetValue(result, out var id))
+                view.SetFavoriteState(true, states.FavoritedResultIds.Contains(id));
     }
 
     private void OnCompareResultsClicked(object sender, RoutedEventArgs e)
@@ -855,16 +1020,21 @@ public sealed partial class SavedItemsPage : Page
         _updatingResultSelector = true;
         try
         {
-            ResultSelector.SelectedItems.Clear();
             if (CompareResultsButton.IsChecked == true)
             {
+                ResultSelector.SelectedItem = null;
                 ResultSelector.SelectionMode = ListViewSelectionMode.Multiple;
+                ResultSelector.ItemsSource = _resultChoices.Where(choice => choice.ResultId is not null).ToArray();
+                ResultSelector.SelectedItems.Clear();
                 foreach (var choice in _resultChoices.Where(choice => choice.ResultId is not null).Take(2))
                     ResultSelector.SelectedItems.Add(choice);
             }
             else
             {
+                if (ResultSelector.SelectionMode == ListViewSelectionMode.Multiple)
+                    ResultSelector.SelectedItems.Clear();
                 ResultSelector.SelectionMode = ListViewSelectionMode.Single;
+                ResultSelector.ItemsSource = _resultChoices;
                 ResultSelector.SelectedItem = _resultChoices.FirstOrDefault();
             }
         }
@@ -935,6 +1105,8 @@ public sealed partial class SavedItemsPage : Page
             copyCompleted: OnSavedResultCopied);
         foreach (var result in _activeDetail.Results.Where(ShouldRenderResult))
             AddSavedResult(result, DetailResults, _detailResultControls);
+        UpdateResultsLayout();
+        DispatcherQueue.TryEnqueue(UpdateResultsLayout);
     }
 
     private bool ShouldRenderResult(SavedQueryResultDetail result)
@@ -955,14 +1127,18 @@ public sealed partial class SavedItemsPage : Page
         if (_activeDetail is null)
             return;
 
-        ClipboardService.SetText(_activeDetail.Query.SourceText);
-        ShowInfo(L("SavedItemsSourceCopied", "Source copied."));
+        try
+        {
+            ClipboardService.SetText(_activeDetail.Query.SourceText);
+            ShowInfo(L("SavedItemsSourceCopied", "Source copied."));
+        }
+        catch (Exception exception) { ShowError(string.Format(L("SavedItemsCopyError", "Unable to copy: {0}"), exception.Message)); }
         await Task.CompletedTask;
     }
 
-    private void OnRerunQueryClicked(object sender, RoutedEventArgs e)
+    private async void OnRerunQueryClicked(object sender, RoutedEventArgs e)
     {
-        if (_activeDetail is null)
+        if (!await ConfirmLeaveFavoriteAsync() || _activeDetail is null)
             return;
 
         var request = new SavedQueryRerunRequest(
@@ -979,13 +1155,11 @@ public sealed partial class SavedItemsPage : Page
             return;
 
         ToggleQueryFavoriteButton.IsEnabled = false;
+        var queryId = _activeDetail.Query.Id;
         try
         {
-            await SavedItemsService.Instance.ToggleStoredQueryFavoriteAsync(_activeDetail.Query.Id);
-            _favoriteStates = await SavedItemsService.Instance.GetFavoriteStatesAsync(_activeDetail.Query.Id);
-            ToggleQueryFavoriteButton.Content = _favoriteStates.IsQueryFavorited
-                ? L("SavedItemsRemoveFavorite", "Remove favorite")
-                : L("SavedItemsAddFavorite", "Add to favorites");
+            await SavedItemsService.Instance.ToggleStoredQueryFavoriteAsync(queryId);
+            if (_activeDetail?.Query.Id == queryId) await RefreshFavoriteStatesAsync();
         }
         catch (Exception exception)
         {
@@ -1008,7 +1182,8 @@ public sealed partial class SavedItemsPage : Page
             await SavedItemsService.Instance.SetFavoritePinnedAsync(
                 favoriteId,
                 PinFavoriteButton.IsChecked == true);
-            await LoadAsync();
+            // Pinning is immediate; do not discard an open note/tag draft.
+            if (!HasUnsavedFavoriteChanges) await LoadAsync();
         }
         catch (Exception exception)
         {
@@ -1059,35 +1234,13 @@ public sealed partial class SavedItemsPage : Page
 
     private async void OnSaveFavoriteMetadataClicked(object sender, RoutedEventArgs e)
     {
-        if (_selectedFavoriteId is not { } favoriteId)
-            return;
-
-        if (!string.IsNullOrWhiteSpace(FavoriteTagsBox.Text) &&
-            !TryReplaceFavoriteTags(FavoriteTagsBox.Text))
-            return;
-
-        FavoriteTagsBox.Text = string.Empty;
-        var tags = _favoriteTags.ToArray();
         SaveFavoriteMetadataButton.IsEnabled = false;
         try
         {
-            await SavedItemsService.Instance.UpdateFavoriteMetadataAsync(
-                favoriteId,
-                FavoriteNoteBox.Text,
-                tags);
-            _savedFavoriteNote = FavoriteNoteBox.Text;
-            _savedFavoriteTags = tags;
-            ShowInfo(L("SavedItemsMetadataSaved", "Favorite details saved."));
-            await LoadAsync();
+            if (await SaveFavoriteChangesAsync())
+                await LoadAsync();
         }
-        catch (Exception exception)
-        {
-            ShowError(exception.Message);
-        }
-        finally
-        {
-            SaveFavoriteMetadataButton.IsEnabled = true;
-        }
+        finally { SaveFavoriteMetadataButton.IsEnabled = true; }
     }
 
     private void OnCancelFavoriteMetadataClicked(object sender, RoutedEventArgs e)
@@ -1095,6 +1248,8 @@ public sealed partial class SavedItemsPage : Page
         _updatingFavoriteMetadata = true;
         try
         {
+            FavoriteEditorPanel.Visibility = Visibility.Collapsed;
+            FavoriteSummaryPanel.Visibility = Visibility.Visible;
             FavoriteNoteBox.Text = _savedFavoriteNote;
             FavoriteTagsBox.Text = string.Empty;
             _favoriteTags.Clear();
@@ -1172,7 +1327,7 @@ public sealed partial class SavedItemsPage : Page
         }
     }
 
-    private void OnBackClicked(object sender, RoutedEventArgs e)
+    private async void OnBackClicked(object sender, RoutedEventArgs e)
     {
         if (_showingNarrowDetail)
         {
@@ -1180,25 +1335,38 @@ public sealed partial class SavedItemsPage : Page
             return;
         }
 
-        NavigateToMainPage();
+        if (await ConfirmLeaveFavoriteAsync()) NavigateToMainPage();
     }
 
     private void OnDetailBackClicked(object sender, RoutedEventArgs e) => ShowListPane();
 
-    private void OnReturnToTranslationClicked(object sender, RoutedEventArgs e) => NavigateToMainPage();
+    private async void OnReturnToTranslationClicked(object sender, RoutedEventArgs e)
+    {
+        if (await ConfirmLeaveFavoriteAsync()) NavigateToMainPage();
+    }
 
     private void ShowListPane()
     {
         _showingNarrowDetail = false;
         UpdateResponsiveLayout();
-        SavedItemsList.Focus(FocusState.Programmatic);
+        if (SavedItemsList.SelectedItem is { } selected)
+        {
+            SavedItemsList.ScrollIntoView(selected);
+            (SavedItemsList.ContainerFromItem(selected) as Control)?.Focus(FocusState.Keyboard);
+        }
+        else SavedItemsList.Focus(FocusState.Keyboard);
     }
 
     private void NavigateToMainPage(Action<MainPage>? action = null)
     {
         var frame = Frame;
-        while (frame.CanGoBack && frame.Content is not MainPage)
+        var mainEntry = frame.BackStack.LastOrDefault(entry => entry.SourcePageType == typeof(MainPage));
+        if (mainEntry is not null)
+        {
+            while (frame.BackStack.Count > 0 && frame.BackStack[^1] != mainEntry)
+                frame.BackStack.RemoveAt(frame.BackStack.Count - 1);
             frame.GoBack();
+        }
         if (frame.Content is not MainPage)
             frame.Navigate(typeof(MainPage));
 
@@ -1217,8 +1385,14 @@ public sealed partial class SavedItemsPage : Page
         Interlocked.Increment(ref _detailGeneration);
         ReleaseResultViews();
         _activeDetail = null;
+        NoSelectionPanel.Visibility = Visibility.Visible;
+        DetailPanel.Visibility = Visibility.Collapsed;
         _activeFavoriteDetail = null;
+        _pendingOtherResults = [];
         _selectedFavoriteId = null;
+        _displayedRow = null;
+        _showingNarrowDetail = false;
+        UpdateResponsiveLayout();
         DetailTitleText.Text = L("SavedItemsSelectQuery", "Select a saved query");
         DetailSourceText.Text = string.Empty;
         DetailMetadataText.Text = string.Empty;
@@ -1236,16 +1410,21 @@ public sealed partial class SavedItemsPage : Page
 
     private void ShowInfo(string message)
     {
+        _messageTimer.Stop();
         PageInfoBar.Severity = InfoBarSeverity.Success;
         PageInfoBar.Message = message;
         PageInfoBar.IsOpen = true;
+        AnnounceMessage(message);
+        _messageTimer.Start();
     }
 
     private void ShowError(string message)
     {
+        _messageTimer.Stop();
         PageInfoBar.Severity = InfoBarSeverity.Error;
         PageInfoBar.Message = message;
         PageInfoBar.IsOpen = true;
+        AnnounceMessage(message);
     }
 
     private static SavedQueryKind? ParseSavedQueryKind(string tag) => tag switch
@@ -1307,10 +1486,18 @@ public sealed partial class SavedItemsPage : Page
     private void ApplyLocalization()
     {
         ReturnToTranslationText.Text = L("SavedItemsBackToTranslation", "Go to translation");
+        BackButton.Content = L("SavedItemsBackToTranslation", "Go to translation");
+        HistoryRailButton.Content = L("SavedItemsHistory", "History");
+        FavoritesRailButton.Content = L("SavedItemsFavorites", "Favorites");
+        SettingsRailButton.Content = L("Settings", "Settings");
+        NoSelectionTitle.Text = L("SavedItemsSelectQuery", "Select a saved query");
+        NoSelectionDescription.Text = L("SavedItemsSelectDescription", "Choose a record on the left to read its source and results.");
+        ClearSearchButton.Content = L("SavedItemsClearSearch", "Clear search and filters");
+        EditFavoriteButton.Content = L("SavedItemsEdit", "Edit note and tags");
         var back = L("Back", "Back");
-        ToolTipService.SetToolTip(BackButton, back);
-        AutomationProperties.SetName(BackButton, back);
-        DetailBackText.Text = back;
+        ToolTipService.SetToolTip(BackButton, BackButton.Content);
+        AutomationProperties.SetName(BackButton, BackButton.Content?.ToString() ?? back);
+        DetailBackText.Text = L("SavedItemsBackToList", "Back to list");
         ToolTipService.SetToolTip(HistoryRailButton, L("SavedItemsHistory", "History"));
         AutomationProperties.SetName(HistoryRailButton, L("SavedItemsHistory", "History"));
         ToolTipService.SetToolTip(FavoritesRailButton, L("SavedItemsFavorites", "Favorites"));
@@ -1318,9 +1505,9 @@ public sealed partial class SavedItemsPage : Page
         SavedItemsSearchBox.PlaceholderText = L("SavedItemsSearchPlaceholder", "Search source, result, or provider");
 
         SetKindLabels(HistoryKindTabs.Items, KindCombo.Items);
-        ((RadioButton)FavoriteKindTabs.Items[0]).Content = L("SavedItemsAllKinds", "All");
-        ((RadioButton)FavoriteKindTabs.Items[1]).Content = L("SavedItemsQueryFavorites", "Whole queries");
-        ((RadioButton)FavoriteKindTabs.Items[2]).Content = L("SavedItemsResultFavorites", "Individual results");
+        FavoriteKindTabs.Items[0].Text = L("SavedItemsAllKinds", "All");
+        FavoriteKindTabs.Items[1].Text = L("SavedItemsQueryFavorites", "Whole queries");
+        FavoriteKindTabs.Items[2].Text = L("SavedItemsResultFavorites", "Individual results");
         ((ComboBoxItem)FavoriteKindCombo.Items[0]).Content = L("SavedItemsAllKinds", "All");
         ((ComboBoxItem)FavoriteKindCombo.Items[1]).Content = L("SavedItemsQueryFavorites", "Whole queries");
         ((ComboBoxItem)FavoriteKindCombo.Items[2]).Content = L("SavedItemsResultFavorites", "Individual results");
@@ -1338,11 +1525,11 @@ public sealed partial class SavedItemsPage : Page
         ToolTipService.SetToolTip(SavedItemsFilterButton, L("SavedItemsFilters", "Filters"));
         AutomationProperties.SetName(SavedItemsFilterButton, L("SavedItemsFilters", "Filters"));
 
-        CopySourceButton.Content = L("SavedItemsCopySource", "Copy source");
+        CopySourceButton.Label = L("SavedItemsCopySource", "Copy source");
         DeleteHistoryButton.Text = L("SavedItemsDeleteHistory", "Delete from history");
-        ToggleQueryFavoriteButton.Content = L("SavedItemsAddFavorite", "Add to favorites");
-        RerunQueryButton.Content = L("SavedItemsRerun", "Translate again");
-        RemoveFavoriteButton.Content = L("SavedItemsRemoveFavorite", "Remove favorite");
+        ToggleQueryFavoriteButton.Label = L("SavedItemsAddFavorite", "Add to favorites");
+        RerunQueryButton.Label = L("SavedItemsRerun", "Translate again");
+        RemoveFavoriteButton.Label = L("SavedItemsRemoveFavorite", "Remove favorite");
         PinFavoriteButton.Content = L("SavedItemsPinFavorite", "Pin favorite");
         FavoriteNoteBox.Header = L("SavedItemsNote", "Note");
         FavoriteTagsHeader.Text = L("SavedItemsTags", "Tags");
@@ -1359,7 +1546,7 @@ public sealed partial class SavedItemsPage : Page
         EmptyBackButton.Content = L("SavedItemsBackToTranslation", "Go to translation");
     }
 
-    private static void SetKindLabels(IList<object> radioItems, IList<object> comboItems)
+    private static void SetKindLabels(IList<SelectorBarItem> radioItems, IList<object> comboItems)
     {
         var labels = new[]
         {
@@ -1370,7 +1557,7 @@ public sealed partial class SavedItemsPage : Page
         };
         for (var index = 0; index < labels.Length; index++)
         {
-            ((RadioButton)radioItems[index]).Content = labels[index];
+            radioItems[index].Text = labels[index];
             ((ComboBoxItem)comboItems[index]).Content = labels[index];
         }
     }
@@ -1384,9 +1571,23 @@ public sealed partial class SavedItemsPage : Page
         string TimeText,
         IReadOnlyList<string> Tags,
         DateTimeOffset CreatedUtc,
-        string GroupTitle)
+        string GroupTitle) : System.ComponentModel.INotifyPropertyChanged
     {
         public Guid StableId => FavoriteId ?? QueryId;
+        public string IconGlyph { get; init; } = "\uE8A5";
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                _isSelected = value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected)));
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(SelectionVisibility)));
+            }
+        }
+        public Visibility SelectionVisibility => IsSelected ? Visibility.Visible : Visibility.Collapsed;
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     }
 
     private sealed record ResultChoice(Guid? ResultId, string DisplayName)

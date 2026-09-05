@@ -140,19 +140,25 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     public void ApplyAppearance(AppearanceSettings settings)
     {
+        RootBorder.Margin = new Thickness(0, 0, 0, _isSavedItemView ? 0 : SettingsService.Instance.CompactMode ? 8 : 16);
         ServiceNameText.FontSize = settings.ServiceNameFontSize;
         StatusText.FontSize = settings.StatusFontSize;
-        ResultText.FontSize = settings.ResultFontSize;
-        CorrectedText.FontSize = settings.ResultFontSize;
+        ResultText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
+        CorrectedText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
+        if (_dictWebView is not null && _dictWebViewRenderedFontScale != AppearanceService.FontScale) QueueUpdateUI();
     }
 
     public void RefreshThemeChrome()
     {
-        ApplyServiceChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme(force: true);
     }
+
+    public ResultMessageView Feedback => ResultFeedback;
+    public event EventHandler<ResultRenderingEventArgs>? RenderingStatusChanged;
 
     public void Cleanup()
     {
+        ResultFeedback.Cleanup();
         _ttsPlaybackObserver.Invalidate();
         Debug.WriteLine(
             $"[ServiceResultItem] Cleanup serviceId={_cachedServiceId ?? _serviceResult?.ServiceId ?? "<none>"} webViewInitialized={_webViewInitialized}");
@@ -332,6 +338,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private string? _dictWebViewRenderedRawHtml;
     private string? _dictWebViewRenderedServiceId;
     private ElementTheme _dictWebViewRenderedTheme;
+    private double _dictWebViewRenderedFontScale;
+    private bool _dictWebViewRenderedHighContrast;
     private bool _dictWebViewRenderedHtmlReady;
     private bool _serviceChromeApplied;
     private ElementTheme _serviceChromeAppliedTheme;
@@ -490,7 +498,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         // Update header corner radius based on expand state
         HeaderBar.CornerRadius = minimal
             ? new CornerRadius(0)
-            : showContent ? new CornerRadius(6, 6, 0, 0) : new CornerRadius(6);
+            : showContent ? new CornerRadius(8, 8, 0, 0) : new CornerRadius(8);
 
         // Pending query hint visibility
         PendingQueryText.Visibility = showPendingHint ? Visibility.Visible : Visibility.Collapsed;
@@ -515,7 +523,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             ApplyHeaderForegroundForCurrentChrome();
         }
         UpdateFavoriteButton();
-        ApplySavedItemActionState();
+        ApplyResultActionState();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -717,9 +725,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 else
                 {
                     ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush, scheduleWebViewRelease: false);
-                    _ = RenderHtmlDefinitionAsync(_serviceResult.Result.RawHtml, _serviceResult.ServiceId);
+                    if (_serviceResult.IsExpanded)
+                        _ = RenderHtmlDefinitionAsync(_serviceResult.Result.RawHtml, _serviceResult.ServiceId);
                 }
-                ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+                ActionButtons.Visibility = Visibility.Visible;
                 ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
             }
             else
@@ -745,7 +754,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 }
 
                 HideErrorPanel();
-                ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+                ActionButtons.Visibility = Visibility.Visible;
                 ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
             }
         }
@@ -759,7 +768,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
             HideDictionaryWebView(scheduleRelease: true);
-            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ActionButtons.Visibility = Visibility.Visible;
             ReplaceButton.Visibility = Visibility.Collapsed;
             PlayButton.Visibility = Visibility.Collapsed;
         }
@@ -802,7 +811,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         return _dictWebView is not null
             && string.Equals(_dictWebViewRenderedRawHtml, rawHtml, StringComparison.Ordinal)
             && string.Equals(_dictWebViewRenderedServiceId, serviceId, StringComparison.Ordinal)
-            && _dictWebViewRenderedTheme == GetEffectiveIconTheme();
+            && _dictWebViewRenderedTheme == GetEffectiveIconTheme()
+            && _dictWebViewRenderedFontScale == AppearanceService.FontScale
+            && _dictWebViewRenderedHighContrast == new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
     }
 
     private WebView2 EnsureDictionaryWebView()
@@ -820,7 +831,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             Visibility = Visibility.Collapsed,
             Height = 0,
         };
-        webView.SetValue(Grid.RowProperty, 3);
+        AutomationProperties.SetAutomationId(webView, "DictWebView");
 
         DictWebViewHost.Children.Clear();
         DictWebViewHost.Children.Add(webView);
@@ -1012,7 +1023,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 ExplanationPanel.Visibility = Visibility.Collapsed;
             }
 
-            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ActionButtons.Visibility = Visibility.Visible;
             ReplaceButton.Visibility = TextInsertionService.HasSourceWindow
                 ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -1023,7 +1034,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             ErrorPanel.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Visible;
             UpdateFoundryLocalRecoveryUi(_serviceResult.Error);
-            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ActionButtons.Visibility = Visibility.Visible;
             ReplaceButton.Visibility = Visibility.Collapsed;
             PlayButton.Visibility = Visibility.Collapsed;
         }
@@ -1609,32 +1620,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         _isHovering = true;
-
-        if (_serviceResult?.IsExpanded == true &&
-            (_serviceResult.Result != null || _serviceResult.Error != null || _serviceResult.GrammarResult != null))
-        {
-            var hasResult = (_serviceResult.Result?.ResultKind == TranslationResultKind.Success) || _serviceResult.GrammarResult != null;
-            ActionButtons.Visibility = hasResult || _serviceResult.Error != null
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-            ReplaceButton.Visibility = hasResult && TextInsertionService.HasSourceWindow
-                ? Visibility.Visible : Visibility.Collapsed;
-            PlayButton.Visibility = _serviceResult.Result?.ResultKind == TranslationResultKind.Success
-                ? Visibility.Visible : Visibility.Collapsed;
-        }
+        ApplyResultActionState();
     }
 
     private void OnControlPointerExited(object sender, PointerRoutedEventArgs e)
     {
         _isHovering = false;
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
-        if (_isSavedItemView)
-        {
-            ApplySavedItemActionState();
-            return;
-        }
-
-        ActionButtons.Visibility = Visibility.Collapsed;
+        ApplyResultActionState();
     }
 
     private void OnHeaderBarPointerEntered(object sender, PointerRoutedEventArgs e)
@@ -1683,6 +1676,11 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private Brush? FindServiceChromeColorOrBrush(string colorKey, params string[] brushKeys)
     {
+        if (_isSavedItemView && ThemeResourceService.IsHighContrastActive())
+        {
+            foreach (var key in brushKeys)
+                if (FindThemeBrush(key) is { } systemBrush) return systemBrush;
+        }
         return FindServiceChromeColorBrush(colorKey) ?? FindServiceChromeBrushFallback(brushKeys);
     }
 
@@ -1904,6 +1902,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void OnFavoriteClicked(object sender, RoutedEventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine($"[ServiceResultItem] Favorite click: provider={_serviceResult?.ServiceId}, enabled={FavoriteButton.IsEnabled}, subscribed={FavoriteRequested is not null}");
         if (_serviceResult is null || FavoriteButton.IsEnabled == false)
         {
             return;
@@ -1930,21 +1929,45 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         AutomationProperties.SetName(FavoriteButton, tooltip);
     }
 
-    private void ApplySavedItemActionState()
+    private void ApplyResultActionState()
     {
-        if (!_isSavedItemView)
-            return;
-
-        RetryButton.Visibility = Visibility.Collapsed;
-        ReplaceButton.Visibility = Visibility.Collapsed;
+        if (_isSavedItemView) RetryButton.Visibility = Visibility.Collapsed;
+        ReplaceButton.Visibility = !_isSavedItemView && _serviceResult?.HasSuccessfulResult == true && TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
         var hasResult = _serviceResult?.HasSuccessfulResult == true;
         ActionButtons.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
-        CopyButton.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        HeaderRow.Height = new GridLength(40);
+        ContentArea.Padding = new Thickness(SettingsService.Instance.CompactMode ? 8 : 12);
+        Grid.SetRow(ActionButtons, 1);
+        ActionButtons.Margin = new Thickness(0, 12, 0, 0);
+        ActionButtons.Height = 32;
+        ActionButtons.Spacing = 8;
+        CopyButton.Visibility = Visibility.Collapsed;
+        HeaderCopyButton.Width = HeaderCopyButton.Height = 32;
+        RetryButton.Width = RetryButton.Height = ReplaceButton.Width = ReplaceButton.Height = 32;
+        PlayButton.Width = PlayButton.Height = 32;
+        FavoriteButton.Width = FavoriteButton.Height = 32;
+        SavedMoreButton.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        var loc = LocalizationService.Instance;
+        SavedCopySourceMenuItem.Text = loc.GetStringOrDefault("SavedItemsCopySource", "Copy source");
+        SavedCollapseMenuItem.Text = loc.GetStringOrDefault("SavedItemsCollapseResult", "Collapse result");
+        ToolTipService.SetToolTip(HeaderCopyButton, loc.GetStringOrDefault("Copy", "Copy"));
+        ToolTipService.SetToolTip(SavedMoreButton, loc.GetStringOrDefault("SavedItemsMore", "More"));
         HeaderCopyButton.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
         PlayButton.Visibility = hasResult && _serviceResult?.Result?.ResultKind == TranslationResultKind.Success
             ? Visibility.Visible
             : Visibility.Collapsed;
     }
+
+    private void OnCopySavedSource(object sender, RoutedEventArgs e)
+    {
+        var text = _serviceResult?.IsGrammarMode == true
+            ? _serviceResult.GrammarResult?.OriginalText : _serviceResult?.Result?.OriginalText;
+        if (string.IsNullOrEmpty(text)) return;
+        try { ClipboardService.SetText(text); CopyCompleted?.Invoke(this, new ResultCopyEventArgs()); }
+        catch (Exception exception) { CopyCompleted?.Invoke(this, new ResultCopyEventArgs(exception)); }
+    }
+
+    private void OnSavedCollapseClicked(object sender, RoutedEventArgs e) => ToggleCollapse();
 
     private void OnCopyClicked(object sender, RoutedEventArgs e)
     {
@@ -1956,10 +1979,17 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             return;
         }
 
-        var dataPackage = new DataPackage();
-        dataPackage.SetText(text);
-        Clipboard.SetContent(dataPackage);
-        CopyCompleted?.Invoke(this, EventArgs.Empty);
+        try
+        {
+            ClipboardService.SetText(text);
+            CopyCompleted?.Invoke(this, new ResultCopyEventArgs());
+        }
+        catch (Exception exception)
+        {
+            CopyCompleted?.Invoke(this, new ResultCopyEventArgs(exception));
+            return;
+        }
+        if (_isSavedItemView) return;
 
         // Visual feedback
         CopyIcon.Glyph = "\uE8FB"; // Checkmark
@@ -1976,6 +2006,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     private async Task RenderHtmlDefinitionAsync(string rawHtml, string serviceId)
     {
+        var renderVersion = ++_dictWebViewRenderVersion;
         try
         {
             var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.RenderHtmlDefinitionAsync.Start");
@@ -1984,6 +2015,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             _dictWebViewRenderedRawHtml = rawHtml;
             _dictWebViewRenderedServiceId = serviceId;
             _dictWebViewRenderedTheme = GetEffectiveIconTheme();
+            _dictWebViewRenderedFontScale = AppearanceService.FontScale;
+            _dictWebViewRenderedHighContrast = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
             _dictWebViewRenderedHtmlReady = false;
             dictWebView.Height = 1;
             dictWebView.Visibility = Visibility.Visible;
@@ -1993,6 +2026,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             if (!_webViewInitialized)
             {
                 await dictWebView.EnsureCoreWebView2Async();
+                if (renderVersion != _dictWebViewRenderVersion || !ReferenceEquals(dictWebView, _dictWebView)) return;
                 _webViewInitialized = true;
 
                 dictWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
@@ -2042,6 +2076,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 "DictionaryHtmlLinkColor",
                 "BlueAccentColor");
 
+            if (_dictWebViewRenderedHighContrast)
+            {
+                var colors = new Windows.UI.ViewManagement.UISettings();
+                var background = colors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
+                var foreground = colors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Foreground);
+                bgColor = $"#{background.R:X2}{background.G:X2}{background.B:X2}";
+                textColor = linkColor = $"#{foreground.R:X2}{foreground.G:X2}{foreground.B:X2}";
+            }
             // Rewrite relative resource paths to use virtual host
             var processedHtml = RewriteResourcePaths(rawHtml);
 
@@ -2063,7 +2105,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                         margin: 4px 0;
                         padding: 0 8px 12px;
                         font-family: -apple-system, 'Segoe UI', sans-serif;
-                        font-size: 13px;
+                        font-size: {{(14 * AppearanceService.FontScale).ToString(System.Globalization.CultureInfo.InvariantCulture)}}px;
                         line-height: 1.45;
                         color: {{textColor}};
                         background-color: {{bgColor}};
@@ -2112,6 +2154,24 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 </style>
                 <script>
                     (() => {
+                        let scheduled = false;
+                        const reportSize = () => {
+                            if (scheduled) return;
+                            scheduled = true;
+                            requestAnimationFrame(() => {
+                                scheduled = false;
+                                const body = document.body;
+                                if (!body) return;
+                                const height = Math.ceil(body.getBoundingClientRect().height + 8);
+                                window.chrome?.webview?.postMessage({ type: 'dict-size', generation: {{renderVersion}}, height });
+                            });
+                        };
+                        document.addEventListener('DOMContentLoaded', () => {
+                            new ResizeObserver(reportSize).observe(document.body);
+                            reportSize();
+                            document.fonts?.ready.then(reportSize);
+                        });
+                        window.addEventListener('load', reportSize, true);
                         const findScrollableContainer = (start) => {
                             let node = start instanceof Element ? start : null;
                             while (node && node !== document.body) {
@@ -2134,7 +2194,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                             const scrollable = findScrollableContainer(event.target);
                             if (!scrollable) {
                                 window.chrome?.webview?.postMessage({
-                                    type: 'dict-wheel-passthrough',
+                                    type: 'dict-wheel-passthrough', generation: {{renderVersion}},
                                     deltaY: event.deltaY
                                 });
                                 event.preventDefault();
@@ -2145,7 +2205,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                             const atBottom = scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 1;
                             if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
                                 window.chrome?.webview?.postMessage({
-                                    type: 'dict-wheel-boundary',
+                                    type: 'dict-wheel-boundary', generation: {{renderVersion}},
                                     deltaY: event.deltaY
                                 });
                                 event.preventDefault();
@@ -2158,12 +2218,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 </html>
                 """;
 
-            var renderVersion = ++_dictWebViewRenderVersion;
+            if (renderVersion != _dictWebViewRenderVersion || !ReferenceEquals(dictWebView, _dictWebView)) return;
             dictWebView.NavigateToString(html);
             _ = ResizeDictionaryWebViewAfterNavigationAsync(dictWebView, renderVersion);
         }
         catch (Exception ex)
         {
+            if (renderVersion != _dictWebViewRenderVersion) return;
+            RenderingStatusChanged?.Invoke(this, new ResultRenderingEventArgs(true));
             _dictWebViewRenderedRawHtml = null;
             _dictWebViewRenderedServiceId = null;
             _dictWebViewRenderedHtmlReady = false;
@@ -2260,7 +2322,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             // Let the browser settle the CSS-first overflow normalization before
             // measuring content height for the host ScrollViewer.
-            await Task.Delay(50);
+            await Task.Delay(2000);
+            if (_dictWebViewRenderedHtmlReady) return;
 
             if (renderVersion != _dictWebViewRenderVersion || !ReferenceEquals(sender, _dictWebView))
             {
@@ -2298,6 +2361,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 return;
             }
 
+            RenderingStatusChanged?.Invoke(this, new ResultRenderingEventArgs(true));
             Debug.WriteLine("[ServiceResultItem] WebView2 measured zero height; falling back to plain text");
             _dictWebViewRenderedHtmlReady = false;
             if (_serviceResult?.Result != null)
@@ -2307,6 +2371,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
         catch (Exception ex)
         {
+            if (renderVersion != _dictWebViewRenderVersion || !ReferenceEquals(sender, _dictWebView)) return;
+            RenderingStatusChanged?.Invoke(this, new ResultRenderingEventArgs(true));
             Debug.WriteLine($"[ServiceResultItem] Failed to size WebView2 after navigation: {ex.Message}");
             _dictWebViewRenderedHtmlReady = false;
             if (_serviceResult?.Result != null)
@@ -2322,6 +2388,22 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             using var document = JsonDocument.Parse(args.WebMessageAsJson);
             var root = document.RootElement;
+            if (_dictWebView is null
+                || !root.TryGetProperty("generation", out var generation)
+                || !generation.TryGetInt32(out var version) || version != _dictWebViewRenderVersion) return;
+            if (root.TryGetProperty("type", out var messageType) && messageType.GetString() == "dict-size")
+            {
+                if (!root.TryGetProperty("height", out var size) || !size.TryGetDouble(out var height)
+                    || !double.IsFinite(height) || height <= 0 || height > 1000000) return;
+                if (Math.Abs(_dictWebView.Height - height) > 1) _dictWebView.Height = height;
+                _dictWebView.Visibility = Visibility.Visible;
+                DictWebViewHost.Visibility = Visibility.Visible;
+                ResultText.Visibility = Visibility.Collapsed;
+                var wasReady = _dictWebViewRenderedHtmlReady;
+                _dictWebViewRenderedHtmlReady = true;
+                if (!wasReady) RenderingStatusChanged?.Invoke(this, new ResultRenderingEventArgs(false));
+                return;
+            }
             if (!root.TryGetProperty("type", out var typeElement) ||
                 (typeElement.GetString() is not "dict-wheel-boundary" and not "dict-wheel-passthrough") ||
                 !root.TryGetProperty("deltaY", out var deltaElement))

@@ -37,6 +37,8 @@ public sealed class SavedItemsService : IAsyncDisposable
         _retentionDaysProvider = retentionDaysProvider ?? (static () => SettingsService.Instance.HistoryRetentionDays);
     }
 
+    private long _revision;
+    public long Revision => Interlocked.Read(ref _revision);
     public event EventHandler<SavedItemsChangedEventArgs>? Changed;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -242,5 +244,9 @@ public sealed class SavedItemsService : IAsyncDisposable
         finally { _writeGate.Release(); }
     }
 
-    private void OnChanged(SavedItemsChangedEventArgs args) => Changed?.Invoke(this, args);
+    private void OnChanged(SavedItemsChangedEventArgs args)
+    {
+        Interlocked.Increment(ref _revision);
+        Changed?.Invoke(this, args);
+    }
 }

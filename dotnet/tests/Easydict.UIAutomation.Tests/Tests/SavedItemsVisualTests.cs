@@ -457,8 +457,21 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         finally { Environment.SetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS", previous); }
     }
 
-    internal static AutomationElement? Find(AutomationElement parent, string id) =>
-        parent.FindFirstDescendant(cf => cf.ByAutomationId(id)) ?? parent.FindFirstDescendant(cf => cf.ByName(id));
+    private sealed record WindowHandle(IntPtr Value);
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Window, WindowHandle> WindowHandles = new();
+
+    internal static AutomationElement? Find(AutomationElement parent, string id)
+    {
+        if (parent is Window window)
+        {
+            // Cache before navigation: querying NativeWindowHandle on an old UIA
+            // provider can itself fail forever after its WebView tree detaches.
+            var handle = WindowHandles.GetValue(window,
+                current => new WindowHandle(current.Properties.NativeWindowHandle.Value));
+            parent = window.Automation.FromHandle(handle.Value);
+        }
+        return parent.FindFirstDescendant(cf => cf.ByAutomationId(id)) ?? parent.FindFirstDescendant(cf => cf.ByName(id));
+    }
     internal static AutomationElement Wait(AutomationElement parent, string id)
     {
         System.Runtime.InteropServices.COMException? lastTransitionError = null;
@@ -466,10 +479,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         {
             try
             {
-                var root = parent is Window currentWindow
-                    ? currentWindow.Automation.FromHandle(currentWindow.Properties.NativeWindowHandle.Value)
-                    : parent;
-                return Find(root, id);
+                return Find(parent, id);
             }
             catch (System.Runtime.InteropServices.COMException ex) when (
                 ex.HResult == unchecked((int)0x8000FFFF) || ex.HResult == unchecked((int)0x80131505) ||

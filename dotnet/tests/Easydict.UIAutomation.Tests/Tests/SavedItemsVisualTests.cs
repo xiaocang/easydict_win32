@@ -338,8 +338,8 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         Wait(mini, "InputTextBox").AsTextBox().Text = "Fluent 2 draft 中文";
         OpenMiniSavedItemsMenu(mini, compact);
         output.WriteLine(ScreenshotHelper.CaptureWindowWithPopup(mini, $"fluent2_mini_{(compact ? "compact" : "standard")}_menu",
-            Wait(mini, "MiniHistoryMenuItem"), Wait(mini, "MiniFavoritesMenuItem")));
-        Invoke(Wait(mini, "MiniHistoryMenuItem"));
+            WaitForMiniMenuItem(launcher, mini, "MiniHistoryMenuItem"), WaitForMiniMenuItem(launcher, mini, "MiniFavoritesMenuItem")));
+        Invoke(WaitForMiniMenuItem(launcher, mini, "MiniHistoryMenuItem"));
         Wait(main, "SavedItemsSearchBox");
         main.Patterns.Window.Pattern.WindowVisualState.Value.Should().Be(WindowVisualState.Normal);
         UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
@@ -349,10 +349,36 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         input.Should().NotBeNull();
         (input!.Patterns.Value.PatternOrDefault?.Value.Value ?? input.Name).Should().Contain("Fluent 2 draft 中文");
         OpenMiniSavedItemsMenu(mini, compact);
-        Invoke(Wait(mini, "MiniFavoritesMenuItem"));
+        Invoke(WaitForMiniMenuItem(launcher, mini, "MiniFavoritesMenuItem"));
         Wait(main, "SavedItemsPageTitle").Properties.HelpText.Value.Should().Be("SavedItemsSection:Favorites");
         Invoke(Wait(main, "SavedItemsReturnToTranslationButton"));
         Wait(main, "SettingsButton");
+    }
+
+    private AutomationElement WaitForMiniMenuItem(AppLauncher launcher, Window mini, string id)
+    {
+        var found = Retry.WhileNull(() =>
+        {
+            var item = Find(mini, id);
+            if (item is not null) return item;
+            // WinUI can host flyouts in a separate top-level PopupHost. Restrict
+            // the fallback to this test app, excluding other Easydict instances.
+            foreach (var root in launcher.Automation.GetDesktop().FindAllChildren(
+                cf => cf.ByProcessId(launcher.Application.ProcessId)))
+            {
+                item = Find(root, id);
+                if (item is not null)
+                {
+                    output.WriteLine($"Found {id} in app popup root '{root.Name}'.");
+                    return item;
+                }
+            }
+            return null;
+        }, TimeSpan.FromSeconds(12)).Result;
+        if (found is not null) return found;
+        // Focusing the mini window for a window capture would dismiss its flyout.
+        output.WriteLine(ScreenshotHelper.CaptureScreen($"fluent2_failed_popup_{id}"));
+        throw new InvalidOperationException($"Missing {id} in mini window and application popup roots");
     }
 
     private static void OpenMiniSavedItemsMenu(Window mini, bool compact)
@@ -434,8 +460,8 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                 Wait(window, "ServiceResultItem_deepl");
                 if (cycle < 8)
                 {
-                    var browser = Wait(window, "DictWebView");
-                    Retry.WhileFalse(() => browser.BoundingRectangle.Height > 20, TimeSpan.FromSeconds(5))
+                    Wait(window, "DictWebView");
+                    Retry.WhileFalse(() => Find(window, "DictWebView")?.BoundingRectangle.Height > 20, TimeSpan.FromSeconds(15))
                         .Result.Should().BeTrue("exercise rendered WebView content before releasing its result card");
                 }
                 Invoke(Wait(window, "CompareResultsButton"));

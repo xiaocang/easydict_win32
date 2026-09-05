@@ -457,7 +457,11 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         finally { Environment.SetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS", previous); }
     }
 
-    private sealed record WindowHandle(IntPtr Value);
+    private sealed class WindowHandle(Window window)
+    {
+        public IntPtr Value { get; } = window.Properties.NativeWindowHandle.Value;
+        public AutomationElement Root { get; set; } = window;
+    }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Window, WindowHandle> WindowHandles = new();
 
     internal static AutomationElement? Find(AutomationElement parent, string id)
@@ -466,24 +470,42 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         {
             // Cache before navigation: querying NativeWindowHandle on an old UIA
             // provider can itself fail forever after its WebView tree detaches.
-            var handle = WindowHandles.GetValue(window,
-                current => new WindowHandle(current.Properties.NativeWindowHandle.Value));
-            parent = window.Automation.FromHandle(handle.Value);
+            var handle = WindowHandles.GetValue(window, current => new WindowHandle(current));
+            try
+            {
+                return FindDescendant(handle.Root, id);
+            }
+            catch (Exception ex) when (IsUiaTransitionError(ex))
+            {
+                // ElementFromHandle itself sends a cross-process request. Only
+                // reacquire after invalidation, rather than on every lookup.
+                handle.Root = window.Automation.FromHandle(handle.Value);
+                return FindDescendant(handle.Root, id);
+            }
         }
-        return parent.FindFirstDescendant(cf => cf.ByAutomationId(id)) ?? parent.FindFirstDescendant(cf => cf.ByName(id));
+        return FindDescendant(parent, id);
     }
+    private static AutomationElement? FindDescendant(AutomationElement parent, string id) =>
+        parent.FindFirstDescendant(cf => cf.ByAutomationId(id)) ?? parent.FindFirstDescendant(cf => cf.ByName(id));
+
+    private static bool IsUiaTransitionError(Exception error) => error switch
+    {
+        System.Runtime.InteropServices.COMException com => com.HResult is
+            unchecked((int)0x8000FFFF) or unchecked((int)0x80131505) or unchecked((int)0x80040201),
+        TimeoutException { InnerException: System.Runtime.InteropServices.COMException com } =>
+            com.HResult == unchecked((int)0x80131505),
+        _ => false
+    };
     internal static AutomationElement Wait(AutomationElement parent, string id)
     {
-        System.Runtime.InteropServices.COMException? lastTransitionError = null;
+        Exception? lastTransitionError = null;
         var found = Retry.WhileNull(() =>
         {
             try
             {
                 return Find(parent, id);
             }
-            catch (System.Runtime.InteropServices.COMException ex) when (
-                ex.HResult == unchecked((int)0x8000FFFF) || ex.HResult == unchecked((int)0x80131505) ||
-                ex.HResult == unchecked((int)0x80040201))
+            catch (Exception ex) when (IsUiaTransitionError(ex))
             {
                 // WinUI can invalidate an in-flight UIA traversal while Frame
                 // navigation detaches the old page and its WebView providers.

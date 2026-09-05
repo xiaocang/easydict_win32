@@ -20,11 +20,25 @@ public sealed partial class SavedItemsPage
                 break;
             case "settings":
                 if (await ConfirmLeaveFavoriteAsync())
+                {
+                    // Finish the navigation item's input/UIA callback before
+                    // unloading result WebViews and their automation providers.
+                    SavedNavigation.IsPaneOpen = false;
+                    await Task.Yield();
+                    if (!_isPageLoaded) return;
                     Frame.Navigate(typeof(SettingsPage));
+                    return;
+                }
                 break;
             case "translation":
                 if (await ConfirmLeaveFavoriteAsync())
+                {
+                    SavedNavigation.IsPaneOpen = false;
+                    await Task.Yield();
+                    if (!_isPageLoaded) return;
                     NavigateToMainPage();
+                    return;
+                }
                 break;
         }
         SavedNavigation.IsPaneOpen = false;

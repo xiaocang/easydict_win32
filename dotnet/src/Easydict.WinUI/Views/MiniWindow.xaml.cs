@@ -75,6 +75,7 @@ public sealed partial class MiniWindow : Window
     private bool _resizePending;      // resize requested but not yet executed
     private bool _resizeThrottling;   // inside cooldown window
     private bool _isSourceTextExpanded = false;
+    private int _inputFocusGeneration;
 
     // Frame-rate-coalesced streaming text applicator. See StreamingTextCoalescer for
     // the rationale; nutshell: multiple services pushing StreamingText updates every
@@ -1922,6 +1923,8 @@ public sealed partial class MiniWindow : Window
 
     private void ShowSavedItemsMenu(FrameworkElement target)
     {
+        // Opening a menu supersedes any delayed activation-time input focus.
+        ++_inputFocusGeneration;
         // Commit the input's LostFocus collapse before the flyout takes focus.
         // UIA/keyboard activation can otherwise hide the focused input while
         // ShowAt is opening the menu, immediately dismissing the flyout.
@@ -2278,11 +2281,13 @@ public sealed partial class MiniWindow : Window
         return true;
     }
 
-    private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts)
+    private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts, int? generation = null)
     {
         if (InputTextBox == null) return;
+        var focusGeneration = generation ?? ++_inputFocusGeneration;
         DispatcherQueue.TryEnqueue(async () =>
         {
+            if (focusGeneration != _inputFocusGeneration) return;
             var attempt = InputFocusMaxAttempts - attemptsRemaining + 1;
 
             if (_isClosing)
@@ -2299,7 +2304,7 @@ public sealed partial class MiniWindow : Window
                 if (attemptsRemaining > 1)
                 {
                     await Task.Delay(InputFocusRetryDelayMs);
-                    QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                    QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
                 }
                 return;
             }
@@ -2312,7 +2317,7 @@ public sealed partial class MiniWindow : Window
                 if (attemptsRemaining > 1)
                 {
                     await Task.Delay(InputFocusRetryDelayMs);
-                    QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                    QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
                 }
                 return;
             }
@@ -2337,7 +2342,7 @@ public sealed partial class MiniWindow : Window
             if (attemptsRemaining > 1)
             {
                 await Task.Delay(InputFocusRetryDelayMs);
-                QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
             }
         });
     }

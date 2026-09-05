@@ -76,6 +76,7 @@ public sealed partial class MiniWindow : Window
     private bool _resizeThrottling;   // inside cooldown window
     private bool _isSourceTextExpanded = false;
     private int _inputFocusGeneration;
+    private bool _isSavedItemsMenuOpen;
 
     // Frame-rate-coalesced streaming text applicator. See StreamingTextCoalescer for
     // the rationale; nutshell: multiple services pushing StreamingText updates every
@@ -119,6 +120,7 @@ public sealed partial class MiniWindow : Window
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
+        SavedItemsMoreButton.Flyout = CreateSavedItemsMenu();
         InitializeCompactWindowControls();
 
         // Construct the streaming coalescer on the UI dispatcher — its timer is
@@ -260,7 +262,7 @@ public sealed partial class MiniWindow : Window
         _compactWindowControls.DragIsland.PointerCanceled += OnCompactDragIslandPointerCanceled;
         _compactWindowControls.DragIsland.PointerCaptureLost += OnCompactDragIslandPointerCaptureLost;
         _compactWindowControls.CloseButton.Click += OnCompactCloseClicked;
-        _compactWindowControls.MoreButton.Click += OnCompactSavedItemsMoreClicked;
+        _compactWindowControls.MoreButton.Flyout = CreateSavedItemsMenu();
         _compactWindowControls.RefreshTheme(Content as FrameworkElement);
     }
 
@@ -1912,25 +1914,8 @@ public sealed partial class MiniWindow : Window
         _ = App.TriggerOcrTranslateAsync();
     }
 
-    private void OnSavedItemsMoreClicked(object sender, RoutedEventArgs e)
-        => ShowSavedItemsMenu(SavedItemsMoreButton);
-
-    private void OnCompactSavedItemsMoreClicked(object sender, RoutedEventArgs e)
+    private MenuFlyout CreateSavedItemsMenu()
     {
-        if (_compactWindowControls is { } compactControls)
-            ShowSavedItemsMenu(compactControls.MoreButton);
-    }
-
-    private void ShowSavedItemsMenu(FrameworkElement target)
-    {
-        // Opening a menu supersedes any delayed activation-time input focus.
-        ++_inputFocusGeneration;
-        // Commit the input's LostFocus collapse before the flyout takes focus.
-        // UIA/keyboard activation can otherwise hide the focused input while
-        // ShowAt is opening the menu, immediately dismissing the flyout.
-        if (target is Control control)
-            control.Focus(FocusState.Programmatic);
-
         var history = new MenuFlyoutItem
         {
             Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsHistory", "History")
@@ -1947,7 +1932,17 @@ public sealed partial class MiniWindow : Window
         var menu = new MenuFlyout();
         menu.Items.Add(history);
         menu.Items.Add(favorites);
-        menu.ShowAt(target);
+        menu.Opening += (_, _) =>
+        {
+            // The button owns the flyout's lifetime and activation. Cancel pending
+            // input focus and keep activation callbacks from stealing menu focus.
+            ++_inputFocusGeneration;
+            _isSavedItemsMenuOpen = true;
+            history.Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsHistory", "History");
+            favorites.Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsFavorites", "Favorites");
+        };
+        menu.Closed += (_, _) => _isSavedItemsMenuOpen = false;
+        return menu;
     }
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
@@ -2283,7 +2278,7 @@ public sealed partial class MiniWindow : Window
 
     private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts, int? generation = null)
     {
-        if (InputTextBox == null) return;
+        if (InputTextBox == null || _isSavedItemsMenuOpen) return;
         var focusGeneration = generation ?? ++_inputFocusGeneration;
         DispatcherQueue.TryEnqueue(async () =>
         {

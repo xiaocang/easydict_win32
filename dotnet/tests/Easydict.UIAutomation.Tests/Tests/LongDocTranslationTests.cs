@@ -190,15 +190,20 @@ public class LongDocTranslationTests : IDisposable
         var pageRangeBox = FindControl(window, "LongDocPageRangeBox");
         pageRangeBox.Should().NotBeNull("LongDocPageRangeBox must exist");
 
-        // Click to focus and type page range
+        // A clickable point does not guarantee keyboard focus after scrolling.
+        // Wait for UIA focus before sending real keyboard input to the page range.
+        window.SetForeground();
         pageRangeBox!.Click();
-        Thread.Sleep(300);
+        pageRangeBox.Focus();
+        Retry.WhileFalse(() => pageRangeBox.Properties.HasKeyboardFocus.ValueOrDefault,
+            TimeSpan.FromSeconds(5)).Result.Should().BeTrue("page range must receive keyboard focus before typing");
 
         // Clear any existing text
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
         Thread.Sleep(100);
         Keyboard.Type("1-5,8,10-12");
-        Thread.Sleep(300);
+        Retry.WhileFalse(() => pageRangeBox.AsTextBox().Text == "1-5,8,10-12",
+            TimeSpan.FromSeconds(5)).Result.Should().BeTrue("typed page range must reach the focused input");
         pageRangeBox.AsTextBox().Text.Should().Be("1-5,8,10-12");
 
         CaptureAndCompare(window, "longdoc_08_page_range");
@@ -313,6 +318,7 @@ public class LongDocTranslationTests : IDisposable
             TimeSpan.FromSeconds(10)).Result;
 
         sourceLangCombo.Should().NotBeNull("SourceLangCombo should exist once the quick-translate UI is ready");
+        window.SetForeground();
     }
 
     private void SwitchToLongDocTab(Window window)
@@ -345,7 +351,7 @@ public class LongDocTranslationTests : IDisposable
                 TimeSpan.FromSeconds(10)).Result;
             titleButton.Should().NotBeNull("Title dropdown button should exist");
 
-            titleButton!.Click();
+            titleButton!.Patterns.Invoke.Pattern.Invoke();
             Thread.Sleep(1000);
 
             var menuItem = Retry.WhileNull(
@@ -388,7 +394,7 @@ public class LongDocTranslationTests : IDisposable
             TimeSpan.FromSeconds(10)).Result;
         titleButton.Should().NotBeNull("Title dropdown button should exist");
 
-        titleButton!.Click();
+        titleButton!.Patterns.Invoke.Pattern.Invoke();
         Thread.Sleep(1000);
 
         var menuItem = Retry.WhileNull(
@@ -402,17 +408,7 @@ public class LongDocTranslationTests : IDisposable
 
     private static AutomationElement? FindTitleButton(Window window)
     {
-        var easydictText = window.FindFirstDescendant(cf => cf.ByName("Easydict"));
-        var current = easydictText;
-        while (current != null)
-        {
-            if (current.ControlType == ControlType.Button)
-                return current;
-
-            current = current.Parent;
-        }
-
-        return null;
+        return window.FindFirstDescendant(cf => cf.ByAutomationId("ModeMenuButton"));
     }
 
     private static string GetModeVerificationControl(string menuItemAutomationId)

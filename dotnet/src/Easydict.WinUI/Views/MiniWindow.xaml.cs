@@ -1922,6 +1922,12 @@ public sealed partial class MiniWindow : Window
 
     private void ShowSavedItemsMenu(FrameworkElement target)
     {
+        // Commit the input's LostFocus collapse before the flyout takes focus.
+        // UIA/keyboard activation can otherwise hide the focused input while
+        // ShowAt is opening the menu, immediately dismissing the flyout.
+        if (target is Control control)
+            control.Focus(FocusState.Programmatic);
+
         var history = new MenuFlyoutItem
         {
             Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsHistory", "History")

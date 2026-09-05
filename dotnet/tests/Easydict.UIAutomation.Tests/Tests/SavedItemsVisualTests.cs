@@ -331,7 +331,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         Invoke(Wait(main, "SettingsButton"));
         Wait(main, "MainScrollViewer");
         main.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Minimized);
-        UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.KEY_M);
+        UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
         var mini = Retry.WhileNull(() => launcher.Application.GetAllTopLevelWindows(launcher.Automation)
             .FirstOrDefault(candidate => candidate.Properties.NativeWindowHandle.Value != main.Properties.NativeWindowHandle.Value && !candidate.IsOffscreen), TimeSpan.FromSeconds(8)).Result!;
         mini.Should().NotBeNull();
@@ -342,7 +342,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         Invoke(Wait(mini, "MiniHistoryMenuItem"));
         Wait(main, "SavedItemsSearchBox");
         main.Patterns.Window.Pattern.WindowVisualState.Value.Should().Be(WindowVisualState.Normal);
-        UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.KEY_M);
+        UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
         mini = Retry.WhileNull(() => launcher.Application.GetAllTopLevelWindows(launcher.Automation)
             .FirstOrDefault(candidate => candidate.Properties.NativeWindowHandle.Value != main.Properties.NativeWindowHandle.Value && !candidate.IsOffscreen), TimeSpan.FromSeconds(8)).Result!;
         var input = Find(mini, "InputTextBox") ?? Find(mini, "SourceTextCollapsed");
@@ -472,7 +472,8 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                 return Find(root, id);
             }
             catch (System.Runtime.InteropServices.COMException ex) when (
-                ex.HResult == unchecked((int)0x8000FFFF) || ex.HResult == unchecked((int)0x80131505))
+                ex.HResult == unchecked((int)0x8000FFFF) || ex.HResult == unchecked((int)0x80131505) ||
+                ex.HResult == unchecked((int)0x80040201))
             {
                 // WinUI can invalidate an in-flight UIA traversal while Frame
                 // navigation detaches the old page and its WebView providers.
@@ -554,6 +555,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                 UILanguage = "zh-CN", AppTheme = theme, CompactMode = compact, ResultFontScale = fontScale, HistoryEnabled = historyEnabled, HistoryRetentionDays = 30,
                 EnableShowWindowHotkey = false, EnableTranslateSelectionHotkey = false,
                 EnableShowMiniWindowHotkey = enableMini, EnableShowFixedWindowHotkey = enableFixed,
+                ShowMiniWindowHotkey = "Ctrl+Alt+F10", // Isolate from a developer app using Ctrl+Alt+M.
                 EnableOcrTranslateHotkey = false, EnableSilentOcrHotkey = false
             }));
             Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", directory);

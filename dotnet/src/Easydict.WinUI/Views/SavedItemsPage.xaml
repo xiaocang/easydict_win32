@@ -53,9 +53,15 @@
                 <TextBlock x:Name="ReturnToTranslationText"/>
             </StackPanel>
         </Button>
-        <InfoBar x:Name="PageInfoBar" Grid.Row="1" Margin="16,0"
+        <StackPanel Grid.Row="1" Margin="16,0" Spacing="8">
+        <InfoBar x:Name="HistoryDisabledNotice"
+                 AutomationProperties.AutomationId="SavedItemsHistoryDisabledNotice"
+                 AutomationProperties.LiveSetting="Polite"
+                 Severity="Informational" IsOpen="False" IsClosable="False" Visibility="Collapsed"/>
+        <InfoBar x:Name="PageInfoBar"
                  AutomationProperties.AutomationId="SavedItemsMessage"
                  AutomationProperties.LiveSetting="Polite" IsOpen="False" IsClosable="True"/>
+        </StackPanel>
     <Grid x:Name="RootGrid" Grid.Row="2" Padding="24" ColumnSpacing="16"
           AutomationProperties.AutomationId="SavedItemsLayoutRoot" AutomationProperties.AccessibilityView="Control">
         <Grid.ColumnDefinitions>

@@ -17,6 +17,143 @@ namespace Easydict.UIAutomation.Tests.Tests;
 public sealed class SavedItemsVisualTests(ITestOutputHelper output)
 {
     [Theory]
+    [InlineData("Light", 0, false)]
+    [InlineData("Light", 30, false)]
+    [InlineData("Dark", 30, false)]
+    [InlineData("Light", 0, true)]
+    public void History_DisabledNotice_ShowsSettingsPathOnlyWhenHistoryIsOff(string theme, int count, bool historyEnabled)
+    {
+        using var dpiScope = new PerMonitorDpiScope();
+        using var fixture = new Fixture(theme, count, historyEnabled: historyEnabled);
+        using var launcher = new AppLauncher();
+        launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var window = launcher.GetMainWindow();
+        OpenHistory(window);
+        foreach (var width in new[] { 1280, 400 })
+        {
+            Resize(window, width);
+            if (historyEnabled)
+            {
+                Find(window, "SavedItemsHistoryDisabledNotice").Should().BeNull();
+                continue;
+            }
+            var notice = Wait(window, "SavedItemsHistoryDisabledNotice");
+            var text = string.Join(" ", notice.FindAllDescendants().Select(element => element.Name));
+            text.Should().Contain("历史记录未开启").And.Contain("设置 → 常规 → 历史记录与隐私")
+                .And.Contain("保存查询历史");
+            notice.IsOffscreen.Should().BeFalse();
+            if (count > 0)
+                Wait(window, "SavedItemsList").FindFirstDescendant(cf => cf.ByControlType(ControlType.ListItem))
+                    .Should().NotBeNull("turning off history keeps existing records visible");
+            output.WriteLine(ScreenshotHelper.CaptureWindow(window,
+                $"history_disabled_{theme}_{width}_{count}_settings_path"));
+        }
+        Resize(window, 1280);
+        Invoke(Wait(window, "SavedItemsFavoritesRailButton"));
+        Find(window, "SavedItemsHistoryDisabledNotice").Should().BeNull();
+        Invoke(Wait(window, "SavedItemsHistoryRailButton"));
+        if (!historyEnabled) Wait(window, "SavedItemsHistoryDisabledNotice");
+        else Find(window, "SavedItemsHistoryDisabledNotice").Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    [InlineData("Minimal")]
+    public void History_ReturnToMain_KeepsUnfocusedInputReadable(string theme)
+    {
+        using var dpiScope = new PerMonitorDpiScope();
+        using var fixture = new Fixture(theme, 0);
+        using var launcher = new AppLauncher();
+        launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var window = launcher.GetMainWindow();
+        Resize(window, 1280);
+        const string draft = "History return must keep this draft readable.\r\n返回主界面后，未获得焦点的输入文字也应清晰可见。";
+        var input = Wait(window, "InputTextBox").AsTextBox();
+        input.Text = draft;
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            (Find(window, "HistoryButton") ?? Wait(window, "SavedItemsMoreButton")).Focus();
+            OpenHistory(window);
+            Invoke(Wait(window, "SavedItemsReturnToTranslationButton"));
+            input = Wait(window, "InputTextBox").AsTextBox();
+            FlaUI.Core.Input.Mouse.MoveTo(new Point(window.BoundingRectangle.Left + 120,
+                window.BoundingRectangle.Top + 20));
+            Thread.Sleep(300); // Let the cached page transition and deferred theme refresh finish.
+            input.Text.ReplaceLineEndings("\n").Should().Be(draft.ReplaceLineEndings("\n"));
+            input.Properties.HasKeyboardFocus.ValueOrDefault.Should().BeFalse(
+                "the return path must be checked before clicking the input");
+            AssertReadable("unfocused");
+            FlaUI.Core.Input.Mouse.MoveTo(input.GetClickablePoint());
+            Thread.Sleep(100);
+            AssertReadable("hovered");
+            input.Click();
+            Thread.Sleep(100);
+            AssertReadable("focused");
+
+            void AssertReadable(string state)
+            {
+                var path = ScreenshotHelper.CaptureElement(input,
+                    $"history_return_{theme}_{attempt}_input_{state}");
+                output.WriteLine(path);
+                using var bitmap = new Bitmap(path);
+                var scale = ScreenshotHelper.GetWindowDpiScale(window);
+                var inset = (int)Math.Ceiling(4 * scale);
+                var bottom = Math.Min(bitmap.Height - inset, (int)(72 * scale));
+                var foregroundPixels = 0;
+                var totalPixels = 0;
+                for (var y = inset; y < bottom; y++)
+                for (var x = inset; x < bitmap.Width - inset; x++)
+                {
+                    var color = bitmap.GetPixel(x, y);
+                    var brightness = 0.299 * color.R + 0.587 * color.G + 0.114 * color.B;
+                    if (theme == "Dark" ? brightness > 170 : brightness < 130)
+                        foregroundPixels++;
+                    totalPixels++;
+                }
+                (foregroundPixels / (double)totalPixels).Should().BeGreaterThan(0.02,
+                    $"{theme} input text must remain readable while {state} after history navigation");
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public void Favorites_ReturnFromNarrowDetail_RestoresCardFocus(string theme)
+    {
+        using var dpiScope = new PerMonitorDpiScope();
+        using var fixture = new Fixture(theme, 30);
+        using var launcher = new AppLauncher();
+        launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var window = launcher.GetMainWindow();
+        OpenHistory(window);
+        Invoke(Wait(window, "SavedItemsFavoritesRailButton"));
+
+        foreach (var width in new[] { 640, 400 })
+        {
+            Resize(window, width);
+            for (var index = 0; index < 2; index++)
+            {
+                var items = Wait(window, "SavedItemsList")
+                    .FindAllChildren(cf => cf.ByControlType(ControlType.ListItem));
+                var item = items[index];
+                item.Click();
+                Wait(window, "EditFavoriteButton");
+                Invoke(Wait(window, "SavedItemsDetailBackButton"));
+                Retry.WhileFalse(() => item.Properties.HasKeyboardFocus.ValueOrDefault,
+                    TimeSpan.FromSeconds(5)).Result.Should().BeTrue(
+                    "returning from details must restore keyboard focus to the selected favorite");
+                item.Patterns.SelectionItem.Pattern.IsSelected.Value.Should().BeTrue();
+                Thread.Sleep(200); // Capture the settled focus visual after responsive layout.
+                output.WriteLine(ScreenshotHelper.CaptureWindow(window,
+                    $"fluent2_{theme}_{width}_favorites_return_focus_{index}"));
+            }
+        }
+    }
+
+    [Theory]
     [InlineData("Dark")]
     [InlineData("Minimal")]
     public void History_ResultFavorite_PointerToggleSurvivesRefreshAndReentry(string theme)
@@ -384,14 +521,14 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
     internal sealed class Fixture : IDisposable
     {
         private readonly string? _previous = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
-        public Fixture(string theme, int count, bool compact = false, bool enableMini = false, string? richHtml = null, double fontScale = 1.0, bool enableFixed = false)
+        public Fixture(string theme, int count, bool compact = false, bool enableMini = false, string? richHtml = null, double fontScale = 1.0, bool enableFixed = false, bool historyEnabled = true)
         {
             compact |= Environment.GetEnvironmentVariable("EASYDICT_UIA_COMPACT") == "1";
             var directory = Path.Combine(Path.GetTempPath(), "Easydict.Fluent2.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             File.WriteAllText(Path.Combine(directory, "settings.json"), JsonSerializer.Serialize(new
             {
-                UILanguage = "zh-CN", AppTheme = theme, CompactMode = compact, ResultFontScale = fontScale, HistoryEnabled = true, HistoryRetentionDays = 30,
+                UILanguage = "zh-CN", AppTheme = theme, CompactMode = compact, ResultFontScale = fontScale, HistoryEnabled = historyEnabled, HistoryRetentionDays = 30,
                 EnableShowWindowHotkey = false, EnableTranslateSelectionHotkey = false,
                 EnableShowMiniWindowHotkey = enableMini, EnableShowFixedWindowHotkey = enableFixed,
                 EnableOcrTranslateHotkey = false, EnableSilentOcrHotkey = false

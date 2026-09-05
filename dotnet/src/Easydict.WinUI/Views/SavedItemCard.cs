@@ -11,9 +11,11 @@ public sealed class SavedItemCard : ContentControl
 {
     public SavedItemCard()
     {
-        Loaded += (_, _) => UpdateFocusBounds();
-        SizeChanged += (_, _) => UpdateFocusBounds();
+        Loaded += (_, _) => LayoutUpdated += OnLayoutUpdated;
+        Unloaded += (_, _) => LayoutUpdated -= OnLayoutUpdated;
     }
+
+    private void OnLayoutUpdated(object? sender, object e) => UpdateFocusBounds();
 
     private void UpdateFocusBounds()
     {
@@ -23,7 +25,11 @@ public sealed class SavedItemCard : ContentControl
         if (parent is ListViewItem container)
         {
             var origin = TransformToVisual(container).TransformPoint(new Point(0, 0));
-            container.FocusVisualMargin = new Thickness(-2, Math.Max(-2, origin.Y - 2), -2, -2);
+            // Returning from narrow details or recycling a date header can move
+            // the card without resizing it. Read its offset after layout settles.
+            var margin = new Thickness(-2, Math.Max(-2, origin.Y - 2), -2, -2);
+            if (container.FocusVisualMargin != margin)
+                container.FocusVisualMargin = margin;
         }
     }
 

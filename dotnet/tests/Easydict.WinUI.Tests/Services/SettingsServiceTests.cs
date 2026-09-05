@@ -33,19 +33,22 @@ public class SettingsServiceTests
         var settingsPath = Path.Combine(testDirectory.Path, "settings.json");
 
         var defaults = CreateIsolatedSettingsService(testDirectory.Path);
-        defaults.HistoryEnabled.Should().BeTrue();
+        defaults.HistoryEnabled.Should().BeFalse();
         defaults.HistoryRetentionDays.Should().Be(30);
 
-        defaults.HistoryEnabled = false;
+        defaults.HistoryEnabled = true;
         defaults.HistoryRetentionDays = 1;
         defaults.Save();
         var minimum = CreateIsolatedSettingsService(testDirectory.Path);
-        minimum.HistoryEnabled.Should().BeFalse();
+        minimum.HistoryEnabled.Should().BeTrue();
         minimum.HistoryRetentionDays.Should().Be(1);
 
+        minimum.HistoryEnabled = false;
         minimum.HistoryRetentionDays = 3650;
         minimum.Save();
-        CreateIsolatedSettingsService(testDirectory.Path).HistoryRetentionDays.Should().Be(3650);
+        var maximum = CreateIsolatedSettingsService(testDirectory.Path);
+        maximum.HistoryEnabled.Should().BeFalse();
+        maximum.HistoryRetentionDays.Should().Be(3650);
 
         File.WriteAllText(settingsPath, """{"HistoryRetentionDays":-1}""");
         CreateIsolatedSettingsService(testDirectory.Path).HistoryRetentionDays.Should().Be(1);
@@ -61,12 +64,12 @@ public class SettingsServiceTests
 
         File.WriteAllText(settingsPath, "{}");
         var missing = CreateIsolatedSettingsService(testDirectory.Path);
-        missing.HistoryEnabled.Should().BeTrue();
+        missing.HistoryEnabled.Should().BeFalse();
         missing.HistoryRetentionDays.Should().Be(30);
 
         File.WriteAllText(settingsPath, "{not-json");
         var corrupt = CreateIsolatedSettingsService(testDirectory.Path);
-        corrupt.HistoryEnabled.Should().BeTrue();
+        corrupt.HistoryEnabled.Should().BeFalse();
         corrupt.HistoryRetentionDays.Should().Be(30);
     }
 

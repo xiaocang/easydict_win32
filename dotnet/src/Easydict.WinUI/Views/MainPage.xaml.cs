@@ -534,6 +534,16 @@ namespace Easydict.WinUI.Views
 
         private void ApplyMainInputChrome(bool minimal, bool compact)
         {
+            // The template animates ContentElement.Foreground for hover/focus,
+            // overriding TextBox.Foreground. Refresh their shared local brush in
+            // place so cached visual states cannot retain a different palette.
+            if (ThemeResourceService.GetColor("QueryTextColor", this) is { } textColor &&
+                InputTextBox.Resources["TextControlForeground"] is SolidColorBrush textForeground)
+            {
+                textForeground.Color = textColor;
+                InputTextBox.Foreground = textForeground;
+            }
+
             if (minimal)
             {
                 var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -556,7 +566,6 @@ namespace Easydict.WinUI.Views
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
             var textBorder = CreateThemeBrush("FloatingInputBorderColor")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var textForeground = CreateThemeBrush("QueryTextColor");
             var placeholderForeground = ThemeResourceService.GetBrush("TextControlPlaceholderForeground", this)
                 ?? ThemeResourceService.GetBrush("TextFillColorTertiaryBrush", this);
             var transparentBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -579,11 +588,6 @@ namespace Easydict.WinUI.Views
             InputTextBox.BorderThickness = new Thickness(0);
             InputTextBox.CornerRadius = new CornerRadius(0);
             InputTextBox.Padding = new Thickness(0);
-            if (textForeground is not null)
-            {
-                InputTextBox.Foreground = textForeground;
-            }
-
             if (placeholderForeground is not null)
             {
                 InputTextBox.PlaceholderForeground = placeholderForeground;

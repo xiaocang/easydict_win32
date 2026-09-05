@@ -1470,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>Refresh</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>No completed queries yet.</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>History is turned off</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>To save future queries, go to {0} → {1} → {2} and turn on “{3}”. Existing records are kept.</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>No favorites yet.</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>Select a saved query</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>Delete from history</value></data>

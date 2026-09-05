@@ -359,6 +359,10 @@
                                 HorizontalAlignment="Stretch"
                                 PreviewKeyDown="OnInputTextBoxKeyDown">
                                 <TextBox.Resources>
+                                    <!-- Keep native text states on the same brush across cached-page navigation. -->
+                                    <SolidColorBrush x:Key="TextControlForeground" Color="{ThemeResource QueryTextColor}" />
+                                    <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="TextControlForeground" />
+                                    <StaticResource x:Key="TextControlForegroundFocused" ResourceKey="TextControlForeground" />
                                     <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
                                     <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
                                     <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />

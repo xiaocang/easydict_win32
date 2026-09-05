@@ -27,13 +27,25 @@
       </xsd:complexType>
     </xsd:element>
   </xsd:schema>
-  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
-  <resheader name="version"><value>1.3</value></resheader>
-  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>1.3</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- App Name -->
   <data name="AppName" xml:space="preserve">
     <value>Easydict</value>
   </data>
+
+  <!-- Main Page -->
   <data name="SourceText" xml:space="preserve">
     <value>Teks Sumber</value>
   </data>
@@ -61,6 +73,8 @@
   <data name="TargetLanguageTooltip" xml:space="preserve">
     <value>Bahasa Target</value>
   </data>
+
+  <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
     <value>Terhubung</value>
   </data>
@@ -108,6 +122,8 @@
   <data name="ServiceResult_Retry" xml:space="preserve">
     <value>Coba lagi</value>
   </data>
+
+  <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>Deteksi Otomatis</value>
   </data>
@@ -138,6 +154,119 @@
   <data name="LangSpanish" xml:space="preserve">
     <value>Spanyol</value>
   </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>Classical Chinese</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>Dutch</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>Swedish</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>Norwegian</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>Danish</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>Portuguese</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>Italian</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>Romanian</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>Russian</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>Polish</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>Czech</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>Ukrainian</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>Bulgarian</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>Slovak</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>Slovenian</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>Estonian</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>Latvian</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>Lithuanian</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>Greek</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>Hungarian</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>Finnish</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>Turkish</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>Arabic</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>Persian</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>Hebrew</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>Hindi</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>Bengali</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>Tamil</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>Telugu</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>Urdu</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>Vietnamese</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>Thai</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>Indonesian</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>Malay</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>Filipino</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>Available Languages</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>Select languages available in source/target pickers. At least 2 required.</value>
+  </data>
+
+  <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
     <value>Pengaturan</value>
   </data>
@@ -165,6 +294,8 @@
   <data name="Manual" xml:space="preserve">
     <value>Manual</value>
   </data>
+
+  <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
     <value>Preferensi Bahasa</value>
   </data>
@@ -180,6 +311,8 @@
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
     <value>Pilih bahasa target secara otomatis berdasarkan bahasa sumber yang terdeteksi</value>
   </data>
+
+  <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
     <value>Konfigurasi Layanan</value>
   </data>
@@ -216,6 +349,8 @@
   <data name="Refresh" xml:space="preserve">
     <value>Segarkan</value>
   </data>
+
+  <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
     <value>Biarkan API key kosong untuk menggunakan terjemahan web gratis. API key Pro memberikan batas lebih tinggi.</value>
   </data>
@@ -291,6 +426,8 @@
   <data name="FreeServicesDescription" xml:space="preserve">
     <value>Google Translate langsung berfungsi tanpa API key.</value>
   </data>
+
+  <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
     <value>HTTP Proxy</value>
   </data>
@@ -306,6 +443,8 @@
   <data name="ProxyDescription" xml:space="preserve">
     <value>Perubahan proxy berlaku setelah aplikasi dimulai ulang. Melewati localhost memastikan Ollama berfungsi tanpa proxy.</value>
   </data>
+
+  <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
     <value>Perilaku</value>
   </data>
@@ -321,6 +460,8 @@
   <data name="LaunchAtStartup" xml:space="preserve">
     <value>Jalankan saat Windows dimulai</value>
   </data>
+
+  <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
     <value>Pintasan</value>
   </data>
@@ -345,6 +486,8 @@
   <data name="HotkeysDescription" xml:space="preserve">
     <value>Catatan: Mulai ulang aplikasi untuk menerapkan perubahan pintasan. Pintasan toggle menggunakan tombol yang sama dengan Shift (mis. Ctrl+Alt+Shift+M).</value>
   </data>
+
+  <!-- About -->
   <data name="About" xml:space="preserve">
     <value>Tentang</value>
   </data>
@@ -369,6 +512,8 @@
   <data name="License" xml:space="preserve">
     <value>Lisensi: GPL-3.0</value>
   </data>
+
+  <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
     <value>Simpan Pengaturan</value>
   </data>
@@ -387,6 +532,8 @@
   <data name="CopyAll" xml:space="preserve">
     <value>Salin Semua</value>
   </data>
+
+  <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
     <value>Terjemahan gagal</value>
   </data>
@@ -435,6 +582,8 @@
   <data name="OK" xml:space="preserve">
     <value>OK</value>
   </data>
+
+  <!-- Service Names -->
   <data name="ServiceGoogle" xml:space="preserve">
     <value>Google Translate</value>
   </data>
@@ -477,8 +626,16 @@
   <data name="ServiceLinguee" xml:space="preserve">
     <value>Kamus Linguee</value>
   </data>
+
+  <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
     <value>Tampilkan</value>
+  </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>Jendela Mini</value>
@@ -525,6 +682,19 @@
   <data name="TrayExit" xml:space="preserve">
     <value>Keluar</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>Seret untuk memilih area  |  Klik ganda untuk memilih jendela  |  Gulir untuk beralih  |  Esc untuk keluar</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>Klik kanan atau Esc untuk membatalkan</value>
+  </data>
+
+  <!-- Window Titles -->
   <data name="QuickTranslate" xml:space="preserve">
     <value>Terjemahan Cepat</value>
   </data>
@@ -534,6 +704,41 @@
   <data name="PinWindowTooltip" xml:space="preserve">
     <value>Sematkan jendela (tetap di atas)</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Terjemahan OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Ukuran font hasil</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Sesuaikan ukuran font hasil terjemahan.</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Mode ringkas</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Tombol aksi cepat</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Tampilkan tombol OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Tampilkan tombol sematkan</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Tampilkan tombol putar</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Putar teks sumber</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Tampilkan tombol tukar</value>
+  </data>
+
+  <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
     <value>Bahasa Antarmuka</value>
   </data>
@@ -546,12 +751,16 @@
   <data name="UILangChineseSimplified" xml:space="preserve">
     <value>Tionghoa (Sederhana)</value>
   </data>
+
+  <!-- x:Uid entries for Settings Page XAML -->
   <data name="Close" xml:space="preserve">
     <value>Tutup</value>
   </data>
   <data name="HideWindow" xml:space="preserve">
     <value>Sembunyikan (Ctrl+Alt+F untuk menampilkan kembali)</value>
   </data>
+
+  <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
     <value>Aktifkan Layanan Internasional</value>
   </data>
@@ -561,6 +770,8 @@
   <data name="InternationalServiceUnavailableHint" xml:space="preserve">
     <value>Layanan ini mungkin tidak tersedia di wilayah Anda. Coba gunakan Bing Translate atau layanan lain yang kompatibel. Anda dapat mengubah layanan yang diaktifkan di Pengaturan.</value>
   </data>
+
+  <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>Tema Aplikasi</value>
   </data>
@@ -576,6 +787,11 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>Gelap</value>
   </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
+
+  <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
     <value>Perubahan Belum Disimpan</value>
   </data>
@@ -588,6 +804,25 @@
   <data name="Cancel" xml:space="preserve">
     <value>Batal</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>Tambah/hapus bahasa: Pengaturan &#x2192; Bahasa Tersedia</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter untuk menerjemahkan, Shift+Enter baris baru</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>Perlu restart setelah perubahan</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>Otomatis = kueri otomatis, Manual = klik untuk kueri</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>Aktifkan layanan di 'Layanan Aktif' di atas terlebih dahulu</value>
+  </data>
+
+  <!-- Service Test Button -->
   <data name="Test" xml:space="preserve">
     <value>Uji</value>
   </data>
@@ -610,23 +845,6 @@
     <value>Silakan konfigurasikan layanan terlebih dahulu (API key, endpoint, dll.).</value>
   </data>
 
-  <!-- Help Tooltips -->
-  <data name="LanguagePickerHelpTip" xml:space="preserve">
-    <value>Tambah/hapus bahasa: Pengaturan &#x2192; Bahasa Tersedia</value>
-  </data>
-  <data name="InputHelpTip" xml:space="preserve">
-    <value>Enter untuk menerjemahkan, Shift+Enter baris baru</value>
-  </data>
-  <data name="HotkeysHelpTip" xml:space="preserve">
-    <value>Perlu restart setelah perubahan</value>
-  </data>
-  <data name="EnabledServicesHelpTip" xml:space="preserve">
-    <value>Otomatis = kueri otomatis, Manual = klik untuk kueri</value>
-  </data>
-  <data name="ServiceConfigHelpTip" xml:space="preserve">
-    <value>Aktifkan layanan di 'Layanan Aktif' di atas terlebih dahulu</value>
-  </data>
-
   <!-- Toggle Switch On/Off -->
   <data name="ToggleOn" xml:space="preserve">
     <value>Aktif</value>
@@ -641,14 +859,6 @@
   </data>
   <data name="WebFree" xml:space="preserve">
     <value>Web (gratis)</value>
-  </data>
-
-  <!-- Screen Capture -->
-  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>Seret untuk memilih area  |  Klik ganda untuk memilih jendela  |  Gulir untuk beralih  |  Esc untuk keluar</value>
-  </data>
-  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
-    <value>Klik kanan atau Esc untuk membatalkan</value>
   </data>
 
   <!-- Grammar Correction Mode -->
@@ -693,6 +903,44 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
   </data>
   <data name="DocumentOutputMode_Title" xml:space="preserve">
     <value>Mode Output Dokumen</value>
@@ -831,6 +1079,48 @@
   </data>
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Lewati</value>
+  </data>
+  <data name="MdxDictionaryReady" xml:space="preserve">
+    <value>This dictionary is ready to use. No configuration needed.</value>
+  </data>
+  <data name="MdxDeleteDictionary" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxRedetectEncryption" xml:space="preserve">
+    <value>Re-detect Encryption</value>
+  </data>
+  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+  </data>
+  <data name="MdxFilePath" xml:space="preserve">
+    <value>File Path</value>
+  </data>
+  <data name="MdxRegistrationCode" xml:space="preserve">
+    <value>Registration Code</value>
+  </data>
+  <data name="MdxEncryptedHelpText" xml:space="preserve">
+    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+  </data>
+  <data name="MdxEmailPlaceholder" xml:space="preserve">
+    <value>Email address used for registration</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>Imported '{0}' with {1} companion resource file(s).</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>Imported '{0}'. No companion MDD resource files found.</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>Add MDD File...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>Re-scan MDD Files</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>Resource Files</value>
   </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>Urutkan Ulang</value>
@@ -1066,207 +1356,6 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>Model NLLB-200 belum diunduh (~360 MB). Klik "Unduh model" untuk mengambilnya ke %LOCALAPPDATA%\Easydict\models.</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>Mengunduh file model NLLB-200…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Unduhan gagal. Periksa koneksi jaringan Anda dan coba lagi.</value></data>
-  <data name="LangClassicalChinese" xml:space="preserve">
-    <value>Classical Chinese</value>
-  </data>
-  <data name="LangDutch" xml:space="preserve">
-    <value>Dutch</value>
-  </data>
-  <data name="LangSwedish" xml:space="preserve">
-    <value>Swedish</value>
-  </data>
-  <data name="LangNorwegian" xml:space="preserve">
-    <value>Norwegian</value>
-  </data>
-  <data name="LangDanish" xml:space="preserve">
-    <value>Danish</value>
-  </data>
-  <data name="LangPortuguese" xml:space="preserve">
-    <value>Portuguese</value>
-  </data>
-  <data name="LangItalian" xml:space="preserve">
-    <value>Italian</value>
-  </data>
-  <data name="LangRomanian" xml:space="preserve">
-    <value>Romanian</value>
-  </data>
-  <data name="LangRussian" xml:space="preserve">
-    <value>Russian</value>
-  </data>
-  <data name="LangPolish" xml:space="preserve">
-    <value>Polish</value>
-  </data>
-  <data name="LangCzech" xml:space="preserve">
-    <value>Czech</value>
-  </data>
-  <data name="LangUkrainian" xml:space="preserve">
-    <value>Ukrainian</value>
-  </data>
-  <data name="LangBulgarian" xml:space="preserve">
-    <value>Bulgarian</value>
-  </data>
-  <data name="LangSlovak" xml:space="preserve">
-    <value>Slovak</value>
-  </data>
-  <data name="LangSlovenian" xml:space="preserve">
-    <value>Slovenian</value>
-  </data>
-  <data name="LangEstonian" xml:space="preserve">
-    <value>Estonian</value>
-  </data>
-  <data name="LangLatvian" xml:space="preserve">
-    <value>Latvian</value>
-  </data>
-  <data name="LangLithuanian" xml:space="preserve">
-    <value>Lithuanian</value>
-  </data>
-  <data name="LangGreek" xml:space="preserve">
-    <value>Greek</value>
-  </data>
-  <data name="LangHungarian" xml:space="preserve">
-    <value>Hungarian</value>
-  </data>
-  <data name="LangFinnish" xml:space="preserve">
-    <value>Finnish</value>
-  </data>
-  <data name="LangTurkish" xml:space="preserve">
-    <value>Turkish</value>
-  </data>
-  <data name="LangArabic" xml:space="preserve">
-    <value>Arabic</value>
-  </data>
-  <data name="LangPersian" xml:space="preserve">
-    <value>Persian</value>
-  </data>
-  <data name="LangHebrew" xml:space="preserve">
-    <value>Hebrew</value>
-  </data>
-  <data name="LangHindi" xml:space="preserve">
-    <value>Hindi</value>
-  </data>
-  <data name="LangBengali" xml:space="preserve">
-    <value>Bengali</value>
-  </data>
-  <data name="LangTamil" xml:space="preserve">
-    <value>Tamil</value>
-  </data>
-  <data name="LangTelugu" xml:space="preserve">
-    <value>Telugu</value>
-  </data>
-  <data name="LangUrdu" xml:space="preserve">
-    <value>Urdu</value>
-  </data>
-  <data name="LangVietnamese" xml:space="preserve">
-    <value>Vietnamese</value>
-  </data>
-  <data name="LangThai" xml:space="preserve">
-    <value>Thai</value>
-  </data>
-  <data name="LangIndonesian" xml:space="preserve">
-    <value>Indonesian</value>
-  </data>
-  <data name="LangMalay" xml:space="preserve">
-    <value>Malay</value>
-  </data>
-  <data name="LangFilipino" xml:space="preserve">
-    <value>Filipino</value>
-  </data>
-  <data name="AvailableLanguages" xml:space="preserve">
-    <value>Available Languages</value>
-  </data>
-  <data name="AvailableLanguagesDesc" xml:space="preserve">
-    <value>Select languages available in source/target pickers. At least 2 required.</value>
-  </data>
-  <data name="TrayTranslateClipboard" xml:space="preserve">
-    <value>Translate Clipboard</value>
-  </data>
-  <data name="TrayOcrTranslate" xml:space="preserve">
-    <value>OCR Translate</value>
-  </data>
-  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
-    <value>Exit screenshot?</value>
-  </data>
-  <data name="ThemeMinimal" xml:space="preserve">
-    <value>Minimal</value>
-  </data>
-  <data name="LayoutDetection_Title" xml:space="preserve">
-    <value>Layout Detection</value>
-  </data>
-  <data name="LayoutDetection_Description" xml:space="preserve">
-    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
-  </data>
-  <data name="LayoutDetection_Auto" xml:space="preserve">
-    <value>Auto (Recommended)</value>
-  </data>
-  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
-    <value>Local ONNX Model</value>
-  </data>
-  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
-    <value>Vision LLM</value>
-  </data>
-  <data name="LayoutDetection_Heuristic" xml:space="preserve">
-    <value>Heuristic Only</value>
-  </data>
-  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
-    <value>Download Model (~75MB)</value>
-  </data>
-  <data name="LayoutDetection_Downloaded" xml:space="preserve">
-    <value>ONNX Model: Ready</value>
-  </data>
-  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
-    <value>ONNX Model: Not Downloaded</value>
-  </data>
-  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
-    <value>Download Failed</value>
-  </data>
-  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
-    <value>Detection Mode</value>
-  </data>
-  <data name="LayoutDetection_VisionService" xml:space="preserve">
-    <value>Vision Service</value>
-  </data>
-  <data name="MdxDictionaryReady" xml:space="preserve">
-    <value>This dictionary is ready to use. No configuration needed.</value>
-  </data>
-  <data name="MdxDeleteDictionary" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxRedetectEncryption" xml:space="preserve">
-    <value>Re-detect Encryption</value>
-  </data>
-  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
-    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
-  </data>
-  <data name="MdxFilePath" xml:space="preserve">
-    <value>File Path</value>
-  </data>
-  <data name="MdxRegistrationCode" xml:space="preserve">
-    <value>Registration Code</value>
-  </data>
-  <data name="MdxEncryptedHelpText" xml:space="preserve">
-    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
-  </data>
-  <data name="MdxEmailPlaceholder" xml:space="preserve">
-    <value>Email address used for registration</value>
-  </data>
-  <data name="MddFilesDetected" xml:space="preserve">
-    <value>Imported '{0}' with {1} companion resource file(s).</value>
-  </data>
-  <data name="MddNoFilesDetected" xml:space="preserve">
-    <value>Imported '{0}'. No companion MDD resource files found.</value>
-  </data>
-  <data name="MddAddFile" xml:space="preserve">
-    <value>Add MDD File...</value>
-  </data>
-  <data name="MddRescanFiles" xml:space="preserve">
-    <value>Re-scan MDD Files</value>
-  </data>
-  <data name="MddAssociatedFiles" xml:space="preserve">
-    <value>Resource Files</value>
-  </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
   <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
@@ -1289,39 +1378,6 @@
   </data>
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Pintasan tidak valid. Contoh: Ctrl+Alt+T</value>
-  </data>
-  <data name="OcrButtonTooltip" xml:space="preserve">
-    <value>Terjemahan OCR</value>
-  </data>
-  <data name="ResultFontSize" xml:space="preserve">
-    <value>Ukuran font hasil</value>
-  </data>
-  <data name="ResultFontSizeDescription" xml:space="preserve">
-    <value>Sesuaikan ukuran font hasil terjemahan.</value>
-  </data>
-  <data name="CompactMode" xml:space="preserve">
-    <value>Mode ringkas</value>
-  </data>
-  <data name="CompactModeDescription" xml:space="preserve">
-    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
-  </data>
-  <data name="QuickActionsHeader" xml:space="preserve">
-    <value>Tombol aksi cepat</value>
-  </data>
-  <data name="ShowOcrButton" xml:space="preserve">
-    <value>Tampilkan tombol OCR</value>
-  </data>
-  <data name="ShowPinButton" xml:space="preserve">
-    <value>Tampilkan tombol sematkan</value>
-  </data>
-  <data name="ShowSourcePlayButton" xml:space="preserve">
-    <value>Tampilkan tombol putar</value>
-  </data>
-  <data name="PlaySourceTextTooltip" xml:space="preserve">
-    <value>Putar teks sumber</value>
-  </data>
-  <data name="ShowSwapButton" xml:space="preserve">
-    <value>Tampilkan tombol tukar</value>
   </data>
   <data name="ClaudeCode_EnableToggle" xml:space="preserve">
     <value>Aktifkan Claude Code</value>
@@ -1414,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>Segarkan</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>Belum ada kueri yang selesai.</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>Riwayat dinonaktifkan</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>Untuk menyimpan kueri berikutnya, buka {0} → {1} → {2} dan aktifkan “{3}”. Catatan yang sudah ada tetap disimpan.</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>Belum ada favorit.</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>Pilih kueri tersimpan</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>Hapus dari riwayat</value></data>

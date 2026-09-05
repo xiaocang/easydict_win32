@@ -39,9 +39,13 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+
+  <!-- App Name -->
   <data name="AppName" xml:space="preserve">
     <value>Easydict</value>
   </data>
+
+  <!-- Main Page -->
   <data name="SourceText" xml:space="preserve">
     <value>&#xE02;&#xE49;&#xE2D;&#xE04;&#xE27;&#xE32;&#xE21;&#xE15;&#xE49;&#xE19;&#xE09;&#xE1A;&#xE31;&#xE1A;</value>
   </data>
@@ -69,6 +73,8 @@
   <data name="TargetLanguageTooltip" xml:space="preserve">
     <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE1B;&#xE25;&#xE32;&#xE22;&#xE17;&#xE32;&#xE07;</value>
   </data>
+
+  <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
     <value>&#xE40;&#xE0A;&#xE37;&#xE48;&#xE2D;&#xE21;&#xE15;&#xE48;&#xE2D;&#xE41;&#xE25;&#xE49;&#xE27;</value>
   </data>
@@ -116,6 +122,8 @@
   <data name="ServiceResult_Retry" xml:space="preserve">
     <value>ลองอีกครั้ง</value>
   </data>
+
+  <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE08;&#xE31;&#xE1A;&#xE2D;&#xE31;&#xE15;&#xE42;&#xE19;&#xE21;&#xE31;&#xE15;&#xE34;</value>
   </data>
@@ -146,6 +154,119 @@
   <data name="LangSpanish" xml:space="preserve">
     <value>&#xE2A;&#xE40;&#xE1B;&#xE19;</value>
   </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>Classical Chinese</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>Dutch</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>Swedish</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>Norwegian</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>Danish</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>Portuguese</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>Italian</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>Romanian</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>Russian</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>Polish</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>Czech</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>Ukrainian</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>Bulgarian</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>Slovak</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>Slovenian</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>Estonian</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>Latvian</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>Lithuanian</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>Greek</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>Hungarian</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>Finnish</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>Turkish</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>Arabic</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>Persian</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>Hebrew</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>Hindi</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>Bengali</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>Tamil</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>Telugu</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>Urdu</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>Vietnamese</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>Thai</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>Indonesian</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>Malay</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>Filipino</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>Available Languages</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>Select languages available in source/target pickers. At least 2 required.</value>
+  </data>
+
+  <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
   </data>
@@ -173,6 +294,8 @@
   <data name="Manual" xml:space="preserve">
     <value>&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
   </data>
+
+  <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;&#xE20;&#xE32;&#xE29;&#xE32;</value>
   </data>
@@ -188,6 +311,8 @@
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
     <value>&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE20;&#xE32;&#xE29;&#xE32;&#xE1B;&#xE25;&#xE32;&#xE22;&#xE17;&#xE32;&#xE07;&#xE2D;&#xE31;&#xE15;&#xE42;&#xE19;&#xE21;&#xE31;&#xE15;&#xE34;&#xE15;&#xE32;&#xE21;&#xE20;&#xE32;&#xE29;&#xE32;&#xE15;&#xE49;&#xE19;&#xE17;&#xE32;&#xE07;&#xE17;&#xE35;&#xE48;&#xE15;&#xE23;&#xE27;&#xE08;&#xE1E;&#xE1A;</value>
   </data>
+
+  <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;</value>
   </data>
@@ -224,6 +349,8 @@
   <data name="Refresh" xml:space="preserve">
     <value>&#xE23;&#xE35;&#xE40;&#xE1F;&#xE23;&#xE0A;</value>
   </data>
+
+  <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
     <value>&#xE40;&#xE27;&#xE49;&#xE19; API key &#xE27;&#xE48;&#xE32;&#xE07;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE0A;&#xE49;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE40;&#xE27;&#xE47;&#xE1A;&#xE1F;&#xE23;&#xE35; API key Pro &#xE21;&#xE35;&#xE02;&#xE35;&#xE14;&#xE08;&#xE33;&#xE01;&#xE31;&#xE14;&#xE17;&#xE35;&#xE48;&#xE2A;&#xE39;&#xE07;&#xE01;&#xE27;&#xE48;&#xE32;</value>
   </data>
@@ -299,6 +426,8 @@
   <data name="FreeServicesDescription" xml:space="preserve">
     <value>Google Translate &#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE44;&#xE14;&#xE49;&#xE17;&#xE31;&#xE19;&#xE17;&#xE35;&#xE42;&#xE14;&#xE22;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key</value>
   </data>
+
+  <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
     <value>HTTP Proxy</value>
   </data>
@@ -314,6 +443,8 @@
   <data name="ProxyDescription" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19; proxy &#xE08;&#xE30;&#xE21;&#xE35;&#xE1C;&#xE25;&#xE2B;&#xE25;&#xE31;&#xE07;&#xE08;&#xE32;&#xE01;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;&#xE41;&#xE2D;&#xE1B; &#xE01;&#xE32;&#xE23;&#xE02;&#xE49;&#xE32;&#xE21; localhost &#xE0A;&#xE48;&#xE27;&#xE22;&#xE43;&#xE2B;&#xE49; Ollama &#xE17;&#xE33;&#xE07;&#xE32;&#xE19;&#xE44;&#xE14;&#xE49;&#xE42;&#xE14;&#xE22;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; proxy</value>
   </data>
+
+  <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
     <value>&#xE1E;&#xE24;&#xE15;&#xE34;&#xE01;&#xE23;&#xE23;&#xE21;</value>
   </data>
@@ -329,6 +460,8 @@
   <data name="LaunchAtStartup" xml:space="preserve">
     <value>&#xE40;&#xE1B;&#xE34;&#xE14;&#xE40;&#xE21;&#xE37;&#xE48;&#xE2D;&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19; Windows</value>
   </data>
+
+  <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
     <value>&#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14;</value>
   </data>
@@ -353,6 +486,8 @@
   <data name="HotkeysDescription" xml:space="preserve">
     <value>&#xE2B;&#xE21;&#xE32;&#xE22;&#xE40;&#xE2B;&#xE15;&#xE38;: &#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;&#xE41;&#xE2D;&#xE1B;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE0A;&#xE49;&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE41;&#xE1B;&#xE25;&#xE07;&#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14; &#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14;&#xE2A;&#xE25;&#xE31;&#xE1A;&#xE43;&#xE0A;&#xE49;&#xE1B;&#xE38;&#xE48;&#xE21;&#xE40;&#xE14;&#xE35;&#xE22;&#xE27;&#xE01;&#xE31;&#xE19;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21; Shift (&#xE40;&#xE0A;&#xE48;&#xE19; Ctrl+Alt+Shift+M)</value>
   </data>
+
+  <!-- About -->
   <data name="About" xml:space="preserve">
     <value>&#xE40;&#xE01;&#xE35;&#xE48;&#xE22;&#xE27;&#xE01;&#xE31;&#xE1A;</value>
   </data>
@@ -377,6 +512,8 @@
   <data name="License" xml:space="preserve">
     <value>&#xE2A;&#xE31;&#xE0D;&#xE0D;&#xE32;&#xE2D;&#xE19;&#xE38;&#xE0D;&#xE32;&#xE15;: GPL-3.0</value>
   </data>
+
+  <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
     <value>&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
   </data>
@@ -395,6 +532,8 @@
   <data name="CopyAll" xml:space="preserve">
     <value>&#xE04;&#xE31;&#xE14;&#xE25;&#xE2D;&#xE01;&#xE17;&#xE31;&#xE49;&#xE07;&#xE2B;&#xE21;&#xE14;</value>
   </data>
+
+  <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE25;&#xE49;&#xE21;&#xE40;&#xE2B;&#xE25;&#xE27;</value>
   </data>
@@ -443,6 +582,8 @@
   <data name="OK" xml:space="preserve">
     <value>&#xE15;&#xE01;&#xE25;&#xE07;</value>
   </data>
+
+  <!-- Service Names -->
   <data name="ServiceGoogle" xml:space="preserve">
     <value>Google Translate</value>
   </data>
@@ -485,8 +626,16 @@
   <data name="ServiceLinguee" xml:space="preserve">
     <value>&#xE1E;&#xE08;&#xE19;&#xE32;&#xE19;&#xE38;&#xE01;&#xE23;&#xE21; Linguee</value>
   </data>
+
+  <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
     <value>&#xE41;&#xE2A;&#xE14;&#xE07;</value>
+  </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE02;&#xE19;&#xE32;&#xE14;&#xE40;&#xE25;&#xE47;&#xE01;</value>
@@ -533,6 +682,19 @@
   <data name="TrayExit" xml:space="preserve">
     <value>&#xE2D;&#xE2D;&#xE01;</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>&#3621;&#3634;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3648;&#3621;&#3639;&#3629;&#3585;&#3614;&#3639;&#3657;&#3609;&#3607;&#3637;&#3656;  |  &#3604;&#3633;&#3610;&#3648;&#3610;&#3636;&#3621;&#3588;&#3621;&#3636;&#3585;&#3648;&#3621;&#3639;&#3629;&#3585;&#3627;&#3609;&#3657;&#3634;&#3605;&#3656;&#3634;&#3591;  |  &#3648;&#3621;&#3639;&#3656;&#3629;&#3609;&#3648;&#3614;&#3639;&#3656;&#3629;&#3626;&#3621;&#3633;&#3610;  |  Esc &#3648;&#3614;&#3639;&#3656;&#3629;&#3629;&#3629;&#3585;</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>&#3588;&#3621;&#3636;&#3585;&#3586;&#3623;&#3634;&#3627;&#3619;&#3639;&#3629; Esc &#3648;&#3614;&#3639;&#3656;&#3629;&#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</value>
+  </data>
+
+  <!-- Window Titles -->
   <data name="QuickTranslate" xml:space="preserve">
     <value>&#xE41;&#xE1B;&#xE25;&#xE14;&#xE48;&#xE27;&#xE19;</value>
   </data>
@@ -542,6 +704,41 @@
   <data name="PinWindowTooltip" xml:space="preserve">
     <value>&#xE1B;&#xE31;&#xE01;&#xE2B;&#xE21;&#xE38;&#xE14;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07; (&#xE41;&#xE2A;&#xE14;&#xE07;&#xE14;&#xE49;&#xE32;&#xE19;&#xE1A;&#xE19;&#xE40;&#xE2A;&#xE21;&#xE2D;)</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>การแปล OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>ขนาดฟอนต์ผลลัพธ์</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>ปรับขนาดฟอนต์ของผลการแปล</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>โหมดกะทัดรัด</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>ปุ่มการทำงานด่วน</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>แสดงปุ่ม OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>แสดงปุ่มปักหมุด</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>แสดงปุ่มเล่น</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>เล่นข้อความต้นฉบับ</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>แสดงปุ่มสลับ</value>
+  </data>
+
+  <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
     <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE02;&#xE2D;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE08;&#xE2D;</value>
   </data>
@@ -554,12 +751,16 @@
   <data name="UILangChineseSimplified" xml:space="preserve">
     <value>&#xE08;&#xE35;&#xE19; (&#xE15;&#xE31;&#xE27;&#xE22;&#xE48;&#xE2D;)</value>
   </data>
+
+  <!-- x:Uid entries for Settings Page XAML -->
   <data name="Close" xml:space="preserve">
     <value>&#xE1B;&#xE34;&#xE14;</value>
   </data>
   <data name="HideWindow" xml:space="preserve">
     <value>&#xE0B;&#xE48;&#xE2D;&#xE19; (Ctrl+Alt+F &#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2D;&#xE35;&#xE01;&#xE04;&#xE23;&#xE31;&#xE49;&#xE07;)</value>
   </data>
+
+  <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
     <value>&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE2A;&#xE32;&#xE01;&#xE25;</value>
   </data>
@@ -569,6 +770,8 @@
   <data name="InternationalServiceUnavailableHint" xml:space="preserve">
     <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE19;&#xE35;&#xE49;&#xE2D;&#xE32;&#xE08;&#xE44;&#xE21;&#xE48;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE43;&#xE19;&#xE20;&#xE39;&#xE21;&#xE34;&#xE20;&#xE32;&#xE04;&#xE02;&#xE2D;&#xE07;&#xE04;&#xE38;&#xE13; &#xE25;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; Bing Translate &#xE2B;&#xE23;&#xE37;&#xE2D;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE02;&#xE49;&#xE32;&#xE01;&#xE31;&#xE19;&#xE44;&#xE14;&#xE49;&#xE01;&#xE31;&#xE1A;&#xE20;&#xE39;&#xE21;&#xE34;&#xE20;&#xE32;&#xE04;&#xE2D;&#xE37;&#xE48;&#xE19; &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE43;&#xE19;&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
   </data>
+
+  <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>&#xE18;&#xE35;&#xE21;&#xE41;&#xE2D;&#xE1B;</value>
   </data>
@@ -584,6 +787,11 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>&#xE21;&#xE37;&#xE14;</value>
   </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
+
+  <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE41;&#xE1B;&#xE25;&#xE07;&#xE17;&#xE35;&#xE48;&#xE22;&#xE31;&#xE07;&#xE44;&#xE21;&#xE48;&#xE44;&#xE14;&#xE49;&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;</value>
   </data>
@@ -596,6 +804,25 @@
   <data name="Cancel" xml:space="preserve">
     <value>&#xE22;&#xE01;&#xE40;&#xE25;&#xE34;&#xE01;</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>&#3648;&#3614;&#3636;&#3656;&#3617;/&#3621;&#3610;&#3616;&#3634;&#3625;&#3634;: &#3605;&#3633;&#3657;&#3591;&#3588;&#3656;&#3634; &#x2192; &#3616;&#3634;&#3625;&#3634;&#3607;&#3637;&#3656;&#3651;&#3594;&#3657;&#3652;&#3604;&#3657;</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter &#3648;&#3614;&#3639;&#3656;&#3629;&#3649;&#3611;&#3621;, Shift+Enter &#3586;&#3638;&#3657;&#3609;&#3610;&#3619;&#3619;&#3607;&#3633;&#3604;&#3651;&#3627;&#3617;&#3656;</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>&#3605;&#3657;&#3629;&#3591;&#3619;&#3637;&#3626;&#3605;&#3634;&#3619;&#3660;&#3607;&#3627;&#3621;&#3633;&#3591;&#3649;&#3585;&#3657;&#3652;&#3586;</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>&#3629;&#3633;&#3605;&#3650;&#3609;&#3617;&#3633;&#3605;&#3636; = &#3626;&#3629;&#3610;&#3606;&#3634;&#3617;&#3629;&#3633;&#3605;&#3650;&#3609;&#3617;&#3633;&#3605;&#3636;, &#3604;&#3657;&#3623;&#3618;&#3605;&#3609;&#3648;&#3629;&#3591; = &#3588;&#3621;&#3636;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3626;&#3629;&#3610;&#3606;&#3634;&#3617;</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>&#3648;&#3611;&#3636;&#3604;&#3651;&#3594;&#3657;&#3610;&#3619;&#3636;&#3585;&#3634;&#3619;&#3651;&#3609; '&#3610;&#3619;&#3636;&#3585;&#3634;&#3619;&#3607;&#3637;&#3656;&#3648;&#3611;&#3636;&#3604;&#3651;&#3594;&#3657;' &#3604;&#3657;&#3634;&#3609;&#3610;&#3609;&#3585;&#3656;&#3629;&#3609;</value>
+  </data>
+
+  <!-- Service Test Button -->
   <data name="Test" xml:space="preserve">
     <value>&#xE17;&#xE14;&#xE2A;&#xE2D;&#xE1A;</value>
   </data>
@@ -618,23 +845,6 @@
     <value>&#xE01;&#xE23;&#xE38;&#xE13;&#xE32;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE01;&#xE48;&#xE2D;&#xE19; (API key, endpoint &#xE2F;&#xE25;&#xE2F;)</value>
   </data>
 
-  <!-- Help Tooltips -->
-  <data name="LanguagePickerHelpTip" xml:space="preserve">
-    <value>&#3648;&#3614;&#3636;&#3656;&#3617;/&#3621;&#3610;&#3616;&#3634;&#3625;&#3634;: &#3605;&#3633;&#3657;&#3591;&#3588;&#3656;&#3634; &#x2192; &#3616;&#3634;&#3625;&#3634;&#3607;&#3637;&#3656;&#3651;&#3594;&#3657;&#3652;&#3604;&#3657;</value>
-  </data>
-  <data name="InputHelpTip" xml:space="preserve">
-    <value>Enter &#3648;&#3614;&#3639;&#3656;&#3629;&#3649;&#3611;&#3621;, Shift+Enter &#3586;&#3638;&#3657;&#3609;&#3610;&#3619;&#3619;&#3607;&#3633;&#3604;&#3651;&#3627;&#3617;&#3656;</value>
-  </data>
-  <data name="HotkeysHelpTip" xml:space="preserve">
-    <value>&#3605;&#3657;&#3629;&#3591;&#3619;&#3637;&#3626;&#3605;&#3634;&#3619;&#3660;&#3607;&#3627;&#3621;&#3633;&#3591;&#3649;&#3585;&#3657;&#3652;&#3586;</value>
-  </data>
-  <data name="EnabledServicesHelpTip" xml:space="preserve">
-    <value>&#3629;&#3633;&#3605;&#3650;&#3609;&#3617;&#3633;&#3605;&#3636; = &#3626;&#3629;&#3610;&#3606;&#3634;&#3617;&#3629;&#3633;&#3605;&#3650;&#3609;&#3617;&#3633;&#3605;&#3636;, &#3604;&#3657;&#3623;&#3618;&#3605;&#3609;&#3648;&#3629;&#3591; = &#3588;&#3621;&#3636;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3626;&#3629;&#3610;&#3606;&#3634;&#3617;</value>
-  </data>
-  <data name="ServiceConfigHelpTip" xml:space="preserve">
-    <value>&#3648;&#3611;&#3636;&#3604;&#3651;&#3594;&#3657;&#3610;&#3619;&#3636;&#3585;&#3634;&#3619;&#3651;&#3609; '&#3610;&#3619;&#3636;&#3585;&#3634;&#3619;&#3607;&#3637;&#3656;&#3648;&#3611;&#3636;&#3604;&#3651;&#3594;&#3657;' &#3604;&#3657;&#3634;&#3609;&#3610;&#3609;&#3585;&#3656;&#3629;&#3609;</value>
-  </data>
-
   <!-- Toggle Switch On/Off -->
   <data name="ToggleOn" xml:space="preserve">
     <value>&#3648;&#3611;&#3636;&#3604;</value>
@@ -649,14 +859,6 @@
   </data>
   <data name="WebFree" xml:space="preserve">
     <value>&#3648;&#3623;&#3655;&#3610; (&#3615;&#3619;&#3637;)</value>
-  </data>
-
-  <!-- Screen Capture -->
-  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>&#3621;&#3634;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3648;&#3621;&#3639;&#3629;&#3585;&#3614;&#3639;&#3657;&#3609;&#3607;&#3637;&#3656;  |  &#3604;&#3633;&#3610;&#3648;&#3610;&#3636;&#3621;&#3588;&#3621;&#3636;&#3585;&#3648;&#3621;&#3639;&#3629;&#3585;&#3627;&#3609;&#3657;&#3634;&#3605;&#3656;&#3634;&#3591;  |  &#3648;&#3621;&#3639;&#3656;&#3629;&#3609;&#3648;&#3614;&#3639;&#3656;&#3629;&#3626;&#3621;&#3633;&#3610;  |  Esc &#3648;&#3614;&#3639;&#3656;&#3629;&#3629;&#3629;&#3585;</value>
-  </data>
-  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
-    <value>&#3588;&#3621;&#3636;&#3585;&#3586;&#3623;&#3634;&#3627;&#3619;&#3639;&#3629; Esc &#3648;&#3614;&#3639;&#3656;&#3629;&#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</value>
   </data>
 
   <!-- Grammar Correction Mode -->
@@ -701,6 +903,44 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
   </data>
   <data name="DocumentOutputMode_Title" xml:space="preserve">
     <value>โหมดเอาต์พุตเอกสาร</value>
@@ -839,6 +1079,48 @@
   </data>
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>ข้าม</value>
+  </data>
+  <data name="MdxDictionaryReady" xml:space="preserve">
+    <value>This dictionary is ready to use. No configuration needed.</value>
+  </data>
+  <data name="MdxDeleteDictionary" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxRedetectEncryption" xml:space="preserve">
+    <value>Re-detect Encryption</value>
+  </data>
+  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+  </data>
+  <data name="MdxFilePath" xml:space="preserve">
+    <value>File Path</value>
+  </data>
+  <data name="MdxRegistrationCode" xml:space="preserve">
+    <value>Registration Code</value>
+  </data>
+  <data name="MdxEncryptedHelpText" xml:space="preserve">
+    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+  </data>
+  <data name="MdxEmailPlaceholder" xml:space="preserve">
+    <value>Email address used for registration</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>Imported '{0}' with {1} companion resource file(s).</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>Imported '{0}'. No companion MDD resource files found.</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>Add MDD File...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>Re-scan MDD Files</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>Resource Files</value>
   </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>จัดลำดับ</value>
@@ -1074,207 +1356,6 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>โมเดล NLLB-200 ยังไม่ได้ดาวน์โหลด (~360 MB) คลิก "ดาวน์โหลดโมเดล" เพื่อดึงไปยัง %LOCALAPPDATA%\Easydict\models</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>กำลังดาวน์โหลดไฟล์โมเดล NLLB-200…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>ดาวน์โหลดล้มเหลว ตรวจสอบการเชื่อมต่อเครือข่ายและลองอีกครั้ง</value></data>
-  <data name="LangClassicalChinese" xml:space="preserve">
-    <value>Classical Chinese</value>
-  </data>
-  <data name="LangDutch" xml:space="preserve">
-    <value>Dutch</value>
-  </data>
-  <data name="LangSwedish" xml:space="preserve">
-    <value>Swedish</value>
-  </data>
-  <data name="LangNorwegian" xml:space="preserve">
-    <value>Norwegian</value>
-  </data>
-  <data name="LangDanish" xml:space="preserve">
-    <value>Danish</value>
-  </data>
-  <data name="LangPortuguese" xml:space="preserve">
-    <value>Portuguese</value>
-  </data>
-  <data name="LangItalian" xml:space="preserve">
-    <value>Italian</value>
-  </data>
-  <data name="LangRomanian" xml:space="preserve">
-    <value>Romanian</value>
-  </data>
-  <data name="LangRussian" xml:space="preserve">
-    <value>Russian</value>
-  </data>
-  <data name="LangPolish" xml:space="preserve">
-    <value>Polish</value>
-  </data>
-  <data name="LangCzech" xml:space="preserve">
-    <value>Czech</value>
-  </data>
-  <data name="LangUkrainian" xml:space="preserve">
-    <value>Ukrainian</value>
-  </data>
-  <data name="LangBulgarian" xml:space="preserve">
-    <value>Bulgarian</value>
-  </data>
-  <data name="LangSlovak" xml:space="preserve">
-    <value>Slovak</value>
-  </data>
-  <data name="LangSlovenian" xml:space="preserve">
-    <value>Slovenian</value>
-  </data>
-  <data name="LangEstonian" xml:space="preserve">
-    <value>Estonian</value>
-  </data>
-  <data name="LangLatvian" xml:space="preserve">
-    <value>Latvian</value>
-  </data>
-  <data name="LangLithuanian" xml:space="preserve">
-    <value>Lithuanian</value>
-  </data>
-  <data name="LangGreek" xml:space="preserve">
-    <value>Greek</value>
-  </data>
-  <data name="LangHungarian" xml:space="preserve">
-    <value>Hungarian</value>
-  </data>
-  <data name="LangFinnish" xml:space="preserve">
-    <value>Finnish</value>
-  </data>
-  <data name="LangTurkish" xml:space="preserve">
-    <value>Turkish</value>
-  </data>
-  <data name="LangArabic" xml:space="preserve">
-    <value>Arabic</value>
-  </data>
-  <data name="LangPersian" xml:space="preserve">
-    <value>Persian</value>
-  </data>
-  <data name="LangHebrew" xml:space="preserve">
-    <value>Hebrew</value>
-  </data>
-  <data name="LangHindi" xml:space="preserve">
-    <value>Hindi</value>
-  </data>
-  <data name="LangBengali" xml:space="preserve">
-    <value>Bengali</value>
-  </data>
-  <data name="LangTamil" xml:space="preserve">
-    <value>Tamil</value>
-  </data>
-  <data name="LangTelugu" xml:space="preserve">
-    <value>Telugu</value>
-  </data>
-  <data name="LangUrdu" xml:space="preserve">
-    <value>Urdu</value>
-  </data>
-  <data name="LangVietnamese" xml:space="preserve">
-    <value>Vietnamese</value>
-  </data>
-  <data name="LangThai" xml:space="preserve">
-    <value>Thai</value>
-  </data>
-  <data name="LangIndonesian" xml:space="preserve">
-    <value>Indonesian</value>
-  </data>
-  <data name="LangMalay" xml:space="preserve">
-    <value>Malay</value>
-  </data>
-  <data name="LangFilipino" xml:space="preserve">
-    <value>Filipino</value>
-  </data>
-  <data name="AvailableLanguages" xml:space="preserve">
-    <value>Available Languages</value>
-  </data>
-  <data name="AvailableLanguagesDesc" xml:space="preserve">
-    <value>Select languages available in source/target pickers. At least 2 required.</value>
-  </data>
-  <data name="TrayTranslateClipboard" xml:space="preserve">
-    <value>Translate Clipboard</value>
-  </data>
-  <data name="TrayOcrTranslate" xml:space="preserve">
-    <value>OCR Translate</value>
-  </data>
-  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
-    <value>Exit screenshot?</value>
-  </data>
-  <data name="ThemeMinimal" xml:space="preserve">
-    <value>Minimal</value>
-  </data>
-  <data name="LayoutDetection_Title" xml:space="preserve">
-    <value>Layout Detection</value>
-  </data>
-  <data name="LayoutDetection_Description" xml:space="preserve">
-    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
-  </data>
-  <data name="LayoutDetection_Auto" xml:space="preserve">
-    <value>Auto (Recommended)</value>
-  </data>
-  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
-    <value>Local ONNX Model</value>
-  </data>
-  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
-    <value>Vision LLM</value>
-  </data>
-  <data name="LayoutDetection_Heuristic" xml:space="preserve">
-    <value>Heuristic Only</value>
-  </data>
-  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
-    <value>Download Model (~75MB)</value>
-  </data>
-  <data name="LayoutDetection_Downloaded" xml:space="preserve">
-    <value>ONNX Model: Ready</value>
-  </data>
-  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
-    <value>ONNX Model: Not Downloaded</value>
-  </data>
-  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
-    <value>Download Failed</value>
-  </data>
-  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
-    <value>Detection Mode</value>
-  </data>
-  <data name="LayoutDetection_VisionService" xml:space="preserve">
-    <value>Vision Service</value>
-  </data>
-  <data name="MdxDictionaryReady" xml:space="preserve">
-    <value>This dictionary is ready to use. No configuration needed.</value>
-  </data>
-  <data name="MdxDeleteDictionary" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxRedetectEncryption" xml:space="preserve">
-    <value>Re-detect Encryption</value>
-  </data>
-  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
-    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
-  </data>
-  <data name="MdxFilePath" xml:space="preserve">
-    <value>File Path</value>
-  </data>
-  <data name="MdxRegistrationCode" xml:space="preserve">
-    <value>Registration Code</value>
-  </data>
-  <data name="MdxEncryptedHelpText" xml:space="preserve">
-    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
-  </data>
-  <data name="MdxEmailPlaceholder" xml:space="preserve">
-    <value>Email address used for registration</value>
-  </data>
-  <data name="MddFilesDetected" xml:space="preserve">
-    <value>Imported '{0}' with {1} companion resource file(s).</value>
-  </data>
-  <data name="MddNoFilesDetected" xml:space="preserve">
-    <value>Imported '{0}'. No companion MDD resource files found.</value>
-  </data>
-  <data name="MddAddFile" xml:space="preserve">
-    <value>Add MDD File...</value>
-  </data>
-  <data name="MddRescanFiles" xml:space="preserve">
-    <value>Re-scan MDD Files</value>
-  </data>
-  <data name="MddAssociatedFiles" xml:space="preserve">
-    <value>Resource Files</value>
-  </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
   <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
@@ -1297,39 +1378,6 @@
   </data>
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>ปุ่มลัดไม่ถูกต้อง ตัวอย่าง: Ctrl+Alt+T</value>
-  </data>
-  <data name="OcrButtonTooltip" xml:space="preserve">
-    <value>การแปล OCR</value>
-  </data>
-  <data name="ResultFontSize" xml:space="preserve">
-    <value>ขนาดฟอนต์ผลลัพธ์</value>
-  </data>
-  <data name="ResultFontSizeDescription" xml:space="preserve">
-    <value>ปรับขนาดฟอนต์ของผลการแปล</value>
-  </data>
-  <data name="CompactMode" xml:space="preserve">
-    <value>โหมดกะทัดรัด</value>
-  </data>
-  <data name="CompactModeDescription" xml:space="preserve">
-    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
-  </data>
-  <data name="QuickActionsHeader" xml:space="preserve">
-    <value>ปุ่มการทำงานด่วน</value>
-  </data>
-  <data name="ShowOcrButton" xml:space="preserve">
-    <value>แสดงปุ่ม OCR</value>
-  </data>
-  <data name="ShowPinButton" xml:space="preserve">
-    <value>แสดงปุ่มปักหมุด</value>
-  </data>
-  <data name="ShowSourcePlayButton" xml:space="preserve">
-    <value>แสดงปุ่มเล่น</value>
-  </data>
-  <data name="PlaySourceTextTooltip" xml:space="preserve">
-    <value>เล่นข้อความต้นฉบับ</value>
-  </data>
-  <data name="ShowSwapButton" xml:space="preserve">
-    <value>แสดงปุ่มสลับ</value>
   </data>
   <data name="ClaudeCode_EnableToggle" xml:space="preserve">
     <value>เปิดใช้งาน Claude Code</value>
@@ -1422,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>รีเฟรช</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>ยังไม่มีการค้นหาที่เสร็จสมบูรณ์</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>ปิดการบันทึกประวัติอยู่</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>หากต้องการบันทึกการค้นหาครั้งต่อไป ให้ไปที่ {0} → {1} → {2} แล้วเปิด “{3}” โดยประวัติเดิมจะยังคงอยู่</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>ยังไม่มีรายการโปรด</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>เลือกการค้นหาที่บันทึกไว้</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>ลบจากประวัติ</value></data>

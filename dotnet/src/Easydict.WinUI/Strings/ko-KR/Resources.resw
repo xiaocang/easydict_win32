@@ -81,6 +81,9 @@
   <data name="StatusDisconnected" xml:space="preserve">
     <value>연결 끊김</value>
   </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>초기화 중...</value>
+  </data>
   <data name="StatusReady" xml:space="preserve">
     <value>준비됨</value>
   </data>
@@ -405,6 +408,18 @@
   <data name="NiuTransDescription" xml:space="preserve">
     <value>NiuTrans는 450개 이상의 언어 쌍을 지원합니다. niutrans.com에서 API 키를 받으세요</value>
   </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>공식 API 사용</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>유다오는 영어 단어의 발음 기호를 제공합니다. API 키 미설정 시 무료 웹 사전을 사용합니다. API 키를 설정하면 공식 API를 사용하여 더 높은 사용량을 제공합니다. API 키는 ai.youdao.com에서 받으세요</value>
+  </data>
   <data name="FreeServicesTitle" xml:space="preserve">
     <value>무료 서비스 (구성 불필요)</value>
   </data>
@@ -525,14 +540,29 @@
   <data name="ServiceNotInitialized" xml:space="preserve">
     <value>서비스가 초기화되지 않았습니다</value>
   </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>활성화된 서비스가 없습니다. 설정에서 서비스를 활성화하세요.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0}개 서비스 완료</value>
+  </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
     <value>잘못된 언어 선택</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>제1언어와 제2언어는 같을 수 없습니다.</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
     <value>잘못된 프록시 URL</value>
   </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>프록시 URL이 유효하지 않습니다. 올바른 URL을 입력하세요 (예: http://127.0.0.1:7890).</value>
+  </data>
   <data name="SettingsSaved" xml:space="preserve">
     <value>설정이 저장되었습니다</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>설정이 성공적으로 저장되었습니다.</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
     <value>재시작 필요</value>
@@ -540,11 +570,17 @@
   <data name="CannotConnectToOllama" xml:space="preserve">
     <value>Ollama에 연결할 수 없습니다</value>
   </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Ollama에서 모델을 가져올 수 없습니다. Ollama가 실행 중이고 접근 가능한지 확인하세요.</value>
+  </data>
   <data name="Copied" xml:space="preserve">
     <value>복사됨!</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
     <value>감지됨: {0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>확인</value>
   </data>
 
   <!-- Service Names -->
@@ -595,6 +631,12 @@
   <data name="TrayShow" xml:space="preserve">
     <value>표시</value>
   </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>미니 창</value>
   </data>
@@ -641,6 +683,61 @@
     <value>종료</value>
   </data>
 
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>드래그하여 영역 선택  |  더블클릭으로 창 선택  |  스크롤로 전환  |  Esc로 종료</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>우클릭 또는 Esc로 취소</value>
+  </data>
+
+  <!-- Window Titles -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>빠른 번역</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>고정 번역</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>창 고정 (항상 위에 표시)</value>
+  </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR 번역</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>결과 글꼴 크기</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>번역 결과의 글꼴 크기를 조정합니다.</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>간결 모드</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>빠른 작업 버튼</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>OCR 버튼 표시</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>고정 버튼 표시</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>재생 버튼 표시</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>원문 재생</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>교체 버튼 표시</value>
+  </data>
+
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
     <value>UI 언어</value>
@@ -656,6 +753,13 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
+  <data name="Close" xml:space="preserve">
+    <value>닫기</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>숨기기 (Ctrl+Alt+F로 다시 표시)</value>
+  </data>
+
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
     <value>국제 서비스 활성화</value>
@@ -683,6 +787,9 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>다크</value>
   </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
 
   <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
@@ -696,88 +803,6 @@
   </data>
   <data name="Cancel" xml:space="preserve">
     <value>취소</value>
-  </data>
-
-  <!-- Service Testing UI -->
-  <data name="Test" xml:space="preserve">
-    <value>테스트</value>
-  </data>
-  <data name="Testing" xml:space="preserve">
-    <value>테스트 중...</value>
-  </data>
-  <data name="TestNotConfigured" xml:space="preserve">
-    <value>먼저 서비스를 구성해 주세요 (API 키, 엔드포인트 등).</value>
-  </data>
-  <data name="TestSuccessTitle" xml:space="preserve">
-    <value>테스트 성공</value>
-  </data>
-  <data name="TestSuccessMessage" xml:space="preserve">
-    <value>구성이 유효합니다. 번역이 {0}ms 만에 완료되었습니다.</value>
-  </data>
-  <data name="TestFailedTitle" xml:space="preserve">
-    <value>테스트 실패</value>
-  </data>
-  <data name="TestFailedMessage" xml:space="preserve">
-    <value>구성 테스트 실패: {0}</value>
-  </data>
-
-  <!-- Youdao Service -->
-  <data name="AppKey" xml:space="preserve">
-    <value>App Key</value>
-  </data>
-  <data name="AppSecret" xml:space="preserve">
-    <value>App Secret</value>
-  </data>
-  <data name="UseOfficialApi" xml:space="preserve">
-    <value>공식 API 사용</value>
-  </data>
-  <data name="YoudaoDescription" xml:space="preserve">
-    <value>유다오는 영어 단어의 발음 기호를 제공합니다. API 키 미설정 시 무료 웹 사전을 사용합니다. API 키를 설정하면 공식 API를 사용하여 더 높은 사용량을 제공합니다. API 키는 ai.youdao.com에서 받으세요</value>
-  </data>
-
-  <!-- Window Chrome -->
-  <data name="QuickTranslate" xml:space="preserve">
-    <value>빠른 번역</value>
-  </data>
-  <data name="FixedTranslate" xml:space="preserve">
-    <value>고정 번역</value>
-  </data>
-  <data name="PinWindowTooltip" xml:space="preserve">
-    <value>창 고정 (항상 위에 표시)</value>
-  </data>
-  <data name="Close" xml:space="preserve">
-    <value>닫기</value>
-  </data>
-  <data name="HideWindow" xml:space="preserve">
-    <value>숨기기 (Ctrl+Alt+F로 다시 표시)</value>
-  </data>
-
-  <!-- Status & Feedback -->
-  <data name="OK" xml:space="preserve">
-    <value>확인</value>
-  </data>
-  <data name="StatusInitializing" xml:space="preserve">
-    <value>초기화 중...</value>
-  </data>
-  <data name="NoServicesEnabled" xml:space="preserve">
-    <value>활성화된 서비스가 없습니다. 설정에서 서비스를 활성화하세요.</value>
-  </data>
-  <data name="ServiceResultsComplete" xml:space="preserve">
-    <value>{0}개 서비스 완료</value>
-  </data>
-  <data name="SettingsSavedMessage" xml:space="preserve">
-    <value>설정이 성공적으로 저장되었습니다.</value>
-  </data>
-
-  <!-- Validation Messages -->
-  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
-    <value>제1언어와 제2언어는 같을 수 없습니다.</value>
-  </data>
-  <data name="InvalidProxyUrlMessage" xml:space="preserve">
-    <value>프록시 URL이 유효하지 않습니다. 올바른 URL을 입력하세요 (예: http://127.0.0.1:7890).</value>
-  </data>
-  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
-    <value>Ollama에서 모델을 가져올 수 없습니다. Ollama가 실행 중이고 접근 가능한지 확인하세요.</value>
   </data>
 
   <!-- Help Tooltips -->
@@ -797,6 +822,29 @@
     <value>먼저 위의 '활성화된 서비스'에서 활성화하세요</value>
   </data>
 
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>테스트</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>테스트 중...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>테스트 성공</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>구성이 유효합니다. 번역이 {0}ms 만에 완료되었습니다.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>테스트 실패</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>구성 테스트 실패: {0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>먼저 서비스를 구성해 주세요 (API 키, 엔드포인트 등).</value>
+  </data>
+
   <!-- Toggle Switch On/Off -->
   <data name="ToggleOn" xml:space="preserve">
     <value>켜짐</value>
@@ -811,14 +859,6 @@
   </data>
   <data name="WebFree" xml:space="preserve">
     <value>웹 (무료)</value>
-  </data>
-
-  <!-- Screen Capture -->
-  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>드래그하여 영역 선택  |  더블클릭으로 창 선택  |  스크롤로 전환  |  Esc로 종료</value>
-  </data>
-  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
-    <value>우클릭 또는 Esc로 취소</value>
   </data>
 
   <!-- Grammar Correction Mode -->
@@ -863,6 +903,44 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>문법 문제가 발견되지 않았습니다.</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
   </data>
   <data name="DocumentOutputMode_Title" xml:space="preserve">
     <value>문서 출력 모드</value>
@@ -1278,54 +1356,6 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200 모델이 아직 다운로드되지 않았습니다(~360 MB). "모델 다운로드"를 클릭하여 %LOCALAPPDATA%\Easydict\models로 가져오세요.</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>NLLB-200 모델 파일을 다운로드하는 중…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>다운로드 실패. 네트워크 연결을 확인하고 다시 시도하세요.</value></data>
-  <data name="TrayTranslateClipboard" xml:space="preserve">
-    <value>Translate Clipboard</value>
-  </data>
-  <data name="TrayOcrTranslate" xml:space="preserve">
-    <value>OCR Translate</value>
-  </data>
-  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
-    <value>Exit screenshot?</value>
-  </data>
-  <data name="ThemeMinimal" xml:space="preserve">
-    <value>Minimal</value>
-  </data>
-  <data name="LayoutDetection_Title" xml:space="preserve">
-    <value>Layout Detection</value>
-  </data>
-  <data name="LayoutDetection_Description" xml:space="preserve">
-    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
-  </data>
-  <data name="LayoutDetection_Auto" xml:space="preserve">
-    <value>Auto (Recommended)</value>
-  </data>
-  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
-    <value>Local ONNX Model</value>
-  </data>
-  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
-    <value>Vision LLM</value>
-  </data>
-  <data name="LayoutDetection_Heuristic" xml:space="preserve">
-    <value>Heuristic Only</value>
-  </data>
-  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
-    <value>Download Model (~75MB)</value>
-  </data>
-  <data name="LayoutDetection_Downloaded" xml:space="preserve">
-    <value>ONNX Model: Ready</value>
-  </data>
-  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
-    <value>ONNX Model: Not Downloaded</value>
-  </data>
-  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
-    <value>Download Failed</value>
-  </data>
-  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
-    <value>Detection Mode</value>
-  </data>
-  <data name="LayoutDetection_VisionService" xml:space="preserve">
-    <value>Vision Service</value>
-  </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
   <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
@@ -1348,39 +1378,6 @@
   </data>
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>잘못된 단축키입니다. 예: Ctrl+Alt+T</value>
-  </data>
-  <data name="OcrButtonTooltip" xml:space="preserve">
-    <value>OCR 번역</value>
-  </data>
-  <data name="ResultFontSize" xml:space="preserve">
-    <value>결과 글꼴 크기</value>
-  </data>
-  <data name="ResultFontSizeDescription" xml:space="preserve">
-    <value>번역 결과의 글꼴 크기를 조정합니다.</value>
-  </data>
-  <data name="CompactMode" xml:space="preserve">
-    <value>간결 모드</value>
-  </data>
-  <data name="CompactModeDescription" xml:space="preserve">
-    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
-  </data>
-  <data name="QuickActionsHeader" xml:space="preserve">
-    <value>빠른 작업 버튼</value>
-  </data>
-  <data name="ShowOcrButton" xml:space="preserve">
-    <value>OCR 버튼 표시</value>
-  </data>
-  <data name="ShowPinButton" xml:space="preserve">
-    <value>고정 버튼 표시</value>
-  </data>
-  <data name="ShowSourcePlayButton" xml:space="preserve">
-    <value>재생 버튼 표시</value>
-  </data>
-  <data name="PlaySourceTextTooltip" xml:space="preserve">
-    <value>원문 재생</value>
-  </data>
-  <data name="ShowSwapButton" xml:space="preserve">
-    <value>교체 버튼 표시</value>
   </data>
   <data name="ClaudeCode_EnableToggle" xml:space="preserve">
     <value>Claude Code 사용</value>
@@ -1473,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>새로 고침</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>완료된 검색이 아직 없습니다.</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>기록 저장이 꺼져 있습니다</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>앞으로의 검색을 저장하려면 {0} → {1} → {2}에서 “{3}”을 켜세요. 기존 기록은 유지됩니다.</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>즐겨찾기가 아직 없습니다.</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>저장된 검색 선택</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>기록에서 삭제</value></data>

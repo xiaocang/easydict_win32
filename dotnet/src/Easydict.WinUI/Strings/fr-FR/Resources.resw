@@ -81,6 +81,9 @@
   <data name="StatusDisconnected" xml:space="preserve">
     <value>Déconnecté</value>
   </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>Initialisation...</value>
+  </data>
   <data name="StatusReady" xml:space="preserve">
     <value>Prêt</value>
   </data>
@@ -405,6 +408,18 @@
   <data name="NiuTransDescription" xml:space="preserve">
     <value>NiuTrans prend en charge plus de 450 paires de langues. Obtenez votre clé API sur niutrans.com</value>
   </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>Utiliser l'API officielle</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>Youdao fournit les transcriptions phonétiques des mots anglais. Sans clés API, utilise le dictionnaire web gratuit. Avec des clés API, active l'API officielle pour des limites plus élevées. Obtenez les clés API sur ai.youdao.com</value>
+  </data>
   <data name="FreeServicesTitle" xml:space="preserve">
     <value>Services gratuits (aucune configuration requise)</value>
   </data>
@@ -525,14 +540,29 @@
   <data name="ServiceNotInitialized" xml:space="preserve">
     <value>Service non initialisé</value>
   </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>Aucun service activé. Allez dans les paramètres pour activer des services.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} service(s) terminé(s)</value>
+  </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
     <value>Sélection de langue invalide</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>La première langue et la deuxième langue ne peuvent pas être identiques.</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
     <value>URL de proxy invalide</value>
   </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>L'URL du proxy n'est pas valide. Veuillez entrer une URL valide (ex. : http://127.0.0.1:7890).</value>
+  </data>
   <data name="SettingsSaved" xml:space="preserve">
     <value>Paramètres enregistrés</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>Vos paramètres ont été enregistrés avec succès.</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
     <value>Redémarrage requis</value>
@@ -540,11 +570,17 @@
   <data name="CannotConnectToOllama" xml:space="preserve">
     <value>Impossible de se connecter à Ollama</value>
   </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Impossible de récupérer les modèles depuis Ollama. Assurez-vous qu'Ollama est en cours d'exécution et accessible.</value>
+  </data>
   <data name="Copied" xml:space="preserve">
     <value>Copié !</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
     <value>Détecté : {0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
   </data>
 
   <!-- Service Names -->
@@ -595,6 +631,12 @@
   <data name="TrayShow" xml:space="preserve">
     <value>Afficher</value>
   </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>Mini fenêtre</value>
   </data>
@@ -641,6 +683,61 @@
     <value>Quitter</value>
   </data>
 
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>Glisser pour s&#233;lectionner  |  Double-clic pour s&#233;lectionner la fen&#234;tre  |  Molette pour changer  |  Esc pour quitter</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>Clic droit ou Esc pour annuler</value>
+  </data>
+
+  <!-- Window Titles -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>Traduction rapide</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>Traduction fixe</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>Épingler la fenêtre (garder au premier plan)</value>
+  </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Traduction OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Taille de police des résultats</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Ajustez la taille de police des résultats de traduction.</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Mode compact</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Boutons d'action rapide</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Afficher le bouton OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Afficher le bouton d'épinglage</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Afficher le bouton de lecture</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Lire le texte source</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Afficher le bouton d'échange</value>
+  </data>
+
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
     <value>Langue de l'interface</value>
@@ -656,6 +753,13 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
+  <data name="Close" xml:space="preserve">
+    <value>Fermer</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>Masquer (Ctrl+Alt+F pour réafficher)</value>
+  </data>
+
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
     <value>Activer les services internationaux</value>
@@ -683,6 +787,9 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>Sombre</value>
   </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
 
   <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
@@ -696,88 +803,6 @@
   </data>
   <data name="Cancel" xml:space="preserve">
     <value>Annuler</value>
-  </data>
-
-  <!-- Service Testing UI -->
-  <data name="Test" xml:space="preserve">
-    <value>Tester</value>
-  </data>
-  <data name="Testing" xml:space="preserve">
-    <value>Test en cours...</value>
-  </data>
-  <data name="TestNotConfigured" xml:space="preserve">
-    <value>Veuillez d'abord configurer le service (clé API, point de terminaison, etc.).</value>
-  </data>
-  <data name="TestSuccessTitle" xml:space="preserve">
-    <value>Test réussi</value>
-  </data>
-  <data name="TestSuccessMessage" xml:space="preserve">
-    <value>La configuration est valide. Traduction terminée en {0}ms.</value>
-  </data>
-  <data name="TestFailedTitle" xml:space="preserve">
-    <value>Échec du test</value>
-  </data>
-  <data name="TestFailedMessage" xml:space="preserve">
-    <value>Échec du test de configuration : {0}</value>
-  </data>
-
-  <!-- Youdao Service -->
-  <data name="AppKey" xml:space="preserve">
-    <value>App Key</value>
-  </data>
-  <data name="AppSecret" xml:space="preserve">
-    <value>App Secret</value>
-  </data>
-  <data name="UseOfficialApi" xml:space="preserve">
-    <value>Utiliser l'API officielle</value>
-  </data>
-  <data name="YoudaoDescription" xml:space="preserve">
-    <value>Youdao fournit les transcriptions phonétiques des mots anglais. Sans clés API, utilise le dictionnaire web gratuit. Avec des clés API, active l'API officielle pour des limites plus élevées. Obtenez les clés API sur ai.youdao.com</value>
-  </data>
-
-  <!-- Window Chrome -->
-  <data name="QuickTranslate" xml:space="preserve">
-    <value>Traduction rapide</value>
-  </data>
-  <data name="FixedTranslate" xml:space="preserve">
-    <value>Traduction fixe</value>
-  </data>
-  <data name="PinWindowTooltip" xml:space="preserve">
-    <value>Épingler la fenêtre (garder au premier plan)</value>
-  </data>
-  <data name="Close" xml:space="preserve">
-    <value>Fermer</value>
-  </data>
-  <data name="HideWindow" xml:space="preserve">
-    <value>Masquer (Ctrl+Alt+F pour réafficher)</value>
-  </data>
-
-  <!-- Status & Feedback -->
-  <data name="OK" xml:space="preserve">
-    <value>OK</value>
-  </data>
-  <data name="StatusInitializing" xml:space="preserve">
-    <value>Initialisation...</value>
-  </data>
-  <data name="NoServicesEnabled" xml:space="preserve">
-    <value>Aucun service activé. Allez dans les paramètres pour activer des services.</value>
-  </data>
-  <data name="ServiceResultsComplete" xml:space="preserve">
-    <value>{0} service(s) terminé(s)</value>
-  </data>
-  <data name="SettingsSavedMessage" xml:space="preserve">
-    <value>Vos paramètres ont été enregistrés avec succès.</value>
-  </data>
-
-  <!-- Validation Messages -->
-  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
-    <value>La première langue et la deuxième langue ne peuvent pas être identiques.</value>
-  </data>
-  <data name="InvalidProxyUrlMessage" xml:space="preserve">
-    <value>L'URL du proxy n'est pas valide. Veuillez entrer une URL valide (ex. : http://127.0.0.1:7890).</value>
-  </data>
-  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
-    <value>Impossible de récupérer les modèles depuis Ollama. Assurez-vous qu'Ollama est en cours d'exécution et accessible.</value>
   </data>
 
   <!-- Help Tooltips -->
@@ -797,6 +822,29 @@
     <value>Activer d&#8217;abord les services dans &#171; Services activ&#233;s &#187; ci-dessus</value>
   </data>
 
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>Tester</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>Test en cours...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>Test réussi</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>La configuration est valide. Traduction terminée en {0}ms.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>Échec du test</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>Échec du test de configuration : {0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>Veuillez d'abord configurer le service (clé API, point de terminaison, etc.).</value>
+  </data>
+
   <!-- Toggle Switch On/Off -->
   <data name="ToggleOn" xml:space="preserve">
     <value>Activé</value>
@@ -811,14 +859,6 @@
   </data>
   <data name="WebFree" xml:space="preserve">
     <value>Web (gratuit)</value>
-  </data>
-
-  <!-- Screen Capture -->
-  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>Glisser pour s&#233;lectionner  |  Double-clic pour s&#233;lectionner la fen&#234;tre  |  Molette pour changer  |  Esc pour quitter</value>
-  </data>
-  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
-    <value>Clic droit ou Esc pour annuler</value>
   </data>
 
   <!-- Grammar Correction Mode -->
@@ -863,6 +903,44 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>Aucun problème de grammaire trouvé.</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
   </data>
   <data name="DocumentOutputMode_Title" xml:space="preserve">
     <value>Mode de sortie du document</value>
@@ -1001,6 +1079,48 @@
   </data>
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Ignorer</value>
+  </data>
+  <data name="MdxDictionaryReady" xml:space="preserve">
+    <value>This dictionary is ready to use. No configuration needed.</value>
+  </data>
+  <data name="MdxDeleteDictionary" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxRedetectEncryption" xml:space="preserve">
+    <value>Re-detect Encryption</value>
+  </data>
+  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+  </data>
+  <data name="MdxFilePath" xml:space="preserve">
+    <value>File Path</value>
+  </data>
+  <data name="MdxRegistrationCode" xml:space="preserve">
+    <value>Registration Code</value>
+  </data>
+  <data name="MdxEncryptedHelpText" xml:space="preserve">
+    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+  </data>
+  <data name="MdxEmailPlaceholder" xml:space="preserve">
+    <value>Email address used for registration</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>Imported '{0}' with {1} companion resource file(s).</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>Imported '{0}'. No companion MDD resource files found.</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>Add MDD File...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>Re-scan MDD Files</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>Resource Files</value>
   </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>Réorganiser</value>
@@ -1236,96 +1356,6 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>Le modèle NLLB-200 n'est pas encore téléchargé (~360 Mo). Cliquez sur « Télécharger le modèle » pour le récupérer dans %LOCALAPPDATA%\Easydict\models.</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>Téléchargement des fichiers du modèle NLLB-200…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Échec du téléchargement. Vérifiez votre connexion réseau et réessayez.</value></data>
-  <data name="TrayTranslateClipboard" xml:space="preserve">
-    <value>Translate Clipboard</value>
-  </data>
-  <data name="TrayOcrTranslate" xml:space="preserve">
-    <value>OCR Translate</value>
-  </data>
-  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
-    <value>Exit screenshot?</value>
-  </data>
-  <data name="ThemeMinimal" xml:space="preserve">
-    <value>Minimal</value>
-  </data>
-  <data name="LayoutDetection_Title" xml:space="preserve">
-    <value>Layout Detection</value>
-  </data>
-  <data name="LayoutDetection_Description" xml:space="preserve">
-    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
-  </data>
-  <data name="LayoutDetection_Auto" xml:space="preserve">
-    <value>Auto (Recommended)</value>
-  </data>
-  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
-    <value>Local ONNX Model</value>
-  </data>
-  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
-    <value>Vision LLM</value>
-  </data>
-  <data name="LayoutDetection_Heuristic" xml:space="preserve">
-    <value>Heuristic Only</value>
-  </data>
-  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
-    <value>Download Model (~75MB)</value>
-  </data>
-  <data name="LayoutDetection_Downloaded" xml:space="preserve">
-    <value>ONNX Model: Ready</value>
-  </data>
-  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
-    <value>ONNX Model: Not Downloaded</value>
-  </data>
-  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
-    <value>Download Failed</value>
-  </data>
-  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
-    <value>Detection Mode</value>
-  </data>
-  <data name="LayoutDetection_VisionService" xml:space="preserve">
-    <value>Vision Service</value>
-  </data>
-  <data name="MdxDictionaryReady" xml:space="preserve">
-    <value>This dictionary is ready to use. No configuration needed.</value>
-  </data>
-  <data name="MdxDeleteDictionary" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxRedetectEncryption" xml:space="preserve">
-    <value>Re-detect Encryption</value>
-  </data>
-  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
-    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
-  </data>
-  <data name="MdxFilePath" xml:space="preserve">
-    <value>File Path</value>
-  </data>
-  <data name="MdxRegistrationCode" xml:space="preserve">
-    <value>Registration Code</value>
-  </data>
-  <data name="MdxEncryptedHelpText" xml:space="preserve">
-    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
-  </data>
-  <data name="MdxEmailPlaceholder" xml:space="preserve">
-    <value>Email address used for registration</value>
-  </data>
-  <data name="MddFilesDetected" xml:space="preserve">
-    <value>Imported '{0}' with {1} companion resource file(s).</value>
-  </data>
-  <data name="MddNoFilesDetected" xml:space="preserve">
-    <value>Imported '{0}'. No companion MDD resource files found.</value>
-  </data>
-  <data name="MddAddFile" xml:space="preserve">
-    <value>Add MDD File...</value>
-  </data>
-  <data name="MddRescanFiles" xml:space="preserve">
-    <value>Re-scan MDD Files</value>
-  </data>
-  <data name="MddAssociatedFiles" xml:space="preserve">
-    <value>Resource Files</value>
-  </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
   <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
@@ -1348,39 +1378,6 @@
   </data>
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Raccourci non valide. Exemple : Ctrl+Alt+T</value>
-  </data>
-  <data name="OcrButtonTooltip" xml:space="preserve">
-    <value>Traduction OCR</value>
-  </data>
-  <data name="ResultFontSize" xml:space="preserve">
-    <value>Taille de police des résultats</value>
-  </data>
-  <data name="ResultFontSizeDescription" xml:space="preserve">
-    <value>Ajustez la taille de police des résultats de traduction.</value>
-  </data>
-  <data name="CompactMode" xml:space="preserve">
-    <value>Mode compact</value>
-  </data>
-  <data name="CompactModeDescription" xml:space="preserve">
-    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
-  </data>
-  <data name="QuickActionsHeader" xml:space="preserve">
-    <value>Boutons d'action rapide</value>
-  </data>
-  <data name="ShowOcrButton" xml:space="preserve">
-    <value>Afficher le bouton OCR</value>
-  </data>
-  <data name="ShowPinButton" xml:space="preserve">
-    <value>Afficher le bouton d'épinglage</value>
-  </data>
-  <data name="ShowSourcePlayButton" xml:space="preserve">
-    <value>Afficher le bouton de lecture</value>
-  </data>
-  <data name="PlaySourceTextTooltip" xml:space="preserve">
-    <value>Lire le texte source</value>
-  </data>
-  <data name="ShowSwapButton" xml:space="preserve">
-    <value>Afficher le bouton d'échange</value>
   </data>
   <data name="ClaudeCode_EnableToggle" xml:space="preserve">
     <value>Activer Claude Code</value>
@@ -1473,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>Actualiser</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>Aucune requête terminée.</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>L’historique est désactivé</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>Pour enregistrer les prochaines requêtes, accédez à {0} → {1} → {2} et activez « {3} ». Les entrées existantes sont conservées.</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>Aucun favori.</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>Sélectionner une requête enregistrée</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>Supprimer de l’historique</value></data>

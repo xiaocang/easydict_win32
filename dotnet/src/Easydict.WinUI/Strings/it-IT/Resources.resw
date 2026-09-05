@@ -27,10 +27,18 @@
       </xsd:complexType>
     </xsd:element>
   </xsd:schema>
-  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
-  <resheader name="version"><value>1.3</value></resheader>
-  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>1.3</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
 
   <!-- App Name -->
   <data name="AppName" xml:space="preserve">
@@ -145,6 +153,117 @@
   </data>
   <data name="LangSpanish" xml:space="preserve">
     <value>Spagnolo</value>
+  </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>Classical Chinese</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>Dutch</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>Swedish</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>Norwegian</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>Danish</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>Portuguese</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>Italian</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>Romanian</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>Russian</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>Polish</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>Czech</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>Ukrainian</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>Bulgarian</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>Slovak</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>Slovenian</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>Estonian</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>Latvian</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>Lithuanian</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>Greek</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>Hungarian</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>Finnish</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>Turkish</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>Arabic</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>Persian</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>Hebrew</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>Hindi</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>Bengali</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>Tamil</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>Telugu</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>Urdu</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>Vietnamese</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>Thai</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>Indonesian</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>Malay</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>Filipino</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>Available Languages</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>Select languages available in source/target pickers. At least 2 required.</value>
   </data>
 
   <!-- Settings Page -->
@@ -512,6 +631,12 @@
   <data name="TrayShow" xml:space="preserve">
     <value>Mostra</value>
   </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>Finestra mini</value>
   </data>
@@ -558,6 +683,17 @@
     <value>Esci</value>
   </data>
 
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>Trascina per selezionare  |  Doppio clic per selezionare la finestra  |  Scorri per cambiare  |  Esc per uscire</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>Clic destro o Esc per annullare</value>
+  </data>
+
   <!-- Window Titles -->
   <data name="QuickTranslate" xml:space="preserve">
     <value>Traduzione rapida</value>
@@ -567,6 +703,39 @@
   </data>
   <data name="PinWindowTooltip" xml:space="preserve">
     <value>Fissa finestra (rimani in primo piano)</value>
+  </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Traduzione OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Dimensione carattere dei risultati</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Regola la dimensione del carattere dei risultati di traduzione.</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Modalità compatta</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Pulsanti di azione rapida</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Mostra pulsante OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Mostra pulsante blocca</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Mostra pulsante riproduci</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Riproduci testo sorgente</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Mostra pulsante scambia</value>
   </data>
 
   <!-- UI Language -->
@@ -618,6 +787,9 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>Scuro</value>
   </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
 
   <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
@@ -631,6 +803,23 @@
   </data>
   <data name="Cancel" xml:space="preserve">
     <value>Annulla</value>
+  </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>Aggiungi/rimuovi lingue: Impostazioni &#x2192; Lingue disponibili</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Invio per tradurre, Maiusc+Invio per nuova riga</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>Riavvio necessario dopo le modifiche</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>Auto = query automatica, Manuale = clicca per eseguire</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>Attiva prima i servizi in 'Servizi attivati' sopra</value>
   </data>
 
   <!-- Service Test Button -->
@@ -656,23 +845,6 @@
     <value>Configura prima il servizio (chiave API, endpoint, ecc.).</value>
   </data>
 
-  <!-- Help Tooltips -->
-  <data name="LanguagePickerHelpTip" xml:space="preserve">
-    <value>Aggiungi/rimuovi lingue: Impostazioni &#x2192; Lingue disponibili</value>
-  </data>
-  <data name="InputHelpTip" xml:space="preserve">
-    <value>Invio per tradurre, Maiusc+Invio per nuova riga</value>
-  </data>
-  <data name="HotkeysHelpTip" xml:space="preserve">
-    <value>Riavvio necessario dopo le modifiche</value>
-  </data>
-  <data name="EnabledServicesHelpTip" xml:space="preserve">
-    <value>Auto = query automatica, Manuale = clicca per eseguire</value>
-  </data>
-  <data name="ServiceConfigHelpTip" xml:space="preserve">
-    <value>Attiva prima i servizi in 'Servizi attivati' sopra</value>
-  </data>
-
   <!-- Toggle Switch On/Off -->
   <data name="ToggleOn" xml:space="preserve">
     <value>Attivato</value>
@@ -687,14 +859,6 @@
   </data>
   <data name="WebFree" xml:space="preserve">
     <value>Web (gratuito)</value>
-  </data>
-
-  <!-- Screen Capture -->
-  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>Trascina per selezionare  |  Doppio clic per selezionare la finestra  |  Scorri per cambiare  |  Esc per uscire</value>
-  </data>
-  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
-    <value>Clic destro o Esc per annullare</value>
   </data>
 
   <!-- Grammar Correction Mode -->
@@ -739,6 +903,44 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
   </data>
   <data name="DocumentOutputMode_Title" xml:space="preserve">
     <value>Modalità di output del documento</value>
@@ -877,6 +1079,48 @@
   </data>
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Salta</value>
+  </data>
+  <data name="MdxDictionaryReady" xml:space="preserve">
+    <value>This dictionary is ready to use. No configuration needed.</value>
+  </data>
+  <data name="MdxDeleteDictionary" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxRedetectEncryption" xml:space="preserve">
+    <value>Re-detect Encryption</value>
+  </data>
+  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+  </data>
+  <data name="MdxFilePath" xml:space="preserve">
+    <value>File Path</value>
+  </data>
+  <data name="MdxRegistrationCode" xml:space="preserve">
+    <value>Registration Code</value>
+  </data>
+  <data name="MdxEncryptedHelpText" xml:space="preserve">
+    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+  </data>
+  <data name="MdxEmailPlaceholder" xml:space="preserve">
+    <value>Email address used for registration</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>Imported '{0}' with {1} companion resource file(s).</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>Imported '{0}'. No companion MDD resource files found.</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>Add MDD File...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>Re-scan MDD Files</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>Resource Files</value>
   </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>Riordina</value>
@@ -1112,207 +1356,6 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>Il modello NLLB-200 non è ancora stato scaricato (~360 MB). Fai clic su "Scarica modello" per scaricarlo in %LOCALAPPDATA%\Easydict\models.</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>Download dei file del modello NLLB-200 in corso…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Download fallito. Controlla la connessione di rete e riprova.</value></data>
-  <data name="LangClassicalChinese" xml:space="preserve">
-    <value>Classical Chinese</value>
-  </data>
-  <data name="LangDutch" xml:space="preserve">
-    <value>Dutch</value>
-  </data>
-  <data name="LangSwedish" xml:space="preserve">
-    <value>Swedish</value>
-  </data>
-  <data name="LangNorwegian" xml:space="preserve">
-    <value>Norwegian</value>
-  </data>
-  <data name="LangDanish" xml:space="preserve">
-    <value>Danish</value>
-  </data>
-  <data name="LangPortuguese" xml:space="preserve">
-    <value>Portuguese</value>
-  </data>
-  <data name="LangItalian" xml:space="preserve">
-    <value>Italian</value>
-  </data>
-  <data name="LangRomanian" xml:space="preserve">
-    <value>Romanian</value>
-  </data>
-  <data name="LangRussian" xml:space="preserve">
-    <value>Russian</value>
-  </data>
-  <data name="LangPolish" xml:space="preserve">
-    <value>Polish</value>
-  </data>
-  <data name="LangCzech" xml:space="preserve">
-    <value>Czech</value>
-  </data>
-  <data name="LangUkrainian" xml:space="preserve">
-    <value>Ukrainian</value>
-  </data>
-  <data name="LangBulgarian" xml:space="preserve">
-    <value>Bulgarian</value>
-  </data>
-  <data name="LangSlovak" xml:space="preserve">
-    <value>Slovak</value>
-  </data>
-  <data name="LangSlovenian" xml:space="preserve">
-    <value>Slovenian</value>
-  </data>
-  <data name="LangEstonian" xml:space="preserve">
-    <value>Estonian</value>
-  </data>
-  <data name="LangLatvian" xml:space="preserve">
-    <value>Latvian</value>
-  </data>
-  <data name="LangLithuanian" xml:space="preserve">
-    <value>Lithuanian</value>
-  </data>
-  <data name="LangGreek" xml:space="preserve">
-    <value>Greek</value>
-  </data>
-  <data name="LangHungarian" xml:space="preserve">
-    <value>Hungarian</value>
-  </data>
-  <data name="LangFinnish" xml:space="preserve">
-    <value>Finnish</value>
-  </data>
-  <data name="LangTurkish" xml:space="preserve">
-    <value>Turkish</value>
-  </data>
-  <data name="LangArabic" xml:space="preserve">
-    <value>Arabic</value>
-  </data>
-  <data name="LangPersian" xml:space="preserve">
-    <value>Persian</value>
-  </data>
-  <data name="LangHebrew" xml:space="preserve">
-    <value>Hebrew</value>
-  </data>
-  <data name="LangHindi" xml:space="preserve">
-    <value>Hindi</value>
-  </data>
-  <data name="LangBengali" xml:space="preserve">
-    <value>Bengali</value>
-  </data>
-  <data name="LangTamil" xml:space="preserve">
-    <value>Tamil</value>
-  </data>
-  <data name="LangTelugu" xml:space="preserve">
-    <value>Telugu</value>
-  </data>
-  <data name="LangUrdu" xml:space="preserve">
-    <value>Urdu</value>
-  </data>
-  <data name="LangVietnamese" xml:space="preserve">
-    <value>Vietnamese</value>
-  </data>
-  <data name="LangThai" xml:space="preserve">
-    <value>Thai</value>
-  </data>
-  <data name="LangIndonesian" xml:space="preserve">
-    <value>Indonesian</value>
-  </data>
-  <data name="LangMalay" xml:space="preserve">
-    <value>Malay</value>
-  </data>
-  <data name="LangFilipino" xml:space="preserve">
-    <value>Filipino</value>
-  </data>
-  <data name="AvailableLanguages" xml:space="preserve">
-    <value>Available Languages</value>
-  </data>
-  <data name="AvailableLanguagesDesc" xml:space="preserve">
-    <value>Select languages available in source/target pickers. At least 2 required.</value>
-  </data>
-  <data name="TrayTranslateClipboard" xml:space="preserve">
-    <value>Translate Clipboard</value>
-  </data>
-  <data name="TrayOcrTranslate" xml:space="preserve">
-    <value>OCR Translate</value>
-  </data>
-  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
-    <value>Exit screenshot?</value>
-  </data>
-  <data name="ThemeMinimal" xml:space="preserve">
-    <value>Minimal</value>
-  </data>
-  <data name="LayoutDetection_Title" xml:space="preserve">
-    <value>Layout Detection</value>
-  </data>
-  <data name="LayoutDetection_Description" xml:space="preserve">
-    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
-  </data>
-  <data name="LayoutDetection_Auto" xml:space="preserve">
-    <value>Auto (Recommended)</value>
-  </data>
-  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
-    <value>Local ONNX Model</value>
-  </data>
-  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
-    <value>Vision LLM</value>
-  </data>
-  <data name="LayoutDetection_Heuristic" xml:space="preserve">
-    <value>Heuristic Only</value>
-  </data>
-  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
-    <value>Download Model (~75MB)</value>
-  </data>
-  <data name="LayoutDetection_Downloaded" xml:space="preserve">
-    <value>ONNX Model: Ready</value>
-  </data>
-  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
-    <value>ONNX Model: Not Downloaded</value>
-  </data>
-  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
-    <value>Download Failed</value>
-  </data>
-  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
-    <value>Detection Mode</value>
-  </data>
-  <data name="LayoutDetection_VisionService" xml:space="preserve">
-    <value>Vision Service</value>
-  </data>
-  <data name="MdxDictionaryReady" xml:space="preserve">
-    <value>This dictionary is ready to use. No configuration needed.</value>
-  </data>
-  <data name="MdxDeleteDictionary" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxRedetectEncryption" xml:space="preserve">
-    <value>Re-detect Encryption</value>
-  </data>
-  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
-    <value>Delete Dictionary</value>
-  </data>
-  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
-    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
-  </data>
-  <data name="MdxFilePath" xml:space="preserve">
-    <value>File Path</value>
-  </data>
-  <data name="MdxRegistrationCode" xml:space="preserve">
-    <value>Registration Code</value>
-  </data>
-  <data name="MdxEncryptedHelpText" xml:space="preserve">
-    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
-  </data>
-  <data name="MdxEmailPlaceholder" xml:space="preserve">
-    <value>Email address used for registration</value>
-  </data>
-  <data name="MddFilesDetected" xml:space="preserve">
-    <value>Imported '{0}' with {1} companion resource file(s).</value>
-  </data>
-  <data name="MddNoFilesDetected" xml:space="preserve">
-    <value>Imported '{0}'. No companion MDD resource files found.</value>
-  </data>
-  <data name="MddAddFile" xml:space="preserve">
-    <value>Add MDD File...</value>
-  </data>
-  <data name="MddRescanFiles" xml:space="preserve">
-    <value>Re-scan MDD Files</value>
-  </data>
-  <data name="MddAssociatedFiles" xml:space="preserve">
-    <value>Resource Files</value>
-  </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
   <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
@@ -1335,39 +1378,6 @@
   </data>
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Scorciatoia non valida. Esempio: Ctrl+Alt+T</value>
-  </data>
-  <data name="OcrButtonTooltip" xml:space="preserve">
-    <value>Traduzione OCR</value>
-  </data>
-  <data name="ResultFontSize" xml:space="preserve">
-    <value>Dimensione carattere dei risultati</value>
-  </data>
-  <data name="ResultFontSizeDescription" xml:space="preserve">
-    <value>Regola la dimensione del carattere dei risultati di traduzione.</value>
-  </data>
-  <data name="CompactMode" xml:space="preserve">
-    <value>Modalità compatta</value>
-  </data>
-  <data name="CompactModeDescription" xml:space="preserve">
-    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
-  </data>
-  <data name="QuickActionsHeader" xml:space="preserve">
-    <value>Pulsanti di azione rapida</value>
-  </data>
-  <data name="ShowOcrButton" xml:space="preserve">
-    <value>Mostra pulsante OCR</value>
-  </data>
-  <data name="ShowPinButton" xml:space="preserve">
-    <value>Mostra pulsante blocca</value>
-  </data>
-  <data name="ShowSourcePlayButton" xml:space="preserve">
-    <value>Mostra pulsante riproduci</value>
-  </data>
-  <data name="PlaySourceTextTooltip" xml:space="preserve">
-    <value>Riproduci testo sorgente</value>
-  </data>
-  <data name="ShowSwapButton" xml:space="preserve">
-    <value>Mostra pulsante scambia</value>
   </data>
   <data name="ClaudeCode_EnableToggle" xml:space="preserve">
     <value>Abilita Claude Code</value>
@@ -1460,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>Aggiorna</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>Nessuna ricerca completata.</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>La cronologia è disattivata</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>Per salvare le prossime ricerche, vai a {0} → {1} → {2} e attiva «{3}». Le voci esistenti vengono conservate.</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>Nessun preferito.</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>Seleziona una ricerca salvata</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>Elimina dalla cronologia</value></data>

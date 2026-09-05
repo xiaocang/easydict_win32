@@ -1291,7 +1291,6 @@
   <data name="OpenVINO_ConfigTitle" xml:space="preserve"><value>OpenVINO（本地 NLLB）</value></data>
   <data name="OpenVINO_ConfigDescription" xml:space="preserve"><value>使用 ONNX Runtime + OpenVINO 在本地运行 NLLB-200。硬件加速为尽力而为，必要时会回退到 CPU。</value></data>
 
-  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>留空端点时会通过 foundry service status 自动发现；如果本地服务使用固定的 OpenAI 兼容端点，也可以手动填写。</value></data>
   <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>安装 Foundry Local</value></data>
   <data name="FoundryLocal_DocsLinkText" xml:space="preserve"><value>安装/使用文档</value></data>
@@ -1300,17 +1299,18 @@
   <data name="FoundryLocal_Title_Unavailable" xml:space="preserve"><value>Foundry Local 不可用</value></data>
   <data name="FoundryLocal_Status_Checking" xml:space="preserve"><value>正在检查 Foundry Local 状态...</value></data>
   <data name="FoundryLocal_Status_NotInstalled" xml:space="preserve"><value>未安装 Foundry Local CLI，或当前 PATH 中不可用。</value></data>
-  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未配置。</value></data>
-  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>通过 foundry service status 自动发现</value></data>
-  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
   <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local 未运行。请启动 Foundry Local 服务，或手动设置端点。</value></data>
   <data name="FoundryLocal_Status_Starting" xml:space="preserve"><value>正在启动 Foundry Local 服务...</value></data>
   <data name="FoundryLocal_Status_LoadingModel" xml:space="preserve"><value>正在加载配置的 Foundry Local 模型...</value></data>
   <data name="FoundryLocal_Status_StartFailed" xml:space="preserve"><value>无法启动 Foundry Local。</value></data>
-  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
-  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>通过 Microsoft Foundry Local 的 OpenAI 兼容本地端点运行本地模型。需要安装 Foundry Local 并准备好本地模型。</value></data>
   <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local 已配置。运行时会使用本地端点或自动发现端点。</value></data>
   <data name="FoundryLocal_EndpointLabel" xml:space="preserve"><value>端点（可选）</value></data>
+  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未配置。</value></data>
+  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>通过 Microsoft Foundry Local 的 OpenAI 兼容本地端点运行本地模型。需要安装 Foundry Local 并准备好本地模型。</value></data>
+  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>通过 foundry service status 自动发现</value></data>
+  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
+  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="PhiSilicaModelPrompt_Title" xml:space="preserve"><value>下载 Phi Silica 模型？</value></data>
   <data name="PhiSilicaModelPrompt_Message" xml:space="preserve"><value>Phi Silica 首次使用前需要下载并准备由 Windows 管理的本机语言模型组件。预计是数 GB 级安装，具体大小取决于设备和 Windows 版本。你可以现在下载、本次先跳过，或暂时禁用 Phi Silica；之后可在“设置”中重新开启。</value></data>
   <data name="PhiSilicaModelPrompt_DownloadNow" xml:space="preserve"><value>现在下载</value></data>
@@ -1470,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>刷新</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>暂无已完成的查询。</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>历史记录未开启</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>如需保存之后的查询，请前往 {0} → {1} → {2}，开启“{3}”。已有记录会保留。</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>暂无收藏。</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>选择一条记录</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>从历史记录中删除</value></data>
@@ -1502,9 +1504,7 @@
   <data name="HistoryRetentionUpdated" xml:space="preserve"><value>历史保留期限已更新。</value></data>
   <data name="SavedItemsAllResults" xml:space="preserve"><value>全部结果（{0}）</value></data>
   <data name="SavedItemsApply" xml:space="preserve"><value>应用</value></data>
-  <data name="SavedItemsBackToList" xml:space="preserve"><value>返回列表</value></data>
   <data name="SavedItemsClearSearch" xml:space="preserve"><value>清除搜索和筛选</value></data>
-  <data name="SavedItemsCollapse" xml:space="preserve"><value>折叠结果</value></data>
   <data name="SavedItemsCollapseResult" xml:space="preserve"><value>折叠结果</value></data>
   <data name="SavedItemsCompare" xml:space="preserve"><value>对比</value></data>
   <data name="SavedItemsCompareCount" xml:space="preserve"><value>对比（{0}/2）</value></data>
@@ -1512,15 +1512,12 @@
   <data name="SavedItemsCopySource" xml:space="preserve"><value>复制原文</value></data>
   <data name="SavedItemsDeleteHistoryConfirm" xml:space="preserve"><value>从历史记录中删除这次查询？收藏不会被删除。</value></data>
   <data name="SavedItemsDiscard" xml:space="preserve"><value>放弃修改</value></data>
-  <data name="SavedItemsEarlier" xml:space="preserve"><value>更早</value></data>
   <data name="SavedItemsEdit" xml:space="preserve"><value>编辑备注和标签</value></data>
-  <data name="SavedItemsEditFavorite" xml:space="preserve"><value>编辑备注和标签</value></data>
   <data name="SavedItemsFilters" xml:space="preserve"><value>筛选</value></data>
   <data name="SavedItemsLoadError" xml:space="preserve"><value>无法加载记录：{0}</value></data>
   <data name="SavedItemsMetadataSaved" xml:space="preserve"><value>收藏信息已保存。</value></data>
   <data name="SavedItemsNoNote" xml:space="preserve"><value>暂无备注</value></data>
   <data name="SavedItemsNoSearchResults" xml:space="preserve"><value>没有匹配的记录。请更换搜索词或清除筛选。</value></data>
-  <data name="SavedItemsNoSelectionDescription" xml:space="preserve"><value>选择一条记录，查看原文和翻译结果。</value></data>
   <data name="SavedItemsOtherResults" xml:space="preserve"><value>同次查询的其他结果</value></data>
   <data name="SavedItemsOtherResultsCount" xml:space="preserve"><value>同次查询的其他结果（{0}）</value></data>
   <data name="SavedItemsPinnedOnly" xml:space="preserve"><value>仅显示置顶</value></data>
@@ -1532,7 +1529,6 @@
   <data name="SavedItemsResultCopied" xml:space="preserve"><value>已复制结果。</value></data>
   <data name="SavedItemsResultCount" xml:space="preserve"><value>{0} 个结果</value></data>
   <data name="SavedItemsResultFavorites" xml:space="preserve"><value>单个结果</value></data>
-  <data name="SavedItemsReturnToTranslation" xml:space="preserve"><value>返回翻译</value></data>
   <data name="SavedItemsSelectDescription" xml:space="preserve"><value>在左侧选择一条记录，查看原文和翻译结果。</value></data>
   <data name="SavedItemsSource" xml:space="preserve"><value>原文</value></data>
   <data name="SavedItemsSourceClipboard" xml:space="preserve"><value>剪贴板</value></data>
@@ -1547,6 +1543,12 @@
   <data name="SavedItemsUnsavedDescription" xml:space="preserve"><value>这条收藏的备注或标签有尚未保存的修改。</value></data>
   <data name="SavedItemsUnsavedTitle" xml:space="preserve"><value>保存修改？</value></data>
   <data name="SavedItemsYesterday" xml:space="preserve"><value>昨天</value></data>
+  <data name="SavedItemsBackToList" xml:space="preserve"><value>返回列表</value></data>
+  <data name="SavedItemsCollapse" xml:space="preserve"><value>折叠结果</value></data>
+  <data name="SavedItemsEarlier" xml:space="preserve"><value>更早</value></data>
+  <data name="SavedItemsEditFavorite" xml:space="preserve"><value>编辑备注和标签</value></data>
+  <data name="SavedItemsNoSelectionDescription" xml:space="preserve"><value>选择一条记录，查看原文和翻译结果。</value></data>
+  <data name="SavedItemsReturnToTranslation" xml:space="preserve"><value>返回翻译</value></data>
   <data name="FluentMoreOptions" xml:space="preserve"><value>更多选项</value></data>
   <data name="FluentCopyFailed" xml:space="preserve"><value>复制失败，请重试。</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>已复制</value></data>

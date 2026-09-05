@@ -588,6 +588,9 @@ public sealed partial class SavedItemsPage : Page
         HistoryRailButton.IsEnabled = true;
         FavoritesRailButton.IsEnabled = true;
         SavedNavigation.SelectedItem = _section == SavedItemsSection.History ? HistoryRailButton : FavoritesRailButton;
+        var historyDisabled = _section == SavedItemsSection.History && !SettingsService.Instance.HistoryEnabled;
+        HistoryDisabledNotice.IsOpen = historyDisabled;
+        HistoryDisabledNotice.Visibility = historyDisabled ? Visibility.Visible : Visibility.Collapsed;
         UpdateFilterBadge();
         UpdateResponsiveLayout();
     }
@@ -1490,6 +1493,11 @@ public sealed partial class SavedItemsPage : Page
         HistoryRailButton.Content = L("SavedItemsHistory", "History");
         FavoritesRailButton.Content = L("SavedItemsFavorites", "Favorites");
         SettingsRailButton.Content = L("Settings", "Settings");
+        HistoryDisabledNotice.Title = L("SavedItemsHistoryDisabledTitle", "History is turned off");
+        HistoryDisabledNotice.Message = string.Format(
+            L("SavedItemsHistoryDisabledMessage", "To save future queries, go to {0} → {1} → {2} and turn on “{3}”. Existing records are kept."),
+            L("Settings", "Settings"), L("SettingsTab_General", "General"),
+            L("HistoryPrivacyTitle", "History & privacy"), L("HistoryEnabledLabel", "Save query history"));
         NoSelectionTitle.Text = L("SavedItemsSelectQuery", "Select a saved query");
         NoSelectionDescription.Text = L("SavedItemsSelectDescription", "Choose a record on the left to read its source and results.");
         ClearSearchButton.Content = L("SavedItemsClearSearch", "Clear search and filters");

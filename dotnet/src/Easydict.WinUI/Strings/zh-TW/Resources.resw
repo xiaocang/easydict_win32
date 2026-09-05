@@ -81,6 +81,9 @@
   <data name="StatusDisconnected" xml:space="preserve">
     <value>未連線</value>
   </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>正在初始化...</value>
+  </data>
   <data name="StatusReady" xml:space="preserve">
     <value>就緒</value>
   </data>
@@ -405,6 +408,18 @@
   <data name="NiuTransDescription" xml:space="preserve">
     <value>小牛翻譯支援 450+ 種語言對。從 niutrans.com 取得您的 API 金鑰</value>
   </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>使用官方 API</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>有道提供英語單字的音標。未設定 API 金鑰時使用免費網頁字典。設定 API 金鑰後可使用官方 API 以獲得更高配額。前往 ai.youdao.com 取得 API 金鑰</value>
+  </data>
   <data name="FreeServicesTitle" xml:space="preserve">
     <value>免費服務（無需設定）</value>
   </data>
@@ -525,14 +540,29 @@
   <data name="ServiceNotInitialized" xml:space="preserve">
     <value>服務未初始化</value>
   </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>未啟用任何服務。請前往設定啟用服務。</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} 個服務已完成</value>
+  </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
     <value>無效的語言選擇</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>第一語言與第二語言不能相同。</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
     <value>無效的代理位址</value>
   </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>代理伺服器網址無效。請輸入有效的網址（例如：http://127.0.0.1:7890）。</value>
+  </data>
   <data name="SettingsSaved" xml:space="preserve">
     <value>設定已儲存</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>您的設定已成功儲存。</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
     <value>需要重新啟動</value>
@@ -540,11 +570,17 @@
   <data name="CannotConnectToOllama" xml:space="preserve">
     <value>無法連線到 Ollama</value>
   </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>無法從 Ollama 取得模型。請確認 Ollama 正在執行且可以存取。</value>
+  </data>
   <data name="Copied" xml:space="preserve">
     <value>已複製！</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
     <value>偵測到：{0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>確定</value>
   </data>
 
   <!-- Service Names -->
@@ -595,6 +631,12 @@
   <data name="TrayShow" xml:space="preserve">
     <value>顯示</value>
   </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>迷你視窗</value>
   </data>
@@ -641,101 +683,18 @@
     <value>結束</value>
   </data>
 
-  <!-- UI Language -->
-  <data name="UILanguage" xml:space="preserve">
-    <value>介面語言</value>
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
   </data>
-  <data name="RestartRequiredMessage" xml:space="preserve">
-    <value>請重新啟動應用程式以使語言更改生效。</value>
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>拖曳選擇區域  |  雙擊選擇視窗  |  滾輪切換視窗  |  Esc 退出</value>
   </data>
-  <data name="UILangEnglish" xml:space="preserve">
-    <value>英語</value>
-  </data>
-  <data name="UILangChineseSimplified" xml:space="preserve">
-    <value>簡體中文</value>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>右鍵或 Esc 取消</value>
   </data>
 
-  <!-- x:Uid entries for Settings Page XAML -->
-  <!-- International Services -->
-  <data name="EnableInternationalServices" xml:space="preserve">
-    <value>啟用國際服務</value>
-  </data>
-  <data name="EnableInternationalServicesDescription" xml:space="preserve">
-    <value>部分服務（Google、DeepL、OpenAI、Gemini 等）需要國際網路存取，可能在部分地區無法使用。</value>
-  </data>
-  <data name="InternationalServiceUnavailableHint" xml:space="preserve">
-    <value>此服務在您所在的地區可能無法使用。請嘗試使用 Bing 翻譯或其他地區相容的翻譯服務。您可以在設定中更改啟用的服務。</value>
-  </data>
-
-  <!-- App Theme -->
-  <data name="AppTheme" xml:space="preserve">
-    <value>應用程式主題</value>
-  </data>
-  <data name="AppThemeDescription" xml:space="preserve">
-    <value>選擇 Easydict 的外觀。選擇「系統」將跟隨 Windows 主題。</value>
-  </data>
-  <data name="ThemeSystem" xml:space="preserve">
-    <value>系統</value>
-  </data>
-  <data name="ThemeLight" xml:space="preserve">
-    <value>淺色</value>
-  </data>
-  <data name="ThemeDark" xml:space="preserve">
-    <value>深色</value>
-  </data>
-
-  <!-- Unsaved Changes Dialog -->
-  <data name="UnsavedChangesTitle" xml:space="preserve">
-    <value>未儲存的變更</value>
-  </data>
-  <data name="UnsavedChangesMessage" xml:space="preserve">
-    <value>您有未儲存的變更。是否要在離開前儲存？</value>
-  </data>
-  <data name="DontSave" xml:space="preserve">
-    <value>不儲存</value>
-  </data>
-  <data name="Cancel" xml:space="preserve">
-    <value>取消</value>
-  </data>
-
-  <!-- Service Testing UI -->
-  <data name="Test" xml:space="preserve">
-    <value>測試</value>
-  </data>
-  <data name="Testing" xml:space="preserve">
-    <value>測試中...</value>
-  </data>
-  <data name="TestNotConfigured" xml:space="preserve">
-    <value>請先設定服務（API 金鑰、端點等）。</value>
-  </data>
-  <data name="TestSuccessTitle" xml:space="preserve">
-    <value>測試成功</value>
-  </data>
-  <data name="TestSuccessMessage" xml:space="preserve">
-    <value>設定有效。翻譯在 {0}ms 內完成。</value>
-  </data>
-  <data name="TestFailedTitle" xml:space="preserve">
-    <value>測試失敗</value>
-  </data>
-  <data name="TestFailedMessage" xml:space="preserve">
-    <value>設定測試失敗：{0}</value>
-  </data>
-
-  <!-- Youdao Service -->
-  <data name="AppKey" xml:space="preserve">
-    <value>App Key</value>
-  </data>
-  <data name="AppSecret" xml:space="preserve">
-    <value>App Secret</value>
-  </data>
-  <data name="UseOfficialApi" xml:space="preserve">
-    <value>使用官方 API</value>
-  </data>
-  <data name="YoudaoDescription" xml:space="preserve">
-    <value>有道提供英語單字的音標。未設定 API 金鑰時使用免費網頁字典。設定 API 金鑰後可使用官方 API 以獲得更高配額。前往 ai.youdao.com 取得 API 金鑰</value>
-  </data>
-
-  <!-- Window Chrome -->
+  <!-- Window Titles -->
   <data name="QuickTranslate" xml:space="preserve">
     <value>快速翻譯</value>
   </data>
@@ -778,6 +737,22 @@
   <data name="ShowSwapButton" xml:space="preserve">
     <value>顯示交換按鈕</value>
   </data>
+
+  <!-- UI Language -->
+  <data name="UILanguage" xml:space="preserve">
+    <value>介面語言</value>
+  </data>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>請重新啟動應用程式以使語言更改生效。</value>
+  </data>
+  <data name="UILangEnglish" xml:space="preserve">
+    <value>英語</value>
+  </data>
+  <data name="UILangChineseSimplified" xml:space="preserve">
+    <value>簡體中文</value>
+  </data>
+
+  <!-- x:Uid entries for Settings Page XAML -->
   <data name="Close" xml:space="preserve">
     <value>關閉</value>
   </data>
@@ -785,21 +760,49 @@
     <value>隱藏（Ctrl+Alt+F 再次顯示）</value>
   </data>
 
-  <!-- Status & Feedback -->
-  <data name="OK" xml:space="preserve">
-    <value>確定</value>
+  <!-- International Services -->
+  <data name="EnableInternationalServices" xml:space="preserve">
+    <value>啟用國際服務</value>
   </data>
-  <data name="StatusInitializing" xml:space="preserve">
-    <value>正在初始化...</value>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve">
+    <value>部分服務（Google、DeepL、OpenAI、Gemini 等）需要國際網路存取，可能在部分地區無法使用。</value>
   </data>
-  <data name="NoServicesEnabled" xml:space="preserve">
-    <value>未啟用任何服務。請前往設定啟用服務。</value>
+  <data name="InternationalServiceUnavailableHint" xml:space="preserve">
+    <value>此服務在您所在的地區可能無法使用。請嘗試使用 Bing 翻譯或其他地區相容的翻譯服務。您可以在設定中更改啟用的服務。</value>
   </data>
-  <data name="ServiceResultsComplete" xml:space="preserve">
-    <value>{0} 個服務已完成</value>
+
+  <!-- App Theme -->
+  <data name="AppTheme" xml:space="preserve">
+    <value>應用程式主題</value>
   </data>
-  <data name="SettingsSavedMessage" xml:space="preserve">
-    <value>您的設定已成功儲存。</value>
+  <data name="AppThemeDescription" xml:space="preserve">
+    <value>選擇 Easydict 的外觀。選擇「系統」將跟隨 Windows 主題。</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>系統</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>淺色</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>深色</value>
+  </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
+
+  <!-- Unsaved Changes Dialog -->
+  <data name="UnsavedChangesTitle" xml:space="preserve">
+    <value>未儲存的變更</value>
+  </data>
+  <data name="UnsavedChangesMessage" xml:space="preserve">
+    <value>您有未儲存的變更。是否要在離開前儲存？</value>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>不儲存</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>取消</value>
   </data>
 
   <!-- Help Tooltips -->
@@ -819,15 +822,27 @@
     <value>請先在上方「已啟用的服務」中啟用</value>
   </data>
 
-  <!-- Validation Messages -->
-  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
-    <value>第一語言與第二語言不能相同。</value>
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>測試</value>
   </data>
-  <data name="InvalidProxyUrlMessage" xml:space="preserve">
-    <value>代理伺服器網址無效。請輸入有效的網址（例如：http://127.0.0.1:7890）。</value>
+  <data name="Testing" xml:space="preserve">
+    <value>測試中...</value>
   </data>
-  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
-    <value>無法從 Ollama 取得模型。請確認 Ollama 正在執行且可以存取。</value>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>測試成功</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>設定有效。翻譯在 {0}ms 內完成。</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>測試失敗</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>設定測試失敗：{0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>請先設定服務（API 金鑰、端點等）。</value>
   </data>
 
   <!-- Toggle Switch On/Off -->
@@ -844,14 +859,6 @@
   </data>
   <data name="WebFree" xml:space="preserve">
     <value>網頁版（免費）</value>
-  </data>
-
-  <!-- Screen Capture -->
-  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>拖曳選擇區域  |  雙擊選擇視窗  |  滾輪切換視窗  |  Esc 退出</value>
-  </data>
-  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
-    <value>右鍵或 Esc 取消</value>
   </data>
 
   <!-- Grammar Correction Mode -->
@@ -896,6 +903,44 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>未發現語法問題。</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
   </data>
   <data name="DocumentOutputMode_Title" xml:space="preserve">
     <value>文件輸出模式</value>
@@ -1246,7 +1291,6 @@
   <data name="OpenVINO_ConfigTitle" xml:space="preserve"><value>OpenVINO（本機 NLLB）</value></data>
   <data name="OpenVINO_ConfigDescription" xml:space="preserve"><value>使用 ONNX Runtime + OpenVINO 在本機執行 NLLB-200。硬體加速為盡力而為，必要時會回退到 CPU。</value></data>
 
-  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>留空端點時會透過 foundry service status 自動探索；如果本機服務使用固定的 OpenAI 相容端點，也可以手動填寫。</value></data>
   <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>安裝 Foundry Local</value></data>
   <data name="FoundryLocal_DocsLinkText" xml:space="preserve"><value>安裝/使用文件</value></data>
@@ -1255,17 +1299,18 @@
   <data name="FoundryLocal_Title_Unavailable" xml:space="preserve"><value>Foundry Local 不可用</value></data>
   <data name="FoundryLocal_Status_Checking" xml:space="preserve"><value>正在檢查 Foundry Local 狀態...</value></data>
   <data name="FoundryLocal_Status_NotInstalled" xml:space="preserve"><value>未安裝 Foundry Local CLI，或目前 PATH 中無法使用。</value></data>
-  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未設定。</value></data>
-  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>透過 foundry service status 自動探索</value></data>
-  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
   <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local 未執行。請啟動 Foundry Local 服務，或手動設定端點。</value></data>
   <data name="FoundryLocal_Status_Starting" xml:space="preserve"><value>正在啟動 Foundry Local 服務...</value></data>
   <data name="FoundryLocal_Status_LoadingModel" xml:space="preserve"><value>正在載入設定的 Foundry Local 模型...</value></data>
   <data name="FoundryLocal_Status_StartFailed" xml:space="preserve"><value>無法啟動 Foundry Local。</value></data>
-  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
-  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>透過 Microsoft Foundry Local 的 OpenAI 相容本機端點執行本機模型。需要安裝 Foundry Local 並備妥本機模型。</value></data>
   <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local 已設定。執行時會使用本機端點或自動探索端點。</value></data>
   <data name="FoundryLocal_EndpointLabel" xml:space="preserve"><value>端點（可選）</value></data>
+  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未設定。</value></data>
+  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>透過 Microsoft Foundry Local 的 OpenAI 相容本機端點執行本機模型。需要安裝 Foundry Local 並備妥本機模型。</value></data>
+  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>透過 foundry service status 自動探索</value></data>
+  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
+  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="PhiSilicaModelPrompt_Title" xml:space="preserve"><value>下載 Phi Silica 模型？</value></data>
   <data name="PhiSilicaModelPrompt_Message" xml:space="preserve"><value>Phi Silica 首次使用前需要下載並準備由 Windows 管理的本機語言模型元件。預計是數 GB 等級的安裝，實際大小取決於裝置和 Windows 版本。你可以現在下載、本次先略過，或暫時停用 Phi Silica；之後可在「設定」中重新啟用。</value></data>
   <data name="PhiSilicaModelPrompt_DownloadNow" xml:space="preserve"><value>立即下載</value></data>
@@ -1311,54 +1356,6 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200 模型尚未下載（約 360 MB）。點擊「下載模型」將檔案儲存到 %LOCALAPPDATA%\Easydict\models。</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>正在下載 NLLB-200 模型檔案…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>下載失敗。請檢查網路連線後重試。</value></data>
-  <data name="TrayTranslateClipboard" xml:space="preserve">
-    <value>Translate Clipboard</value>
-  </data>
-  <data name="TrayOcrTranslate" xml:space="preserve">
-    <value>OCR Translate</value>
-  </data>
-  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
-    <value>Exit screenshot?</value>
-  </data>
-  <data name="ThemeMinimal" xml:space="preserve">
-    <value>Minimal</value>
-  </data>
-  <data name="LayoutDetection_Title" xml:space="preserve">
-    <value>Layout Detection</value>
-  </data>
-  <data name="LayoutDetection_Description" xml:space="preserve">
-    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
-  </data>
-  <data name="LayoutDetection_Auto" xml:space="preserve">
-    <value>Auto (Recommended)</value>
-  </data>
-  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
-    <value>Local ONNX Model</value>
-  </data>
-  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
-    <value>Vision LLM</value>
-  </data>
-  <data name="LayoutDetection_Heuristic" xml:space="preserve">
-    <value>Heuristic Only</value>
-  </data>
-  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
-    <value>Download Model (~75MB)</value>
-  </data>
-  <data name="LayoutDetection_Downloaded" xml:space="preserve">
-    <value>ONNX Model: Ready</value>
-  </data>
-  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
-    <value>ONNX Model: Not Downloaded</value>
-  </data>
-  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
-    <value>Download Failed</value>
-  </data>
-  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
-    <value>Detection Mode</value>
-  </data>
-  <data name="LayoutDetection_VisionService" xml:space="preserve">
-    <value>Vision Service</value>
-  </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
   <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
@@ -1473,6 +1470,8 @@
   <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
   <data name="SavedItemsRefresh" xml:space="preserve"><value>重新整理</value></data>
   <data name="SavedItemsNoHistory" xml:space="preserve"><value>尚無已完成的查詢。</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>歷史記錄尚未啟用</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>如需儲存之後的查詢，請前往 {0} → {1} → {2}，開啟「{3}」。既有記錄會保留。</value></data>
   <data name="SavedItemsNoFavorites" xml:space="preserve"><value>尚無收藏。</value></data>
   <data name="SavedItemsSelectQuery" xml:space="preserve"><value>選取已儲存的查詢</value></data>
   <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>從歷史記錄刪除</value></data>

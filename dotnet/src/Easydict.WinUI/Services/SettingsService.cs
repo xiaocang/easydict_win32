@@ -203,9 +203,9 @@ public sealed class SettingsService
 
 
     /// <summary>
-    /// Whether completed queries are written to local history. Favorites remain available.
+    /// Whether completed queries are written to local history. Off by default; favorites remain available.
     /// </summary>
-    public bool HistoryEnabled { get; set; } = true;
+    public bool HistoryEnabled { get; set; } = false;
 
     /// <summary>
     /// Number of days visible history is retained before being pruned.
@@ -802,7 +802,7 @@ public sealed class SettingsService
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
-        HistoryEnabled = GetValue(nameof(HistoryEnabled), true);
+        HistoryEnabled = GetValue(nameof(HistoryEnabled), false);
         HistoryRetentionDays = Math.Clamp(GetValue(nameof(HistoryRetentionDays), 30), 1, 3650);
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");

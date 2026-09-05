@@ -1462,4 +1462,35 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>무료 모델</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>API 키 받기 (추천 링크)</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>기록</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>즐겨찾기</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>더 보기</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>원문, 결과 또는 서비스 검색</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>전체</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>번역 / 사전</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>문법 교정</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>새로 고침</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>완료된 검색이 아직 없습니다.</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>즐겨찾기가 아직 없습니다.</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>저장된 검색 선택</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>기록에서 삭제</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>번역으로 이동</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>즐겨찾기에 추가</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>즐겨찾기에서 삭제</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>즐겨찾기 고정</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>메모</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>태그</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>태그를 쉼표로 구분</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>태그는 최대 20개, 각 태그는 40자 이내로 사용하세요.</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>저장</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>결과를 즐겨찾기에 추가</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>결과 즐겨찾기 삭제</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>모든 기간</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>오늘</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>최근 7일</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>최근 30일</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>모든 서비스</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>다시 시도</value></data>
 </root>

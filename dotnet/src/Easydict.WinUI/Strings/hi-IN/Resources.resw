@@ -1049,4 +1049,35 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>मुफ़्त मॉडल</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>API key प्राप्त करें (रेफ़रल लिंक)</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>इतिहास</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>पसंदीदा</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>अधिक</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>स्रोत, परिणाम या प्रदाता खोजें</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>सभी</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>अनुवाद / शब्दकोश</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>व्याकरण सुधार</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>रीफ़्रेश करें</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>अभी कोई पूर्ण क्वेरी नहीं है।</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>अभी कोई पसंदीदा नहीं है।</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>सहेजी गई क्वेरी चुनें</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>इतिहास से हटाएँ</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>अनुवाद पर जाएँ</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>पसंदीदा में जोड़ें</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>पसंदीदा हटाएँ</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>पसंदीदा पिन करें</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>नोट</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>टैग</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>टैग को अल्पविराम से अलग करें</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>अधिकतम 20 टैग रखें और हर टैग में अधिकतम 40 वर्ण रखें।</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>सहेजें</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>परिणाम पसंदीदा में जोड़ें</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>परिणाम पसंदीदा हटाएँ</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>कभी भी</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>आज</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>पिछले 7 दिन</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>पिछले 30 दिन</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>सभी प्रदाता</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>पुनः प्रयास करें</value></data>
 </root>

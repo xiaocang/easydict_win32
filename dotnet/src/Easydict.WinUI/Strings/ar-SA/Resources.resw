@@ -1457,4 +1457,35 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>نماذج مجانية</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>الحصول على مفتاح API (رابط إحالة)</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>السجل</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>المفضلة</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>المزيد</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>البحث في النص الأصلي أو النتيجة أو الموفر</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>الكل</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>ترجمة / قاموس</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>تصحيح القواعد</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>تحديث</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>لا توجد استعلامات مكتملة بعد.</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>لا توجد عناصر مفضلة بعد.</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>حدد استعلامًا محفوظًا</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>حذف من السجل</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>الانتقال إلى الترجمة</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>إضافة إلى المفضلة</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>إزالة من المفضلة</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>تثبيت المفضلة</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>ملاحظة</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>العلامات</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>افصل العلامات بفواصل</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>استخدم 20 علامة كحد أقصى، وبحد أقصى 40 حرفًا لكل علامة.</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>حفظ</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>إضافة النتيجة إلى المفضلة</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>إزالة النتيجة من المفضلة</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>أي وقت</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>اليوم</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>آخر 7 أيام</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>آخر 30 يومًا</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>كل الموفرين</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>إعادة المحاولة</value></data>
 </root>

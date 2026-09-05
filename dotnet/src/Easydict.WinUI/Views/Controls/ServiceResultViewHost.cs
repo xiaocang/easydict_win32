@@ -14,23 +14,36 @@ internal static class ServiceResultViewHost
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
         FrameworkElement? themeRoot = null,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        bool isSavedItemView = false,
+        EventHandler? copyCompleted = null)
     {
         IServiceResultView control = MinimalThemeService.IsActive
             ? new MinimalServiceResultItem()
             : new ServiceResultItem();
 
         control.ThemeRoot = themeRoot;
+        control.IsSavedItemView = isSavedItemView;
         control.CollapseToggled += collapseToggled;
         control.QueryRequested += queryRequested;
         if (foundryLocalStartRequested is not null)
         {
             control.FoundryLocalStartRequested += foundryLocalStartRequested;
         }
+        if (favoriteRequested is not null)
+        {
+            control.FavoriteRequested += favoriteRequested;
+        }
+        if (copyCompleted is not null)
+        {
+            control.CopyCompleted += copyCompleted;
+        }
         control.ServiceResult = result;
         ApplyAutomationProperties(control, result);
         control.RefreshThemeChrome();
         control.ApplyAppearance(AppearanceService.CurrentSnapshot());
+        control.SetFavoriteState(favoriteRequested is not null, isFavorited: false);
         return control;
     }
 
@@ -41,14 +54,20 @@ internal static class ServiceResultViewHost
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
         FrameworkElement? themeRoot = null,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        bool isSavedItemView = false,
+        EventHandler? copyCompleted = null)
     {
         var control = Create(
             result,
             collapseToggled,
             queryRequested,
             themeRoot ?? resultsPanel,
-            foundryLocalStartRequested);
+            foundryLocalStartRequested,
+            favoriteRequested,
+            isSavedItemView,
+            copyCompleted);
         controls.Add(control);
         resultsPanel.Items.Add(control.Element);
         control.RefreshThemeChrome();
@@ -81,11 +100,14 @@ internal static class ServiceResultViewHost
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
         FrameworkElement? themeRoot = null,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        bool isSavedItemView = false,
+        EventHandler? copyCompleted = null)
     {
         using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.RebuildForCurrentTheme");
 
-        Release(controls, resultsPanel, collapseToggled, queryRequested, foundryLocalStartRequested);
+        Release(controls, resultsPanel, collapseToggled, queryRequested, foundryLocalStartRequested, favoriteRequested, copyCompleted);
 
         foreach (var result in results)
         {
@@ -96,7 +118,10 @@ internal static class ServiceResultViewHost
                 collapseToggled,
                 queryRequested,
                 themeRoot,
-                foundryLocalStartRequested);
+                foundryLocalStartRequested,
+                favoriteRequested,
+                isSavedItemView,
+                copyCompleted);
         }
     }
 
@@ -105,7 +130,9 @@ internal static class ServiceResultViewHost
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        EventHandler? copyCompleted = null)
     {
         using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.Release");
 
@@ -116,6 +143,14 @@ internal static class ServiceResultViewHost
             if (foundryLocalStartRequested is not null)
             {
                 control.FoundryLocalStartRequested -= foundryLocalStartRequested;
+            }
+            if (favoriteRequested is not null)
+            {
+                control.FavoriteRequested -= favoriteRequested;
+            }
+            if (copyCompleted is not null)
+            {
+                control.CopyCompleted -= copyCompleted;
             }
             control.Cleanup();
         }

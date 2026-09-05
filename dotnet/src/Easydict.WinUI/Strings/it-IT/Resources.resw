@@ -1449,4 +1449,35 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>Modelli gratuiti</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Ottieni una chiave API (link di riferimento)</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>Cronologia</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>Preferiti</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>Altro</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>Cerca testo originale, risultato o provider</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>Tutti</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>Traduzione / Dizionario</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>Correzione grammaticale</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>Aggiorna</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>Nessuna ricerca completata.</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>Nessun preferito.</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>Seleziona una ricerca salvata</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>Elimina dalla cronologia</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>Vai alla traduzione</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>Aggiungi ai preferiti</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>Rimuovi dai preferiti</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>Fissa preferito</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>Nota</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>Tag</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>Separa i tag con virgole</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>Usa al massimo 20 tag, ciascuno di non oltre 40 caratteri.</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>Salva</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>Aggiungi risultato ai preferiti</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>Rimuovi risultato dai preferiti</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>Qualsiasi periodo</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>Oggi</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>Ultimi 7 giorni</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>Ultimi 30 giorni</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>Tutti i provider</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>Riprova</value></data>
 </root>

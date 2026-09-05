@@ -113,52 +113,14 @@
                 <Setter Property="BorderThickness" Value="{ThemeResource EasydictIconButtonBorderThickness}" />
             </Style>
 
-            <Style x:Key="EasydictAccentButtonStyle" TargetType="Button">
+            <Style x:Key="EasydictAccentButtonStyle"
+                   TargetType="Button"
+                   BasedOn="{StaticResource AccentButtonStyle}">
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="MinHeight" Value="0" />
                 <Setter Property="Padding" Value="12,8" />
-                <Setter Property="Background" Value="{ThemeResource AccentBrush}" />
-                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="{ThemeResource EasydictIconButtonBorderThickness}" />
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
-                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="UseSystemFocusVisuals" Value="True" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Grid x:Name="Root"
-                                  Background="Transparent">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver" />
-                                        <VisualState x:Name="Pressed" />
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="Root.Opacity" Value="0.5" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <Border x:Name="ButtonChrome"
-                                        Background="{TemplateBinding Background}"
-                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                        CornerRadius="{TemplateBinding CornerRadius}">
-                                    <ContentPresenter
-                                        Content="{TemplateBinding Content}"
-                                        ContentTemplate="{TemplateBinding ContentTemplate}"
-                                        Padding="{TemplateBinding Padding}"
-                                        Foreground="{TemplateBinding Foreground}"
-                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
             </Style>
 
             <Style x:Key="EasydictPrimaryRoundButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictAccentButtonStyle}">

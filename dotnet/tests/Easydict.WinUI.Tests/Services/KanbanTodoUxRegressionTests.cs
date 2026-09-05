@@ -458,7 +458,7 @@ public class KanbanTodoUxRegressionTests
             AssertContainsInOrder(snippet, "service.Hide();", "await Task.Delay(150, cancellationToken);",
                 "hiding a foreground or pending window must be immediate");
             snippet.Should().Contain("service.ShowRequests.IsPending || (service.IsVisible && service.IsForeground)");
-            snippet.Should().Contain("service.ShowWithText(text)");
+            snippet.Should().Contain("service.ShowWithText(text, QuerySourceKind.Selection)");
             snippet.Should().Contain("GetForegroundWindow() == sourceWindow");
             serviceCode.Should().Contain("SelectionCaptureInterrupted += ShowRequests.Invalidate");
             windowCode.Should().Contain("_appWindow?.Show(false)");

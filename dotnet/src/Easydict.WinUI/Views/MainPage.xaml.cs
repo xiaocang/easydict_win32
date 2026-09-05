@@ -9,6 +9,7 @@ using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
@@ -28,6 +29,7 @@ namespace Easydict.WinUI.Views
     /// </summary>
     public partial class MainPage : Page
     {
+        private const double SavedItemsHeaderBreakpoint = 600;
         private LanguageDetectionService? _detectionService;
         // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
         // Other code may Cancel() but must NOT Dispose().
@@ -38,6 +40,8 @@ namespace Easydict.WinUI.Views
         private Task? _currentQueryTask;
         private readonly SettingsService _settings = SettingsService.Instance;
         private readonly List<ServiceQueryResult> _serviceResults = new();
+        private QuerySnapshotDraft? _currentSnapshotDraft;
+        private SavedQueryRerunRequest? _pendingSavedQueryRerun;
         private readonly List<IServiceResultView> _resultControls = new();
         private string? _staticUiSettingsSignature;
         private readonly TargetLanguageSelector _targetLanguageSelector;
@@ -305,6 +309,10 @@ namespace Easydict.WinUI.Views
                 ApplyThemeChrome();
             }
             SyncLocalModelPreparationProgressFromCoordinator();
+            if (Interlocked.Exchange(ref _pendingSavedQueryRerun, null) is { } pendingRerun)
+            {
+                _ = RerunSavedQueryAsync(pendingRerun);
+            }
 #if PORTABLE_UPDATE_CHECK
             StartPortableUpdateCheck();
 #endif
@@ -1308,6 +1316,21 @@ namespace Easydict.WinUI.Views
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SettingsButton, loc.GetString("SettingsTooltip"));
+            var historyText = loc.GetString("SavedItemsHistory");
+            var favoritesText = loc.GetString("SavedItemsFavorites");
+            var savedItemsMoreText = loc.GetString("SavedItemsMore");
+            HistoryButtonText.Text = historyText;
+            FavoritesButtonText.Text = favoritesText;
+            ToolTipService.SetToolTip(HistoryButton, historyText);
+            ToolTipService.SetToolTip(FavoritesButton, favoritesText);
+            ToolTipService.SetToolTip(SavedItemsMoreButton, savedItemsMoreText);
+            AutomationProperties.SetName(HistoryButton, historyText);
+            AutomationProperties.SetName(FavoritesButton, favoritesText);
+            AutomationProperties.SetName(SavedItemsMoreButton, savedItemsMoreText);
+            CompactHistoryMenuItem.Text = historyText;
+            CompactFavoritesMenuItem.Text = favoritesText;
+            AutomationProperties.SetName(CompactHistoryMenuItem, historyText);
+            AutomationProperties.SetName(CompactFavoritesMenuItem, favoritesText);
             ToolTipService.SetToolTip(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
             ToolTipService.SetToolTip(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
@@ -1731,7 +1754,8 @@ namespace Easydict.WinUI.Views
                     OnServiceCollapseToggled,
                     OnServiceQueryRequested,
                     this,
-                    OnFoundryLocalStartRequested);
+                    OnFoundryLocalStartRequested,
+                    OnFavoriteRequested);
             }
 
             ReorderResultsPanel();
@@ -1849,7 +1873,8 @@ namespace Easydict.WinUI.Views
                 OnServiceCollapseToggled,
                 OnServiceQueryRequested,
                 this,
-                OnFoundryLocalStartRequested);
+                OnFoundryLocalStartRequested,
+                OnFavoriteRequested);
 
             ReorderResultsPanel();
         }
@@ -1866,7 +1891,8 @@ namespace Easydict.WinUI.Views
                 ResultsPanel,
                 OnServiceCollapseToggled,
                 OnServiceQueryRequested,
-                OnFoundryLocalStartRequested);
+                OnFoundryLocalStartRequested,
+                OnFavoriteRequested);
 
             if (clearResults)
             {
@@ -2145,6 +2171,7 @@ namespace Easydict.WinUI.Views
             var cts = new CancellationTokenSource();
             var oldCts = Interlocked.Exchange(ref _manualQueryCts, cts);
             try { oldCts?.Cancel(); } catch (ObjectDisposedException) { }
+            var snapshotDraft = _currentSnapshotDraft;
 
             try
             {
@@ -2179,6 +2206,7 @@ namespace Easydict.WinUI.Views
                 // Mark as loading and queried
                 serviceResult.IsLoading = true;
                 serviceResult.MarkQueried();
+                // Preserve the draft captured when this manual provider request began.
 
                 // Detect language (use cached if available from recent query)
                 var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
@@ -2201,7 +2229,12 @@ namespace Easydict.WinUI.Views
                         Language = detectedLanguage,
                         IncludeExplanations = _settings.GrammarIncludeExplanations,
                     };
-                    await ExecuteGrammarCorrectionForServiceAsync(serviceResult, grammarRequest, ct);
+                    await ExecuteGrammarCorrectionForServiceAsync(
+                        serviceResult,
+                        grammarRequest,
+                        snapshotDraft,
+                        _serviceResults.IndexOf(serviceResult),
+                        ct);
                     return;
                 }
 
@@ -2229,13 +2262,25 @@ namespace Easydict.WinUI.Views
                 if (manager.IsStreamingService(serviceResult.ServiceId))
                 {
                     await ExecuteStreamingTranslationForServiceAsync(
-                        manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                        manager,
+                        serviceResult,
+                        request,
+                        detectedLanguage,
+                        targetLanguage,
+                        ct,
+                        snapshotDraft,
+                        _serviceResults.IndexOf(serviceResult));
                 }
                 else
                 {
                     // Run on thread pool to avoid blocking UI thread
                     var result = await Task.Run(
                         () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
+                    snapshotDraft?.TryAddTranslation(
+                        serviceResult.ServiceId,
+                        serviceResult.ServiceDisplayName,
+                        _serviceResults.IndexOf(serviceResult),
+                        result);
                     serviceResult.Result = result;
                     serviceResult.IsLoading = false;
                     serviceResult.ApplyAutoCollapseLogic();
@@ -2275,7 +2320,87 @@ namespace Easydict.WinUI.Views
             {
                 Interlocked.CompareExchange(ref _manualQueryCts, null, cts);
                 cts.Dispose();
+                if (snapshotDraft is not null)
+                {
+                    using var recordCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await SavedItemsService.Instance.RecordSnapshotAsync(snapshotDraft, recordCts.Token);
+                    await RefreshCurrentQueryFavoriteAsync(snapshotDraft);
+                }
             }
+        }
+
+        private async void OnFavoriteRequested(object? sender, ServiceQueryResult serviceResult)
+        {
+            var draft = _currentSnapshotDraft;
+            if (draft is null)
+            {
+                return;
+            }
+
+            var savedResult = draft.Snapshot().Results
+                .FirstOrDefault(result => string.Equals(result.ProviderId, serviceResult.ServiceId, StringComparison.Ordinal));
+            if (savedResult is null)
+            {
+                return;
+            }
+
+            try
+            {
+                var toggle = await SavedItemsService.Instance.ToggleResultFavoriteAsync(draft, savedResult.Id);
+                foreach (var control in _resultControls.Where(control => ReferenceEquals(control.ServiceResult, serviceResult)))
+                {
+                    control.SetFavoriteState(isVisible: true, toggle.IsFavorited);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"[MainPage] Failed to toggle saved result: {exception.Message}");
+                SetStatusSummary(
+                    $"{LocalizationService.Instance.GetString("StatusError")}: {exception.Message}",
+                    important: true);
+            }
+        }
+
+        private async void OnCurrentQueryFavoriteClicked(object sender, RoutedEventArgs e)
+        {
+            var draft = _currentSnapshotDraft;
+            if (draft is null || draft.Snapshot().Results.Count == 0)
+                return;
+
+            CurrentQueryFavoriteButton.IsEnabled = false;
+            try
+            {
+                var toggle = await SavedItemsService.Instance.ToggleQueryFavoriteAsync(draft);
+                CurrentQueryFavoriteIcon.Glyph = toggle.IsFavorited ? "\uE735" : "\uE734";
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"[MainPage] Failed to toggle saved query: {exception.Message}");
+                SetStatusSummary(
+                    $"{LocalizationService.Instance.GetString("StatusError")}: {exception.Message}",
+                    important: true);
+            }
+            finally
+            {
+                CurrentQueryFavoriteButton.IsEnabled = true;
+            }
+        }
+
+        private async Task RefreshCurrentQueryFavoriteAsync(QuerySnapshotDraft draft)
+        {
+            if (_isClosing || !ReferenceEquals(draft, _currentSnapshotDraft))
+                return;
+
+            var snapshot = draft.Snapshot();
+            CurrentQueryFavoriteButton.Visibility = snapshot.Results.Count > 0 && _currentQuickQueryMode != QueryMode.LongDocument
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            if (snapshot.Results.Count == 0)
+                return;
+
+            var states = await SavedItemsService.Instance.GetFavoriteStatesAsync(snapshot.Id);
+            if (ReferenceEquals(draft, _currentSnapshotDraft))
+                CurrentQueryFavoriteIcon.Glyph = states.IsQueryFavorited ? "\uE735" : "\uE734";
         }
 
         private async void OnFoundryLocalStartRequested(object? sender, ServiceQueryResult serviceResult)
@@ -2473,7 +2598,7 @@ namespace Easydict.WinUI.Views
         /// Start a new translation query for all enabled services.
         /// Executes translations in parallel for multiple services.
         /// </summary>
-        private async Task StartQueryAsync()
+        private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
         {
             if (_isClosing)
             {
@@ -2518,6 +2643,7 @@ namespace Easydict.WinUI.Views
             // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
             var oldManualCts = Interlocked.Exchange(ref _manualQueryCts, null);
             try { oldManualCts?.Cancel(); } catch (ObjectDisposedException) { }
+            QuerySnapshotDraft? snapshotDraft = null;
 
             var ct = currentCts.Token;
 
@@ -2542,6 +2668,17 @@ namespace Easydict.WinUI.Views
                     reason: "StartQueryModeResolved");
 
                 var targetLanguage = resolution.EffectiveTargetLanguage;
+                var savedKind = SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind);
+                snapshotDraft = new QuerySnapshotDraft(
+                    inputText,
+                    detectedLanguage.ToIso639(),
+                    targetLanguage.ToIso639(),
+                    savedKind,
+                    sourceKind,
+                    _settings.HistoryEnabled);
+                _currentSnapshotDraft = snapshotDraft;
+                CurrentQueryFavoriteButton.Visibility = Visibility.Collapsed;
+                CurrentQueryFavoriteIcon.Glyph = "\uE734";
                 if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
                 {
                     UpdateTargetLanguageSelector(targetLanguage);
@@ -2641,7 +2778,7 @@ namespace Easydict.WinUI.Views
                 if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
                 {
                     await StartGrammarCorrectionInternalAsync(
-                        inputText, detectedLanguage, targetLanguage, ct);
+                        inputText, detectedLanguage, targetLanguage, snapshotDraft, ct);
                     return;
                 }
 
@@ -2679,7 +2816,7 @@ namespace Easydict.WinUI.Views
                         {
                             // Streaming path for LLM services
                             await ExecuteStreamingTranslationForServiceAsync(
-                                manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                                manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
                             outcome = QueryExecutionOutcome.Success;
                         }
                         else
@@ -2689,6 +2826,11 @@ namespace Easydict.WinUI.Views
                             // HTTP response processing, JSON parsing, and retry logic
                             var result = await Task.Run(
                                 () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
+                            snapshotDraft.TryAddTranslation(
+                                serviceResult.ServiceId,
+                                serviceResult.ServiceDisplayName,
+                                _serviceResults.IndexOf(serviceResult),
+                                result);
 
                             DispatcherQueue.TryEnqueue(() =>
                             {
@@ -2814,6 +2956,12 @@ namespace Easydict.WinUI.Views
             {
                 if (!_isClosing) SetLoading(false);
                 Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
+                if (snapshotDraft is not null)
+                {
+                    using var recordCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await SavedItemsService.Instance.RecordSnapshotAsync(snapshotDraft, recordCts.Token);
+                    await RefreshCurrentQueryFavoriteAsync(snapshotDraft);
+                }
             }
         }
 
@@ -2821,10 +2969,10 @@ namespace Easydict.WinUI.Views
         /// Wrapper that always tracks the query task before returning.
         /// Avoids "downgrading" from a running real task to a no-op completed task.
         /// </summary>
-        private Task StartQueryTrackedAsync()
+        private Task StartQueryTrackedAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
         {
             var oldTask = _currentQueryTask;
-            var newTask = StartQueryAsync();
+            var newTask = StartQueryAsync(sourceKind);
             Task trackedTask;
 
             // Only update _currentQueryTask if:
@@ -2889,6 +3037,7 @@ namespace Easydict.WinUI.Views
             string inputText,
             TranslationLanguage detectedLang,
             TranslationLanguage targetLanguage,
+            QuerySnapshotDraft snapshotDraft,
             CancellationToken ct)
         {
             var grammarRequest = new GrammarCorrectionRequest
@@ -2908,8 +3057,8 @@ namespace Easydict.WinUI.Views
             var tasks = _serviceResults
                 .Where(sr => sr.EnabledQuery)
                 .Select(sr => sr.IsGrammarCapable
-                    ? ExecuteGrammarCorrectionForServiceAsync(sr, grammarRequest, ct)
-                    : ExecuteTranslationForServiceAsync(sr, translationRequest, detectedLang, targetLanguage, ct))
+                    ? ExecuteGrammarCorrectionForServiceAsync(sr, grammarRequest, snapshotDraft, _serviceResults.IndexOf(sr), ct)
+                    : ExecuteTranslationForServiceAsync(sr, translationRequest, detectedLang, targetLanguage, snapshotDraft, _serviceResults.IndexOf(sr), ct))
                 .ToArray();
 
             var taskResults = await Task.WhenAll(tasks);
@@ -2953,6 +3102,8 @@ namespace Easydict.WinUI.Views
             TranslationRequest request,
             TranslationLanguage detectedLanguage,
             TranslationLanguage targetLanguage,
+            QuerySnapshotDraft? snapshotDraft,
+            int displayOrder,
             CancellationToken ct)
         {
             serviceResult.MarkQueried();
@@ -2965,12 +3116,17 @@ namespace Easydict.WinUI.Views
                 if (manager.IsStreamingService(serviceResult.ServiceId))
                 {
                     await ExecuteStreamingTranslationForServiceAsync(
-                        manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                        manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, displayOrder);
                     return true;
                 }
 
                 var result = await Task.Run(
                     () => manager.TranslateAsync(request, ct, serviceResult.ServiceId), ct);
+                snapshotDraft?.TryAddTranslation(
+                    serviceResult.ServiceId,
+                    serviceResult.ServiceDisplayName,
+                    displayOrder,
+                    result);
 
                 DispatcherQueue.TryEnqueue(() =>
                 {
@@ -3050,6 +3206,8 @@ namespace Easydict.WinUI.Views
         private async Task<bool?> ExecuteGrammarCorrectionForServiceAsync(
             ServiceQueryResult serviceResult,
             GrammarCorrectionRequest request,
+            QuerySnapshotDraft? snapshotDraft,
+            int displayOrder,
             CancellationToken ct)
         {
             serviceResult.MarkQueried();
@@ -3101,6 +3259,11 @@ namespace Easydict.WinUI.Views
                 var grammarResult = GrammarCorrectionParser.Parse(
                     rawOutput, request.Text, serviceResult.ServiceDisplayName,
                     stopwatch.ElapsedMilliseconds);
+                snapshotDraft?.TryAddGrammar(
+                    serviceResult.ServiceId,
+                    serviceResult.ServiceDisplayName,
+                    displayOrder,
+                    grammarResult);
 
                 DispatcherQueue.TryEnqueue(() =>
                 {
@@ -3157,7 +3320,9 @@ namespace Easydict.WinUI.Views
             TranslationRequest request,
             TranslationLanguage detectedLanguage,
             TranslationLanguage targetLanguage,
-            CancellationToken ct)
+            CancellationToken ct,
+            QuerySnapshotDraft? snapshotDraft = null,
+            int displayOrder = 0)
         {
             var stopwatch = Stopwatch.StartNew();
             var sb = new StringBuilder();
@@ -3235,6 +3400,11 @@ namespace Easydict.WinUI.Views
             {
                 // Best-effort: continue with original result if enrichment fails
             }
+            snapshotDraft?.TryAddTranslation(
+                serviceResult.ServiceId,
+                serviceResult.ServiceDisplayName,
+                displayOrder,
+                result);
 
             DispatcherQueue.TryEnqueue(() =>
             {
@@ -4468,6 +4638,7 @@ namespace Easydict.WinUI.Views
             var compact = IsCompactChrome;
             PinButton.Visibility = !compact && settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
             OcrButton.Visibility = !compact && settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+            ApplySavedItemsHeaderVisibility();
 
             SourcePlayButton.Visibility = (!compact && settings.ShowSourcePlayButton)
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -4475,6 +4646,24 @@ namespace Easydict.WinUI.Views
             var showSwap = !compact && settings.ShowSwapButton && _currentMode == QueryMode.Translation;
             SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
             SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ApplySavedItemsHeaderVisibility()
+        {
+            var useMoreMenu = IsCompactChrome || RootGrid.ActualWidth < SavedItemsHeaderBreakpoint;
+            HistoryButton.Visibility = useMoreMenu ? Visibility.Collapsed : Visibility.Visible;
+            FavoritesButton.Visibility = useMoreMenu ? Visibility.Collapsed : Visibility.Visible;
+            SavedItemsMoreButton.Visibility = useMoreMenu ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnHistoryClicked(object sender, RoutedEventArgs e)
+        {
+            App.OpenSavedItems(SavedItemsSection.History);
+        }
+
+        private void OnFavoritesClicked(object sender, RoutedEventArgs e)
+        {
+            App.OpenSavedItems(SavedItemsSection.Favorites);
         }
 
         private async void OnSettingsClicked(object sender, RoutedEventArgs e)
@@ -4522,14 +4711,65 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
-        /// Set text to translate (called from external sources like hotkey).
+        /// Restores a saved query into the quick-translation surface and runs it again.
         /// </summary>
-        public void SetTextAndTranslate(string text)
+        public void RerunSavedQuery(SavedQueryRerunRequest request)
         {
-            _ = SetTextAndTranslateAsync(text);
+            ArgumentNullException.ThrowIfNull(request);
+            if (!_isLoaded)
+            {
+                Interlocked.Exchange(ref _pendingSavedQueryRerun, request);
+                return;
+            }
+
+            _ = RerunSavedQueryAsync(request);
+        }
+        private async Task RerunSavedQueryAsync(SavedQueryRerunRequest request)
+        {
+            if (!await SwitchModeAsync(QueryMode.Translation))
+            {
+                return;
+            }
+
+            var sourceLanguage = LanguageCodes.FromIso639(request.SourceLanguage);
+            var targetLanguage = LanguageCodes.FromIso639(request.TargetLanguage);
+            _suppressSourceLanguageSelectionChanged = true;
+            try
+            {
+                var sourceIndex = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, sourceLanguage);
+                if (sourceIndex >= 0)
+                {
+                    SourceLangCombo.SelectedIndex = sourceIndex;
+                }
+
+                var narrowSourceIndex = LanguageComboHelper.FindLanguageIndex(SourceLangComboNarrow, sourceLanguage);
+                if (narrowSourceIndex >= 0)
+                {
+                    SourceLangComboNarrow.SelectedIndex = narrowSourceIndex;
+                }
+            }
+            finally
+            {
+                _suppressSourceLanguageSelectionChanged = false;
+            }
+
+            RebuildTargetCombos(targetLanguage);
+            _targetLanguageSelector.MarkManualSelection();
+            RefreshQuickQueryModePreview();
+            HideSuggestionPopup();
+            InputTextBox.Text = request.SourceText;
+            await StartQueryTrackedAsync(QuerySourceKind.HistoryRerun);
         }
 
-        private async Task SetTextAndTranslateAsync(string text)
+        /// <summary>
+        /// Set text to translate (called from external sources like hotkey).
+        /// </summary>
+        public void SetTextAndTranslate(string text, QuerySourceKind sourceKind = QuerySourceKind.Manual)
+        {
+            _ = SetTextAndTranslateAsync(text, sourceKind);
+        }
+
+        private async Task SetTextAndTranslateAsync(string text, QuerySourceKind sourceKind)
         {
             // Switch out of Long Document mode for quick translate
             if (_currentMode == QueryMode.LongDocument)
@@ -4544,7 +4784,7 @@ namespace Easydict.WinUI.Views
             _targetLanguageSelector.Reset();
             HideSuggestionPopup();
             InputTextBox.Text = text;
-            _ = StartQueryTrackedAsync();
+            _ = StartQueryTrackedAsync(sourceKind);
         }
 
         public void QueueInputFocusAndSelectAll()
@@ -4892,7 +5132,10 @@ namespace Easydict.WinUI.Views
             => UpdateSuggestionPopupPlacement();
 
         private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
-            => UpdateSuggestionPopupPlacement();
+        {
+            UpdateSuggestionPopupPlacement();
+            ApplySavedItemsHeaderVisibility();
+        }
 
         private void OnSuggestionPopupOpened(object? sender, object e)
             => QueueRestoreInputFocusFromSuggestionPopup();

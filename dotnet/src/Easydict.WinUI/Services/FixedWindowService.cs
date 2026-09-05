@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.WinUI.Models;
 using Microsoft.UI.Dispatching;
 
 namespace Easydict.WinUI.Services;
@@ -110,11 +111,11 @@ public sealed class FixedWindowService : IDisposable
     /// <summary>
     /// Show the fixed window with text to translate.
     /// </summary>
-    public void ShowWithText(string text)
+    public void ShowWithText(string text, QuerySourceKind sourceKind)
     {
         ShowRequests.Invalidate();
         EnsureWindowCreated();
-        _fixedWindow?.SetTextAndTranslate(text);
+        _fixedWindow?.SetTextAndTranslate(text, sourceKind);
         _fixedWindow?.ShowAndActivate();
     }
 

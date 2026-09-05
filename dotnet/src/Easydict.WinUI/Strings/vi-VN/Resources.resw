@@ -1457,4 +1457,35 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>Mô hình miễn phí</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Nhận khóa API (liên kết giới thiệu)</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>Lịch sử</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>Yêu thích</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>Thêm</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>Tìm nguồn, kết quả hoặc nhà cung cấp</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>Tất cả</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>Dịch thuật / Từ điển</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>Sửa ngữ pháp</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>Làm mới</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>Chưa có truy vấn hoàn tất.</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>Chưa có mục yêu thích.</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>Chọn truy vấn đã lưu</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>Xóa khỏi lịch sử</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>Đi đến bản dịch</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>Thêm vào yêu thích</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>Xóa khỏi yêu thích</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>Ghim mục yêu thích</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>Ghi chú</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>Thẻ</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>Phân tách thẻ bằng dấu phẩy</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>Dùng tối đa 20 thẻ, mỗi thẻ không quá 40 ký tự.</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>Lưu</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>Thêm kết quả vào yêu thích</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>Xóa kết quả khỏi yêu thích</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>Mọi lúc</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>Hôm nay</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>7 ngày qua</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>30 ngày qua</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>Tất cả nhà cung cấp</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>Thử lại</value></data>
 </root>

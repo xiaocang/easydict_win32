@@ -5,7 +5,9 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
 using Microsoft.UI.Input;
@@ -34,6 +36,7 @@ public sealed partial class FixedWindow : Window
     private Task? _currentQueryTask;
     private readonly SettingsService _settings = SettingsService.Instance;
     private readonly List<ServiceQueryResult> _serviceResults = new();
+    private QuerySnapshotDraft? _currentSnapshotDraft;
     private readonly List<IServiceResultView> _resultControls = new();
     private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
     private AppWindow? _appWindow;
@@ -926,7 +929,7 @@ public sealed partial class FixedWindow : Window
         LoadingRing.Visibility = Visibility.Collapsed;
     }
 
-    private async Task StartQueryAsync()
+    private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
     {
         if (_isClosing)
         {
@@ -966,6 +969,7 @@ public sealed partial class FixedWindow : Window
         }
 
         var ct = currentCts.Token;
+        QuerySnapshotDraft? snapshotDraft = null;
 
         try
         {
@@ -990,6 +994,15 @@ public sealed partial class FixedWindow : Window
             ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
 
             var targetLanguage = resolution.EffectiveTargetLanguage;
+            var savedKind = SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind);
+            snapshotDraft = new QuerySnapshotDraft(
+                inputText,
+                detectedLanguage.ToIso639(),
+                targetLanguage.ToIso639(),
+                savedKind,
+                sourceKind,
+                _settings.HistoryEnabled);
+            _currentSnapshotDraft = snapshotDraft;
             if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
             {
                 UpdateTargetLanguageSelector(targetLanguage);
@@ -1066,7 +1079,7 @@ public sealed partial class FixedWindow : Window
             if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
             {
                 await StartGrammarCorrectionInternalAsync(
-                    inputText, detectedLanguage, targetLanguage, ct);
+                    inputText, detectedLanguage, targetLanguage, ct, snapshotDraft);
                 return;
             }
 
@@ -1102,7 +1115,7 @@ public sealed partial class FixedWindow : Window
                     {
                         // Streaming path for LLM services (pass manager to avoid re-acquiring)
                         await ExecuteStreamingTranslationForServiceAsync(
-                            manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                            manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
                     }
                     else
                     {
@@ -1111,6 +1124,11 @@ public sealed partial class FixedWindow : Window
                         // HTTP response processing, JSON parsing, and retry logic
                         var result = await Task.Run(
                             () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
+                        snapshotDraft.TryAddTranslation(
+                            serviceResult.ServiceId,
+                            serviceResult.ServiceDisplayName,
+                            _serviceResults.IndexOf(serviceResult),
+                            result);
 
                         DispatcherQueue.TryEnqueue(() =>
                         {
@@ -1191,6 +1209,11 @@ public sealed partial class FixedWindow : Window
         {
             if (!_isClosing) SetLoading(false);
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
+            if (snapshotDraft is not null)
+            {
+                using var recordCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await SavedItemsService.Instance.RecordSnapshotAsync(snapshotDraft, recordCts.Token);
+            }
         }
     }
 
@@ -1198,10 +1221,10 @@ public sealed partial class FixedWindow : Window
     /// Wrapper that always tracks the query task before returning.
     /// Avoids "downgrading" from a running real task to a no-op completed task.
     /// </summary>
-    private Task StartQueryTrackedAsync()
+    private Task StartQueryTrackedAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
     {
         var oldTask = _currentQueryTask;
-        var newTask = StartQueryAsync();
+        var newTask = StartQueryAsync(sourceKind);
         Task trackedTask;
 
         // Only update _currentQueryTask if:
@@ -1243,7 +1266,8 @@ public sealed partial class FixedWindow : Window
         string inputText,
         TranslationLanguage detectedLang,
         TranslationLanguage targetLanguage,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null)
     {
         var grammarRequest = new GrammarCorrectionRequest
         {
@@ -1262,8 +1286,8 @@ public sealed partial class FixedWindow : Window
         var tasks = _serviceResults
             .Where(sr => sr.EnabledQuery)
             .Select(sr => sr.IsGrammarCapable
-                ? ExecuteGrammarCorrectionForServiceAsync(sr, grammarRequest, ct)
-                : ExecuteTranslationForServiceAsync(sr, translationRequest, detectedLang, targetLanguage, ct))
+                ? ExecuteGrammarCorrectionForServiceAsync(sr, grammarRequest, ct, snapshotDraft, _serviceResults.IndexOf(sr))
+                : ExecuteTranslationForServiceAsync(sr, translationRequest, detectedLang, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(sr)))
             .ToArray();
 
         var taskResults = await Task.WhenAll(tasks);
@@ -1287,7 +1311,9 @@ public sealed partial class FixedWindow : Window
         TranslationRequest request,
         TranslationLanguage detectedLanguage,
         TranslationLanguage targetLanguage,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null,
+        int displayOrder = 0)
     {
         serviceResult.MarkQueried();
 
@@ -1299,12 +1325,17 @@ public sealed partial class FixedWindow : Window
             if (manager.IsStreamingService(serviceResult.ServiceId))
             {
                 await ExecuteStreamingTranslationForServiceAsync(
-                    manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                    manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, displayOrder);
                 return true;
             }
 
             var result = await Task.Run(
                 () => manager.TranslateAsync(request, ct, serviceResult.ServiceId), ct);
+            snapshotDraft?.TryAddTranslation(
+                serviceResult.ServiceId,
+                serviceResult.ServiceDisplayName,
+                displayOrder,
+                result);
 
             DispatcherQueue.TryEnqueue(() =>
             {
@@ -1371,7 +1402,9 @@ public sealed partial class FixedWindow : Window
     private async Task<bool?> ExecuteGrammarCorrectionForServiceAsync(
         ServiceQueryResult serviceResult,
         GrammarCorrectionRequest request,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null,
+        int displayOrder = 0)
     {
         serviceResult.MarkQueried();
 
@@ -1413,6 +1446,11 @@ public sealed partial class FixedWindow : Window
             var grammarResult = GrammarCorrectionParser.Parse(
                 rawOutput, request.Text, serviceResult.ServiceDisplayName,
                 stopwatch.ElapsedMilliseconds);
+            snapshotDraft?.TryAddGrammar(
+                serviceResult.ServiceId,
+                serviceResult.ServiceDisplayName,
+                displayOrder,
+                grammarResult);
 
             DispatcherQueue.TryEnqueue(() =>
             {
@@ -1468,7 +1506,9 @@ public sealed partial class FixedWindow : Window
         TranslationRequest request,
         TranslationLanguage detectedLanguage,
         TranslationLanguage targetLanguage,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null,
+        int displayOrder = 0)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var sb = new StringBuilder();
@@ -1537,6 +1577,11 @@ public sealed partial class FixedWindow : Window
         {
             // Best-effort: continue with original result if enrichment fails
         }
+        snapshotDraft?.TryAddTranslation(
+            serviceResult.ServiceId,
+            serviceResult.ServiceDisplayName,
+            displayOrder,
+            result);
 
         DispatcherQueue.TryEnqueue(() =>
         {
@@ -1936,7 +1981,7 @@ public sealed partial class FixedWindow : Window
     /// <summary>
     /// Set text and start translation (called from external sources).
     /// </summary>
-    public void SetTextAndTranslate(string text)
+    public void SetTextAndTranslate(string text, QuerySourceKind sourceKind)
     {
         _targetLanguageSelector.Reset();
 
@@ -1947,7 +1992,7 @@ public sealed partial class FixedWindow : Window
         }
 
         InputTextBox.Text = text;
-        _ = StartQueryTrackedAsync();
+        _ = StartQueryTrackedAsync(sourceKind);
     }
 
     /// <summary>

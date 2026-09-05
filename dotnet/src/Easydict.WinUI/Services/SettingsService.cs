@@ -69,7 +69,7 @@ public sealed class SettingsService
         LoadSettings();
     }
 
-    private static string ResolveSettingsDirectory()
+    internal static string ResolveSettingsDirectory()
     {
         var settingsDirectory = Environment.GetEnvironmentVariable(SettingsDirectoryEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(settingsDirectory))
@@ -201,6 +201,16 @@ public sealed class SettingsService
     public bool ClipboardMonitoring { get; set; } = false;
     public bool AutoTranslate { get; set; } = false;
 
+
+    /// <summary>
+    /// Whether completed queries are written to local history. Favorites remain available.
+    /// </summary>
+    public bool HistoryEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Number of days visible history is retained before being pruned.
+    /// </summary>
+    public int HistoryRetentionDays { get; set; } = 30;
     /// <summary>
     /// When true, long-document translation runs in a child worker process
     /// (Easydict.Workers.LongDoc.exe). Native MuPDF / ONNX heap is reclaimed
@@ -792,6 +802,8 @@ public sealed class SettingsService
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
+        HistoryEnabled = GetValue(nameof(HistoryEnabled), true);
+        HistoryRetentionDays = Math.Clamp(GetValue(nameof(HistoryRetentionDays), 30), 1, 3650);
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         OcrTranslateHotkey = GetValue(nameof(OcrTranslateHotkey), "Ctrl+Alt+S");
@@ -1075,6 +1087,9 @@ public sealed class SettingsService
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
+        HistoryRetentionDays = Math.Clamp(HistoryRetentionDays, 1, 3650);
+        _settings[nameof(HistoryEnabled)] = HistoryEnabled;
+        _settings[nameof(HistoryRetentionDays)] = HistoryRetentionDays;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;

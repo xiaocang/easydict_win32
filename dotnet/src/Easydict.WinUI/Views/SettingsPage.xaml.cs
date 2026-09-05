@@ -17,6 +17,7 @@ using Easydict.OpenVINO.Services;
 using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.SavedItems;
 using Easydict.SidecarClient.Protocol;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -3153,6 +3154,9 @@ public sealed partial class SettingsPage : Page
             MinimizeToTrayOnStartupToggle.IsOn = _settings.MinimizeToTrayOnStartup;
             ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
             MouseSelectionTranslateToggle.IsOn = _settings.MouseSelectionTranslate;
+            HistoryEnabledToggle.IsOn = _settings.HistoryEnabled;
+            HistoryRetentionDaysBox.Value = _settings.HistoryRetentionDays;
+            HistoryRetentionDaysBox.IsEnabled = _settings.HistoryEnabled;
             MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
             MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -4789,6 +4793,103 @@ public sealed partial class SettingsPage : Page
     {
         MouseSelectionExcludedAppsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnHistoryEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading)
+        {
+            return;
+        }
+
+        var previousValue = _settings.HistoryEnabled;
+        try
+        {
+            _settings.HistoryEnabled = HistoryEnabledToggle.IsOn;
+            _settings.Save();
+            HistoryRetentionDaysBox.IsEnabled = HistoryEnabledToggle.IsOn;
+        }
+        catch (Exception exception)
+        {
+            _settings.HistoryEnabled = previousValue;
+            HistoryEnabledToggle.IsOn = previousValue;
+            HistoryRetentionDaysBox.IsEnabled = previousValue;
+            HistoryRetentionValidationText.Text = exception.Message;
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private async void OnHistoryRetentionDaysValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs e)
+    {
+        if (_isLoading || double.IsNaN(e.NewValue))
+        {
+            return;
+        }
+
+        var value = Math.Clamp((int)Math.Round(e.NewValue), 1, 3650);
+        var previousValue = _settings.HistoryRetentionDays;
+        try
+        {
+            _settings.HistoryRetentionDays = value;
+            _settings.Save();
+            if (Math.Abs(HistoryRetentionDaysBox.Value - value) > double.Epsilon)
+            {
+                _isLoading = true;
+                try { HistoryRetentionDaysBox.Value = value; }
+                finally { _isLoading = false; }
+            }
+            HistoryRetentionValidationText.Visibility = Visibility.Collapsed;
+            if (value < previousValue)
+            {
+                await SavedItemsService.Instance.PruneExpiredHistoryAsync(_lifetimeCts.Token);
+            }
+            HistoryRetentionValidationText.Text = "History retention updated.";
+            HistoryRetentionValidationText.Foreground = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            _settings.HistoryRetentionDays = previousValue;
+            _isLoading = true;
+            try { HistoryRetentionDaysBox.Value = previousValue; }
+            finally { _isLoading = false; }
+            HistoryRetentionValidationText.Text = exception.Message;
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private async void OnClearHistoryClicked(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Clear history?",
+            Content = "Visible history will be removed. Favorites will not be deleted.",
+            PrimaryButtonText = "Clear",
+            CloseButtonText = LocalizationService.Instance.GetString("Cancel")
+        };
+        if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        ClearHistoryButton.IsEnabled = false;
+        try
+        {
+            await SavedItemsService.Instance.ClearHistoryAsync(_lifetimeCts.Token);
+            HistoryRetentionValidationText.Text = "History cleared. Favorites were kept.";
+            HistoryRetentionValidationText.Foreground = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            HistoryRetentionValidationText.Text = exception.Message;
+            HistoryRetentionValidationText.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            ClearHistoryButton.IsEnabled = true;
+        }
     }
 
     private void OnOcrEngineChanged(object sender, SelectionChangedEventArgs e)

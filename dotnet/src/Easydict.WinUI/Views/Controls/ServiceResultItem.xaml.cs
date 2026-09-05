@@ -8,6 +8,7 @@ using Easydict.WinUI.Services;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -39,6 +40,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private MdxDictionaryTranslationService? _currentMdxService;
     private FrameworkElement? _themeRoot;
     private readonly LatestPlaybackTaskObserver _ttsPlaybackObserver = new();
+    private bool _favoriteVisible;
+    private bool _isFavorited;
+    private bool _isSavedItemView;
 
     /// <summary>
     /// Exposes the control instance for parent item hosting.
@@ -65,6 +69,19 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     public bool IsMinimalRenderer => false;
 
+    public bool IsSavedItemView
+    {
+        get => _isSavedItemView;
+        set
+        {
+            if (_isSavedItemView == value)
+                return;
+
+            _isSavedItemView = value;
+            QueueUpdateUI();
+        }
+    }
+
     /// <summary>
     /// Exposes the header panel for sticky calculation in MiniWindow.
     /// </summary>
@@ -89,6 +106,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     public event EventHandler<ServiceQueryResult>? FoundryLocalStartRequested;
 
+    public event EventHandler<ServiceQueryResult>? FavoriteRequested;
+
+    public event EventHandler? CopyCompleted;
+
     public ServiceResultItem()
     {
         this.InitializeComponent();
@@ -108,6 +129,13 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// Re-runs <see cref="UpdateUI"/> to pick up changes in the demotion state (e.g., when
     /// <see cref="SettingsService.HideEmptyServiceResults"/> is toggled at runtime).
     /// </summary>
+
+    public void SetFavoriteState(bool isVisible, bool isFavorited)
+    {
+        _favoriteVisible = isVisible;
+        _isFavorited = isFavorited;
+        UpdateFavoriteButton();
+    }
     public void RefreshDemotionState() => QueueUpdateUI();
 
     public void ApplyAppearance(AppearanceSettings settings)
@@ -486,6 +514,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             ApplyHeaderForegroundForCurrentChrome();
         }
+        UpdateFavoriteButton();
+        ApplySavedItemActionState();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -617,6 +647,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         ReplaceButton.Visibility = Visibility.Collapsed;
         PlayButton.Visibility = Visibility.Collapsed;
         CopyButton.Visibility = Visibility.Collapsed;
+        HeaderCopyButton.Visibility = Visibility.Collapsed;
     }
 
     private void UpdateTranslationUI()
@@ -1597,6 +1628,12 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     {
         _isHovering = false;
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        if (_isSavedItemView)
+        {
+            ApplySavedItemActionState();
+            return;
+        }
+
         ActionButtons.Visibility = Visibility.Collapsed;
     }
 
@@ -1865,6 +1902,50 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         return message;
     }
 
+    private void OnFavoriteClicked(object sender, RoutedEventArgs e)
+    {
+        if (_serviceResult is null || FavoriteButton.IsEnabled == false)
+        {
+            return;
+        }
+
+        FavoriteRequested?.Invoke(this, _serviceResult);
+    }
+
+    private void UpdateFavoriteButton()
+    {
+        var hasSuccessfulText = _serviceResult?.IsGrammarMode == true
+            ? !string.IsNullOrWhiteSpace(_serviceResult.GrammarResult?.CorrectedText)
+            : _serviceResult?.Result is { ResultKind: TranslationResultKind.Success, TranslatedText.Length: > 0 };
+        FavoriteButton.Visibility = _favoriteVisible && hasSuccessfulText
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        FavoriteButton.IsEnabled = FavoriteButton.Visibility == Visibility.Visible;
+        FavoriteIcon.Glyph = _isFavorited ? "\uE735" : "\uE734";
+        var localization = LocalizationService.Instance;
+        var tooltip = _isFavorited
+            ? localization.GetStringOrDefault("SavedItemsRemoveResultFavorite", "Remove result favorite")
+            : localization.GetStringOrDefault("SavedItemsAddResultFavorite", "Add result favorite");
+        ToolTipService.SetToolTip(FavoriteButton, tooltip);
+        AutomationProperties.SetName(FavoriteButton, tooltip);
+    }
+
+    private void ApplySavedItemActionState()
+    {
+        if (!_isSavedItemView)
+            return;
+
+        RetryButton.Visibility = Visibility.Collapsed;
+        ReplaceButton.Visibility = Visibility.Collapsed;
+        var hasResult = _serviceResult?.HasSuccessfulResult == true;
+        ActionButtons.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        CopyButton.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        HeaderCopyButton.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        PlayButton.Visibility = hasResult && _serviceResult?.Result?.ResultKind == TranslationResultKind.Success
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
     private void OnCopyClicked(object sender, RoutedEventArgs e)
     {
         var text = _serviceResult?.IsGrammarMode == true
@@ -1878,6 +1959,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         var dataPackage = new DataPackage();
         dataPackage.SetText(text);
         Clipboard.SetContent(dataPackage);
+        CopyCompleted?.Invoke(this, EventArgs.Empty);
 
         // Visual feedback
         CopyIcon.Glyph = "\uE8FB"; // Checkmark

@@ -23,7 +23,7 @@ internal sealed class CompactWindowControlsView
         Root = new Grid
         {
             Width = 44,
-            Height = 44,
+            Height = 66,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0),
@@ -44,15 +44,20 @@ internal sealed class CompactWindowControlsView
         var layout = new Grid { Margin = new Thickness(1) };
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         Root.Children.Add(layout);
+
+        MoreButton = CreateSegmentButton(new FontIcon { Glyph = "\uE712", FontSize = 9 });
+        Grid.SetRow(MoreButton, 0);
+        layout.Children.Add(MoreButton);
 
         _closeIcon = new FontIcon { Glyph = "\uE8BB", FontSize = 9 };
         CloseButton = CreateSegmentButton(_closeIcon);
-        Grid.SetRow(CloseButton, 0);
+        Grid.SetRow(CloseButton, 1);
         layout.Children.Add(CloseButton);
 
         _separator = CreateSeparator();
-        Grid.SetRow(_separator, 0);
+        Grid.SetRow(_separator, 1);
         layout.Children.Add(_separator);
 
         DragIsland = new Border
@@ -61,7 +66,7 @@ internal sealed class CompactWindowControlsView
             VerticalAlignment = VerticalAlignment.Stretch,
             CornerRadius = new CornerRadius(0, 0, 21, 21)
         };
-        Grid.SetRow(DragIsland, 1);
+        Grid.SetRow(DragIsland, 2);
 
         DragIsland.Child = new Image
         {
@@ -80,6 +85,8 @@ internal sealed class CompactWindowControlsView
     public Grid Root { get; }
 
     public Button CloseButton { get; }
+
+    public Button MoreButton { get; }
 
     public Border DragIsland { get; }
 
@@ -100,6 +107,7 @@ internal sealed class CompactWindowControlsView
         _separator.Background = strokeBrush;
         DragIsland.Background = secondarySurfaceBrush;
         CloseButton.Background = transparentBrush;
+        MoreButton.Background = transparentBrush;
         _closeIcon.Foreground = textBrush;
     }
 

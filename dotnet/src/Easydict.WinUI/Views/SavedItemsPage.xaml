@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Easydict.WinUI.Views.SavedItemsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Easydict.WinUI.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    NavigationCacheMode="Disabled"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Page.Resources>
+        <local:SavedItemsGroupHeaderVisibilityConverter x:Key="SavedItemsGroupHeaderVisibilityConverter"/>
+        <Style x:Key="SavedItemsRailButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource EasydictIconButtonStyle}">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+        </Style>
+        <Style x:Key="SavedItemsIconButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource EasydictIconButtonStyle}"/>
+        <Style x:Key="SavedItemsSecondaryButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource EasydictBaseButtonStyle}"/>
+        <Style x:Key="SavedItemsPrimaryButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource EasydictAccentButtonStyle}"/>
+        <Style x:Key="SavedItemsCardStyle"
+               TargetType="Border"
+               BasedOn="{StaticResource EasydictSurfaceStyle}">
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style x:Key="SavedItemsDetailCardStyle"
+               TargetType="Border"
+               BasedOn="{StaticResource EasydictElevatedSurfaceStyle}">
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style x:Key="SavedItemsTagPillStyle" TargetType="Border">
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="SavedItemsTagButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource EasydictBaseButtonStyle}">
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+        </Style>
+        <Style x:Key="SavedItemsCardContainerStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="MinHeight" Value="88"/>
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+        </Style>
+    </Page.Resources>
+
+    <Grid RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Button Margin="16,12,16,0" HorizontalAlignment="Left"
+                AutomationProperties.AutomationId="SavedItemsReturnToTranslationButton"
+                Click="OnReturnToTranslationClicked">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon Glyph="&#xE72B;" FontSize="16"/>
+                <TextBlock x:Name="ReturnToTranslationText"/>
+            </StackPanel>
+        </Button>
+    <Grid x:Name="RootGrid" Grid.Row="1" Padding="24" ColumnSpacing="16" SizeChanged="OnPageSizeChanged">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="RailColumn" Width="56"/>
+            <ColumnDefinition x:Name="ListColumn" Width="360"/>
+            <ColumnDefinition x:Name="DetailColumn" Width="*"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel x:Name="NavigationRail" Grid.Column="0" Spacing="8">
+            <Button x:Name="BackButton" Style="{StaticResource SavedItemsRailButtonStyle}" Click="OnBackClicked" ToolTipService.ToolTip="Back" AutomationProperties.AutomationId="SavedItemsBackButton" AutomationProperties.Name="Back">
+                <FontIcon Glyph="&#xE72B;"/>
+            </Button>
+            <Button x:Name="HistoryRailButton" Style="{StaticResource SavedItemsRailButtonStyle}" AutomationProperties.AutomationId="SavedItemsHistoryRailButton" Click="OnHistoryRailClicked">
+                <FontIcon Glyph="&#xE81C;"/>
+            </Button>
+            <Button x:Name="FavoritesRailButton" Style="{StaticResource SavedItemsRailButtonStyle}" AutomationProperties.AutomationId="SavedItemsFavoritesRailButton" Click="OnFavoritesRailClicked">
+                <FontIcon Glyph="&#xE734;"/>
+            </Button>
+        </StackPanel>
+
+        <Grid x:Name="ListPane" Grid.Column="1" RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="40"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="PageTitleText" AutomationProperties.AutomationId="SavedItemsPageTitle" FontSize="24" FontWeight="SemiBold"/>
+            <Grid Grid.Row="1" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="36"/>
+                </Grid.ColumnDefinitions>
+                <AutoSuggestBox x:Name="SavedItemsSearchBox"
+                                Height="40"
+                                AutomationProperties.AutomationId="SavedItemsSearchBox"
+                                PlaceholderText="Search source, result, or provider"
+                                TextChanged="OnSearchTextChanged"/>
+                <Button x:Name="SavedItemsFilterButton"
+                        Grid.Column="1"
+                        Style="{StaticResource SavedItemsIconButtonStyle}"
+                        Width="36"
+                        Height="36"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="SavedItemsFilterButton"
+                        Click="OnFilterButtonClicked">
+                    <Button.Flyout>
+                        <Flyout x:Name="FilterFlyout" Opened="OnFilterFlyoutOpened">
+                            <StackPanel Width="280" Spacing="12">
+                                <TextBlock x:Name="FilterTitleText" FontSize="16" FontWeight="SemiBold"/>
+                                <StackPanel x:Name="HistoryFilterPanel" Spacing="8">
+                                    <ComboBox x:Name="TimeRangeCombo" Header="Time range" HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="Any time" Tag="" IsSelected="True"/>
+                                        <ComboBoxItem Content="Today" Tag="today"/>
+                                        <ComboBoxItem Content="Last 7 days" Tag="week"/>
+                                        <ComboBoxItem Content="Last 30 days" Tag="month"/>
+                                    </ComboBox>
+                                    <ComboBox x:Name="ProviderCombo" Header="Provider" HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="All providers" Tag="" IsSelected="True"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel x:Name="FavoritesFilterPanel" Spacing="8" Visibility="Collapsed">
+                                    <TextBlock x:Name="FavoriteTagsFilterLabel" Text="Tags"/>
+                                    <ListView x:Name="FavoriteTagsFilterList" MaxHeight="180" SelectionMode="Multiple"/>
+                                    <ToggleSwitch x:Name="PinnedOnlyToggle" Header="Pinned only"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                                    <Button x:Name="ResetFiltersButton"
+                                            Style="{StaticResource SavedItemsSecondaryButtonStyle}"
+                                            Content="Reset"
+                                            Click="OnResetFiltersClicked"/>
+                                    <Button x:Name="ApplyFiltersButton"
+                                            Style="{StaticResource SavedItemsPrimaryButtonStyle}"
+                                            Content="Apply"
+                                            Click="OnApplyFiltersClicked"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                    <Grid>
+                        <FontIcon Glyph="&#xE71C;" FontSize="14"/>
+                        <Ellipse x:Name="FilterActiveBadge"
+                                 Width="7"
+                                 Height="7"
+                                 Fill="{ThemeResource AccentBrush}"
+                                 HorizontalAlignment="Right"
+                                 VerticalAlignment="Top"
+                                 Visibility="Collapsed"/>
+                    </Grid>
+                </Button>
+            </Grid>
+
+            <Grid Grid.Row="2">
+                <RadioButtons x:Name="HistoryKindTabs" MaxColumns="4" AutomationProperties.AutomationId="SavedItemsHistoryKindTabs" SelectionChanged="OnHistoryKindChanged">
+                    <RadioButton Content="All" Tag="" IsChecked="True"/>
+                    <RadioButton Content="Translation / Dictionary" Tag="translation"/>
+                    <RadioButton Content="Grammar correction" Tag="grammar"/>
+                    <RadioButton Content="OCR" Tag="ocr"/>
+                </RadioButtons>
+                <ComboBox x:Name="KindCombo" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="SavedItemsHistoryKindCombo" SelectionChanged="OnNarrowKindChanged" Visibility="Collapsed">
+                    <ComboBoxItem Content="All" Tag="" IsSelected="True"/>
+                    <ComboBoxItem Content="Translation / Dictionary" Tag="translation"/>
+                    <ComboBoxItem Content="Grammar correction" Tag="grammar"/>
+                    <ComboBoxItem Content="OCR" Tag="ocr"/>
+                </ComboBox>
+                <RadioButtons x:Name="FavoriteKindTabs" MaxColumns="3" AutomationProperties.AutomationId="SavedItemsFavoriteKindTabs" SelectionChanged="OnFavoriteKindChanged" Visibility="Collapsed">
+                    <RadioButton Content="All" Tag="" IsChecked="True"/>
+                    <RadioButton Content="Whole queries" Tag="query"/>
+                    <RadioButton Content="Individual results" Tag="result"/>
+                </RadioButtons>
+                <ComboBox x:Name="FavoriteKindCombo" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="SavedItemsFavoriteKindCombo" SelectionChanged="OnNarrowFavoriteKindChanged" Visibility="Collapsed">
+                    <ComboBoxItem Content="All" Tag="" IsSelected="True"/>
+                    <ComboBoxItem Content="Whole queries" Tag="query"/>
+                    <ComboBoxItem Content="Individual results" Tag="result"/>
+                </ComboBox>
+            </Grid>
+
+            <Grid Grid.Row="3">
+                <ListView x:Name="SavedItemsList"
+                          AutomationProperties.AutomationId="SavedItemsList"
+                          ItemContainerStyle="{StaticResource SavedItemsCardContainerStyle}"
+                          Background="Transparent"
+                          SelectionChanged="OnItemSelected"
+                          ContainerContentChanging="OnListContainerContentChanging"
+                          KeyDown="OnSavedItemsListKeyDown">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource SavedItemsCardStyle}">
+                                <Grid RowSpacing="5">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{Binding GroupTitle}"
+                                               Visibility="{Binding GroupTitle, Converter={StaticResource SavedItemsGroupHeaderVisibilityConverter}}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               Margin="0,4,0,2"/>
+                                    <Grid Grid.Row="1" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding SourceText}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                    </Grid>
+                                    <TextBlock Grid.Row="2" Text="{Binding Metadata}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Row="3" Text="{Binding PreviewText}" FontSize="13" TextWrapping="Wrap"/>
+                                    <ItemsControl Grid.Row="4" ItemsSource="{Binding Tags}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <ItemsWrapGrid Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Style="{StaticResource SavedItemsTagPillStyle}" Margin="0,2,6,0">
+                                                    <TextBlock Text="{Binding}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <ProgressRing x:Name="PageLoadingRing" Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,12" IsActive="False" Visibility="Collapsed"/>
+                <StackPanel x:Name="EmptyState"
+                            AutomationProperties.AutomationId="SavedItemsEmptyState"
+                            Canvas.ZIndex="1"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Top"
+                            Margin="0,48,0,0"
+                            Spacing="8">
+                    <FontIcon Glyph="&#xE81C;" FontSize="32" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="EmptyStateText" AutomationProperties.AutomationId="SavedItemsEmptyStateText" TextAlignment="Center" TextWrapping="Wrap"/>
+                    <Button x:Name="RetryLoadButton"
+                            Style="{StaticResource SavedItemsPrimaryButtonStyle}"
+                            Content="Retry"
+                            Click="OnRefreshClicked"
+                            HorizontalAlignment="Center"
+                            Visibility="Collapsed"/>
+                    <Button x:Name="EmptyBackButton"
+                            Style="{StaticResource SavedItemsSecondaryButtonStyle}"
+                            Content="Go to translation"
+                            Click="OnBackClicked"
+                            HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <ScrollViewer x:Name="DetailScroll" Grid.Column="2" AutomationProperties.AutomationId="SavedItemsDetail">
+            <StackPanel x:Name="DetailPanel" Spacing="12">
+                <Button x:Name="DetailBackButton"
+                        Style="{StaticResource SavedItemsSecondaryButtonStyle}"
+                        AutomationProperties.AutomationId="SavedItemsDetailBackButton"
+                        HorizontalAlignment="Left"
+                        Click="OnDetailBackClicked"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE72B;"/>
+                        <TextBlock x:Name="DetailBackText" Text="Back"/>
+                    </StackPanel>
+                </Button>
+                <InfoBar x:Name="PageInfoBar" IsOpen="False" IsClosable="True"/>
+                <Border Style="{StaticResource SavedItemsDetailCardStyle}">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Name="DetailTitleText"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Text="Select a saved query"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="DetailSourceText"
+                                   AutomationProperties.AutomationId="SavedItemsDetailSourceText"
+                                   FontSize="14"
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True"/>
+                        <TextBlock x:Name="DetailMetadataText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="CopySourceButton"
+                                    Style="{StaticResource SavedItemsSecondaryButtonStyle}"
+                                    Content="Copy source"
+                                    Click="OnCopySourceClicked"
+                                    Visibility="Collapsed"/>
+                            <Button x:Name="ToggleQueryFavoriteButton"
+                                    Style="{StaticResource SavedItemsSecondaryButtonStyle}"
+                                    Content="Add to favorites"
+                                    Click="OnToggleQueryFavoriteClicked"
+                                    Visibility="Collapsed"/>
+                            <Button x:Name="RerunQueryButton"
+                                    Style="{StaticResource SavedItemsPrimaryButtonStyle}"
+                                    Content="Translate again"
+                                    Click="OnRerunQueryClicked"
+                                    Visibility="Collapsed"/>
+                            <Button x:Name="RemoveFavoriteButton"
+                                    Style="{StaticResource SavedItemsSecondaryButtonStyle}"
+                                    Content="Remove favorite"
+                                    Click="OnRemoveFavoriteClicked"
+                                    Visibility="Collapsed"/>
+                            <Button x:Name="DetailMoreButton"
+                                    Style="{StaticResource SavedItemsIconButtonStyle}"
+                                    Visibility="Collapsed">
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem x:Name="DeleteHistoryButton"
+                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                        Text="Delete from history"
+                                                        Click="OnDeleteHistoryClicked"/>
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                                <FontIcon Glyph="&#xE712;" FontSize="14"/>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border x:Name="FavoriteMetadataPanel"
+                        Style="{StaticResource SavedItemsDetailCardStyle}"
+                        Visibility="Collapsed">
+                    <StackPanel Spacing="8">
+                        <ToggleButton x:Name="PinFavoriteButton"
+                                      Content="Pin favorite"
+                                      Click="OnPinFavoriteClicked"
+                                      HorizontalAlignment="Left"/>
+                        <TextBox x:Name="FavoriteNoteBox"
+                                 Header="Note"
+                                 TextWrapping="Wrap"
+                                 AcceptsReturn="True"
+                                 MaxLength="2000"/>
+                        <TextBlock x:Name="FavoriteTagsHeader"
+                                   Text="Tags"
+                                   FontWeight="SemiBold"/>
+                        <ItemsControl x:Name="FavoriteTagChips"
+                                      AutomationProperties.AutomationId="SavedItemsFavoriteTagChips">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <ItemsWrapGrid Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource SavedItemsTagButtonStyle}"
+                                            Tag="{Binding}"
+                                            Click="OnRemoveFavoriteTagClicked">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <TextBlock Text="{Binding}" FontSize="12"/>
+                                            <FontIcon Glyph="&#xE711;" FontSize="10"/>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <AutoSuggestBox x:Name="FavoriteTagsBox"
+                                        PlaceholderText="Separate tags with commas"
+                                        QuerySubmitted="OnFavoriteTagSubmitted"/>
+                        <Button x:Name="SaveFavoriteMetadataButton"
+                                Style="{StaticResource SavedItemsPrimaryButtonStyle}"
+                                Content="Save"
+                                Click="OnSaveFavoriteMetadataClicked"
+                                HorizontalAlignment="Left"/>
+                        <Button x:Name="CancelFavoriteMetadataButton"
+                                Style="{StaticResource SavedItemsSecondaryButtonStyle}"
+                                Content="Cancel changes"
+                                Click="OnCancelFavoriteMetadataClicked"
+                                HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </Border>
+                <Grid x:Name="ResultSelectionPanel" ColumnSpacing="8" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ListView x:Name="ResultSelector" SelectionMode="Single" SelectionChanged="OnResultSelectionChanged" MaxHeight="140">
+                        <ListView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ListView.ItemsPanel>
+                    </ListView>
+                    <ToggleButton x:Name="CompareResultsButton" Grid.Column="1" Content="Compare" Click="OnCompareResultsClicked" VerticalAlignment="Top"/>
+                </Grid>
+                <ItemsControl x:Name="DetailResults">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal" ItemWidth="360" MaximumRowsOrColumns="2"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <Expander x:Name="OtherResultsExpander" Header="Other results" IsExpanded="False" Visibility="Collapsed">
+                    <ItemsControl x:Name="OtherDetailResults"/>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+    </Grid>
+</Page>

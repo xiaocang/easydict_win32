@@ -32,6 +32,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <TextBlock
@@ -51,6 +52,19 @@
                         Margin="8,0,0,0"
                         Visibility="Collapsed"
                         VerticalAlignment="Center"/>
+
+                    <Button
+                        x:Name="FavoriteButton"
+                        Grid.Column="2"
+                        Width="28"
+                        Height="28"
+                        Margin="6,0,0,0"
+                        Padding="0"
+                        Background="Transparent"
+                        Click="OnFavoriteClicked"
+                        Visibility="Collapsed">
+                        <FontIcon x:Name="FavoriteIcon" Glyph="&#xE734;" FontSize="12"/>
+                    </Button>
                 </Grid>
             </Border>
 

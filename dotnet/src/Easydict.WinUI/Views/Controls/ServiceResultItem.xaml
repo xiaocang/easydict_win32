@@ -40,6 +40,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -96,8 +97,24 @@
 
                     <!-- Retry Button (visible on error) -->
                     <Button
-                        x:Name="RetryButton"
+                        x:Name="HeaderCopyButton"
                         Grid.Column="4"
+                        Click="OnCopyClicked"
+                        ToolTipService.ToolTip="Copy"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Width="24"
+                        Height="24"
+                        Padding="0"
+                        Visibility="Collapsed">
+                        <FontIcon Glyph="&#xE8C8;"
+                                  FontSize="12"
+                                  Foreground="{ThemeResource ActionButtonIconBrush}"/>
+                    </Button>
+
+                    <Button
+                        x:Name="RetryButton"
+                        Grid.Column="5"
                         Click="OnRetryClicked"
                         Background="Transparent"
                         BorderThickness="0"
@@ -114,7 +131,7 @@
                     <!-- Expand/Collapse Arrow -->
                     <FontIcon
                         x:Name="ArrowIcon"
-                        Grid.Column="5"
+                        Grid.Column="6"
                         Glyph="&#xE70D;"
                         FontSize="10"
                         Foreground="{ThemeResource ServiceResultHeaderSecondaryForegroundBrush}"
@@ -325,6 +342,23 @@
                                     Glyph="&#xE768;"
                                     FontSize="12"
                                     Foreground="{ThemeResource ActionButtonIconBrush}"/>
+                        </Button>
+
+                        <!-- Favorite Button: enabled only by Main-window host -->
+                        <Button
+                            x:Name="FavoriteButton"
+                            Click="OnFavoriteClicked"
+                            ToolTipService.ToolTip="Add to favorites"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Width="24"
+                            Height="24"
+                            Padding="0"
+                            Visibility="Collapsed">
+                            <FontIcon x:Name="FavoriteIcon"
+                                      Glyph="&#xE734;"
+                                      FontSize="12"
+                                      Foreground="{ThemeResource ActionButtonIconBrush}"/>
                         </Button>
 
                         <!-- Copy Button -->

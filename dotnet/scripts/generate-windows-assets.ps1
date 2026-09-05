@@ -3,8 +3,8 @@
 # Also generates targetsize variants for taskbar/Start menu
 
 param(
-    [string]$SourceIcon = "screenshot/icon_512x512@2x.png",
-    [string]$UnplatedIcon = "dotnet/src/Easydict.WinUI/Assets/icon_unplated_1024.png",
+    [string]$SourceIcon = "dotnet/src/Easydict.WinUI/Assets/Branding/AppIconSource.png",
+    [string]$UnplatedIcon = "dotnet/src/Easydict.WinUI/Assets/Branding/AppIconSource.png",
     [string]$OutputDir = "dotnet/src/Easydict.WinUI/Assets"
 )
 
@@ -213,6 +213,13 @@ foreach ($asset in $assets) {
     }
 
     Write-Host ""
+}
+
+# Package.appxmanifest references an unqualified StoreLogo.png for package properties.
+if (Resize-Image -SourcePath $SourceIcon -OutputPath (Join-Path $OutputDir "StoreLogo.png") -Width 50 -Height 50) {
+    $successCount++
+} else {
+    $failCount++
 }
 
 # Generate targetsize variants for Square44x44Logo (used by taskbar, Start menu, etc.)

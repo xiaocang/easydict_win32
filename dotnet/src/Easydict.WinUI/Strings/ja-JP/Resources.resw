@@ -1462,4 +1462,35 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>無料モデル</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>APIキーを取得（紹介リンク）</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>履歴</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>お気に入り</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>その他</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>原文、結果、サービスを検索</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>すべて</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>翻訳／辞書</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>文法修正</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>更新</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>完了した検索はまだありません。</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>お気に入りはまだありません。</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>保存済みの検索を選択</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>履歴から削除</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>翻訳へ移動</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>お気に入りに追加</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>お気に入りから削除</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>お気に入りを固定</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>メモ</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>タグ</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>タグをカンマで区切る</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>タグは最大20個、各タグは40文字以内にしてください。</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>保存</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>結果をお気に入りに追加</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>結果をお気に入りから削除</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>すべての期間</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>今日</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>過去 7 日間</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>過去 30 日間</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>すべてのサービス</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>再試行</value></data>
 </root>

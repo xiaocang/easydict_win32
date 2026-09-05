@@ -2576,6 +2576,48 @@
                         </Border>
                     </StackPanel>
 
+                    <StackPanel x:Name="HistoryPrivacySection"
+                                Spacing="12">
+                        <TextBlock x:Name="HistoryPrivacyHeaderText"
+                                   Text="History &amp; privacy"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"/>
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="12">
+                                <ToggleSwitch x:Name="HistoryEnabledToggle"
+                                              AutomationProperties.AutomationId="HistoryEnabledToggle"
+                                              Header="Save query history"
+                                              Toggled="OnHistoryEnabledToggled"/>
+                                <TextBlock Text="Stores completed translation, dictionary, grammar, and OCR queries. Long documents are never saved."
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <NumberBox x:Name="HistoryRetentionDaysBox"
+                                           AutomationProperties.AutomationId="HistoryRetentionDaysBox"
+                                           Header="History retention (days)"
+                                           Minimum="1"
+                                           Maximum="3650"
+                                           SmallChange="1"
+                                           LargeChange="30"
+                                           SpinButtonPlacementMode="Compact"
+                                           ValueChanged="OnHistoryRetentionDaysValueChanged"/>
+                                <TextBlock Text="Favorites are kept when history expires or is cleared."
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <TextBlock x:Name="HistoryRetentionValidationText"
+                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                           TextWrapping="Wrap"
+                                           Visibility="Collapsed"/>
+                                <Button x:Name="ClearHistoryButton"
+                                        AutomationProperties.AutomationId="ClearHistoryButton"
+                                        Content="Clear history"
+                                        HorizontalAlignment="Left"
+                                        Click="OnClearHistoryClicked"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
                     <!-- TTS Output Settings -->
                     <StackPanel x:Name="TtsSettingsSection" Spacing="12">
                         <TextBlock x:Name="TtsSettingsHeaderText"

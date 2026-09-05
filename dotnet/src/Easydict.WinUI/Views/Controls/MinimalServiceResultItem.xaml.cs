@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
@@ -12,6 +13,9 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     private bool _updateUIPending;
     private int _updateUIRequestVersion;
     private int _renderedUpdateUIVersion;
+    private bool _favoriteVisible;
+    private bool _isFavorited;
+    private bool _isSavedItemView;
 
     public MinimalServiceResultItem()
     {
@@ -29,6 +33,19 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public bool IsMinimalRenderer => true;
 
+    public bool IsSavedItemView
+    {
+        get => _isSavedItemView;
+        set
+        {
+            if (_isSavedItemView == value)
+                return;
+
+            _isSavedItemView = value;
+            QueueUpdateUI();
+        }
+    }
+
     public HashSet<string>? AlreadyShownPhonetics { get; set; }
 
     public event EventHandler<ServiceQueryResult>? CollapseToggled;
@@ -36,6 +53,14 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     public event EventHandler<ServiceQueryResult>? QueryRequested;
 
     event EventHandler<ServiceQueryResult>? IServiceResultView.FoundryLocalStartRequested
+    {
+        add { }
+        remove { }
+    }
+
+    public event EventHandler<ServiceQueryResult>? FavoriteRequested;
+
+    event EventHandler? IServiceResultView.CopyCompleted
     {
         add { }
         remove { }
@@ -73,6 +98,13 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();
 
+    public void SetFavoriteState(bool isVisible, bool isFavorited)
+    {
+        _favoriteVisible = isVisible;
+        _isFavorited = isFavorited;
+        UpdateFavoriteButton();
+    }
+
     public void Cleanup()
     {
         if (_serviceResult != null)
@@ -90,6 +122,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         ResultText.Text = string.Empty;
         ErrorText.Text = string.Empty;
         ContentArea.Visibility = Visibility.Collapsed;
+        FavoriteButton.Visibility = Visibility.Collapsed;
     }
 
     private void OnServiceResultPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -195,6 +228,31 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
             || ResultText.Visibility == Visibility.Visible
             || ErrorText.Visibility == Visibility.Visible;
         ContentArea.Visibility = hasVisibleContent ? Visibility.Visible : Visibility.Collapsed;
+        UpdateFavoriteButton();
+    }
+
+    private void OnFavoriteClicked(object sender, RoutedEventArgs e)
+    {
+        if (_serviceResult is not null && FavoriteButton.IsEnabled)
+            FavoriteRequested?.Invoke(this, _serviceResult);
+    }
+
+    private void UpdateFavoriteButton()
+    {
+        var hasSuccessfulText = _serviceResult?.IsGrammarMode == true
+            ? !string.IsNullOrWhiteSpace(_serviceResult.GrammarResult?.CorrectedText)
+            : _serviceResult?.Result is { ResultKind: TranslationResultKind.Success, TranslatedText.Length: > 0 };
+        FavoriteButton.Visibility = _favoriteVisible && hasSuccessfulText
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        FavoriteButton.IsEnabled = FavoriteButton.Visibility == Visibility.Visible;
+        FavoriteIcon.Glyph = _isFavorited ? "\uE735" : "\uE734";
+        var localization = LocalizationService.Instance;
+        var tooltip = _isFavorited
+            ? localization.GetStringOrDefault("SavedItemsRemoveResultFavorite", "Remove result favorite")
+            : localization.GetStringOrDefault("SavedItemsAddResultFavorite", "Add result favorite");
+        ToolTipService.SetToolTip(FavoriteButton, tooltip);
+        AutomationProperties.SetName(FavoriteButton, tooltip);
     }
 
     private static string GetStatusText(ServiceQueryResult serviceResult) =>

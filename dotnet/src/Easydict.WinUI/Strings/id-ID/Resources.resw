@@ -1403,4 +1403,35 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>Model gratis</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>Dapatkan API key (tautan rujukan)</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>Riwayat</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>Favorit</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>Lainnya</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>Cari sumber, hasil, atau penyedia</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>Semua</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>Terjemahan / Kamus</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>Koreksi tata bahasa</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>Segarkan</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>Belum ada kueri yang selesai.</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>Belum ada favorit.</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>Pilih kueri tersimpan</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>Hapus dari riwayat</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>Buka terjemahan</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>Tambahkan ke favorit</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>Hapus favorit</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>Sematkan favorit</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>Catatan</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>Tag</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>Pisahkan tag dengan koma</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>Gunakan maksimal 20 tag, dengan hingga 40 karakter per tag.</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>Simpan</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>Tambahkan hasil ke favorit</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>Hapus hasil dari favorit</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>Kapan saja</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>Hari ini</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>7 hari terakhir</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>30 hari terakhir</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>Semua penyedia</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>Coba lagi</value></data>
 </root>

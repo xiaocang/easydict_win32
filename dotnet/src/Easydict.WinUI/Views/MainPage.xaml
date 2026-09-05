@@ -161,6 +161,73 @@
                               FontSize="18"
                               Foreground="{ThemeResource ButtonForeground}"/>
                 </Button>
+                <Button
+                    x:Name="HistoryButton"
+                    AutomationProperties.AutomationId="HistoryButton"
+                    AutomationProperties.Name="History"
+                    Click="OnHistoryClicked"
+                    Style="{StaticResource EasydictBaseButtonStyle}"
+                    ToolTipService.ToolTip="History"
+                    Height="32"
+                    Padding="10,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon Glyph="&#xE81C;" FontSize="14"/>
+                        <TextBlock x:Name="HistoryButtonText"
+                                   Text="History"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="FavoritesButton"
+                    AutomationProperties.AutomationId="FavoritesButton"
+                    AutomationProperties.Name="Favorites"
+                    Click="OnFavoritesClicked"
+                    Style="{StaticResource EasydictBaseButtonStyle}"
+                    ToolTipService.ToolTip="Favorites"
+                    Height="32"
+                    Padding="10,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon Glyph="&#xE734;" FontSize="14"/>
+                        <TextBlock x:Name="FavoritesButtonText"
+                                   Text="Favorites"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="SavedItemsMoreButton"
+                    AutomationProperties.AutomationId="SavedItemsMoreButton"
+                    AutomationProperties.Name="More"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="More"
+                    Width="32"
+                    Height="32"
+                    Visibility="Collapsed">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem
+                                x:Name="CompactHistoryMenuItem"
+                                AutomationProperties.AutomationId="CompactHistoryMenuItem"
+                                Text="History"
+                                Click="OnHistoryClicked">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE81C;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem
+                                x:Name="CompactFavoritesMenuItem"
+                                AutomationProperties.AutomationId="CompactFavoritesMenuItem"
+                                Text="Favorites"
+                                Click="OnFavoritesClicked">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE734;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <FontIcon Glyph="&#xE712;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
                 <!-- Settings Button -->
                 <Button
                     x:Name="SettingsButton"
@@ -516,6 +583,18 @@
                             FontWeight="SemiBold"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Margin="4,0,0,4"/>
+                        <Button
+                            x:Name="CurrentQueryFavoriteButton"
+                            AutomationProperties.AutomationId="CurrentQueryFavoriteButton"
+                            AutomationProperties.Name="Favorite current query"
+                            Click="OnCurrentQueryFavoriteClicked"
+                            Style="{StaticResource EasydictIconButtonStyle}"
+                            ToolTipService.ToolTip="Favorite current query"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed">
+                            <FontIcon x:Name="CurrentQueryFavoriteIcon" Glyph="&#xE734;" FontSize="16"/>
+                        </Button>
 
                         <ItemsControl
                             x:Name="ResultsPanel"

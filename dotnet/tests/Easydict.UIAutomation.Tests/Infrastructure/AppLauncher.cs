@@ -258,9 +258,11 @@ public sealed class AppLauncher : IDisposable
             {
                 lastException = ex;
             }
-            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1460)
+            catch (System.ComponentModel.Win32Exception ex) when (
+                ex.NativeErrorCode is 1460 or unchecked((int)0x800705B4))
             {
-                // FlaUI may surface the same UIA timeout as ERROR_TIMEOUT.
+                // FlaUI can pass either ERROR_TIMEOUT or HRESULT_FROM_WIN32
+                // directly to Win32Exception, which preserves that raw value.
                 lastException = ex;
             }
 

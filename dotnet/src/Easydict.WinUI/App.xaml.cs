@@ -537,7 +537,7 @@ namespace Easydict.WinUI
                     if (!string.IsNullOrWhiteSpace(text)
                         && _window?.Content is Frame frame && frame.Content is MainPage mainPage)
                     {
-                        mainPage.SetTextAndTranslate(text, QuerySourceKind.Clipboard);
+                        mainPage.SetTextAndTranslate(text, QuerySourceKind.Selection);
                     }
                 });
             }

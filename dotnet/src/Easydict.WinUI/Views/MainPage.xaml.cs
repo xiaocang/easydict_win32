@@ -1572,7 +1572,7 @@ namespace Easydict.WinUI.Views
                 }
 
                 InputTextBox.Text = text;
-                await StartQueryTrackedAsync();
+                await StartQueryTrackedAsync(QuerySourceKind.Clipboard);
             });
         }
 

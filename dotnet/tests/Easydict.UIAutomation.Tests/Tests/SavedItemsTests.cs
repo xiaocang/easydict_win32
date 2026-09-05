@@ -221,26 +221,34 @@ public sealed class SavedItemsTests : IDisposable
         UITestHelper.FindByAutomationIdOrName(fixedWindow!, "SavedItemsList").Should().BeNull();
     }
 
-    [Fact]
-    public void HistorySettings_PersistImmediatelyAcrossRestart()
+    [Theory]
+    [InlineData(1280)]
+    [InlineData(640)]
+    public void HistorySettings_PersistImmediatelyAcrossRestart(int width)
     {
         using var dpiScope = new PerMonitorDpiScope();
-        var controls = OpenHistorySettings(_launcher);
-        var scrollViewer = UITestHelper.FindByAutomationIdOrName(_launcher.GetMainWindow(), "MainScrollViewer")!;
+        var controls = OpenHistorySettings(_launcher, width);
+        var scrollViewer = controls.ScrollViewer;
         ScrollHelper.ScrollToFind(scrollViewer, 70, () =>
         {
             var clear = UITestHelper.FindByAutomationIdOrName(_launcher.GetMainWindow(), "ClearHistoryButton");
             return clear is { IsOffscreen: false } && clear.BoundingRectangle.Bottom < scrollViewer.BoundingRectangle.Bottom - 16
                 ? clear : null;
         }, _output.WriteLine).Should().NotBeNull();
-        _output.WriteLine(ScreenshotHelper.CaptureWindow(_launcher.GetMainWindow(), "fluent2_history_privacy_settings"));
+        _output.WriteLine(ScreenshotHelper.CaptureWindow(_launcher.GetMainWindow(), $"fluent2_history_privacy_settings_{width}"));
+        var togglePattern = controls.Toggle.Patterns.Toggle.PatternOrDefault;
+        togglePattern.Should().NotBeNull();
         var retentionPattern = controls.Retention.Patterns.RangeValue.PatternOrDefault;
         retentionPattern.Should().NotBeNull();
+        var originalToggleState = togglePattern!.ToggleState.Value;
+        var originalRetention = retentionPattern!.Value.Value;
+        if (togglePattern!.ToggleState.Value == FlaUI.Core.Definitions.ToggleState.Off)
+            togglePattern.Toggle();
+        Retry.WhileFalse(() => controls.Retention.IsEnabled, TimeSpan.FromSeconds(5))
+            .Result.Should().BeTrue("history must be enabled before editing retention");
         retentionPattern!.SetValue(7);
         Thread.Sleep(300);
 
-        var togglePattern = controls.Toggle.Patterns.Toggle.PatternOrDefault;
-        togglePattern.Should().NotBeNull();
         if (togglePattern!.ToggleState.Value == FlaUI.Core.Definitions.ToggleState.On)
             togglePattern.Toggle();
 
@@ -252,7 +260,7 @@ public sealed class SavedItemsTests : IDisposable
         _launcher.Dispose();
         using var relaunched = new AppLauncher();
         relaunched.LaunchAuto(TimeSpan.FromSeconds(45));
-        var reloaded = OpenHistorySettings(relaunched);
+        var reloaded = OpenHistorySettings(relaunched, width);
         var reloadedToggle = reloaded.Toggle.Patterns.Toggle.PatternOrDefault;
         var reloadedRetention = reloaded.Retention.Patterns.RangeValue.PatternOrDefault;
 
@@ -264,15 +272,20 @@ public sealed class SavedItemsTests : IDisposable
         reloaded.Clear.IsEnabled.Should().BeTrue();
 
         reloadedToggle.Toggle();
-        Retry.WhileTrue(
-            () => !reloaded.Retention.IsEnabled,
-            TimeSpan.FromSeconds(5));
-        reloadedRetention.SetValue(30);
+        Retry.WhileFalse(() => reloaded.Retention.IsEnabled, TimeSpan.FromSeconds(5))
+            .Result.Should().BeTrue();
+        reloadedRetention.SetValue(originalRetention);
+        if (originalToggleState == FlaUI.Core.Definitions.ToggleState.Off)
+            reloadedToggle.Toggle();
     }
 
-    private HistorySettingsControls OpenHistorySettings(AppLauncher launcher)
+    private HistorySettingsControls OpenHistorySettings(AppLauncher launcher, int width)
     {
         var window = launcher.GetMainWindow();
+        var scale = ScreenshotHelper.GetWindowDpiScale(window);
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window,
+            new System.Drawing.Rectangle(0, 0, (int)(width * scale) + 16, (int)(700 * scale) + 40))
+            .Should().BeTrue();
         window.SetForeground();
         var settingsButton = Retry.WhileNull(
             () => UITestHelper.FindByAutomationIdOrName(window, "SettingsButton"),
@@ -283,26 +296,53 @@ public sealed class SavedItemsTests : IDisposable
         else
             settingsButton.Click();
 
-        var scrollViewer = Retry.WhileNull(
-            () => UITestHelper.FindByAutomationIdOrName(window, "MainScrollViewer"),
+        var generalTab = Retry.WhileNull(
+            () => FindRendered(window, "SettingsTab_General"),
             TimeSpan.FromSeconds(15)).Result;
-        scrollViewer.Should().NotBeNull();
+        generalTab.Should().NotBeNull();
+        generalTab!.Click();
+        Retry.WhileNull(
+            () => FindRendered(window, "SettingsGeneralBehaviorHeader"),
+            TimeSpan.FromSeconds(10)).Result.Should().NotBeNull("history settings are in General");
+
+        var scrollViewer = Retry.WhileNull(
+            () => new[] { "SettingsDetailsScrollViewer", "MainScrollViewer" }
+                .Select(id => FindRendered(window, id))
+                .FirstOrDefault(element => element?.Patterns.Scroll.PatternOrDefault?.VerticallyScrollable.Value == true),
+            TimeSpan.FromSeconds(15)).Result;
+        scrollViewer.Should().NotBeNull("wide Settings scrolls the detail pane; stacked Settings scrolls the outer page");
         var retention = ScrollHelper.ScrollToFind(
             scrollViewer!,
             65,
             () => UITestHelper.FindByAutomationIdOrName(window, "HistoryRetentionDaysBox"),
             _output.WriteLine);
+        if (retention is null)
+            _output.WriteLine(ScreenshotHelper.CaptureWindow(window, "history_settings_retention_missing"));
         retention.Should().NotBeNull();
         var toggle = UITestHelper.FindByAutomationIdOrName(window, "HistoryEnabledToggle");
         var clear = UITestHelper.FindByAutomationIdOrName(window, "ClearHistoryButton");
         toggle.Should().NotBeNull();
         clear.Should().NotBeNull();
-        return new HistorySettingsControls(toggle!, retention!, clear!);
+        return new HistorySettingsControls(toggle!, retention!, clear!, scrollViewer!);
+    }
+
+    private static AutomationElement? FindRendered(Window window, string automationId)
+    {
+        var viewport = window.BoundingRectangle;
+        // Both responsive navigation templates expose the same IDs. The hidden
+        // template can appear first in the automation tree with empty bounds.
+        return window.FindAllDescendants(cf => cf.ByAutomationId(automationId))
+            .FirstOrDefault(element =>
+            {
+                var bounds = element.BoundingRectangle;
+                return !element.IsOffscreen && bounds.Width > 1 && bounds.Height > 1 && bounds.IntersectsWith(viewport);
+            });
     }
 
     private sealed record HistorySettingsControls(
         AutomationElement Toggle,
         AutomationElement Retention,
-        AutomationElement Clear);
+        AutomationElement Clear,
+        AutomationElement ScrollViewer);
     public void Dispose() => _launcher.Dispose();
 }

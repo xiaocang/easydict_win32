@@ -247,20 +247,21 @@ public class MainPageLifecycleLeakTests
     }
 
     [Fact]
-    public void MainPage_PreservesLanguageSelectionSuppressionWhileSyncingResponsiveCombos()
+    public void MainPage_UsesSingleLanguageSelectorsWithSuppressedProgrammaticChanges()
     {
         var content = File.ReadAllText(MainPagePath);
+        var xaml = System.Xml.Linq.XDocument.Load(MainPageXamlPath);
+        var combos = xaml.Descendants().Where(element => element.Name.LocalName == "ComboBox").ToList();
 
-        content.Should().Contain("var wasSuppressed = _suppressSourceLanguageSelectionChanged;",
-            "wide/narrow source combo synchronization must not clear an outer localization/settings suppression scope");
-        content.Should().Contain("finally { _suppressSourceLanguageSelectionChanged = wasSuppressed; }",
-            "source combo synchronization should restore the previous suppression state");
-        content.Should().Contain("var wasSuppressed = _suppressTargetLanguageSelectionChanged;",
-            "wide/narrow target combo synchronization must not fire a second manual target-language change");
-        content.Should().Contain("finally { _suppressTargetLanguageSelectionChanged = wasSuppressed; }",
-            "target combo synchronization should restore the previous suppression state");
-        content.Should().NotContain("TargetLangCombo.SelectionChanged += (s, e) => SyncComboSelection",
-            "target combo sync should run under suppression instead of directly changing the paired combo");
+        foreach (var language in new[] { "Source", "Target" })
+        {
+            var handler = $"On{language}LanguageChanged";
+            combos.Count(element => (string?)element.Attribute("SelectionChanged") == handler)
+                .Should().Be(1, "responsive layouts share a single language bar instead of synchronizing duplicate selectors");
+            GetMethodBody(content, handler).Should().Contain(
+                $"if (!_isLoaded || _suppress{language}LanguageSelectionChanged)",
+                "programmatic selection changes must not trigger a manual query");
+        }
     }
 
     [Fact]

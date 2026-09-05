@@ -161,6 +161,73 @@
                               FontSize="18"
                               Foreground="{ThemeResource ButtonForeground}"/>
                 </Button>
+                <Button
+                    x:Name="HistoryButton"
+                    AutomationProperties.AutomationId="HistoryButton"
+                    AutomationProperties.Name="History"
+                    Click="OnHistoryClicked"
+                    Style="{StaticResource EasydictBaseButtonStyle}"
+                    ToolTipService.ToolTip="History"
+                    Height="32"
+                    Padding="10,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon Glyph="&#xE81C;" FontSize="14"/>
+                        <TextBlock x:Name="HistoryButtonText"
+                                   Text="History"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="FavoritesButton"
+                    AutomationProperties.AutomationId="FavoritesButton"
+                    AutomationProperties.Name="Favorites"
+                    Click="OnFavoritesClicked"
+                    Style="{StaticResource EasydictBaseButtonStyle}"
+                    ToolTipService.ToolTip="Favorites"
+                    Height="32"
+                    Padding="10,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon Glyph="&#xE734;" FontSize="14"/>
+                        <TextBlock x:Name="FavoritesButtonText"
+                                   Text="Favorites"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="SavedItemsMoreButton"
+                    AutomationProperties.AutomationId="SavedItemsMoreButton"
+                    AutomationProperties.Name="More"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="More"
+                    Width="32"
+                    Height="32"
+                    Visibility="Collapsed">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem
+                                x:Name="CompactHistoryMenuItem"
+                                AutomationProperties.AutomationId="CompactHistoryMenuItem"
+                                Text="History"
+                                Click="OnHistoryClicked">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE81C;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem
+                                x:Name="CompactFavoritesMenuItem"
+                                AutomationProperties.AutomationId="CompactFavoritesMenuItem"
+                                Text="Favorites"
+                                Click="OnFavoritesClicked">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE734;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <FontIcon Glyph="&#xE712;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
                 <!-- Settings Button -->
                 <Button
                     x:Name="SettingsButton"
@@ -183,218 +250,30 @@
                       VerticalScrollBarVisibility="Visible"
                       HorizontalScrollBarVisibility="Disabled"
                       ViewChanged="OnQuickTranslateContentViewChanged">
-            <Grid x:Name="QuickContentGrid"
-                  Padding="4">
-                <VisualStateManager.VisualStateGroups>
-                    <VisualStateGroup x:Name="LayoutStates">
-                        <!-- Wide layout: all controls in one row -->
-                        <VisualState x:Name="WideLayout">
-                            <VisualState.StateTriggers>
-                                <AdaptiveTrigger MinWindowWidth="500"/>
-                            </VisualState.StateTriggers>
-                            <VisualState.Setters>
-                                <Setter Target="ActionBarWide.Visibility"
-                                        Value="Visible"/>
-                                <Setter Target="ActionBarNarrow.Visibility"
-                                        Value="Collapsed"/>
-                            </VisualState.Setters>
-                        </VisualState>
-                        <!-- Narrow layout: stacked controls -->
-                        <VisualState x:Name="NarrowLayout">
-                            <VisualState.StateTriggers>
-                                <AdaptiveTrigger MinWindowWidth="0"/>
-                            </VisualState.StateTriggers>
-                            <VisualState.Setters>
-                                <Setter Target="ActionBarWide.Visibility"
-                                        Value="Collapsed"/>
-                                <Setter Target="ActionBarNarrow.Visibility"
-                                        Value="Visible"/>
-                            </VisualState.Setters>
-                        </VisualState>
-                    </VisualStateGroup>
-                </VisualStateManager.VisualStateGroups>
-
+            <Grid x:Name="QuickContentGrid" MaxWidth="1280" HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="QuickInputColumn" Width="*"/>
+                    <ColumnDefinition x:Name="QuickResultColumn" Width="0"/>
+                </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"
-                                   MinHeight="40"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"
-                                   MinHeight="40"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-
-                <!-- Wide Layout: Language + Button in one row -->
-                <Grid x:Name="ActionBarWide"
-                      Grid.Row="1"
-                      Margin="0,4,0,4"
-                      Visibility="Visible">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Source Language -->
-                    <ComboBox
-                        x:Name="SourceLangCombo"
-                        AutomationProperties.AutomationId="SourceLangCombo"
-                        Grid.Column="0"
-                        MinWidth="130"
-                        MaxWidth="200"
-                        SelectionChanged="OnSourceLanguageChanged"
-                        VerticalAlignment="Center"
-                        ToolTipService.ToolTip="Source Language"/>
-
-                    <!-- Swap Languages Button -->
-                    <Button
-                        x:Name="SwapLanguageButton"
-                        Grid.Column="1"
-                        Click="OnSwapLanguagesClicked"
-                        Style="{StaticResource EasydictIconButtonStyle}"
-                        ToolTipService.ToolTip="Swap source and target languages"
-                        AutomationProperties.Name="Swap source and target languages"
-                        Margin="8,0"
-                        VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE8AB;"
-                                  FontSize="16"
-                                  Foreground="{ThemeResource ButtonForeground}"/>
-                    </Button>
-
-                    <!-- Target Language -->
-                    <ComboBox
-                        x:Name="TargetLangCombo"
-                        AutomationProperties.AutomationId="TargetLangCombo"
-                        Grid.Column="2"
-                        MinWidth="130"
-                        MaxWidth="200"
-                        SelectionChanged="OnTargetLanguageChanged"
-                        VerticalAlignment="Center"
-                        ToolTipService.ToolTip="Target Language"/>
-
-                    <!-- Language Help Icon -->
-                    <FontIcon
-                        x:Name="LangHelpIcon"
-                        Grid.Column="3"
-                        Glyph="&#xE897;"
-                        FontSize="14"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        VerticalAlignment="Center"
-                        Margin="6,0,0,0"/>
-
-                    <!-- Translate Button (Right) -->
-                    <Button
-                        x:Name="TranslateButton"
-                        Grid.Column="4"
-                        Click="OnTranslateClicked"
-                        Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
-                        VerticalAlignment="Center"
-                        ToolTipService.ToolTip="Translate"
-                        AutomationProperties.Name="Translate">
-                        <Grid>
-                            <ProgressRing
-                                x:Name="LoadingRing"
-                                IsActive="False"
-                                Width="16"
-                                Height="16"
-                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                Visibility="Collapsed"/>
-                            <FontIcon
-                                x:Name="TranslateIcon"
-                                Glyph="&#xE8C1;"
-                                FontSize="16"
-                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                        </Grid>
-                    </Button>
-                </Grid>
-
-                <!-- Narrow Layout: Stacked controls -->
-                <StackPanel x:Name="ActionBarNarrow"
-                            Grid.Row="1"
-                            Spacing="4"
-                            Margin="0,4,0,4"
-                            Visibility="Collapsed">
-                    <!-- Language row -->
+                <ScrollViewer x:Name="QuickInputScrollViewer" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <ComboBox
-                            x:Name="SourceLangComboNarrow"
-                            AutomationProperties.AutomationId="SourceLangComboNarrow"
-                            Grid.Column="0"
-                            HorizontalAlignment="Stretch"
-                            SelectionChanged="OnSourceLanguageChanged"
-                            ToolTipService.ToolTip="Source Language"/>
-
-                        <Button
-                            x:Name="SwapLanguageButtonNarrow"
-                            Grid.Column="1"
-                            Click="OnSwapLanguagesClicked"
-                            Style="{StaticResource EasydictIconButtonStyle}"
-                            ToolTipService.ToolTip="Swap source and target languages"
-                            AutomationProperties.Name="Swap source and target languages"
-                            VerticalAlignment="Center"
-                            Margin="4,0">
-                            <FontIcon Glyph="&#xE8AB;"
-                                      FontSize="16"
-                                      Foreground="{ThemeResource ButtonForeground}"/>
-                        </Button>
-
-                        <ComboBox
-                            x:Name="TargetLangComboNarrow"
-                            AutomationProperties.AutomationId="TargetLangComboNarrow"
-                            Grid.Column="2"
-                            HorizontalAlignment="Stretch"
-                            SelectionChanged="OnTargetLanguageChanged"
-                            ToolTipService.ToolTip="Target Language"/>
-
-                        <FontIcon
-                            x:Name="LangHelpIconNarrow"
-                            Grid.Column="3"
-                            Glyph="&#xE897;"
-                            FontSize="14"
-                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                            VerticalAlignment="Center"
-                            Margin="4,0,0,0"/>
-                    </Grid>
-
-                    <Button
-                        x:Name="TranslateButtonNarrow"
-                        Click="OnTranslateClicked"
-                        Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
-                        HorizontalAlignment="Center"
-                        ToolTipService.ToolTip="Translate"
-                        AutomationProperties.Name="Translate">
-                        <Grid>
-                            <ProgressRing
-                                x:Name="LoadingRingNarrow"
-                                IsActive="False"
-                                Width="16"
-                                Height="16"
-                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                Visibility="Collapsed"/>
-                            <FontIcon
-                                x:Name="TranslateIconNarrow"
-                                Glyph="&#xE8C1;"
-                                FontSize="16"
-                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                        </Grid>
-                    </Button>
-                </StackPanel>
-
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                 <!-- Input Card -->
                 <Border x:Name="QuickInputCard"
                         AutomationProperties.AutomationId="QuickInputCard"
                         AutomationProperties.AccessibilityView="Control"
                         Grid.Row="0"
                         MaxHeight="480"
-                        Style="{StaticResource CardStyle}"
+                        Style="{StaticResource FluentInputCardStyle}"
                         Margin="0,0,0,2">
                     <Grid x:Name="QuickInputCardContent"
                           Margin="4">
@@ -414,6 +293,7 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBlock
+                                x:Name="QuickSourceTitleText"
                                 Grid.Column="0"
                                 Text="Source Text"
                                 FontSize="13"
@@ -479,6 +359,10 @@
                                 HorizontalAlignment="Stretch"
                                 PreviewKeyDown="OnInputTextBoxKeyDown">
                                 <TextBox.Resources>
+                                    <!-- Keep native text states on the same brush across cached-page navigation. -->
+                                    <SolidColorBrush x:Key="TextControlForeground" Color="{ThemeResource QueryTextColor}" />
+                                    <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="TextControlForeground" />
+                                    <StaticResource x:Key="TextControlForegroundFocused" ResourceKey="TextControlForeground" />
                                     <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
                                     <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
                                     <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
@@ -493,51 +377,86 @@
                     </Grid>
                 </Border>
 
-                <!-- Output Area: Multiple Service Results -->
-                <Border x:Name="QuickOutputCard"
-                        AutomationProperties.AutomationId="QuickOutputCard"
-                        AutomationProperties.AccessibilityView="Control"
-                        Grid.Row="2"
-                        MinHeight="280"
-                        Style="{StaticResource CardStyle}"
-                        Margin="0,2,0,0">
-                    <Grid x:Name="QuickOutputCardContent"
-                          Margin="4">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
 
-                        <TextBlock
-                            x:Name="ResultsTitleText"
-                            Grid.Row="0"
-                            Text="Translation Results"
-                            FontSize="13"
-                            FontWeight="SemiBold"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Margin="4,0,0,4"/>
+                <controls:FluentLanguageBar x:Name="ActionBarWide"
+                      Grid.Row="1"
+                      Margin="0,4,0,4"
+                      Visibility="Visible">
 
-                        <ItemsControl
-                            x:Name="ResultsPanel"
-                            Grid.Row="1"
-                            VerticalAlignment="Stretch">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Vertical"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
 
-                        <TextBlock
-                            x:Name="PlaceholderText"
-                            Grid.Row="1"
-                            Text="Translation will appear here..."
-                            FontSize="13"
-                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                            Margin="8,8,0,0"
-                            Visibility="Visible"/>
-                    </Grid>
-                </Border>
+                    <!-- Source Language -->
+                    <ComboBox
+                        x:Name="SourceLangCombo"
+                        AutomationProperties.AutomationId="SourceLangCombo"
+                        Grid.Column="0"
+                        MinWidth="0"
+                        HorizontalAlignment="Stretch"
+                        SelectionChanged="OnSourceLanguageChanged"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="Source Language"/>
+
+                    <!-- Swap Languages Button -->
+                    <Button
+                        x:Name="SwapLanguageButton"
+                        Grid.Column="1"
+                        Click="OnSwapLanguagesClicked"
+                        Style="{StaticResource EasydictIconButtonStyle}"
+                        ToolTipService.ToolTip="Swap source and target languages"
+                        AutomationProperties.Name="Swap source and target languages"
+                        Margin="8,0"
+                        VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE8AB;"
+                                  FontSize="16"
+                                  Foreground="{ThemeResource ButtonForeground}"/>
+                    </Button>
+
+                    <!-- Target Language -->
+                    <ComboBox
+                        x:Name="TargetLangCombo"
+                        AutomationProperties.AutomationId="TargetLangCombo"
+                        Grid.Column="2"
+                        MinWidth="0"
+                        HorizontalAlignment="Stretch"
+                        SelectionChanged="OnTargetLanguageChanged"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="Target Language"/>
+
+                    <!-- Language Help Icon -->
+                    <FontIcon
+                        x:Name="LangHelpIcon"
+                        Grid.Column="3"
+                        Glyph="&#xE897;"
+                        FontSize="14"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        VerticalAlignment="Center"
+                        Margin="6,0,0,0"/>
+
+                    <!-- Translate Button (Right) -->
+                    <Button
+                        x:Name="TranslateButton"
+                        Grid.Column="4"
+                        Click="OnTranslateClicked"
+                        Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="Translate"
+                        AutomationProperties.Name="Translate">
+                        <Grid>
+                            <ProgressRing
+                                x:Name="LoadingRing"
+                                IsActive="False"
+                                Width="16"
+                                Height="16"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                Visibility="Collapsed"/>
+                            <FontIcon
+                                x:Name="TranslateIcon"
+                                Glyph="&#xE8C1;"
+                                FontSize="16"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                        </Grid>
+                    </Button>
+                </controls:FluentLanguageBar>
+
 
                 <!-- Footer -->
                 <Grid x:Name="QuickFooterGrid"
@@ -570,9 +489,72 @@
                             VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>
+
+                    </Grid>
+                </ScrollViewer>
+                <ScrollViewer x:Name="QuickResultsScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" ViewChanged="OnQuickTranslateContentViewChanged">
+                <!-- Output Area: Multiple Service Results -->
+                <Border x:Name="QuickOutputCard"
+                        AutomationProperties.AutomationId="QuickOutputCard"
+                        AutomationProperties.AccessibilityView="Control"
+                        Grid.Row="0"
+                        MinHeight="280"
+                        Style="{StaticResource FluentInputCardStyle}"
+                        Margin="0,2,0,0">
+                    <Grid x:Name="QuickOutputCardContent"
+                          Margin="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock
+                            x:Name="ResultsTitleText"
+                            Grid.Row="0"
+                            Text="Translation Results"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Margin="4,0,0,4"/>
+                        <Button
+                            x:Name="CurrentQueryFavoriteButton"
+                            AutomationProperties.AutomationId="CurrentQueryFavoriteButton"
+                            AutomationProperties.Name="Favorite current query"
+                            Click="OnCurrentQueryFavoriteClicked"
+                            Style="{StaticResource EasydictIconButtonStyle}"
+                            ToolTipService.ToolTip="Favorite current query"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed">
+                            <FontIcon x:Name="CurrentQueryFavoriteIcon" Glyph="&#xE734;" FontSize="16"/>
+                        </Button>
+
+                        <ItemsControl
+                            x:Name="ResultsPanel"
+                            Grid.Row="1"
+                            VerticalAlignment="Stretch">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Vertical"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+
+                        <TextBlock
+                            x:Name="PlaceholderText"
+                            Grid.Row="1"
+                            Text="Translation will appear here..."
+                            FontSize="13"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Margin="8,8,0,0"
+                            Visibility="Visible"/>
+                    </Grid>
+                </Border>
+
+
+                </ScrollViewer>
             </Grid>
         </ScrollViewer>
-
         <!-- Long Document Content -->
         <ScrollViewer x:Name="LongDocContent"
                       Grid.Row="1"
@@ -594,7 +576,7 @@
                 <!-- Row 0: Input Card -->
                 <Border x:Name="LongDocInputCard"
                         Grid.Row="0"
-                        Style="{StaticResource CardStyle}"
+                        Style="{StaticResource FluentInputCardStyle}"
                         Margin="0,0,0,2">
                     <Grid x:Name="LongDocInputCardContent"
                           Margin="4">
@@ -801,9 +783,19 @@
                     </Button>
 
                     <!-- Row 1, Col 0: Input Mode -->
-                    <ComboBox x:Name="LongDocInputModeCombo"
-                              Grid.Row="1"
-                              Grid.Column="0"
+
+
+                    <!-- Row 1, Col 1: Output Mode -->
+
+
+                    <!-- Row 1, Col 2: Concurrency -->
+
+
+                    <!-- Row 1, Col 3: Page Range -->
+
+<Expander x:Name="LongDocMoreOptions" Grid.Row="1" Grid.ColumnSpan="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="LongDocMoreOptions">
+<StackPanel Spacing="12">
+<ComboBox x:Name="LongDocInputModeCombo"
                               SelectedIndex="2"
                               SelectionChanged="OnLongDocInputModeChanged"
                               HorizontalAlignment="Stretch"
@@ -828,40 +820,7 @@
                         <ComboBoxItem Content="PDF"
                                       Tag="pdf"/>
                     </ComboBox>
-
-                    <!-- Row 1, Col 1: Output Mode -->
-                    <ComboBox x:Name="LongDocOutputModeCombo"
-                              Grid.Row="1"
-                              Grid.Column="1"
-                              SelectedIndex="0"
-                              SelectionChanged="OnLongDocOutputModeChanged"
-                              HorizontalAlignment="Stretch"
-                              ToolTipService.ToolTip="Output Format">
-                        <ComboBox.Header>
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="4">
-                                <TextBlock Text="&#x1F4DD;"
-                                           FontSize="13"/>
-                                <TextBlock Text="Output"
-                                           FontSize="12"/>
-                                <FontIcon x:Name="LongDocOutputModeHint"
-                                          Glyph="&#xE897;"
-                                          FontSize="11"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                            </StackPanel>
-                        </ComboBox.Header>
-                        <ComboBoxItem Content="Mono"
-                                      Tag="Monolingual"/>
-                        <ComboBoxItem Content="Bilingual"
-                                      Tag="Bilingual"/>
-                        <ComboBoxItem Content="Both"
-                                      Tag="Both"/>
-                    </ComboBox>
-
-                    <!-- Row 1, Col 2: Concurrency -->
-                    <NumberBox x:Name="LongDocConcurrencyBox"
-                               Grid.Row="1"
-                               Grid.Column="2"
+<NumberBox x:Name="LongDocConcurrencyBox"
                                Minimum="1"
                                Maximum="16"
                                SmallChange="1"
@@ -885,11 +844,7 @@
                             </StackPanel>
                         </NumberBox.Header>
                     </NumberBox>
-
-                    <!-- Row 1, Col 3: Page Range -->
-                    <TextBox x:Name="LongDocPageRangeBox"
-                             Grid.Row="1"
-                             Grid.Column="3"
+<TextBox x:Name="LongDocPageRangeBox"
                              PlaceholderText="1-3,5,7-10"
                              MinWidth="110"
                              Background="{ThemeResource TextControlBackground}"
@@ -912,12 +867,14 @@
                             </StackPanel>
                         </TextBox.Header>
                     </TextBox>
+</StackPanel>
+</Expander>
                 </Grid>
 
                 <!-- Row 2: Output Card -->
                 <Border x:Name="LongDocOutputCard"
                         Grid.Row="2"
-                        Style="{StaticResource CardStyle}"
+                        Style="{StaticResource FluentInputCardStyle}"
                         Margin="0,2,0,0">
                     <Grid x:Name="LongDocOutputCardContent"
                           Margin="4">
@@ -955,6 +912,31 @@
                                     Grid.Row="1"
                                     Spacing="8"
                                     VerticalAlignment="Top">
+<ComboBox x:Name="LongDocOutputModeCombo"
+                              SelectedIndex="0"
+                              SelectionChanged="OnLongDocOutputModeChanged"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Output Format">
+                        <ComboBox.Header>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="4">
+                                <TextBlock Text="&#x1F4DD;"
+                                           FontSize="13"/>
+                                <TextBlock Text="Output"
+                                           FontSize="12"/>
+                                <FontIcon x:Name="LongDocOutputModeHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                            </StackPanel>
+                        </ComboBox.Header>
+                        <ComboBoxItem Content="Mono"
+                                      Tag="Monolingual"/>
+                        <ComboBoxItem Content="Bilingual"
+                                      Tag="Bilingual"/>
+                        <ComboBoxItem Content="Both"
+                                      Tag="Both"/>
+                    </ComboBox>
                             <TextBlock x:Name="LongDocOutputFolderLabel"
                                        Text="Output Folder"
                                        FontSize="12"

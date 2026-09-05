@@ -23,11 +23,19 @@ public interface IServiceResultView
 
     HashSet<string>? AlreadyShownPhonetics { get; set; }
 
+    bool IsSavedItemView { get; set; }
+
     event EventHandler<ServiceQueryResult>? CollapseToggled;
 
     event EventHandler<ServiceQueryResult>? QueryRequested;
 
     event EventHandler<ServiceQueryResult>? FoundryLocalStartRequested;
+
+    event EventHandler<ServiceQueryResult>? FavoriteRequested;
+
+    event EventHandler? CopyCompleted;
+    event EventHandler<ResultRenderingEventArgs>? RenderingStatusChanged;
+    ResultMessageView Feedback { get; }
 
     void RefreshDemotionState();
 
@@ -44,6 +52,10 @@ public interface IServiceResultView
     }
 
     IEnumerable<string> GetDisplayedPhoneticKeys();
+
+    void SetFavoriteState(bool isVisible, bool isFavorited)
+    {
+    }
 
     void Cleanup();
 }

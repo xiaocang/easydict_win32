@@ -189,6 +189,28 @@ internal static class ThemeResourceService
         FrameworkElement? root,
         out object? value)
     {
+        // Code-created chrome must use the user's contrast palette, just like XAML brushes.
+        if (themeName == "HighContrast" && key.EndsWith("Color", StringComparison.Ordinal)
+            && !key.StartsWith("System", StringComparison.Ordinal))
+        {
+            var foreground = key.Contains("Text", StringComparison.Ordinal)
+                || key.Contains("Foreground", StringComparison.Ordinal)
+                || key.Contains("Border", StringComparison.Ordinal)
+                || key.Contains("Icon", StringComparison.Ordinal);
+            var settings = new Windows.UI.ViewManagement.UISettings();
+            if (key.Contains("Accent", StringComparison.Ordinal) || key.Contains("Selected", StringComparison.Ordinal))
+            {
+                value = settings.UIElementColor(foreground
+                    ? Windows.UI.ViewManagement.UIElementType.HighlightText
+                    : Windows.UI.ViewManagement.UIElementType.Highlight);
+                return true;
+            }
+            value = settings.GetColorValue(foreground
+                ? Windows.UI.ViewManagement.UIColorType.Foreground
+                : Windows.UI.ViewManagement.UIColorType.Background);
+            return true;
+        }
+
         // XAML resource lookup walks the element tree before falling back to
         // application resources, so directly scoped overrides win. Keep merged
         // framework dictionaries out of this first pass: several Easydict keys

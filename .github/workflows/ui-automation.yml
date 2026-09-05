@@ -274,6 +274,9 @@ jobs:
           - name: "Theme Contrast"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.ThemeContrastTests."
             suffix: "theme-contrast"
+          - name: "Saved Items"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SavedItemsTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SavedItemsVisualTests.)"
+            suffix: "saved-items"
           - name: "OCR"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.OcrTests."
             suffix: "ocr-overlay"
@@ -355,6 +358,16 @@ jobs:
 
           # Export for later steps
           echo "EASYDICT_PACKAGE_FAMILY_NAME=$($pkg.PackageFamilyName)" >> $env:GITHUB_ENV
+
+      - name: Configure Saved Items test desktop and isolated launch
+        if: matrix.shard.name == 'Saved Items'
+        shell: pwsh
+        run: |
+          dotnet/scripts/ci/Set-UiTestDisplayResolution.ps1 -Width 1920 -Height 1080
+          # Launch the registered package's executable directly so each fixture's
+          # EASYDICT_SETTINGS_DIR reaches the app. Explorer activation loses it.
+          $testExe = (Resolve-Path 'dotnet/msix/extracted/Easydict.WinUI.exe').Path
+          "EASYDICT_EXE_PATH=$testExe" >> $env:GITHUB_ENV
 
       - name: Restore UI test dependencies
         working-directory: dotnet

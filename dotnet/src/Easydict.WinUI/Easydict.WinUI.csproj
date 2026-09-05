@@ -249,18 +249,24 @@
         <Message Importance="high" Text="[Localization] Checking for resources.pri..." />
         <Message Importance="high" Text="[Localization] WindowsPackageType=$(WindowsPackageType)" />
         <Message Importance="high" Text="[Localization] OutDir=$(OutDir)" />
-        <Warning Condition="!Exists('$(OutDir)resources.pri')"
-                 Text="[Localization] ⚠ resources.pri NOT found in $(OutDir). Localization will show keys instead of values!" />
-        <Message Condition="Exists('$(OutDir)resources.pri')"
+        <Warning Condition="!Exists('$(OutDir)resources.pri') And !Exists('$(OutDir)$(TargetName).pri')"
+                 Text="[Localization] No PRI resource file found in $(OutDir)." />
+        <Message Condition="Exists('$(OutDir)resources.pri') Or Exists('$(OutDir)$(TargetName).pri')"
                  Importance="high"
-                 Text="[Localization] ✓ resources.pri found - localization will work correctly" />
+                 Text="[Localization] PRI resources found" />
     </Target>
 
     <ItemGroup>
         <!-- MSIX Package Assets - copy to output for winapp package -->
-        <Content Include="Assets\*.png">
+        <Content Include="Assets\Branding\Dark\*.ico;Assets\Branding\Dark\*.png;Assets\Branding\Unplated\*.ico">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+        <!-- The unplated master is a build-time source; ship the generated icons only. -->
+        <Content Include="Assets\*.png" Exclude="Assets\icon_unplated_1024.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Remove="Assets\icon_unplated_1024.png" />
 
         <!-- Service Icons -->
         <Content Include="Assets\ServiceIcons\*.png">
@@ -286,10 +292,10 @@
     <Target Name="GenerateAppIconIco"
             Condition="$([MSBuild]::IsOSPlatform('Windows'))"
             BeforeTargets="BeforeBuild"
-            Inputs="$(ProjectDir)Assets\macos\white-black-icon.appiconset\icon_512x512@2x.png"
+            Inputs="$(ProjectDir)Assets\Branding\AppIconSource.png;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1;$(ProjectDir)..\..\scripts\IconRasterizer.cs"
             Outputs="&quot;$(IntermediateOutputPath)AppIcon.ico&quot;">
         <Exec
-            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\\..\\scripts\\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\\macos\\white-black-icon.appiconset\\icon_512x512@2x.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
+            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\Branding\AppIconSource.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
     </Target>
 
     <Target Name="CopyAppIconToOutput"

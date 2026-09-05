@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $false)]
-    [string]$SourceIcon = "src\Easydict.WinUI\Assets\macos\white-black-icon.appiconset\icon_512x512@2x.png",
+    [string]$SourceIcon = "src\Easydict.WinUI\Assets\Branding\AppIconSource.png",
 
     [Parameter(Mandatory = $false)]
     [string]$AssetsDir = "src\Easydict.WinUI\Assets"
@@ -68,12 +68,11 @@ Write-Host "Assets dir : $assetsFull"
 $sourceImage = [System.Drawing.Image]::FromFile($sourceFull)
 try {
     $targets = Get-ChildItem -Path $assetsFull -Filter *.png -File | Where-Object {
-        # Exclude copied macOS assets folder (keep them as source/materials)
+        # Exclude source-material folders.
         $_.FullName -notmatch ([Regex]::Escape([System.IO.Path]::Combine($assetsFull, 'macos'))) -and
-        # Exclude the unplated source master — it is produced by generate-unplated-icon.py
-        # (flood-fills the white squircle to transparency). A plain resize would re-plate it.
+        $_.FullName -notmatch ([Regex]::Escape([System.IO.Path]::Combine($assetsFull, 'Branding'))) -and
+        # Exclude the transparent source master and its derivatives.
         $_.Name -ne 'icon_unplated_1024.png' -and
-        # Exclude unplated derivatives — these must keep transparent backgrounds.
         $_.Name -notlike '*_altform-unplated.png'
     }
 

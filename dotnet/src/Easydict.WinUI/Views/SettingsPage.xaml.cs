@@ -17,6 +17,7 @@ using Easydict.OpenVINO.Services;
 using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.SavedItems;
 using Easydict.SidecarClient.Protocol;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -376,7 +377,11 @@ public sealed partial class SettingsPage : Page
         LogLifetimeState("ctor registered");
         PerfLog("ctor: begin InitializeComponent");
 #endif
-        this.InitializeComponent();
+        // Resolve page-local theme resources using the app preference even before
+        // the page is attached to its Frame (whose theme otherwise arrives later).
+        RequestedTheme = MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme);
+            this.InitializeComponent();
+            InitializeFluentSettingsLayout();
         ApplyThemeChrome();
         ApplyLingueeAvailability();
         InitializeServiceConfigurationHeaderIcons();
@@ -516,6 +521,7 @@ public sealed partial class SettingsPage : Page
 
     public void ApplyThemeChrome()
     {
+        RequestedTheme = MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme);
         var minimal = MinimalThemeService.IsActive;
         var chrome = CreateSettingsThemeChrome();
         Background = chrome.PageBackground;
@@ -1136,6 +1142,8 @@ public sealed partial class SettingsPage : Page
         if (resetScroll)
         {
             MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
+            SettingsDetailsScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
+            _settingsDetailsOffset = _settingsStackedOffset = 0;
         }
 
         // Theme chrome is refreshed on actual theme changes (OnActualThemeChanged →
@@ -1284,6 +1292,16 @@ public sealed partial class SettingsPage : Page
     private void ApplyLocalization()
     {
         var loc = LocalizationService.Instance;
+        HistoryPrivacyHeaderText.Text = loc.GetString("HistoryPrivacyTitle");
+        HistoryEnabledToggle.Header = null;
+        HistoryEnabledTitleText.Text = loc.GetString("HistoryEnabledLabel");
+        AutomationProperties.SetName(HistoryEnabledToggle, HistoryEnabledTitleText.Text);
+        HistoryPrivacyDescriptionText.Text = loc.GetString("HistoryPrivacyDescription");
+        HistoryRetentionDaysBox.Header = null;
+        HistoryRetentionTitleText.Text = loc.GetString("HistoryRetentionLabel");
+        AutomationProperties.SetName(HistoryRetentionDaysBox, HistoryRetentionTitleText.Text);
+        HistoryRetentionDescriptionText.Text = loc.GetString("HistoryRetentionDescription");
+        ClearHistoryButton.Content = loc.GetString("HistoryClearLabel");
 
         // Main header
         if (SettingsHeaderText != null)
@@ -2887,7 +2905,7 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(GetSelectedTag(SecondLanguageCombo) ?? "en", _settings.SecondLanguage)
             || !SameUiLanguageSetting(GetSelectedTag(UILanguageCombo), _settings.UILanguage)
             || AutoSelectTargetToggle.IsOn != _settings.AutoSelectTargetLanguage
-            || !SameSequence(_languageItems.Where(item => item.IsSelected).Select(item => item.Tag).ToList(), _settings.SelectedLanguages);
+            || !SettingsPresentationComparison.LanguagesEqual(_languageItems.Where(item => item.IsSelected).Select(item => item.Tag), _settings.SelectedLanguages);
     }
 
     private bool HotkeyTabSettingsDifferFromSettings()
@@ -2933,9 +2951,9 @@ public sealed partial class SettingsPage : Page
         return !SameSequence(GetEnabledServicesFromCollection(_mainWindowServices), _settings.MainWindowEnabledServices)
             || !SameSequence(GetEnabledServicesFromCollection(_miniWindowServices), _settings.MiniWindowEnabledServices)
             || !SameSequence(GetEnabledServicesFromCollection(_fixedWindowServices), _settings.FixedWindowEnabledServices)
-            || !SameDictionary(GetEnabledQueryFromCollection(_mainWindowServices), _settings.MainWindowServiceEnabledQuery)
-            || !SameDictionary(GetEnabledQueryFromCollection(_miniWindowServices), _settings.MiniWindowServiceEnabledQuery)
-            || !SameDictionary(GetEnabledQueryFromCollection(_fixedWindowServices), _settings.FixedWindowServiceEnabledQuery);
+            || !SettingsPresentationComparison.QueryModesEqual(GetEnabledQueryFromCollection(_mainWindowServices), _settings.MainWindowServiceEnabledQuery)
+            || !SettingsPresentationComparison.QueryModesEqual(GetEnabledQueryFromCollection(_miniWindowServices), _settings.MiniWindowServiceEnabledQuery)
+            || !SettingsPresentationComparison.QueryModesEqual(GetEnabledQueryFromCollection(_fixedWindowServices), _settings.FixedWindowServiceEnabledQuery);
     }
 
     private static bool SameSetting(string? current, string? saved)
@@ -3153,6 +3171,9 @@ public sealed partial class SettingsPage : Page
             MinimizeToTrayOnStartupToggle.IsOn = _settings.MinimizeToTrayOnStartup;
             ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
             MouseSelectionTranslateToggle.IsOn = _settings.MouseSelectionTranslate;
+            HistoryEnabledToggle.IsOn = _settings.HistoryEnabled;
+            HistoryRetentionDaysBox.Value = _settings.HistoryRetentionDays;
+            HistoryRetentionDaysBox.IsEnabled = _settings.HistoryEnabled;
             MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
             MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -4163,6 +4184,9 @@ public sealed partial class SettingsPage : Page
 
     private async void OnBackClick(object sender, RoutedEventArgs e)
     {
+        // Deferred native TextChanged events can arrive after a tab has loaded.
+        // Decide from the current editors, rather than a transient dirty flag.
+        _hasUnsavedChanges = HasAnyTrackedSettingChanges();
         if (_hasUnsavedChanges)
         {
             var loc = LocalizationService.Instance;
@@ -4789,6 +4813,116 @@ public sealed partial class SettingsPage : Page
     {
         MouseSelectionExcludedAppsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnHistoryEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading)
+        {
+            return;
+        }
+
+        var previousValue = _settings.HistoryEnabled;
+        try
+        {
+            _settings.HistoryEnabled = HistoryEnabledToggle.IsOn;
+            _settings.Save();
+            HistoryRetentionDaysBox.IsEnabled = HistoryEnabledToggle.IsOn;
+        }
+        catch (Exception exception)
+        {
+            _settings.HistoryEnabled = previousValue;
+            HistoryEnabledToggle.IsOn = previousValue;
+            HistoryRetentionDaysBox.IsEnabled = previousValue;
+            HistoryRetentionValidationText.Text = exception.Message;
+            HistoryRetentionValidationText.Foreground = ThemeResourceService.GetBrush("SystemFillColorCriticalBrush", this);
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private int _historyRetentionGeneration;
+
+    private async void OnHistoryRetentionDaysValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs e)
+    {
+        if (_isLoading || double.IsNaN(e.NewValue))
+        {
+            return;
+        }
+
+        var value = Math.Clamp((int)Math.Round(e.NewValue), 1, 3650);
+        var previousValue = _settings.HistoryRetentionDays;
+        if (value == previousValue) return;
+        var generation = ++_historyRetentionGeneration;
+        var persisted = false;
+        try
+        {
+            _settings.HistoryRetentionDays = value;
+            _settings.Save();
+            persisted = true;
+            if (Math.Abs(HistoryRetentionDaysBox.Value - value) > double.Epsilon)
+            {
+                _isLoading = true;
+                try { HistoryRetentionDaysBox.Value = value; }
+                finally { _isLoading = false; }
+            }
+            HistoryRetentionValidationText.Visibility = Visibility.Collapsed;
+            if (value < previousValue)
+            {
+                await SavedItemsService.Instance.PruneExpiredHistoryAsync(_lifetimeCts.Token);
+            }
+            if (generation != _historyRetentionGeneration) return;
+            HistoryRetentionValidationText.Text = LocalizationService.Instance.GetString("HistoryRetentionUpdated");
+            HistoryRetentionValidationText.Foreground = ThemeResourceService.GetBrush("SystemFillColorSuccessBrush", this);
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            if (generation != _historyRetentionGeneration) return;
+            if (!persisted)
+            {
+                _settings.HistoryRetentionDays = previousValue;
+                _isLoading = true;
+                try { HistoryRetentionDaysBox.Value = previousValue; }
+                finally { _isLoading = false; }
+            }
+            HistoryRetentionValidationText.Text = exception.Message;
+            HistoryRetentionValidationText.Foreground = ThemeResourceService.GetBrush("SystemFillColorCriticalBrush", this);
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private async void OnClearHistoryClicked(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = LocalizationService.Instance.GetString("HistoryClearTitle"),
+            Content = LocalizationService.Instance.GetString("HistoryClearDescription"),
+            PrimaryButtonText = LocalizationService.Instance.GetString("HistoryClearLabel"),
+            CloseButtonText = LocalizationService.Instance.GetString("Cancel")
+        };
+        if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        ClearHistoryButton.IsEnabled = false;
+        try
+        {
+            await SavedItemsService.Instance.ClearHistoryAsync(_lifetimeCts.Token);
+            HistoryRetentionValidationText.Text = LocalizationService.Instance.GetString("HistoryCleared");
+            HistoryRetentionValidationText.Foreground = ThemeResourceService.GetBrush("SystemFillColorSuccessBrush", this);
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            HistoryRetentionValidationText.Text = exception.Message;
+            HistoryRetentionValidationText.Foreground = ThemeResourceService.GetBrush("SystemFillColorCriticalBrush", this);
+            HistoryRetentionValidationText.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            ClearHistoryButton.IsEnabled = true;
+        }
     }
 
     private void OnOcrEngineChanged(object sender, SelectionChangedEventArgs e)

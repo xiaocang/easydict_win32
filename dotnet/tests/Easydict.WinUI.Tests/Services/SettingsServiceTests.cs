@@ -27,6 +27,53 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void HistorySettings_DefaultClampAndRoundTripUseIsolatedStorage()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        var settingsPath = Path.Combine(testDirectory.Path, "settings.json");
+
+        var defaults = CreateIsolatedSettingsService(testDirectory.Path);
+        defaults.HistoryEnabled.Should().BeFalse();
+        defaults.HistoryRetentionDays.Should().Be(30);
+
+        defaults.HistoryEnabled = true;
+        defaults.HistoryRetentionDays = 1;
+        defaults.Save();
+        var minimum = CreateIsolatedSettingsService(testDirectory.Path);
+        minimum.HistoryEnabled.Should().BeTrue();
+        minimum.HistoryRetentionDays.Should().Be(1);
+
+        minimum.HistoryEnabled = false;
+        minimum.HistoryRetentionDays = 3650;
+        minimum.Save();
+        var maximum = CreateIsolatedSettingsService(testDirectory.Path);
+        maximum.HistoryEnabled.Should().BeFalse();
+        maximum.HistoryRetentionDays.Should().Be(3650);
+
+        File.WriteAllText(settingsPath, """{"HistoryRetentionDays":-1}""");
+        CreateIsolatedSettingsService(testDirectory.Path).HistoryRetentionDays.Should().Be(1);
+        File.WriteAllText(settingsPath, """{"HistoryRetentionDays":5000}""");
+        CreateIsolatedSettingsService(testDirectory.Path).HistoryRetentionDays.Should().Be(3650);
+    }
+
+    [Fact]
+    public void HistorySettings_MissingOrCorruptValuesFallBackToDefaults()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        var settingsPath = Path.Combine(testDirectory.Path, "settings.json");
+
+        File.WriteAllText(settingsPath, "{}");
+        var missing = CreateIsolatedSettingsService(testDirectory.Path);
+        missing.HistoryEnabled.Should().BeFalse();
+        missing.HistoryRetentionDays.Should().Be(30);
+
+        File.WriteAllText(settingsPath, "{not-json");
+        var corrupt = CreateIsolatedSettingsService(testDirectory.Path);
+        corrupt.HistoryEnabled.Should().BeFalse();
+        corrupt.HistoryRetentionDays.Should().Be(30);
+    }
+
+    [Fact]
     public void Migration_ShouldPreserveAlreadyProtectedSensitiveSettings()
     {
         using var testDirectory = new TemporaryDirectory();
@@ -752,14 +799,10 @@ public class SettingsServiceTests
     [Fact]
     public void SelectedLanguages_HasDefaultValue()
     {
-        _settings.SelectedLanguages.Should().NotBeNull();
-        _settings.SelectedLanguages.Should().Contain("zh");
-        _settings.SelectedLanguages.Should().Contain("en");
-        _settings.SelectedLanguages.Should().Contain("ja");
-        _settings.SelectedLanguages.Should().Contain("ko");
-        _settings.SelectedLanguages.Should().Contain("fr");
-        _settings.SelectedLanguages.Should().Contain("de");
-        _settings.SelectedLanguages.Should().Contain("es");
+        using var testDirectory = new TemporaryDirectory();
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+
+        settings.SelectedLanguages.Should().BeEquivalentTo("zh", "en", "ja", "ko", "fr", "de", "es");
     }
 
     [Fact]
@@ -1045,6 +1088,20 @@ public class SettingsServiceTests
 
         constructor.Should().NotBeNull();
         return (SettingsService)constructor!.Invoke(null);
+    }
+
+    private static SettingsService CreateIsolatedSettingsService(string directory)
+    {
+        var previousSettingsDirectory = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", directory);
+            return CreateIsolatedSettingsService();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previousSettingsDirectory);
+        }
     }
 
     private sealed class TemporaryDirectory : IDisposable

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
@@ -12,6 +13,9 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     private bool _updateUIPending;
     private int _updateUIRequestVersion;
     private int _renderedUpdateUIVersion;
+    private bool _favoriteVisible;
+    private bool _isFavorited;
+    private bool _isSavedItemView;
 
     public MinimalServiceResultItem()
     {
@@ -29,6 +33,19 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public bool IsMinimalRenderer => true;
 
+    public bool IsSavedItemView
+    {
+        get => _isSavedItemView;
+        set
+        {
+            if (_isSavedItemView == value)
+                return;
+
+            _isSavedItemView = value;
+            QueueUpdateUI();
+        }
+    }
+
     public HashSet<string>? AlreadyShownPhonetics { get; set; }
 
     public event EventHandler<ServiceQueryResult>? CollapseToggled;
@@ -40,6 +57,11 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         add { }
         remove { }
     }
+
+    public event EventHandler<ServiceQueryResult>? FavoriteRequested;
+
+    public event EventHandler? CopyCompleted;
+    private int _playGeneration;
 
     public ServiceQueryResult? ServiceResult
     {
@@ -66,15 +88,30 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public void ApplyAppearance(AppearanceSettings settings)
     {
+        RootBorder.Margin = new Thickness(0, 0, 0, _isSavedItemView ? 0 : SettingsService.Instance.CompactMode ? 8 : 16);
         ServiceNameText.FontSize = settings.ServiceNameFontSize;
         StatusText.FontSize = settings.StatusFontSize;
-        ResultText.FontSize = settings.ResultFontSize;
+        ResultText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
     }
 
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();
 
+    public void SetFavoriteState(bool isVisible, bool isFavorited)
+    {
+        _favoriteVisible = isVisible;
+        _isFavorited = isFavorited;
+        UpdateFavoriteButton();
+    }
+
+    public ResultMessageView Feedback => ResultFeedback;
+    // This renderer deliberately uses native text and has no asynchronous rich-content state.
+    public event EventHandler<ResultRenderingEventArgs>? RenderingStatusChanged { add { } remove { } }
+
     public void Cleanup()
     {
+        ResultFeedback.Cleanup();
+        _playGeneration++;
+        CopyButton.Visibility = CollapseButton.Visibility = Visibility.Collapsed;
         if (_serviceResult != null)
         {
             _serviceResult.PropertyChanged -= OnServiceResultPropertyChanged;
@@ -90,6 +127,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         ResultText.Text = string.Empty;
         ErrorText.Text = string.Empty;
         ContentArea.Visibility = Visibility.Collapsed;
+        FavoriteButton.Visibility = Visibility.Collapsed;
     }
 
     private void OnServiceResultPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -129,6 +167,24 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     {
         using var hotspot = UiThreadHotspotDiagnostics.Measure("MinimalServiceResultItem.UpdateUI");
         _renderedUpdateUIVersion = _updateUIRequestVersion;
+        var hasSavedResult = _serviceResult?.HasSuccessfulResult == true;
+        CopyButton.Visibility = CollapseButton.Visibility = hasSavedResult ? Visibility.Visible : Visibility.Collapsed;
+        SavedActionBar.Visibility = hasSavedResult || _favoriteVisible ? Visibility.Visible : Visibility.Collapsed;
+        PlayButton.Visibility = hasSavedResult && _serviceResult?.Result is not null ? Visibility.Visible : Visibility.Collapsed;
+        SavedMoreButton.Visibility = hasSavedResult ? Visibility.Visible : Visibility.Collapsed;
+        if (hasSavedResult)
+        {
+            HeaderBar.Padding = new Thickness(12, 4, 8, 4);
+            ContentArea.Padding = new Thickness(SettingsService.Instance.CompactMode ? 8 : 12);
+            var loc = LocalizationService.Instance;
+            SavedCopySourceMenuItem.Text = loc.GetStringOrDefault("SavedItemsCopySource", "Copy source");
+            SavedCollapseMenuItem.Text = loc.GetStringOrDefault("SavedItemsCollapseResult", "Collapse result");
+            ToolTipService.SetToolTip(CopyButton, loc.GetStringOrDefault("Copy", "Copy"));
+            ToolTipService.SetToolTip(PlayButton, loc.GetStringOrDefault("Play", "Play"));
+            ToolTipService.SetToolTip(SavedMoreButton, loc.GetStringOrDefault("SavedItemsMore", "More"));
+            ToolTipService.SetToolTip(CollapseButton, loc.GetStringOrDefault("SavedItemsToggleResult", "Expand or collapse result"));
+            CollapseIcon.Glyph = _serviceResult!.IsExpanded ? "\uE70E" : "\uE70D";
+        }
 
         if (_serviceResult is null)
         {
@@ -140,7 +196,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         {
             _serviceResult.IsExpanded = false;
         }
-        else if ((_serviceResult.HasResult || _serviceResult.HasError || _serviceResult.IsStreaming)
+        else if (!_isSavedItemView && (_serviceResult.HasError || _serviceResult.IsStreaming)
                  && !_serviceResult.IsExpanded)
         {
             _serviceResult.IsExpanded = true;
@@ -195,6 +251,36 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
             || ResultText.Visibility == Visibility.Visible
             || ErrorText.Visibility == Visibility.Visible;
         ContentArea.Visibility = hasVisibleContent ? Visibility.Visible : Visibility.Collapsed;
+        UpdateFavoriteButton();
+        if (_serviceResult is not null)
+            ContentArea.Visibility = _serviceResult.IsExpanded && hasVisibleContent ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnFavoriteClicked(object sender, RoutedEventArgs e)
+    {
+        System.Diagnostics.Debug.WriteLine($"[MinimalServiceResultItem] Favorite click: provider={_serviceResult?.ServiceId}, enabled={FavoriteButton.IsEnabled}, subscribed={FavoriteRequested is not null}");
+        if (_serviceResult is not null && FavoriteButton.IsEnabled)
+            FavoriteRequested?.Invoke(this, _serviceResult);
+    }
+
+    private void UpdateFavoriteButton()
+    {
+        SavedActionBar.Visibility = _favoriteVisible || (_serviceResult?.HasSuccessfulResult == true)
+            ? Visibility.Visible : Visibility.Collapsed;
+        var hasSuccessfulText = _serviceResult?.IsGrammarMode == true
+            ? !string.IsNullOrWhiteSpace(_serviceResult.GrammarResult?.CorrectedText)
+            : _serviceResult?.Result is { ResultKind: TranslationResultKind.Success, TranslatedText.Length: > 0 };
+        FavoriteButton.Visibility = _favoriteVisible && hasSuccessfulText
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        FavoriteButton.IsEnabled = FavoriteButton.Visibility == Visibility.Visible;
+        FavoriteIcon.Glyph = _isFavorited ? "\uE735" : "\uE734";
+        var localization = LocalizationService.Instance;
+        var tooltip = _isFavorited
+            ? localization.GetStringOrDefault("SavedItemsRemoveResultFavorite", "Remove result favorite")
+            : localization.GetStringOrDefault("SavedItemsAddResultFavorite", "Add result favorite");
+        ToolTipService.SetToolTip(FavoriteButton, tooltip);
+        AutomationProperties.SetName(FavoriteButton, tooltip);
     }
 
     private static string GetStatusText(ServiceQueryResult serviceResult) =>
@@ -246,6 +332,37 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
             ThemeRoot ?? this);
     }
 
+    private void CopySavedText(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try { ClipboardService.SetText(text); CopyCompleted?.Invoke(this, new ResultCopyEventArgs()); }
+        catch (Exception exception) { CopyCompleted?.Invoke(this, new ResultCopyEventArgs(exception)); }
+    }
+
+    private void OnCopyClicked(object sender, RoutedEventArgs e) => CopySavedText(
+        _serviceResult?.IsGrammarMode == true ? _serviceResult.GrammarResult?.CorrectedText : _serviceResult?.Result?.TranslatedText);
+
+    private void OnCopySavedSource(object sender, RoutedEventArgs e) => CopySavedText(
+        _serviceResult?.IsGrammarMode == true ? _serviceResult.GrammarResult?.OriginalText : _serviceResult?.Result?.OriginalText);
+
+    private void OnCollapseClicked(object sender, RoutedEventArgs e) => ToggleCollapse();
+
+    private async void OnPlayClicked(object sender, RoutedEventArgs e)
+    {
+        var generation = ++_playGeneration;
+        if (PlayIcon.Glyph == "\uE71A")
+        {
+            TextToSpeechService.Instance.Stop();
+            PlayIcon.Glyph = "\uE768";
+            return;
+        }
+        if (_serviceResult?.Result is not { } result) return;
+        PlayIcon.Glyph = "\uE71A";
+        try { await TextToSpeechService.Instance.SpeakAsync(result.TranslatedText, result.TargetLanguage); }
+        catch (Exception exception) { System.Diagnostics.Debug.WriteLine(exception.Message); }
+        finally { if (generation == _playGeneration) PlayIcon.Glyph = "\uE768"; }
+    }
+
     private void OnHeaderPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (_serviceResult is null || _serviceResult.IsLoading)
@@ -271,6 +388,14 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     {
         if (_serviceResult is null)
         {
+            return;
+        }
+
+        if (_isSavedItemView || _serviceResult.HasSuccessfulResult)
+        {
+            _serviceResult.IsExpanded = !_serviceResult.IsExpanded;
+            UpdateUI();
+            CollapseToggled?.Invoke(this, _serviceResult);
             return;
         }
 

@@ -51,8 +51,8 @@
                 Background="Transparent"
                 BorderThickness="0"
                 CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                Width="28"
-                Height="28"
+                Width="32"
+                Height="32"
                 Padding="0">
                 <FontIcon x:Name="PinIcon"
                         Glyph="&#xE718;"
@@ -77,8 +77,8 @@
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="OCR translate"
                 AutomationProperties.Name="OCR translate"
-                Width="28"
-                Height="28"
+                Width="32"
+                Height="32"
                 Padding="0">
                 <FontIcon Glyph="&#xE722;"
                         FontSize="14"
@@ -92,8 +92,8 @@
                 Click="OnCloseClicked"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Hide (Ctrl+Alt+F to show again)"
-                Width="28"
-                Height="28"
+                Width="32"
+                Height="32"
                 Padding="0">
                 <FontIcon Glyph="&#xE8BB;"
                         FontSize="14"
@@ -135,14 +135,9 @@
         </Border>
 
         <!-- Language Bar -->
-        <Grid Grid.Row="2"
+        <controls:FluentLanguageBar Grid.Row="2"
                 Margin="0,0,0,4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+
 
             <ComboBox
                 x:Name="SourceLangCombo"
@@ -157,8 +152,8 @@
                 x:Name="SwapButton"
                 Grid.Column="1"
                 Click="OnSwapClicked"
-                Width="28"
-                Height="28"
+                Width="32"
+                Height="32"
                 Padding="0"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Swap languages"
@@ -204,7 +199,7 @@
                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                 </Grid>
             </Button>
-        </Grid>
+        </controls:FluentLanguageBar>
 
         <!-- Detected Language Label -->
         <TextBlock

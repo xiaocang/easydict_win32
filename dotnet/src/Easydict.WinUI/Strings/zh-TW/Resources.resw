@@ -81,6 +81,9 @@
   <data name="StatusDisconnected" xml:space="preserve">
     <value>未連線</value>
   </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>正在初始化...</value>
+  </data>
   <data name="StatusReady" xml:space="preserve">
     <value>就緒</value>
   </data>
@@ -405,6 +408,18 @@
   <data name="NiuTransDescription" xml:space="preserve">
     <value>小牛翻譯支援 450+ 種語言對。從 niutrans.com 取得您的 API 金鑰</value>
   </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>使用官方 API</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>有道提供英語單字的音標。未設定 API 金鑰時使用免費網頁字典。設定 API 金鑰後可使用官方 API 以獲得更高配額。前往 ai.youdao.com 取得 API 金鑰</value>
+  </data>
   <data name="FreeServicesTitle" xml:space="preserve">
     <value>免費服務（無需設定）</value>
   </data>
@@ -525,14 +540,29 @@
   <data name="ServiceNotInitialized" xml:space="preserve">
     <value>服務未初始化</value>
   </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>未啟用任何服務。請前往設定啟用服務。</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} 個服務已完成</value>
+  </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
     <value>無效的語言選擇</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>第一語言與第二語言不能相同。</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
     <value>無效的代理位址</value>
   </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>代理伺服器網址無效。請輸入有效的網址（例如：http://127.0.0.1:7890）。</value>
+  </data>
   <data name="SettingsSaved" xml:space="preserve">
     <value>設定已儲存</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>您的設定已成功儲存。</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
     <value>需要重新啟動</value>
@@ -540,11 +570,17 @@
   <data name="CannotConnectToOllama" xml:space="preserve">
     <value>無法連線到 Ollama</value>
   </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>無法從 Ollama 取得模型。請確認 Ollama 正在執行且可以存取。</value>
+  </data>
   <data name="Copied" xml:space="preserve">
     <value>已複製！</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
     <value>偵測到：{0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>確定</value>
   </data>
 
   <!-- Service Names -->
@@ -595,6 +631,12 @@
   <data name="TrayShow" xml:space="preserve">
     <value>顯示</value>
   </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>迷你視窗</value>
   </data>
@@ -641,6 +683,61 @@
     <value>結束</value>
   </data>
 
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>拖曳選擇區域  |  雙擊選擇視窗  |  滾輪切換視窗  |  Esc 退出</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>右鍵或 Esc 取消</value>
+  </data>
+
+  <!-- Window Titles -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>快速翻譯</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>固定翻譯</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>釘選視窗（保持在最上層）</value>
+  </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR 翻譯</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>結果字型大小</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>調整翻譯結果的字型大小。</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>緊湊模式</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Reduce spacing while keeping language, progress and key actions visible.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>快捷操作按鈕</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>顯示 OCR 按鈕</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>顯示釘選按鈕</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>顯示朗讀按鈕</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>朗讀原文</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>顯示交換按鈕</value>
+  </data>
+
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
     <value>介面語言</value>
@@ -656,6 +753,13 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
+  <data name="Close" xml:space="preserve">
+    <value>關閉</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>隱藏（Ctrl+Alt+F 再次顯示）</value>
+  </data>
+
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
     <value>啟用國際服務</value>
@@ -683,6 +787,9 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>深色</value>
   </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
 
   <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
@@ -696,110 +803,6 @@
   </data>
   <data name="Cancel" xml:space="preserve">
     <value>取消</value>
-  </data>
-
-  <!-- Service Testing UI -->
-  <data name="Test" xml:space="preserve">
-    <value>測試</value>
-  </data>
-  <data name="Testing" xml:space="preserve">
-    <value>測試中...</value>
-  </data>
-  <data name="TestNotConfigured" xml:space="preserve">
-    <value>請先設定服務（API 金鑰、端點等）。</value>
-  </data>
-  <data name="TestSuccessTitle" xml:space="preserve">
-    <value>測試成功</value>
-  </data>
-  <data name="TestSuccessMessage" xml:space="preserve">
-    <value>設定有效。翻譯在 {0}ms 內完成。</value>
-  </data>
-  <data name="TestFailedTitle" xml:space="preserve">
-    <value>測試失敗</value>
-  </data>
-  <data name="TestFailedMessage" xml:space="preserve">
-    <value>設定測試失敗：{0}</value>
-  </data>
-
-  <!-- Youdao Service -->
-  <data name="AppKey" xml:space="preserve">
-    <value>App Key</value>
-  </data>
-  <data name="AppSecret" xml:space="preserve">
-    <value>App Secret</value>
-  </data>
-  <data name="UseOfficialApi" xml:space="preserve">
-    <value>使用官方 API</value>
-  </data>
-  <data name="YoudaoDescription" xml:space="preserve">
-    <value>有道提供英語單字的音標。未設定 API 金鑰時使用免費網頁字典。設定 API 金鑰後可使用官方 API 以獲得更高配額。前往 ai.youdao.com 取得 API 金鑰</value>
-  </data>
-
-  <!-- Window Chrome -->
-  <data name="QuickTranslate" xml:space="preserve">
-    <value>快速翻譯</value>
-  </data>
-  <data name="FixedTranslate" xml:space="preserve">
-    <value>固定翻譯</value>
-  </data>
-  <data name="PinWindowTooltip" xml:space="preserve">
-    <value>釘選視窗（保持在最上層）</value>
-  </data>
-  <data name="OcrButtonTooltip" xml:space="preserve">
-    <value>OCR 翻譯</value>
-  </data>
-  <data name="ResultFontSize" xml:space="preserve">
-    <value>結果字型大小</value>
-  </data>
-  <data name="ResultFontSizeDescription" xml:space="preserve">
-    <value>調整翻譯結果的字型大小。</value>
-  </data>
-  <data name="CompactMode" xml:space="preserve">
-    <value>緊湊模式</value>
-  </data>
-  <data name="CompactModeDescription" xml:space="preserve">
-    <value>隱藏標題、狀態、提示圖示和輔助快捷按鈕，讓翻譯介面更緊湊。</value>
-  </data>
-  <data name="QuickActionsHeader" xml:space="preserve">
-    <value>快捷操作按鈕</value>
-  </data>
-  <data name="ShowOcrButton" xml:space="preserve">
-    <value>顯示 OCR 按鈕</value>
-  </data>
-  <data name="ShowPinButton" xml:space="preserve">
-    <value>顯示釘選按鈕</value>
-  </data>
-  <data name="ShowSourcePlayButton" xml:space="preserve">
-    <value>顯示朗讀按鈕</value>
-  </data>
-  <data name="PlaySourceTextTooltip" xml:space="preserve">
-    <value>朗讀原文</value>
-  </data>
-  <data name="ShowSwapButton" xml:space="preserve">
-    <value>顯示交換按鈕</value>
-  </data>
-  <data name="Close" xml:space="preserve">
-    <value>關閉</value>
-  </data>
-  <data name="HideWindow" xml:space="preserve">
-    <value>隱藏（Ctrl+Alt+F 再次顯示）</value>
-  </data>
-
-  <!-- Status & Feedback -->
-  <data name="OK" xml:space="preserve">
-    <value>確定</value>
-  </data>
-  <data name="StatusInitializing" xml:space="preserve">
-    <value>正在初始化...</value>
-  </data>
-  <data name="NoServicesEnabled" xml:space="preserve">
-    <value>未啟用任何服務。請前往設定啟用服務。</value>
-  </data>
-  <data name="ServiceResultsComplete" xml:space="preserve">
-    <value>{0} 個服務已完成</value>
-  </data>
-  <data name="SettingsSavedMessage" xml:space="preserve">
-    <value>您的設定已成功儲存。</value>
   </data>
 
   <!-- Help Tooltips -->
@@ -819,15 +822,27 @@
     <value>請先在上方「已啟用的服務」中啟用</value>
   </data>
 
-  <!-- Validation Messages -->
-  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
-    <value>第一語言與第二語言不能相同。</value>
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>測試</value>
   </data>
-  <data name="InvalidProxyUrlMessage" xml:space="preserve">
-    <value>代理伺服器網址無效。請輸入有效的網址（例如：http://127.0.0.1:7890）。</value>
+  <data name="Testing" xml:space="preserve">
+    <value>測試中...</value>
   </data>
-  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
-    <value>無法從 Ollama 取得模型。請確認 Ollama 正在執行且可以存取。</value>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>測試成功</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>設定有效。翻譯在 {0}ms 內完成。</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>測試失敗</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>設定測試失敗：{0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>請先設定服務（API 金鑰、端點等）。</value>
   </data>
 
   <!-- Toggle Switch On/Off -->
@@ -844,14 +859,6 @@
   </data>
   <data name="WebFree" xml:space="preserve">
     <value>網頁版（免費）</value>
-  </data>
-
-  <!-- Screen Capture -->
-  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>拖曳選擇區域  |  雙擊選擇視窗  |  滾輪切換視窗  |  Esc 退出</value>
-  </data>
-  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
-    <value>右鍵或 Esc 取消</value>
   </data>
 
   <!-- Grammar Correction Mode -->
@@ -896,6 +903,44 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>未發現語法問題。</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
   </data>
   <data name="DocumentOutputMode_Title" xml:space="preserve">
     <value>文件輸出模式</value>
@@ -1246,7 +1291,6 @@
   <data name="OpenVINO_ConfigTitle" xml:space="preserve"><value>OpenVINO（本機 NLLB）</value></data>
   <data name="OpenVINO_ConfigDescription" xml:space="preserve"><value>使用 ONNX Runtime + OpenVINO 在本機執行 NLLB-200。硬體加速為盡力而為，必要時會回退到 CPU。</value></data>
 
-  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>留空端點時會透過 foundry service status 自動探索；如果本機服務使用固定的 OpenAI 相容端點，也可以手動填寫。</value></data>
   <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>安裝 Foundry Local</value></data>
   <data name="FoundryLocal_DocsLinkText" xml:space="preserve"><value>安裝/使用文件</value></data>
@@ -1255,17 +1299,18 @@
   <data name="FoundryLocal_Title_Unavailable" xml:space="preserve"><value>Foundry Local 不可用</value></data>
   <data name="FoundryLocal_Status_Checking" xml:space="preserve"><value>正在檢查 Foundry Local 狀態...</value></data>
   <data name="FoundryLocal_Status_NotInstalled" xml:space="preserve"><value>未安裝 Foundry Local CLI，或目前 PATH 中無法使用。</value></data>
-  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未設定。</value></data>
-  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>透過 foundry service status 自動探索</value></data>
-  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
   <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local 未執行。請啟動 Foundry Local 服務，或手動設定端點。</value></data>
   <data name="FoundryLocal_Status_Starting" xml:space="preserve"><value>正在啟動 Foundry Local 服務...</value></data>
   <data name="FoundryLocal_Status_LoadingModel" xml:space="preserve"><value>正在載入設定的 Foundry Local 模型...</value></data>
   <data name="FoundryLocal_Status_StartFailed" xml:space="preserve"><value>無法啟動 Foundry Local。</value></data>
-  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
-  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>透過 Microsoft Foundry Local 的 OpenAI 相容本機端點執行本機模型。需要安裝 Foundry Local 並備妥本機模型。</value></data>
   <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local 已設定。執行時會使用本機端點或自動探索端點。</value></data>
   <data name="FoundryLocal_EndpointLabel" xml:space="preserve"><value>端點（可選）</value></data>
+  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未設定。</value></data>
+  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>透過 Microsoft Foundry Local 的 OpenAI 相容本機端點執行本機模型。需要安裝 Foundry Local 並備妥本機模型。</value></data>
+  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>透過 foundry service status 自動探索</value></data>
+  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
+  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="PhiSilicaModelPrompt_Title" xml:space="preserve"><value>下載 Phi Silica 模型？</value></data>
   <data name="PhiSilicaModelPrompt_Message" xml:space="preserve"><value>Phi Silica 首次使用前需要下載並準備由 Windows 管理的本機語言模型元件。預計是數 GB 等級的安裝，實際大小取決於裝置和 Windows 版本。你可以現在下載、本次先略過，或暫時停用 Phi Silica；之後可在「設定」中重新啟用。</value></data>
   <data name="PhiSilicaModelPrompt_DownloadNow" xml:space="preserve"><value>立即下載</value></data>
@@ -1311,54 +1356,6 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200 模型尚未下載（約 360 MB）。點擊「下載模型」將檔案儲存到 %LOCALAPPDATA%\Easydict\models。</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>正在下載 NLLB-200 模型檔案…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>下載失敗。請檢查網路連線後重試。</value></data>
-  <data name="TrayTranslateClipboard" xml:space="preserve">
-    <value>Translate Clipboard</value>
-  </data>
-  <data name="TrayOcrTranslate" xml:space="preserve">
-    <value>OCR Translate</value>
-  </data>
-  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
-    <value>Exit screenshot?</value>
-  </data>
-  <data name="ThemeMinimal" xml:space="preserve">
-    <value>Minimal</value>
-  </data>
-  <data name="LayoutDetection_Title" xml:space="preserve">
-    <value>Layout Detection</value>
-  </data>
-  <data name="LayoutDetection_Description" xml:space="preserve">
-    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
-  </data>
-  <data name="LayoutDetection_Auto" xml:space="preserve">
-    <value>Auto (Recommended)</value>
-  </data>
-  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
-    <value>Local ONNX Model</value>
-  </data>
-  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
-    <value>Vision LLM</value>
-  </data>
-  <data name="LayoutDetection_Heuristic" xml:space="preserve">
-    <value>Heuristic Only</value>
-  </data>
-  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
-    <value>Download Model (~75MB)</value>
-  </data>
-  <data name="LayoutDetection_Downloaded" xml:space="preserve">
-    <value>ONNX Model: Ready</value>
-  </data>
-  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
-    <value>ONNX Model: Not Downloaded</value>
-  </data>
-  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
-    <value>Download Failed</value>
-  </data>
-  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
-    <value>Detection Mode</value>
-  </data>
-  <data name="LayoutDetection_VisionService" xml:space="preserve">
-    <value>Vision Service</value>
-  </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
   <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
@@ -1462,4 +1459,98 @@
   <data name="PpOcrV6DownloadProgress" xml:space="preserve"><value>{0:F1} / {1:F1} MB</value></data>
   <data name="FreeModelsBadge" xml:space="preserve"><value>含免費模型</value></data>
   <data name="GetApiKeyReferralLink" xml:space="preserve"><value>取得 API 金鑰（推薦連結）</value></data>
+  <!-- Saved items -->
+  <data name="SavedItemsHistory" xml:space="preserve"><value>歷史記錄</value></data>
+  <data name="SavedItemsFavorites" xml:space="preserve"><value>收藏</value></data>
+  <data name="SavedItemsMore" xml:space="preserve"><value>更多</value></data>
+  <data name="SavedItemsSearchPlaceholder" xml:space="preserve"><value>搜尋原文、結果或服務</value></data>
+  <data name="SavedItemsAllKinds" xml:space="preserve"><value>全部</value></data>
+  <data name="SavedItemsTranslationKind" xml:space="preserve"><value>翻譯／詞典</value></data>
+  <data name="SavedItemsGrammarKind" xml:space="preserve"><value>語法修正</value></data>
+  <data name="SavedItemsOcrKind" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsRefresh" xml:space="preserve"><value>重新整理</value></data>
+  <data name="SavedItemsNoHistory" xml:space="preserve"><value>尚無已完成的查詢。</value></data>
+  <data name="SavedItemsHistoryDisabledTitle" xml:space="preserve"><value>歷史記錄尚未啟用</value></data>
+  <data name="SavedItemsHistoryDisabledMessage" xml:space="preserve"><value>如需儲存之後的查詢，請前往 {0} → {1} → {2}，開啟「{3}」。既有記錄會保留。</value></data>
+  <data name="SavedItemsNoFavorites" xml:space="preserve"><value>尚無收藏。</value></data>
+  <data name="SavedItemsSelectQuery" xml:space="preserve"><value>選取已儲存的查詢</value></data>
+  <data name="SavedItemsDeleteHistory" xml:space="preserve"><value>從歷史記錄刪除</value></data>
+  <data name="SavedItemsBackToTranslation" xml:space="preserve"><value>前往翻譯</value></data>
+  <data name="SavedItemsAddFavorite" xml:space="preserve"><value>加入收藏</value></data>
+  <data name="SavedItemsRemoveFavorite" xml:space="preserve"><value>移除收藏</value></data>
+  <data name="SavedItemsPinFavorite" xml:space="preserve"><value>置頂收藏</value></data>
+  <data name="SavedItemsNote" xml:space="preserve"><value>備註</value></data>
+  <data name="SavedItemsTags" xml:space="preserve"><value>標籤</value></data>
+  <data name="SavedItemsTagsPlaceholder" xml:space="preserve"><value>以逗號分隔標籤</value></data>
+  <data name="SavedItemsTagLimits" xml:space="preserve"><value>最多可使用 20 個標籤，每個標籤不超過 40 個字元。</value></data>
+  <data name="SavedItemsSave" xml:space="preserve"><value>儲存</value></data>
+  <data name="SavedItemsAddResultFavorite" xml:space="preserve"><value>收藏此結果</value></data>
+  <data name="SavedItemsRemoveResultFavorite" xml:space="preserve"><value>取消收藏此結果</value></data>
+  <data name="SavedItemsAnyTime" xml:space="preserve"><value>任何時間</value></data>
+  <data name="SavedItemsToday" xml:space="preserve"><value>今天</value></data>
+  <data name="SavedItemsLastSevenDays" xml:space="preserve"><value>最近 7 天</value></data>
+  <data name="SavedItemsLastThirtyDays" xml:space="preserve"><value>最近 30 天</value></data>
+  <data name="SavedItemsAllProviders" xml:space="preserve"><value>所有服務</value></data>
+  <data name="SavedItemsRetry" xml:space="preserve"><value>重試</value></data>
+  <data name="HistoryClearDescription" xml:space="preserve"><value>Visible history will be removed. Favorites will not be deleted.</value></data>
+  <data name="HistoryClearLabel" xml:space="preserve"><value>Clear history</value></data>
+  <data name="HistoryClearTitle" xml:space="preserve"><value>Clear history?</value></data>
+  <data name="HistoryCleared" xml:space="preserve"><value>History cleared. Favorites were kept.</value></data>
+  <data name="HistoryEnabledLabel" xml:space="preserve"><value>Save query history</value></data>
+  <data name="HistoryPrivacyDescription" xml:space="preserve"><value>Saves successful translation, dictionary, grammar correction and OCR queries. Turning this off stops new history and keeps existing records. Long documents are excluded from history and favorites.</value></data>
+  <data name="HistoryPrivacyTitle" xml:space="preserve"><value>History &amp; privacy</value></data>
+  <data name="HistoryRetentionDescription" xml:space="preserve"><value>Default: 30 days. Choose 1–3650 days. Favorites are kept when history expires or is cleared.</value></data>
+  <data name="HistoryRetentionLabel" xml:space="preserve"><value>Keep history (days)</value></data>
+  <data name="HistoryRetentionUpdated" xml:space="preserve"><value>History retention updated.</value></data>
+  <data name="SavedItemsAllResults" xml:space="preserve"><value>All results ({0})</value></data>
+  <data name="SavedItemsApply" xml:space="preserve"><value>Apply</value></data>
+  <data name="SavedItemsClearSearch" xml:space="preserve"><value>Clear search and filters</value></data>
+  <data name="SavedItemsCollapseResult" xml:space="preserve"><value>Collapse result</value></data>
+  <data name="SavedItemsCompare" xml:space="preserve"><value>Compare</value></data>
+  <data name="SavedItemsCompareCount" xml:space="preserve"><value>Compare ({0}/2)</value></data>
+  <data name="SavedItemsCopyError" xml:space="preserve"><value>Unable to copy: {0}</value></data>
+  <data name="SavedItemsCopySource" xml:space="preserve"><value>Copy source</value></data>
+  <data name="SavedItemsDeleteHistoryConfirm" xml:space="preserve"><value>Delete this query from history? Favorites will not be deleted.</value></data>
+  <data name="SavedItemsDiscard" xml:space="preserve"><value>Discard</value></data>
+  <data name="SavedItemsEdit" xml:space="preserve"><value>Edit note and tags</value></data>
+  <data name="SavedItemsFilters" xml:space="preserve"><value>Filters</value></data>
+  <data name="SavedItemsLoadError" xml:space="preserve"><value>Unable to load saved items: {0}</value></data>
+  <data name="SavedItemsMetadataSaved" xml:space="preserve"><value>Favorite details saved.</value></data>
+  <data name="SavedItemsNoNote" xml:space="preserve"><value>No note</value></data>
+  <data name="SavedItemsNoSearchResults" xml:space="preserve"><value>No matching records. Try another search or clear your filters.</value></data>
+  <data name="SavedItemsOtherResults" xml:space="preserve"><value>Other results</value></data>
+  <data name="SavedItemsOtherResultsCount" xml:space="preserve"><value>Other results from this query ({0})</value></data>
+  <data name="SavedItemsPinnedOnly" xml:space="preserve"><value>Pinned only</value></data>
+  <data name="SavedItemsProvider" xml:space="preserve"><value>Provider</value></data>
+  <data name="SavedItemsQueryFavorites" xml:space="preserve"><value>Whole queries</value></data>
+  <data name="SavedItemsRemoveFavoriteConfirm" xml:space="preserve"><value>Remove this favorite?</value></data>
+  <data name="SavedItemsRerun" xml:space="preserve"><value>Translate again</value></data>
+  <data name="SavedItemsReset" xml:space="preserve"><value>Reset</value></data>
+  <data name="SavedItemsResultCopied" xml:space="preserve"><value>Result copied.</value></data>
+  <data name="SavedItemsResultCount" xml:space="preserve"><value>{0} results</value></data>
+  <data name="SavedItemsResultFavorites" xml:space="preserve"><value>Individual results</value></data>
+  <data name="SavedItemsSelectDescription" xml:space="preserve"><value>Choose a record on the left to read its source and results.</value></data>
+  <data name="SavedItemsSource" xml:space="preserve"><value>Source text</value></data>
+  <data name="SavedItemsSourceClipboard" xml:space="preserve"><value>Clipboard</value></data>
+  <data name="SavedItemsSourceCopied" xml:space="preserve"><value>Source copied.</value></data>
+  <data name="SavedItemsSourceHistoryRerun" xml:space="preserve"><value>From history</value></data>
+  <data name="SavedItemsSourceManual" xml:space="preserve"><value>Typed input</value></data>
+  <data name="SavedItemsSourceOcr" xml:space="preserve"><value>OCR</value></data>
+  <data name="SavedItemsSourceSelection" xml:space="preserve"><value>Selected text</value></data>
+  <data name="SavedItemsTimeRange" xml:space="preserve"><value>Time range</value></data>
+  <data name="SavedItemsToggleResult" xml:space="preserve"><value>Expand or collapse result</value></data>
+  <data name="SavedItemsUnreadableResult" xml:space="preserve"><value>This saved result cannot be read.</value></data>
+  <data name="SavedItemsUnsavedDescription" xml:space="preserve"><value>This favorite has changes to its note or tags.</value></data>
+  <data name="SavedItemsUnsavedTitle" xml:space="preserve"><value>Save your changes?</value></data>
+  <data name="SavedItemsYesterday" xml:space="preserve"><value>Yesterday</value></data>
+  <data name="SavedItemsBackToList" xml:space="preserve"><value>Back to list</value></data>
+  <data name="SavedItemsCollapse" xml:space="preserve"><value>Collapse result</value></data>
+  <data name="SavedItemsEarlier" xml:space="preserve"><value>Earlier</value></data>
+  <data name="SavedItemsEditFavorite" xml:space="preserve"><value>Edit note and tags</value></data>
+  <data name="SavedItemsNoSelectionDescription" xml:space="preserve"><value>Choose a record to read its source and results.</value></data>
+  <data name="SavedItemsReturnToTranslation" xml:space="preserve"><value>Go to translation</value></data>
+  <data name="FluentMoreOptions" xml:space="preserve"><value>More options</value></data>
+  <data name="FluentCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
+  <data name="FluentCopied" xml:space="preserve"><value>Copied</value></data>
+  <data name="FluentDictionaryFallback" xml:space="preserve"><value>Rich dictionary content could not be displayed. A text version is shown.</value></data>
 </root>

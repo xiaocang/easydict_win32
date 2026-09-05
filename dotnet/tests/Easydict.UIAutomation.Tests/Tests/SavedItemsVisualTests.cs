@@ -336,7 +336,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             .FirstOrDefault(candidate => candidate.Properties.NativeWindowHandle.Value != main.Properties.NativeWindowHandle.Value && !candidate.IsOffscreen), TimeSpan.FromSeconds(8)).Result!;
         mini.Should().NotBeNull();
         Wait(mini, "InputTextBox").AsTextBox().Text = "Fluent 2 draft 中文";
-        Invoke(Wait(mini, compact ? "MiniCompactMoreButton" : "SavedItemsMoreButton"));
+        OpenMiniSavedItemsMenu(mini, compact);
         output.WriteLine(ScreenshotHelper.CaptureWindowWithPopup(mini, $"fluent2_mini_{(compact ? "compact" : "standard")}_menu",
             Wait(mini, "MiniHistoryMenuItem"), Wait(mini, "MiniFavoritesMenuItem")));
         Invoke(Wait(mini, "MiniHistoryMenuItem"));
@@ -348,11 +348,23 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         var input = Find(mini, "InputTextBox") ?? Find(mini, "SourceTextCollapsed");
         input.Should().NotBeNull();
         (input!.Patterns.Value.PatternOrDefault?.Value.Value ?? input.Name).Should().Contain("Fluent 2 draft 中文");
-        Invoke(Wait(mini, compact ? "MiniCompactMoreButton" : "SavedItemsMoreButton"));
+        OpenMiniSavedItemsMenu(mini, compact);
         Invoke(Wait(mini, "MiniFavoritesMenuItem"));
         Wait(main, "SavedItemsPageTitle").Properties.HelpText.Value.Should().Be("SavedItemsSection:Favorites");
         Invoke(Wait(main, "SavedItemsReturnToTranslationButton"));
         Wait(main, "SettingsButton");
+    }
+
+    private static void OpenMiniSavedItemsMenu(Window mini, bool compact)
+    {
+        mini.SetForeground();
+        var button = Wait(mini, compact ? "MiniCompactMoreButton" : "SavedItemsMoreButton");
+        // Finish the input's LostFocus collapse before invoking the flyout.
+        // Setting Value through UIA does not move focus as typing/clicking does.
+        button.Focus();
+        Retry.WhileFalse(() => button.Properties.HasKeyboardFocus.ValueOrDefault,
+            TimeSpan.FromSeconds(5)).Result.Should().BeTrue("menu button must have focus before opening");
+        Invoke(button);
     }
 
     [Fact]

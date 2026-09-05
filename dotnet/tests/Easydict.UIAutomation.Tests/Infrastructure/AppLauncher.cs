@@ -258,6 +258,11 @@ public sealed class AppLauncher : IDisposable
             {
                 lastException = ex;
             }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1460)
+            {
+                // FlaUI may surface the same UIA timeout as ERROR_TIMEOUT.
+                lastException = ex;
+            }
 
             Thread.Sleep(500);
         }

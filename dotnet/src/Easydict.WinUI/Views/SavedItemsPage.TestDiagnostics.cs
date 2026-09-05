@@ -32,7 +32,11 @@ public sealed partial class SavedItemsPage
                 Dpi = XamlRoot.RasterizationScale
             };
             var directory = SettingsService.ResolveSettingsDirectory();
-            await File.WriteAllTextAsync(Path.Combine(directory, "saved-items-metrics.json"), JsonSerializer.Serialize(metrics));
+            var reportPath = Path.Combine(directory, "saved-items-metrics.json");
+            var temporaryPath = reportPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(metrics));
+            // Existence signals a complete report to the UI test reader.
+            File.Move(temporaryPath, reportPath, overwrite: true);
         };
         KeyboardAccelerators.Add(probe);
     }

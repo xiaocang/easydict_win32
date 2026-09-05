@@ -89,6 +89,27 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private const int QueryShutdownTimeoutSeconds = 2;
 
+    private bool _isSelectionCapturePending;
+    private int _autoCloseGeneration;
+    internal event Action? SelectionCaptureInterrupted;
+
+    internal void SetSelectionCapturePending(bool pending)
+    {
+        _isSelectionCapturePending = pending;
+        _autoCloseGeneration++;
+        if (!pending)
+            ScheduleDelayedAutoClose();
+    }
+
+    private void InterruptSelectionCapture([System.Runtime.CompilerServices.CallerMemberName] string reason = "")
+    {
+        if (_isSelectionCapturePending)
+        {
+            CrashDiagnostics.Log($"[WindowShow] Mini: capture interrupted by {reason}");
+            SelectionCaptureInterrupted?.Invoke();
+        }
+    }
+
     public MiniWindow()
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
@@ -130,6 +151,8 @@ public sealed partial class MiniWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
+            content.AddHandler(UIElement.PointerPressedEvent,
+                new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => InterruptSelectionCapture("PointerPressed")), true);
             content.ActualThemeChanged += OnContentActualThemeChanged;
             content.Loaded += (s, e) =>
             {
@@ -780,6 +803,7 @@ public sealed partial class MiniWindow : Window
     {
         if (args.WindowActivationState != WindowActivationState.Deactivated)
         {
+            InterruptSelectionCapture();
             Debug.WriteLine($"[MiniWindow] Activated: state={args.WindowActivationState}, loaded={_isLoaded}");
             QueueInputFocusAndSelectAll();
             return;
@@ -787,6 +811,7 @@ public sealed partial class MiniWindow : Window
 
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
+            if (_isSelectionCapturePending) return;
             // Grace period: don't auto-close within 500ms of showing
             // This prevents a race condition where the window is hidden immediately
             // after being shown due to Windows returning focus to the previous app
@@ -812,6 +837,7 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private void ScheduleDelayedAutoClose()
     {
+        var generation = _autoCloseGeneration;
         DispatcherQueue.TryEnqueue(async () =>
         {
             try
@@ -824,8 +850,10 @@ public sealed partial class MiniWindow : Window
                     await Task.Delay((int)remainingMs);
                 }
 
+                if (generation != _autoCloseGeneration) return;
+
                 // Check if window is still deactivated and should auto-close
-                if (!_isPinned && _settings.MiniWindowAutoClose && !_isClosing && _appWindow?.IsVisible == true)
+                if (!_isSelectionCapturePending && !_isPinned && _settings.MiniWindowAutoClose && !_isClosing && _appWindow?.IsVisible == true)
                 {
                     // Only hide if we're still not the foreground window
                     var hWnd = WindowNative.GetWindowHandle(this);
@@ -844,6 +872,7 @@ public sealed partial class MiniWindow : Window
 
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        InterruptSelectionCapture();
         try
         {
             SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
@@ -871,6 +900,7 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private void OnTextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_isLoaded) InterruptSelectionCapture();
         // Delay to allow layout to complete
         RequestResize();
     }
@@ -1927,7 +1957,7 @@ public sealed partial class MiniWindow : Window
             { sri.NotifyTtsPlaying(playbackTask); break; }
     }
 
-    private void SetSourceTextState(bool expanded)
+    private void SetSourceTextState(bool expanded, bool focusInput = true)
     {
         if (SourceTextCollapsed == null || InputTextBox == null || SourceTextContainer == null) return;
         _isSourceTextExpanded = expanded;
@@ -1936,7 +1966,7 @@ public sealed partial class MiniWindow : Window
         {
             SourceTextCollapsed.Visibility = Visibility.Collapsed;
             InputTextBox.Visibility = Visibility.Visible;
-            InputTextBox.Focus(FocusState.Programmatic);
+            if (focusInput) InputTextBox.Focus(FocusState.Programmatic);
             ProtectedCursorHelper.Set(SourceTextContainer, null);
             SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
         }
@@ -2090,10 +2120,20 @@ public sealed partial class MiniWindow : Window
     }
 
     /// <summary>
-    /// Show the window and bring it to front.
+    /// Show while preserving focus in the selection source.
     /// </summary>
+    internal void ShowWithoutActivation()
+    {
+        _isClosing = false;
+        _appWindow?.Show(false);
+        SetSourceTextState(true, focusInput: false);
+        RequestResize();
+    }
+
     public void ShowAndActivate()
     {
+        InterruptSelectionCapture();
+        _autoCloseGeneration++;
         _isClosing = false;
         _lastShowTime = DateTime.UtcNow;
         _appWindow?.Show();
@@ -2224,6 +2264,8 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void HideWindow()
     {
+        InterruptSelectionCapture();
+        _autoCloseGeneration++;
         // Stop any already-initialized TTS audio immediately.
         TextToSpeechService.StopIfInitialized();
         

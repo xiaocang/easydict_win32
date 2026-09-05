@@ -29,15 +29,6 @@ public static class TextSelectionService
     private static extern short GetAsyncKeyState(int vKey);
 
     [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetCurrentThreadId();
-
-    [DllImport("user32.dll")]
-    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-
-    [DllImport("user32.dll")]
     private static extern uint GetClipboardSequenceNumber();
 
     // INPUT struct must be 40 bytes on 64-bit Windows.
@@ -138,6 +129,9 @@ public static class TextSelectionService
 
     private static readonly UIA3Automation _automation = new();
     private static readonly SemaphoreSlim _automationSemaphore = new(1, 1);
+#if WINUI_TEST
+    internal static int TestCaptureDelayMs { get; set; }
+#endif
     private const int UiaSemaphoreTimeoutMs = 200;
     private const int UiaExecutionTimeoutMs = 800;
     private const int DispatcherOperationTimeoutMs = 500;
@@ -215,18 +209,9 @@ public static class TextSelectionService
         DispatcherQueue dispatcher,
         Action action,
         CancellationToken cancellationToken = default)
-    {
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!dispatcher.TryEnqueue(() =>
-        {
-            try { action(); tcs.TrySetResult(); }
-            catch (Exception ex) { tcs.TrySetException(ex); }
-        }))
-        {
-            tcs.TrySetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
-        }
-        return WaitForDispatcherOperationAsync(tcs.Task, cancellationToken);
-    }
+        => SelectionCaptureSession.RunDispatchedAsync(
+            callback => dispatcher.TryEnqueue(() => callback()), action,
+            cancellationToken, DispatcherOperationTimeoutMs);
 
     private static async Task<T?> WaitForDispatcherOperationAsync<T>(
         Task<T?> task,
@@ -248,26 +233,6 @@ public static class TextSelectionService
         }
     }
 
-    private static async Task WaitForDispatcherOperationAsync(
-        Task task,
-        CancellationToken cancellationToken)
-    {
-        using var timeoutCts = new CancellationTokenSource(DispatcherOperationTimeoutMs);
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            timeoutCts.Token);
-
-        try
-        {
-            await task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested
-            && !cancellationToken.IsCancellationRequested)
-        {
-            throw new TimeoutException("Dispatcher operation timed out.");
-        }
-    }
-
     /// <summary>
     /// Gets the currently selected text using UI Automation API.
     /// Strategy by app type:
@@ -280,6 +245,37 @@ public static class TextSelectionService
     /// </summary>
     public static async Task<string?> GetSelectedTextAsync(CancellationToken cancellationToken = default)
     {
+        try { return await GetSelectedTextAsync(GetForegroundWindow(), cancellationToken); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Existing callers treat a lost selection source like an empty selection.
+            return null;
+        }
+    }
+
+    internal static Task<string?> GetSelectedTextAsync(nint sourceWindow, CancellationToken cancellationToken)
+    {
+        var session = new SelectionCaptureSession(sourceWindow, GetForegroundWindow, cancellationToken);
+        return SelectionCaptureGate.Shared.RunAsync(async () =>
+        {
+            session.ThrowIfInvalid();
+#if WINUI_TEST
+            // Deterministic desktop coverage of a slow source; absent from production builds.
+            if (TestCaptureDelayMs is > 0 and <= 10000)
+            {
+                await Task.Delay(TestCaptureDelayMs, cancellationToken);
+                session.ThrowIfInvalid();
+            }
+#endif
+            var text = await GetSelectedTextCoreAsync(session);
+            session.ThrowIfInvalid();
+            return text;
+        }, cancellationToken);
+    }
+
+    private static async Task<string?> GetSelectedTextCoreAsync(SelectionCaptureSession session)
+    {
+        var cancellationToken = session.CancellationToken;
         // Identify the foreground process once to avoid redundant P/Invoke + Process.GetProcessById
         // calls. Previously, GetForegroundWindow was called 3+ times and Process.GetProcessById
         // 2-3 times per selection, each allocating process handles.
@@ -287,7 +283,7 @@ public static class TextSelectionService
         uint processId = 0;
         try
         {
-            var hWnd = GetForegroundWindow();
+            var hWnd = session.SourceWindow;
             if (hWnd != IntPtr.Zero && GetWindowThreadProcessId(hWnd, out processId) != 0)
             {
                 using var process = Process.GetProcessById((int)processId);
@@ -326,7 +322,7 @@ public static class TextSelectionService
         {
             Debug.WriteLine("[TextSelectionService] Detected Electron app, using clipboard method");
             clipboardAlreadyAttempted = true;
-            var (clipboardText, electronOutcome) = await GetSelectedTextViaClipboardAsync(cancellationToken, isElectron);
+            var (clipboardText, electronOutcome) = await GetSelectedTextViaClipboardAsync(session, isElectron);
             capturedClipOutcome = electronOutcome;
             if (!string.IsNullOrWhiteSpace(clipboardText))
             {
@@ -351,7 +347,18 @@ public static class TextSelectionService
             {
                 try
                 {
-                    var uiaTask = Task.Run(() => GetSelectedTextViaUIA(), cancellationToken);
+                    session.ThrowIfInvalid();
+                    var uiaTask = Task.Run(() =>
+                    {
+                        session.ThrowIfInvalid();
+                        return GetSelectedTextViaUIA(session);
+                    }, cancellationToken);
+                    _ = uiaTask.ContinueWith(task =>
+                    {
+                        _ = task.Exception; // Observe failures after the caller times out.
+                        _automationSemaphore.Release();
+                    }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    semaphoreAcquired = false;
                     if (await Task.WhenAny(uiaTask, Task.Delay(UiaExecutionTimeoutMs, cancellationToken)) == uiaTask)
                     {
                         uiaText = await uiaTask;
@@ -403,7 +410,7 @@ public static class TextSelectionService
         }
 
         Debug.WriteLine("[TextSelectionService] UIA returned no text, falling back to clipboard method");
-        var (fallbackText, fallbackOutcome) = await GetSelectedTextViaClipboardAsync(cancellationToken, false);
+        var (fallbackText, fallbackOutcome) = await GetSelectedTextViaClipboardAsync(session, false);
         if (!string.IsNullOrWhiteSpace(fallbackText))
         {
             Debug.WriteLine($"[TextSelectionService] Got {fallbackText.Length} chars via clipboard fallback");
@@ -415,11 +422,13 @@ public static class TextSelectionService
         return null;
     }
 
-    private static string? GetSelectedTextViaUIA()
+    private static string? GetSelectedTextViaUIA(SelectionCaptureSession session)
     {
         try
         {
+            session.ThrowIfInvalid();
             var focused = _automation.FocusedElement();
+            session.ThrowIfInvalid();
             if (focused == null)
             {
                 Debug.WriteLine("[TextSelectionService] No focused element");
@@ -436,6 +445,7 @@ public static class TextSelectionService
             Debug.WriteLine("[TextSelectionService] No text pattern available or no selection");
             return null;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"[TextSelectionService] GetFocusedElement failed: {ex.Message}");
@@ -535,168 +545,67 @@ public static class TextSelectionService
     /// Returns the text (or null) plus the underlying ClipWait outcome so callers
     /// can distinguish a benign timeout from a non-text payload (e.g. video frame).
     /// </summary>
-    private static async Task<(string? text, ClipWaitResult outcome)> GetSelectedTextViaClipboardAsync(CancellationToken cancellationToken = default, bool isElectronApp = false)
+    private static async Task<(string? text, ClipWaitResult outcome)> GetSelectedTextViaClipboardAsync(
+        SelectionCaptureSession session, bool isElectronApp = false)
     {
         const int pollIntervalMs = 30;
-        const int timeoutMsStandard = 450;
-        const int timeoutMsElectron = 1200; // Electron apps need more time for clipboard propagation
-
-        var timeoutMs = isElectronApp ? timeoutMsElectron : timeoutMsStandard;
+        var timeoutMs = isElectronApp ? 1200 : 450;
+        var cancellationToken = session.CancellationToken;
+        session.ThrowIfInvalid();
 
         try
         {
-            // Capture the foreground window FIRST before any UI operations
-            var targetWindow = GetForegroundWindow();
-            Debug.WriteLine($"[TextSelectionService] Target window handle: {targetWindow}");
-
-            if (App.MainWindow == null)
+            var dispatcherQueue = App.MainWindow?.DispatcherQueue;
+            if (dispatcherQueue == null) return (null, ClipWaitResult.Timeout);
+            var snapshot = await RunOnDispatcherAsync<ClipboardProbe?>(dispatcherQueue, async () =>
             {
-                Debug.WriteLine("[TextSelectionService] MainWindow not available");
-                return (null, ClipWaitResult.Timeout);
-            }
+                session.ThrowIfInvalid();
+                var content = Clipboard.GetContent();
+                var hasText = content.Contains(StandardDataFormats.Text);
+                var text = hasText ? await content.GetTextAsync() : null;
+                return new ClipboardProbe(hasText, text, content.AvailableFormats?.Count ?? 0);
+            }, cancellationToken);
+            if (snapshot == null) return (null, ClipWaitResult.Timeout);
 
-            var dispatcherQueue = App.MainWindow.DispatcherQueue;
-            if (dispatcherQueue == null)
-            {
-                Debug.WriteLine("[TextSelectionService] DispatcherQueue not available");
-                return (null, ClipWaitResult.Timeout);
-            }
-
-            // 1. Save current clipboard content (awaitable — guarantees completion).
-            // Capture both the text (if any) and whether the clipboard was *genuinely
-            // empty* (zero formats), so the restore step can tell an empty clipboard
-            // apart from a non-text payload (e.g. an image) — see issue #168.
-            string? originalClipboard = null;
-            bool originalWasEmpty = false;
-            try
-            {
-                var snapshot = await RunOnDispatcherAsync<ClipboardProbe?>(dispatcherQueue, async () =>
-                {
-                    var dataPackage = Clipboard.GetContent();
-                    var formatCount = dataPackage.AvailableFormats?.Count ?? 0;
-                    if (dataPackage.Contains(StandardDataFormats.Text))
-                    {
-                        var text = await dataPackage.GetTextAsync();
-                        Debug.WriteLine($"[TextSelectionService] Original clipboard: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...'");
-                        return new ClipboardProbe(true, text, formatCount);
-                    }
-                    Debug.WriteLine($"[TextSelectionService] Original clipboard has no text (formats={formatCount})");
-                    return new ClipboardProbe(false, null, formatCount);
-                }, cancellationToken);
-
-                originalClipboard = snapshot?.Text;
-                originalWasEmpty = snapshot != null && snapshot.AvailableFormatCount == 0;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[TextSelectionService] Failed to save clipboard: {ex.Message}");
-                return (null, ClipWaitResult.Timeout);
-            }
-
-            // 2. Capture baseline clipboard sequence BEFORE any modifications
             var baselineSequence = GetClipboardSequenceNumber();
-            Debug.WriteLine($"[TextSelectionService] Baseline clipboard sequence: {baselineSequence}");
-
-            // 3. Attach to target thread and send Ctrl+C (with try/finally for guaranteed detach)
-            uint currentThreadId = 0;
-            uint targetThreadId = 0;
-            bool attached = false;
-            bool ctrlCSent = false;
-            var waitOutcome = ClipWaitResult.Timeout;
-
-            try
-            {
-                if (targetWindow != IntPtr.Zero)
-                {
-                    targetThreadId = GetWindowThreadProcessId(targetWindow, out _);
-                    currentThreadId = GetCurrentThreadId();
-
-                    Debug.WriteLine($"[TextSelectionService] Current thread: {currentThreadId}, Target thread: {targetThreadId}");
-
-                    // Attach input threads
-                    if (targetThreadId != currentThreadId && targetThreadId != 0)
-                    {
-                        attached = AttachThreadInput(currentThreadId, targetThreadId, true);
-                        Debug.WriteLine($"[TextSelectionService] AttachThreadInput result: {attached}");
-                    }
-
-                    var focusResult = SetForegroundWindow(targetWindow);
-                    Debug.WriteLine($"[TextSelectionService] SetForegroundWindow result: {focusResult}");
-
-                    // Verify foreground actually changed
-                    var actualForeground = GetForegroundWindow();
-                    if (actualForeground != targetWindow)
-                    {
-                        Debug.WriteLine($"[TextSelectionService] Focus verification failed: expected {targetWindow}, got {actualForeground}");
-                        // Ctrl+C was never sent, so the clipboard is untouched — nothing to restore.
-                        return (null, ClipWaitResult.Timeout);
-                    }
-
-                    await Task.Delay(100, cancellationToken); // Wait for focus to settle
-                }
-
-                SendCtrlC();
-                ctrlCSent = true;
-
-                // Use ClipWait with baseline sequence - polls for clipboard readiness
-                waitOutcome = await WaitForClipboardTextAsync(dispatcherQueue, timeoutMs, pollIntervalMs, baselineSequence, cancellationToken);
-                if (waitOutcome != ClipWaitResult.Success)
-                {
-                    Debug.WriteLine($"[TextSelectionService] ClipWait result={waitOutcome} after up to {timeoutMs}ms");
-                }
-            }
-            finally
-            {
-                // CRITICAL: Always detach input threads to prevent target app freeze
-                if (attached && currentThreadId != 0 && targetThreadId != 0)
-                {
-                    var detached = AttachThreadInput(currentThreadId, targetThreadId, false);
-                    Debug.WriteLine($"[TextSelectionService] AttachThreadInput detach result: {detached}");
-                }
-            }
-
-            // 4. Read whatever Ctrl+C placed on the clipboard (the captured selection),
-            // BEFORE restoring so the read isn't clobbered by the restore write.
+            var ctrlCSent = false;
             string? selectedText = null;
-            try
+            var outcome = await SelectionCaptureSession.WithCleanupAsync(async () =>
             {
-                selectedText = await RunOnDispatcherAsync<string?>(dispatcherQueue, async () =>
+                await Task.Delay(100, cancellationToken);
+                // The source is already foreground. Attaching input queues here can move
+                // keyboard focus into the now-visible Easydict window and lose the selection.
+                await RunOnDispatcherAsync(dispatcherQueue, () =>
                 {
-                    var dataPackage = Clipboard.GetContent();
-                    if (dataPackage.Contains(StandardDataFormats.Text))
-                    {
-                        var text = await dataPackage.GetTextAsync();
-                        Debug.WriteLine($"[TextSelectionService] After SendCtrlC clipboard: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...'");
-                        return text;
-                    }
-                    Debug.WriteLine("[TextSelectionService] After SendCtrlC clipboard has no text");
-                    return null;
+                    session.ThrowIfInvalid();
+                    ctrlCSent = true;
+                    SendCtrlC();
                 }, cancellationToken);
-            }
-            catch (Exception ex)
+                // Ctrl+C may be processed asynchronously by the source. Even after
+                // dismissal, wait for its bounded outcome before restoring and letting
+                // another capture use the clipboard; otherwise a late copy can leak.
+                return await WaitForClipboardTextAsync(
+                    dispatcherQueue, timeoutMs, pollIntervalMs, baselineSequence);
+            }, async () =>
             {
-                Debug.WriteLine($"[TextSelectionService] Failed to read clipboard: {ex.Message}");
-                // Fall through to restore regardless — selectedText stays null.
-            }
+                if (!ctrlCSent) return;
+                // Cleanup must finish even if capture was cancelled by typing/hiding.
+                try
+                {
+                    selectedText = await RunOnDispatcherAsync<string?>(dispatcherQueue, async () =>
+                    {
+                        var content = Clipboard.GetContent();
+                        return content.Contains(StandardDataFormats.Text) ? await content.GetTextAsync() : null;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[TextSelectionService] Clipboard cleanup read failed: {ex.GetType().Name}");
+                }
 
-            // 5. Restore the original clipboard state. This runs on EVERY path where Ctrl+C
-            // may have changed the clipboard — success, timeout, or non-text payload — not
-            // just the success path. Restoring only on success used to leave an empty or
-            // non-text Ctrl+C result stranded on the clipboard, re-introducing the data
-            // loss from issue #168. We drive the decision off the clipboard sequence number
-            // (did Ctrl+C actually change anything?) rather than the wait outcome. We restore
-            // saved text, or clear back to empty only when the clipboard was genuinely empty
-            // to begin with; a non-text original (image/RTF/etc.) can't be restored here
-            // because we only captured its text form, so we leave it rather than clearing it.
-            // The write is awaited and retried (and intentionally not cancellable) so a
-            // transient lock held by another app (Office frequently holds the clipboard open)
-            // no longer silently loses the user's clipboard.
-            if (ctrlCSent)
-            {
                 var clipboardChanged = GetClipboardSequenceNumber() != baselineSequence;
-                Debug.WriteLine($"[TextSelectionService] Clipboard changed: {clipboardChanged}");
-
-                var (restoreAction, textToRestore) = ResolveClipboardRestore(originalClipboard, originalWasEmpty, clipboardChanged, selectedText);
+                var (restoreAction, textToRestore) = ResolveClipboardRestore(
+                    snapshot.Text, snapshot.AvailableFormatCount == 0, clipboardChanged, selectedText);
                 switch (restoreAction)
                 {
                     case ClipboardRestoreAction.RestoreText:
@@ -711,26 +620,17 @@ public static class TextSelectionService
                         await RunClipboardWriteWithRetryAsync(dispatcherQueue, Clipboard.Clear, "Clipboard clear-to-empty");
                         break;
                 }
-            }
+            });
 
-            // 6. Produce the return value based on the wait outcome.
-            if (waitOutcome != ClipWaitResult.Success)
-            {
-                return (null, waitOutcome);
-            }
-
-            var outcome = string.IsNullOrWhiteSpace(selectedText) ? ClipWaitResult.Timeout : ClipWaitResult.Success;
-            return (selectedText, outcome);
+            session.ThrowIfInvalid();
+            return outcome == ClipWaitResult.Success && !string.IsNullOrWhiteSpace(selectedText)
+                ? (selectedText, ClipWaitResult.Success)
+                : (null, outcome);
         }
-        catch (OperationCanceledException)
-        {
-            // Expected when user performs another action during clipboard wait
-            Debug.WriteLine("[TextSelectionService] Clipboard method canceled by user action");
-            throw; // Rethrow to match UIA path behavior
-        }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[TextSelectionService] Clipboard method failed: {ex}");
+            Debug.WriteLine($"[TextSelectionService] Clipboard capture failed: {ex.GetType().Name}");
             return (null, ClipWaitResult.Timeout);
         }
     }
@@ -845,6 +745,7 @@ public static class TextSelectionService
 
         while (Environment.TickCount64 - startTime < timeoutMs)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var currentSequence = GetClipboardSequenceNumber();
 
             // Clipboard changed from baseline - check if it has text

@@ -68,6 +68,21 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     private const int QueryShutdownTimeoutSeconds = 2;
 
+    private bool _isSelectionCapturePending;
+    internal event Action? SelectionCaptureInterrupted;
+
+    internal void SetSelectionCapturePending(bool pending)
+        => _isSelectionCapturePending = pending;
+
+    private void InterruptSelectionCapture([System.Runtime.CompilerServices.CallerMemberName] string reason = "")
+    {
+        if (_isSelectionCapturePending)
+        {
+            CrashDiagnostics.Log($"[WindowShow] Fixed: capture interrupted by {reason}");
+            SelectionCaptureInterrupted?.Invoke();
+        }
+    }
+
     public FixedWindow()
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
@@ -107,6 +122,8 @@ public sealed partial class FixedWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
+            content.AddHandler(UIElement.PointerPressedEvent,
+                new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => InterruptSelectionCapture("PointerPressed")), true);
             content.ActualThemeChanged += OnContentActualThemeChanged;
             content.Loaded += (s, e) =>
             {
@@ -710,6 +727,7 @@ public sealed partial class FixedWindow : Window
 
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        InterruptSelectionCapture();
         try
         {
             SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
@@ -735,6 +753,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     private void OnTextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_isLoaded) InterruptSelectionCapture();
         // Delay to allow layout to complete
         RequestResize();
     }
@@ -1932,10 +1951,18 @@ public sealed partial class FixedWindow : Window
     }
 
     /// <summary>
-    /// Show the window and bring it to front.
+    /// Show while preserving focus in the selection source.
     /// </summary>
+    internal void ShowWithoutActivation()
+    {
+        _isClosing = false;
+        _appWindow?.Show(false);
+        RequestResize();
+    }
+
     public void ShowAndActivate()
     {
+        InterruptSelectionCapture();
         _isClosing = false;
         _appWindow?.Show();
 
@@ -2065,6 +2092,7 @@ public sealed partial class FixedWindow : Window
             return;
         }
 
+        InterruptSelectionCapture();
         System.Diagnostics.Debug.WriteLine($"[FixedWindow] Activated: state={args.WindowActivationState}, loaded={_isLoaded}");
         QueueInputFocusAndSelectAll();
     }
@@ -2074,6 +2102,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void HideWindow()
     {
+        InterruptSelectionCapture();
         // Stop any already-initialized TTS audio immediately.
         TextToSpeechService.StopIfInitialized();
 

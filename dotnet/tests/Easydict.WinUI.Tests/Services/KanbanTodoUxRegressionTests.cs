@@ -443,72 +443,29 @@ public class KanbanTodoUxRegressionTests
             "private async void OnShowFixedWindowHotkey()",
             "private void OnToggleMiniWindowHotkey()");
 
-        AssertContainsInOrder(
-            miniHotkeySnippet,
-            "TextInsertionService.CaptureSourceWindow();",
-            "TextSelectionService.GetSelectedTextAsync();",
-            "the Mini Window hotkey must capture the source before reading selected text");
-        AssertContainsInOrder(
-            miniHotkeySnippet,
-            "TextSelectionService.GetSelectedTextAsync();",
-            "MiniWindowService.Instance.ShowWithText(text)",
-            "the Mini Window hotkey must read selected text before dispatching the window show");
-        miniHotkeySnippet.Should().Contain("await Task.Delay(150);",
-            "the Mini Window hotkey should preserve its existing delayed selection flow");
-        miniHotkeySnippet.Should().Contain("MiniWindowService.Instance.ShowWithText(text)");
-        miniHotkeySnippet.Should().Contain("MiniWindowService.Instance.Show()");
-        miniHotkeySnippet.Should().NotContain("FixedWindowService.Instance.ShowWithText(text)");
-        miniHotkeySnippet.Should().NotContain("FixedWindowService.Instance.Show()");
+        foreach (var (snippet, serviceCode, windowCode) in new[]
+        {
+            (miniHotkeySnippet, miniServiceCode, miniWindowCode),
+            (fixedHotkeySnippet, fixedServiceCode, fixedWindowCode)
+        })
+        {
+            AssertContainsInOrder(snippet,
+                "TextInsertionService.CaptureSourceWindow();", "service.ShowWithoutActivation",
+                "the source must be recorded before showing the window");
+            AssertContainsInOrder(snippet,
+                "service.ShowWithoutActivation", "TextSelectionService.GetSelectedTextAsync(sourceWindow, cancellationToken)",
+                "selection capture must not gate window visibility");
+            AssertContainsInOrder(snippet, "service.Hide();", "await Task.Delay(150, cancellationToken);",
+                "hiding a foreground or pending window must be immediate");
+            snippet.Should().Contain("service.ShowRequests.IsPending || (service.IsVisible && service.IsForeground)");
+            snippet.Should().Contain("service.ShowWithText(text)");
+            snippet.Should().Contain("GetForegroundWindow() == sourceWindow");
+            serviceCode.Should().Contain("SelectionCaptureInterrupted += ShowRequests.Invalidate");
+            windowCode.Should().Contain("_appWindow?.Show(false)");
+        }
+        miniWindowCode.Should().Contain("if (_isSelectionCapturePending) return;");
+        miniWindowCode.Should().Contain("if (generation != _autoCloseGeneration) return;");
 
-        // Toggle behavior (issue #194): the Mini Window hotkey must hide the
-        // window when it is already in the foreground, and must decide that
-        // before the selection-capture delay so closing is instant.
-        miniHotkeySnippet.Should().Contain("if (mini.IsVisible && mini.IsForeground)",
-            "the Mini Window hotkey should hide the foreground window on repeated press");
-        miniHotkeySnippet.Should().Contain("mini.Hide();",
-            "the toggle path should hide the mini window instead of re-showing it");
-        AssertContainsInOrder(
-            miniHotkeySnippet,
-            "mini.Hide();",
-            "await Task.Delay(150);",
-            "hiding the mini window must not wait for the selection-capture delay");
-        miniHotkeySnippet.Should().Contain("MiniWindowService.Instance.EnsureCreated()",
-            "first show should pre-create the mini window so XAML inflation overlaps the selection-capture wait");
-        miniServiceCode.Should().Contain("public void EnsureCreated()",
-            "the mini window service should expose hidden pre-creation for the hotkey warm-up");
-
-        AssertContainsInOrder(
-            fixedHotkeySnippet,
-            "TextInsertionService.CaptureSourceWindow();",
-            "TextSelectionService.GetSelectedTextAsync();",
-            "the Fixed Window hotkey must capture the source before reading selected text");
-        AssertContainsInOrder(
-            fixedHotkeySnippet,
-            "TextSelectionService.GetSelectedTextAsync();",
-            "FixedWindowService.Instance.ShowWithText(text)",
-            "the Fixed Window hotkey must read selected text before dispatching the window show");
-        fixedHotkeySnippet.Should().Contain("await Task.Delay(150);",
-            "the Fixed Window hotkey should preserve its existing delayed selection flow");
-        fixedHotkeySnippet.Should().Contain("FixedWindowService.Instance.ShowWithText(text)");
-        fixedHotkeySnippet.Should().Contain("FixedWindowService.Instance.Show()");
-        fixedHotkeySnippet.Should().NotContain("MiniWindowService.Instance.ShowWithText(text)");
-        fixedHotkeySnippet.Should().NotContain("MiniWindowService.Instance.Show()");
-
-        // Toggle behavior (issue #194) for the Fixed Window hotkey, mirroring the
-        // mini window contract above.
-        fixedHotkeySnippet.Should().Contain("if (fixedWindow.IsVisible && fixedWindow.IsForeground)",
-            "the Fixed Window hotkey should hide the foreground window on repeated press");
-        fixedHotkeySnippet.Should().Contain("fixedWindow.Hide();",
-            "the toggle path should hide the fixed window instead of re-showing it");
-        AssertContainsInOrder(
-            fixedHotkeySnippet,
-            "fixedWindow.Hide();",
-            "await Task.Delay(150);",
-            "hiding the fixed window must not wait for the selection-capture delay");
-        fixedHotkeySnippet.Should().Contain("FixedWindowService.Instance.EnsureCreated()",
-            "first show should pre-create the fixed window so XAML inflation overlaps the selection-capture wait");
-        fixedServiceCode.Should().Contain("public void EnsureCreated()",
-            "the fixed window service should expose hidden pre-creation for the hotkey warm-up");
     }
 
     private static string FindProjectRoot()

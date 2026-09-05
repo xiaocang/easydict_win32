@@ -13,6 +13,7 @@ public sealed class FixedWindowService : IDisposable
     private static FixedWindowService? _instance;
     private FixedWindow? _fixedWindow;
     private bool _isDisposed;
+    internal HotkeyWindowShowCoordinator ShowRequests { get; } = new();
 
     /// <summary>
     /// Gets the singleton instance of FixedWindowService.
@@ -44,7 +45,7 @@ public sealed class FixedWindowService : IDisposable
 
     private FixedWindowService()
     {
-        // Private constructor for singleton pattern
+        ShowRequests.PendingChanged += pending => _fixedWindow?.SetSelectionCapturePending(pending);
     }
 
     /// <summary>
@@ -72,14 +73,19 @@ public sealed class FixedWindowService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Ensure the fixed window instance exists without showing it.
-    /// Lets callers pay the window-creation cost ahead of time (e.g. while
-    /// selection capture is still running) so the first Show is instant.
-    /// </summary>
-    public void EnsureCreated()
+    /// <summary>Ensure a hidden window instance exists.</summary>
+    public void EnsureCreated() => EnsureWindowCreated();
+
+    /// <summary>Show promptly while preserving focus in the selection source.</summary>
+    internal void ShowWithoutActivation()
     {
+        var stopwatch = Stopwatch.StartNew();
+        var created = _fixedWindow == null;
         EnsureWindowCreated();
+        CrashDiagnostics.Log($"[WindowShow] Fixed: creation={stopwatch.ElapsedMilliseconds}ms, new={created}");
+        _fixedWindow?.SetSelectionCapturePending(ShowRequests.IsPending);
+        _fixedWindow?.ShowWithoutActivation();
+        CrashDiagnostics.Log($"[WindowShow] Fixed: show requested={stopwatch.ElapsedMilliseconds}ms");
     }
 
     /// <summary>
@@ -87,6 +93,7 @@ public sealed class FixedWindowService : IDisposable
     /// </summary>
     public void Show()
     {
+        ShowRequests.Invalidate();
         EnsureWindowCreated();
         _fixedWindow?.ShowAndActivate();
     }
@@ -96,6 +103,7 @@ public sealed class FixedWindowService : IDisposable
     /// </summary>
     public void Hide()
     {
+        ShowRequests.Invalidate();
         _fixedWindow?.HideWindow();
     }
 
@@ -104,6 +112,7 @@ public sealed class FixedWindowService : IDisposable
     /// </summary>
     public void ShowWithText(string text)
     {
+        ShowRequests.Invalidate();
         EnsureWindowCreated();
         _fixedWindow?.SetTextAndTranslate(text);
         _fixedWindow?.ShowAndActivate();
@@ -149,13 +158,19 @@ public sealed class FixedWindowService : IDisposable
         if (_fixedWindow == null)
         {
             _fixedWindow = new FixedWindow();
-            _fixedWindow.Closed += (_, _) => _fixedWindow = null;
+            _fixedWindow.SelectionCaptureInterrupted += ShowRequests.Invalidate;
+            _fixedWindow.Closed += (_, _) =>
+            {
+                ShowRequests.Invalidate();
+                _fixedWindow = null;
+            };
             _fixedWindow.ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme));
         }
     }
 
     public void Dispose()
     {
+        ShowRequests.Invalidate();
         if (_isDisposed) return;
         _isDisposed = true;
 

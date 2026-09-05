@@ -269,7 +269,7 @@ jobs:
             filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MiniWindowLongTextTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PhoneticTranscriptionTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DictionaryWebViewRenderingTests.)"
             suffix: "mini-phonetic-dictionary"
           - name: "Core & Settings"
-            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests.)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowShowLatencyTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests.)"
             suffix: "core-settings-darkmode"
           - name: "Theme Contrast"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.ThemeContrastTests."

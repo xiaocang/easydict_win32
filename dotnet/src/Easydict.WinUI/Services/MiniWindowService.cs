@@ -14,6 +14,7 @@ public sealed class MiniWindowService : IDisposable
     private static MiniWindowService? _instance;
     private MiniWindow? _miniWindow;
     private bool _isDisposed;
+    internal HotkeyWindowShowCoordinator ShowRequests { get; } = new();
 
     /// <summary>
     /// Gets the singleton instance of MiniWindowService.
@@ -45,7 +46,7 @@ public sealed class MiniWindowService : IDisposable
 
     private MiniWindowService()
     {
-        // Private constructor for singleton pattern
+        ShowRequests.PendingChanged += pending => _miniWindow?.SetSelectionCapturePending(pending);
     }
 
     /// <summary>
@@ -93,14 +94,19 @@ public sealed class MiniWindowService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Ensure the mini window instance exists without showing it.
-    /// Lets callers pay the window-creation cost ahead of time (e.g. while
-    /// selection capture is still running) so the first Show is instant.
-    /// </summary>
-    public void EnsureCreated()
+    /// <summary>Ensure a hidden window instance exists.</summary>
+    public void EnsureCreated() => EnsureWindowCreated();
+
+    /// <summary>Show promptly while preserving focus in the selection source.</summary>
+    internal void ShowWithoutActivation()
     {
+        var stopwatch = Stopwatch.StartNew();
+        var created = _miniWindow == null;
         EnsureWindowCreated();
+        CrashDiagnostics.Log($"[WindowShow] Mini: creation={stopwatch.ElapsedMilliseconds}ms, new={created}");
+        _miniWindow?.SetSelectionCapturePending(ShowRequests.IsPending);
+        _miniWindow?.ShowWithoutActivation();
+        CrashDiagnostics.Log($"[WindowShow] Mini: show requested={stopwatch.ElapsedMilliseconds}ms");
     }
 
     /// <summary>
@@ -108,6 +114,7 @@ public sealed class MiniWindowService : IDisposable
     /// </summary>
     public void Show()
     {
+        ShowRequests.Invalidate();
         EnsureWindowCreated();
         _miniWindow?.ShowAndActivate();
     }
@@ -117,6 +124,7 @@ public sealed class MiniWindowService : IDisposable
     /// </summary>
     public void Hide()
     {
+        ShowRequests.Invalidate();
         _miniWindow?.HideWindow();
     }
 
@@ -125,6 +133,7 @@ public sealed class MiniWindowService : IDisposable
     /// </summary>
     public void ShowWithText(string text)
     {
+        ShowRequests.Invalidate();
         EnsureWindowCreated();
         _miniWindow?.SetTextAndTranslate(text);
         _miniWindow?.ShowAndActivate();
@@ -170,13 +179,19 @@ public sealed class MiniWindowService : IDisposable
         if (_miniWindow == null)
         {
             _miniWindow = new MiniWindow();
-            _miniWindow.Closed += (_, _) => _miniWindow = null;
+            _miniWindow.SelectionCaptureInterrupted += ShowRequests.Invalidate;
+            _miniWindow.Closed += (_, _) =>
+            {
+                ShowRequests.Invalidate();
+                _miniWindow = null;
+            };
             _miniWindow.ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme));
         }
     }
 
     public void Dispose()
     {
+        ShowRequests.Invalidate();
         if (_isDisposed) return;
         _isDisposed = true;
 

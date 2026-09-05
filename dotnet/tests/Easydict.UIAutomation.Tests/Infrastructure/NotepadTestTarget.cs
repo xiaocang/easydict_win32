@@ -26,14 +26,14 @@ public sealed class NotepadTestTarget : IDisposable
     public Application Application => _notepad;
     public UIA3Automation Automation => _automation;
 
-    public NotepadTestTarget(string textContent)
+    public NotepadTestTarget(string textContent, string? executablePath = null)
     {
         TextContent = textContent;
         _automation = new UIA3Automation();
 
         try
         {
-            _notepad = Application.Launch("notepad.exe");
+            _notepad = Application.Launch(executablePath ?? "notepad.exe");
 
             var window = _notepad.GetMainWindow(_automation, TimeSpan.FromSeconds(10));
             if (window == null)

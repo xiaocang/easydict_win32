@@ -262,9 +262,11 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         </Content>
-        <Content Include="Assets\*.png">
+        <!-- The unplated master is a build-time source; ship the generated icons only. -->
+        <Content Include="Assets\*.png" Exclude="Assets\icon_unplated_1024.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Remove="Assets\icon_unplated_1024.png" />
 
         <!-- Service Icons -->
         <Content Include="Assets\ServiceIcons\*.png">

@@ -23,4 +23,7 @@ internal static class ThemedIconService
         : SystemThemeProbe.IsTaskbarDark() ?? true;
 
     internal static string DarkIconPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Branding", "Dark", "AppIcon.ico");
+
+    internal static string WindowIconPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Branding", "Unplated",
+        IsWindowDark ? "AppIcon.Dark.ico" : "AppIcon.ico");
 }

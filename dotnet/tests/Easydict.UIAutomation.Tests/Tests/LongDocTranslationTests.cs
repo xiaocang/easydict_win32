@@ -199,6 +199,7 @@ public class LongDocTranslationTests : IDisposable
         Thread.Sleep(100);
         Keyboard.Type("1-5,8,10-12");
         Thread.Sleep(300);
+        pageRangeBox.AsTextBox().Text.Should().Be("1-5,8,10-12");
 
         CaptureAndCompare(window, "longdoc_08_page_range");
     }
@@ -439,6 +440,25 @@ public class LongDocTranslationTests : IDisposable
             () => FindByAutomationIdOrName(window, name),
             TimeSpan.FromSeconds(10)).Result;
 
+        if (control is not null && name is "LongDocInputModeCombo" or "LongDocConcurrencyBox" or "LongDocPageRangeBox")
+        {
+            // Expanded controls enter the UIA tree before layout settles and may
+            // be below the viewport. All advanced-option callers need this wait.
+            var scroller = FindByAutomationIdOrName(window, "LongDocContent");
+            scroller.Should().NotBeNull();
+            control = ScrollHelper.ScrollToFind(scroller!, 50, () =>
+            {
+                var candidate = FindByAutomationIdOrName(window, name);
+                if (candidate is null || candidate.IsOffscreen || !candidate.IsEnabled) return null;
+                try
+                {
+                    candidate.GetClickablePoint();
+                    return candidate;
+                }
+                catch (FlaUI.Core.Exceptions.NoClickablePointException) { return null; }
+            }, _output.WriteLine);
+        }
+
         if (control == null)
         {
             _output.WriteLine($"Control not found: {name}");
@@ -449,10 +469,7 @@ public class LongDocTranslationTests : IDisposable
 
     private ComboBox? FindComboBox(Window window, string name)
     {
-        ExpandAdvancedOptionsIfNeeded(window, name);
-        var combo = Retry.WhileNull(
-            () => FindByAutomationIdOrName(window, name)?.AsComboBox(),
-            TimeSpan.FromSeconds(5)).Result;
+        var combo = FindControl(window, name)?.AsComboBox();
 
         if (combo == null)
         {

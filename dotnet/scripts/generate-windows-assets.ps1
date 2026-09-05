@@ -4,7 +4,7 @@
 
 param(
     [string]$SourceIcon = "dotnet/src/Easydict.WinUI/Assets/Branding/AppIconSource.png",
-    [string]$UnplatedIcon = "dotnet/src/Easydict.WinUI/Assets/Branding/AppIconSource.png",
+    [string]$UnplatedIcon = "dotnet/src/Easydict.WinUI/Assets/icon_unplated_1024.png",
     [string]$OutputDir = "dotnet/src/Easydict.WinUI/Assets"
 )
 
@@ -234,9 +234,10 @@ foreach ($size in $targetSizes) {
         $failCount++
     }
 
-    # Unplated version (transparent background, no plate)
+    # Windows also selects altform-unplated for Start, search, and pinned taskbar icons.
+    # Keep the plate in this shared shell resource; native window icons below use UnplatedIcon.
     $outputPath = Join-Path $OutputDir "Square44x44Logo.targetsize-${size}_altform-unplated.png"
-    if (Resize-Image -SourcePath $UnplatedIcon -OutputPath $outputPath -Width $size -Height $size) {
+    if (Resize-Image -SourcePath $SourceIcon -OutputPath $outputPath -Width $size -Height $size) {
         $successCount++
     } else {
         $failCount++
@@ -249,3 +250,12 @@ Write-Host "Asset generation complete!" -ForegroundColor Green
 Write-Host "  Successful: $successCount" -ForegroundColor Green
 Write-Host "  Failed: $failCount" -ForegroundColor $(if ($failCount -gt 0) { "Red" } else { "Gray" })
 Write-Host "========================================" -ForegroundColor Cyan
+
+# Native title bars require ICO assets, including an outlined variant for dark themes.
+$windowIconDir = Join-Path $OutputDir 'Branding/Unplated'
+foreach ($dark in @($false, $true)) {
+    $iconName = if ($dark) { 'AppIcon.Dark.ico' } else { 'AppIcon.ico' }
+    & "$PSScriptRoot/generate-app-icon-ico.ps1" `
+        -SourcePng $UnplatedIcon -OutputIco (Join-Path $windowIconDir $iconName) -DarkMode:$dark -SmoothDarkOutline
+    if (-not $?) { throw "Failed to generate $iconName" }
+}

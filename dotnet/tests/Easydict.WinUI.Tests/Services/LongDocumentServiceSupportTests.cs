@@ -11,6 +11,31 @@ namespace Easydict.WinUI.Tests.Services;
 [Trait("Category", "WinUI")]
 public sealed class LongDocumentServiceSupportTests
 {
+    [Theory]
+    [InlineData("openrouter")]
+    [InlineData("orcarouter")]
+    public void Routers_AreAvailableForGrammarAndLongDocumentsWhenConfigured(string id)
+    {
+        using var client = new HttpClient();
+        ITranslationService service = id == "openrouter"
+            ? new Easydict.TranslationService.Services.OpenRouterService(client)
+            : new Easydict.TranslationService.Services.OrcaRouterService(client);
+        LongDocumentServiceSupport.IsSupported(service).Should().BeTrue();
+        GrammarCorrectionServiceAvailability.IsAvailable(service, Language.English).Should().BeFalse();
+        var tested = new Dictionary<string, bool> { [id] = true };
+        LongDocumentServiceSupport.IsReadyForSelection(service, tested).Should().BeFalse();
+
+        if (service is Easydict.TranslationService.Services.OpenRouterService openRouter)
+            openRouter.Configure("test-router-key");
+        else
+            ((Easydict.TranslationService.Services.OrcaRouterService)service).Configure("test-router-key");
+
+        foreach (var language in new[] { Language.Auto, Language.English, Language.SimplifiedChinese })
+            GrammarCorrectionServiceAvailability.IsAvailable(service, language).Should().BeTrue();
+        LongDocumentServiceSupport.IsReadyForSelection(service, new Dictionary<string, bool>()).Should().BeFalse();
+        LongDocumentServiceSupport.IsReadyForSelection(service, tested).Should().BeTrue();
+    }
+
     [Fact]
     public void IsReadyForSelection_TreatsReadyLocalModelAsReadyWithoutServiceTestStatus()
     {

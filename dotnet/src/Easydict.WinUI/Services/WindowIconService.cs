@@ -4,14 +4,13 @@ using System.Runtime.InteropServices;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
-/// Service for setting window icons in unpackaged WinUI3 applications.
-/// Uses dual-path loading: embedded resource (primary) and file fallback (secondary).
+/// Sets transparent window icons in packaged and unpackaged WinUI3 applications.
+/// Falls back to the embedded application icon or its file if the asset is unavailable.
 /// </summary>
 public static class WindowIconService
 {
     /// <summary>
-    /// Sets the window icon using dual-path loading strategy.
-    /// First attempts to load from embedded resource, falls back to file if needed.
+    /// Uses the unplated icon matching the window theme, with application icon fallbacks.
     /// </summary>
     /// <param name="appWindow">The AppWindow instance to set the icon for.</param>
     public static void SetWindowIcon(AppWindow? appWindow)
@@ -24,12 +23,21 @@ public static class WindowIconService
 
         try
         {
-            if (ThemedIconService.IsWindowDark && File.Exists(ThemedIconService.DarkIconPath))
+            var windowIconPath = ThemedIconService.WindowIconPath;
+            if (File.Exists(windowIconPath))
             {
-                appWindow.SetIcon(ThemedIconService.DarkIconPath);
+                appWindow.SetIcon(windowIconPath);
                 return;
             }
-            // Primary path: Try to load icon from embedded resource
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Icon] Failed to load unplated icon: {ex.Message}");
+        }
+
+        try
+        {
+            // Fall back to the embedded application icon.
             var iconId = GetEmbeddedIconId();
             if (iconId != null)
             {

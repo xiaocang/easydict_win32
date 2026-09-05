@@ -415,6 +415,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             var window = launcher.GetMainWindow();
             for (var cycle = 0; cycle < 12; cycle++)
             {
+                output.WriteLine($"Saved-items lifecycle cycle {cycle + 1}/12");
                 OpenHistory(window);
                 var rows = Wait(window, "SavedItemsList").FindAllChildren(cf => cf.ByControlType(ControlType.ListItem));
                 rows[cycle % 3].Click();
@@ -430,7 +431,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                 if (cycle is 3 or 7 or 11)
                 {
                     Invoke(Wait(window, "SavedItemsSettingsRailButton"));
-                    var scroller = Wait(window, "MainScrollViewer");
+                    var scroller = Wait(window, "SettingsDetailsScrollViewer");
                     var theme = ScrollHelper.ScrollToFind(scroller, 70, () => Find(window, "AppThemeCombo"), output.WriteLine)!.AsComboBox();
                     var themeName = cycle == 3 ? "深色" : cycle == 7 ? "极简线框" : "浅色";
                     theme.Select(themeName);
@@ -460,8 +461,30 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         parent.FindFirstDescendant(cf => cf.ByAutomationId(id)) ?? parent.FindFirstDescendant(cf => cf.ByName(id));
     internal static AutomationElement Wait(AutomationElement parent, string id)
     {
-        var found = Retry.WhileNull(() => Find(parent, id), TimeSpan.FromSeconds(12)).Result;
+        System.Runtime.InteropServices.COMException? lastTransitionError = null;
+        var found = Retry.WhileNull(() =>
+        {
+            try
+            {
+                var root = parent is Window currentWindow
+                    ? currentWindow.Automation.FromHandle(currentWindow.Properties.NativeWindowHandle.Value)
+                    : parent;
+                return Find(root, id);
+            }
+            catch (System.Runtime.InteropServices.COMException ex) when (
+                ex.HResult == unchecked((int)0x8000FFFF) || ex.HResult == unchecked((int)0x80131505))
+            {
+                // WinUI can invalidate an in-flight UIA traversal while Frame
+                // navigation detaches the old page and its WebView providers.
+                // Re-query within the existing deadline; persistent errors still fail.
+                lastTransitionError = ex;
+                System.Console.WriteLine($"UIA transition while waiting for {id}: 0x{ex.HResult:X8}; retrying within deadline.");
+                return null;
+            }
+        }, TimeSpan.FromSeconds(12)).Result;
         if (found is not null) return found;
+        if (lastTransitionError is not null)
+            throw new InvalidOperationException($"Timed out waiting for {id}; UIA failed during navigation.", lastTransitionError);
         if (parent is Window window) ScreenshotHelper.CaptureWindow(window, $"fluent2_failed_missing_{id}");
         var tree = string.Join("\n", parent.FindAllDescendants().Select(element => $"{element.Properties.ControlType.ValueOrDefault} {element.Properties.AutomationId.ValueOrDefault}: {element.Properties.Name.ValueOrDefault}"));
         throw new InvalidOperationException($"Missing {id}\n{tree}");

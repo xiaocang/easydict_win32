@@ -11,6 +11,7 @@ param(
     [Parameter(Mandatory = $false)]
     [int[]]$Sizes = @(16, 24, 32, 48, 64, 128, 256),
     [switch]$DarkMode,
+    [switch]$SmoothDarkOutline,
     [string]$OutputPngDirectory
 )
 
@@ -29,7 +30,7 @@ function New-PngBytes {
         [int]$Size
     )
 
-    $bitmap = [Easydict.IconTools.IconRasterizer]::Render($Source, $Size, $DarkMode.IsPresent)
+    $bitmap = [Easydict.IconTools.IconRasterizer]::Render($Source, $Size, $DarkMode.IsPresent, $SmoothDarkOutline.IsPresent)
     $ms = New-Object System.IO.MemoryStream
     try {
         $bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)

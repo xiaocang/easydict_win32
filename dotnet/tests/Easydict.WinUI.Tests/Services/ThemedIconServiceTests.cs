@@ -7,6 +7,25 @@ namespace Easydict.WinUI.Tests.Services;
 public sealed class ThemedIconServiceTests
 {
     [Theory]
+    [InlineData(16)]
+    [InlineData(24)]
+    [InlineData(32)]
+    [InlineData(48)]
+    public void SmoothWindowOutlineUsesPartialCoverageAtSmallSizes(int size)
+    {
+        using var source = new Bitmap(size, size);
+        var brand = Color.FromArgb(255, 0, 40, 80);
+        using (var graphics = Graphics.FromImage(source))
+        using (var brush = new SolidBrush(brand))
+            graphics.FillRectangle(brush, size / 4, size / 4, size / 2, size / 2);
+
+        using var result = Easydict.IconTools.IconRasterizer.Render(source, size, true, true);
+        Assert.Equal(brand.ToArgb(), result.GetPixel(size / 2, size / 2).ToArgb());
+        Assert.InRange(result.GetPixel(size / 4 - 1, size / 2).A, (byte)1, (byte)254);
+        Assert.Equal(0, result.GetPixel(0, 0).A);
+    }
+
+    [Theory]
     [InlineData(48)]
     [InlineData(96)]
     [InlineData(144)]

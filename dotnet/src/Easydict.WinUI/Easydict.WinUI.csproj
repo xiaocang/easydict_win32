@@ -258,7 +258,7 @@
 
     <ItemGroup>
         <!-- MSIX Package Assets - copy to output for winapp package -->
-        <Content Include="Assets\Branding\Dark\*.ico;Assets\Branding\Dark\*.png">
+        <Content Include="Assets\Branding\Dark\*.ico;Assets\Branding\Dark\*.png;Assets\Branding\Unplated\*.ico">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         </Content>

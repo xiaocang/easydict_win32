@@ -154,6 +154,20 @@ public sealed class SavedItemsService : IAsyncDisposable
     public Task<FavoriteStateMap> GetFavoriteStatesAsync(Guid queryId, CancellationToken cancellationToken = default)
         => _store.GetFavoriteStatesAsync(queryId, cancellationToken);
 
+    /// <summary>Best-effort translation-path read. Unavailable storage must not fail a completed query.</summary>
+    internal async Task<FavoriteStateMap?> TryGetFavoriteStatesAsync(Guid queryId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await GetFavoriteStatesAsync(queryId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            CrashDiagnostics.LogException("SavedItemsService.TryGetFavoriteStatesAsync", exception, isTerminating: false, isHandled: true);
+            return null;
+        }
+    }
+
     public Task<SavedItemsPageResult<SavedQueryListItem>> ListHistoryAsync(HistoryListRequest request, CancellationToken cancellationToken = default)
         => _store.ListHistoryAsync(request, cancellationToken);
 

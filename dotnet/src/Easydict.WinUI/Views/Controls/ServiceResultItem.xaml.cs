@@ -130,6 +130,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// <see cref="SettingsService.HideEmptyServiceResults"/> is toggled at runtime).
     /// </summary>
 
+    public (bool IsVisible, bool IsFavorited) FavoriteState => (_favoriteVisible, _isFavorited);
+
     public void SetFavoriteState(bool isVisible, bool isFavorited)
     {
         _favoriteVisible = isVisible;

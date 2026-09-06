@@ -76,6 +76,62 @@ public sealed class SavedItemsServiceTests : IAsyncLifetime
         (await _service.GetQueryDetailAsync(draft.Id)).Should().BeNull();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task QueryCompletion_WhenStorageIsUnavailable_RecordAndFavoriteRefreshAreBestEffort(bool corrupt)
+    {
+        var path = Path.Combine(_directory, "unavailable.db");
+        if (corrupt)
+        {
+            await File.WriteAllTextAsync(path, "This is not a SQLite database.");
+        }
+        else
+        {
+            await using var connection = new SqliteConnection($"Data Source={path}");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA user_version = 999";
+            await command.ExecuteNonQueryAsync();
+        }
+        await using var service = new SavedItemsService(new SavedItemsStore(path), TimeProvider.System, TimeSpan.FromDays(1));
+        var draft = CreateDraft("successful translation", historyEnabled: true);
+
+        await service.RecordSnapshotAsync(draft);
+        var states = await service.TryGetFavoriteStatesAsync(draft.Id);
+
+        states.Should().BeNull("a failed optional read must not fault query completion or invent an unfavorited state");
+        draft.Snapshot().Results.Should().ContainSingle(result => result.PlainText == "result");
+        var explicitRead = () => service.GetFavoriteStatesAsync(draft.Id);
+        await explicitRead.Should().ThrowAsync<Exception>("explicit saved-items operations must still report storage failures");
+    }
+
+    [Fact]
+    public async Task TryGetFavoriteStatesAsync_ReturnsPersistedState()
+    {
+        var draft = CreateDraft("source", historyEnabled: true);
+        await _service.ToggleQueryFavoriteAsync(draft);
+        var resultId = draft.Snapshot().Results[0].Id;
+        await _service.ToggleResultFavoriteAsync(draft, resultId);
+
+        var states = await _service.TryGetFavoriteStatesAsync(draft.Id);
+
+        states.Should().NotBeNull();
+        states!.IsQueryFavorited.Should().BeTrue();
+        states.FavoritedResultIds.Should().ContainSingle().Which.Should().Be(resultId);
+    }
+
+    [Fact]
+    public async Task TryGetFavoriteStatesAsync_PreservesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var read = () => _service.TryGetFavoriteStatesAsync(Guid.NewGuid(), cancellation.Token);
+
+        await read.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     [Fact]
     public async Task UserFavoriteFailure_IsReturnedToCaller()
     {

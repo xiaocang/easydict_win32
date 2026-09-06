@@ -1217,7 +1217,7 @@ public sealed partial class SavedItemsPage : Page
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         var merged = _favoriteTags
             .Concat(candidates)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(SavedItemsSearch.Normalize, StringComparer.Ordinal)
             .ToArray();
         if (merged.Length > 20 ||
             merged.Any(static tag => System.Globalization.StringInfo.ParseCombiningCharacters(tag).Length > 40))

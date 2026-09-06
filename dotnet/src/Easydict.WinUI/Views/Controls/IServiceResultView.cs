@@ -53,6 +53,8 @@ public interface IServiceResultView
 
     IEnumerable<string> GetDisplayedPhoneticKeys();
 
+    (bool IsVisible, bool IsFavorited) FavoriteState => (false, false);
+
     void SetFavoriteState(bool isVisible, bool isFavorited)
     {
     }

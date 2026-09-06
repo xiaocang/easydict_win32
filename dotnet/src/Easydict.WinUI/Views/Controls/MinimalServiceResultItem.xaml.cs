@@ -96,6 +96,8 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();
 
+    public (bool IsVisible, bool IsFavorited) FavoriteState => (_favoriteVisible, _isFavorited);
+
     public void SetFavoriteState(bool isVisible, bool isFavorited)
     {
         _favoriteVisible = isVisible;

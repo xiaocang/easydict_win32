@@ -164,6 +164,9 @@ namespace Easydict.WinUI.Views
             }
 
             InitializeFluentLayout();
+#if WINUI_TEST
+            InitializeSavedQueryDiagnostics();
+#endif
             this.Loaded += OnPageLoaded;
             this.Unloaded += OnPageUnloaded;
             this.ActualThemeChanged += OnActualThemeChanged;
@@ -2320,9 +2323,15 @@ namespace Easydict.WinUI.Views
             if (snapshot.Results.Count == 0)
                 return;
 
-            var states = await SavedItemsService.Instance.GetFavoriteStatesAsync(snapshot.Id);
-            if (ReferenceEquals(draft, _currentSnapshotDraft))
-                CurrentQueryFavoriteIcon.Glyph = states.IsQueryFavorited ? "\uE735" : "\uE734";
+            var states = await SavedItemsService.Instance.TryGetFavoriteStatesAsync(snapshot.Id);
+            if (_isClosing || !ReferenceEquals(draft, _currentSnapshotDraft))
+                return;
+            if (states is null)
+            {
+                CurrentQueryFavoriteButton.Visibility = Visibility.Collapsed;
+                return;
+            }
+            CurrentQueryFavoriteIcon.Glyph = states.IsQueryFavorited ? "\uE735" : "\uE734";
         }
 
         private async void OnFoundryLocalStartRequested(object? sender, ServiceQueryResult serviceResult)

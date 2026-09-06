@@ -275,7 +275,7 @@ jobs:
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.ThemeContrastTests."
             suffix: "theme-contrast"
           - name: "Saved Items"
-            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SavedItemsTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SavedItemsVisualTests.)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SavedItemsTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SavedItemsVisualTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.LiveQueryFavoriteTests.)"
             suffix: "saved-items"
           - name: "OCR"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.OcrTests."

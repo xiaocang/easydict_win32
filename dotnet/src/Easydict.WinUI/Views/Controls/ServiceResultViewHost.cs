@@ -123,11 +123,14 @@ internal static class ServiceResultViewHost
     {
         using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.RebuildForCurrentTheme");
 
+        var favoriteStates = controls
+            .Where(control => control.ServiceResult is not null)
+            .ToDictionary(control => control.ServiceResult!, control => control.FavoriteState);
         Release(controls, resultsPanel, collapseToggled, queryRequested, foundryLocalStartRequested, favoriteRequested, copyCompleted);
 
         foreach (var result in results)
         {
-            Add(
+            var control = Add(
                 result,
                 controls,
                 resultsPanel,
@@ -138,6 +141,8 @@ internal static class ServiceResultViewHost
                 favoriteRequested,
                 isSavedItemView,
                 copyCompleted);
+            if (favoriteStates.TryGetValue(result, out var favoriteState))
+                control.SetFavoriteState(favoriteState.IsVisible, favoriteState.IsFavorited);
         }
     }
 

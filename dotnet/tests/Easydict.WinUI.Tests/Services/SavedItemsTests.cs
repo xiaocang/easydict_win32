@@ -278,6 +278,24 @@ public sealed class SavedItemsStoreTests : IAsyncLifetime
         favoriteDetail.Favorite.Tags.Should().BeEquivalentTo("work", "Reference");
     }
 
+    [Theory]
+    [InlineData("Ｗｏｒｋ", "Work")]
+    [InlineData("café", "cafe\u0301")]
+    [InlineData("two  words", "two\twords")]
+    public async Task FavoriteMetadata_DeduplicatesTagsByStoredSearchKey(string first, string equivalent)
+    {
+        var draft = CreateTranslationDraft("hello", "provider", "Provider", "你好", historyEnabled: true);
+        var favorite = await _store.AddQueryFavoriteAsync(draft.Snapshot());
+
+        await _store.UpdateFavoriteMetadataAsync(favorite.FavoriteId, "Updated note", [" " + first + " ", equivalent, "Other"]);
+
+        var detail = await _store.GetFavoriteDetailAsync(favorite.FavoriteId);
+        detail!.Favorite.Note.Should().Be("Updated note");
+        detail.Favorite.Tags.Should().BeEquivalentTo(first, "Other");
+        var filtered = await _store.ListFavoritesAsync(new FavoriteListRequest(Tags: [equivalent]));
+        filtered.Items.Should().ContainSingle(item => item.Id == favorite.FavoriteId);
+    }
+
     [Fact]
     public async Task HistorySearch_TreatsLikeMetacharactersLiterally()
     {

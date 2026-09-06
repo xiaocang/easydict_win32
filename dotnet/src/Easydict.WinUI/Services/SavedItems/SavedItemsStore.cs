@@ -236,7 +236,7 @@ public sealed class SavedItemsStore
 
         var normalizedTags = tags.Select(static tag => tag.Trim())
             .Where(static tag => tag.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(SavedItemsSearch.Normalize, StringComparer.Ordinal)
             .ToArray();
         if (normalizedTags.Length > 20 || normalizedTags.Any(static tag => TextElementCount(tag) > 40))
             throw new ArgumentOutOfRangeException(nameof(tags), "Favorites support at most 20 tags of 40 text elements each.");

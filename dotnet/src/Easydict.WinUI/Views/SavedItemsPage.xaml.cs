@@ -139,9 +139,8 @@ public sealed partial class SavedItemsPage : Page
 
     private void OnSavedItemsChanged(object? sender, SavedItemsChangedEventArgs e)
     {
-        if (!_isPageLoaded || _savingFavoriteMetadata || HasUnsavedFavoriteChanges)
-            return;
-
+        // Store notifications can arrive on a worker thread. Even the unsaved-change
+        // guard reads XAML controls, so evaluate all page state on the UI thread.
         DispatcherQueue.TryEnqueue(async () =>
         {
             if (_isPageLoaded && !_savingFavoriteMetadata && !HasUnsavedFavoriteChanges)

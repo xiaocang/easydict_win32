@@ -39,6 +39,33 @@ public sealed partial class SavedItemsPage
             File.Move(temporaryPath, reportPath, overwrite: true);
         };
         KeyboardAccelerators.Add(probe);
+
+        var backgroundFavoriteProbe = new KeyboardAccelerator
+        {
+            Key = VirtualKey.F11,
+            Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift
+        };
+        backgroundFavoriteProbe.Invoked += async (_, args) =>
+        {
+            args.Handled = true;
+            if (_selectedFavoriteId is not { } favoriteId) return;
+            var pinned = PinFavoriteButton.IsChecked != true;
+            string? error = null;
+            try
+            {
+                await Task.Run(() => Services.SavedItems.SavedItemsService.Instance
+                    .SetFavoritePinnedAsync(favoriteId, pinned));
+            }
+            catch (Exception exception)
+            {
+                error = exception.ToString();
+            }
+            var reportPath = Path.Combine(SettingsService.ResolveSettingsDirectory(), "saved-items-background-favorite.json");
+            var temporaryPath = reportPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(new { FavoriteId = favoriteId, Pinned = pinned, Error = error }));
+            File.Move(temporaryPath, reportPath, overwrite: true);
+        };
+        KeyboardAccelerators.Add(backgroundFavoriteProbe);
     }
 }
 #endif

@@ -16,6 +16,66 @@ namespace Easydict.UIAutomation.Tests.Tests;
 [Collection("UIAutomation")]
 public sealed class SavedItemsVisualTests(ITestOutputHelper output)
 {
+    [Fact]
+    public void Favorites_BackgroundNotification_RefreshesDetailAndPreservesUnsavedNote()
+    {
+        var previousDiagnostics = Environment.GetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS");
+        Environment.SetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS", "1");
+        try
+        {
+            using var dpiScope = new PerMonitorDpiScope();
+            using var fixture = new Fixture("Light", 1);
+            using var launcher = new AppLauncher();
+            launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+            var window = launcher.GetMainWindow();
+            OpenHistory(window);
+            Invoke(Wait(window, "SavedItemsFavoritesRailButton"));
+            Wait(window, "SavedItemsList").FindFirstDescendant(cf => cf.ByControlType(ControlType.ListItem))!.Click();
+            Wait(window, "EditFavoriteButton");
+
+            // A write from another thread must refresh an active favorite without
+            // reading its XAML controls on the notification thread.
+            ChangePinOnWorkerThread(expectedPinned: false);
+            Invoke(Wait(window, "EditFavoriteButton"));
+            Wait(window, "PinFavoriteButton").Patterns.Toggle.Pattern.ToggleState.Value.Should().Be(ToggleState.Off);
+
+            const string note = "Keep this unsaved note after a background favorite update.";
+            Wait(window, "FavoriteNoteBox").AsTextBox().Text = note;
+            ChangePinOnWorkerThread(expectedPinned: true);
+            Wait(window, "FavoriteNoteBox").AsTextBox().Text.Should().Be(note,
+                "background notifications must preserve the active editor draft");
+
+            Invoke(Wait(window, "CancelFavoriteMetadataButton"));
+            Invoke(Wait(window, "SavedItemsReturnToTranslationButton"));
+            OpenHistory(window);
+            Invoke(Wait(window, "SavedItemsFavoritesRailButton"));
+            Wait(window, "SavedItemsList").FindFirstDescendant(cf => cf.ByControlType(ControlType.ListItem))!.Click();
+            Invoke(Wait(window, "EditFavoriteButton"));
+            Wait(window, "PinFavoriteButton").Patterns.Toggle.Pattern.ToggleState.Value.Should().Be(ToggleState.On);
+            Wait(window, "FavoriteNoteBox").AsTextBox().Text.Should().NotBe(note,
+                "the unsaved note must not be persisted by a pin update");
+
+            void ChangePinOnWorkerThread(bool expectedPinned)
+            {
+                var reportPath = Path.Combine(Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR")!,
+                    "saved-items-background-favorite.json");
+                File.Delete(reportPath);
+                window.SetForeground();
+                UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL,
+                    FlaUI.Core.WindowsAPI.VirtualKeyShort.SHIFT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F11);
+                Retry.WhileFalse(() => File.Exists(reportPath), TimeSpan.FromSeconds(10)).Result.Should().BeTrue();
+                using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+                report.RootElement.GetProperty("Error").ValueKind.Should().Be(JsonValueKind.Null,
+                    "the committed write must not fail when notifying an active favorite: {0}", report.RootElement);
+                report.RootElement.GetProperty("Pinned").GetBoolean().Should().Be(expectedPinned);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS", previousDiagnostics);
+        }
+    }
+
     [Theory]
     [InlineData("Light", 0, false)]
     [InlineData("Light", 30, false)]

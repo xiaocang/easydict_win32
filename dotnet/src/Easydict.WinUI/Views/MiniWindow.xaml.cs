@@ -1184,15 +1184,7 @@ public sealed partial class MiniWindow : Window
             ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
 
             var targetLanguage = resolution.EffectiveTargetLanguage;
-            var savedKind = SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind);
-            snapshotDraft = new QuerySnapshotDraft(
-                inputText,
-                detectedLanguage.ToIso639(),
-                targetLanguage.ToIso639(),
-                savedKind,
-                sourceKind,
-                _settings.HistoryEnabled);
-            _currentSnapshotDraft = snapshotDraft;
+            _currentSnapshotDraft = null;
             if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
             {
                 UpdateTargetLanguageSelector(targetLanguage);
@@ -1252,6 +1244,17 @@ public sealed partial class MiniWindow : Window
                     return;
                 }
             }
+
+            // The preparation prompt can disable the last grammar service and
+            // change both the query mode and target language.
+            snapshotDraft = new QuerySnapshotDraft(
+                inputText,
+                detectedLanguage.ToIso639(),
+                targetLanguage.ToIso639(),
+                SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
+                sourceKind,
+                _settings.HistoryEnabled);
+            _currentSnapshotDraft = snapshotDraft;
 
             SetLoading(true);
             _hasAutoPlayedCurrentQuery = false;

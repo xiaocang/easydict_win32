@@ -2586,15 +2586,7 @@ namespace Easydict.WinUI.Views
                     reason: "StartQueryModeResolved");
 
                 var targetLanguage = resolution.EffectiveTargetLanguage;
-                var savedKind = SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind);
-                snapshotDraft = new QuerySnapshotDraft(
-                    inputText,
-                    detectedLanguage.ToIso639(),
-                    targetLanguage.ToIso639(),
-                    savedKind,
-                    sourceKind,
-                    _settings.HistoryEnabled);
-                _currentSnapshotDraft = snapshotDraft;
+                _currentSnapshotDraft = null;
                 CurrentQueryFavoriteButton.Visibility = Visibility.Collapsed;
                 CurrentQueryFavoriteIcon.Glyph = "\uE734";
                 if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
@@ -2675,6 +2667,17 @@ namespace Easydict.WinUI.Views
                         return;
                     }
                 }
+
+                // The preparation prompt can disable the last grammar service and
+                // change both the query mode and target language.
+                snapshotDraft = new QuerySnapshotDraft(
+                    inputText,
+                    detectedLanguage.ToIso639(),
+                    targetLanguage.ToIso639(),
+                    SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
+                    sourceKind,
+                    _settings.HistoryEnabled);
+                _currentSnapshotDraft = snapshotDraft;
 
                 _hasAutoPlayedCurrentQuery = false;
 

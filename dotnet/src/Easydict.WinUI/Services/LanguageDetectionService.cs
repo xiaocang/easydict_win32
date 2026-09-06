@@ -14,6 +14,9 @@ namespace Easydict.WinUI.Services;
 public sealed class LanguageDetectionService : IDisposable
 {
     private readonly SettingsService _settings;
+    private readonly Func<string, CancellationToken, Action?, Task<Language>> _detectLanguage;
+    private static readonly string[] DetectionServiceIds = ["google", "bing"];
+    private static readonly TimeSpan DetectionAttemptTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Memory cache for detection results.
@@ -25,8 +28,24 @@ public sealed class LanguageDetectionService : IDisposable
     private int _disposed;
 
     public LanguageDetectionService(SettingsService settings)
+        : this(settings, DetectWithSharedServicesAsync)
+    {
+    }
+
+    internal LanguageDetectionService(
+        SettingsService settings,
+        Func<string, CancellationToken, Task<Language>> detectLanguage)
+        : this(settings, (text, ct, _) => detectLanguage(text, ct))
+    {
+        ArgumentNullException.ThrowIfNull(detectLanguage);
+    }
+
+    internal LanguageDetectionService(
+        SettingsService settings,
+        Func<string, CancellationToken, Action?, Task<Language>> detectLanguage)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _detectLanguage = detectLanguage ?? throw new ArgumentNullException(nameof(detectLanguage));
 
         _cache = new MemoryCache(new MemoryCacheOptions
         {
@@ -45,7 +64,10 @@ public sealed class LanguageDetectionService : IDisposable
     /// <param name="text">Text to detect.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Detected language, or Language.Auto if detection fails.</returns>
-    public async Task<Language> DetectAsync(string text, CancellationToken cancellationToken = default)
+    public async Task<Language> DetectAsync(
+        string text,
+        CancellationToken cancellationToken = default,
+        Action? onRateLimited = null)
     {
         if (IsDisposed())
         {
@@ -85,20 +107,12 @@ public sealed class LanguageDetectionService : IDisposable
 
         try
         {
-            // Use Google Translate service for detection (no API key required)
-            // Acquire handle to prevent manager disposal during detection
-            using var handle = TranslationManagerService.Instance.AcquireHandle();
-            var googleService = handle.Manager.Services.TryGetValue("google", out var service)
-                ? service
-                : null;
+            var detected = await _detectLanguage(text, cancellationToken, onRateLimited);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            if (googleService == null)
-            {
-                Debug.WriteLine("[Detection] Google service not available");
+            // Unknown results can be transient. Let the next query retry detection.
+            if (detected == Language.Auto)
                 return Language.Auto;
-            }
-
-            var detected = await googleService.DetectLanguageAsync(text, cancellationToken);
 
             // Cache the result (ignore if cache was disposed)
             try
@@ -123,6 +137,78 @@ public sealed class LanguageDetectionService : IDisposable
             Debug.WriteLine($"[Detection] Failed: {ex.Message}");
             return Language.Auto; // Graceful degradation
         }
+    }
+
+    private static async Task<Language> DetectWithSharedServicesAsync(
+        string text, CancellationToken cancellationToken, Action? onRateLimited)
+    {
+#if WINUI_TEST
+        // Deterministic UI regression coverage; excluded from production builds.
+        var scenario = Environment.GetEnvironmentVariable("EASYDICT_TEST_DETECTION");
+        if (scenario is "rate-limited-recovered" or "rate-limited-failed")
+        {
+            onRateLimited?.Invoke();
+            await Task.Delay(50, cancellationToken);
+            return scenario == "rate-limited-recovered" ? Language.English : Language.Auto;
+        }
+#endif
+        // Keep both providers alive if proxy settings change during detection.
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        return await DetectWithFallbackAsync(text, handle.Manager.Services, cancellationToken, onRateLimited);
+    }
+
+    internal static async Task<Language> DetectWithFallbackAsync(
+        string text,
+        IReadOnlyDictionary<string, ITranslationService> services,
+        CancellationToken cancellationToken,
+        Action? onRateLimited = null)
+    {
+        foreach (var serviceId in DetectionServiceIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!services.TryGetValue(serviceId, out var service) || !service.IsConfigured)
+                continue;
+
+            // Bound each attempt so an unreachable primary can reach the fallback.
+            // A window's shorter deadline or user cancellation still takes precedence.
+            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            attemptCts.CancelAfter(DetectionAttemptTimeout);
+            try
+            {
+                var detected = await service.DetectLanguageAsync(text, attemptCts.Token);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (detected != Language.Auto)
+                    return detected;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (IsRateLimited(ex))
+                    onRateLimited?.Invoke();
+
+                // Do not log exception messages: provider URLs can include the input text.
+                var reason = ex is HttpRequestException http
+                    ? $"HTTP {http.StatusCode?.ToString() ?? "network error"}"
+                    : ex.GetType().Name;
+                CrashDiagnostics.Log($"[Detection] {serviceId} failed ({reason}); trying next provider.");
+            }
+        }
+
+        return Language.Auto;
+    }
+
+    private static bool IsRateLimited(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests }
+                or TranslationException { ErrorCode: TranslationErrorCode.RateLimited })
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

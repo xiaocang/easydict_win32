@@ -202,14 +202,21 @@
         </controls:FluentLanguageBar>
 
         <!-- Detected Language Label -->
-        <TextBlock
-            x:Name="DetectedLangText"
-            Grid.Row="3"
-            Text=""
-            FontSize="10"
-            Foreground="{ThemeResource BlueAccentBrush}"
-            Margin="0,0,0,2"
-            Visibility="Collapsed"/>
+        <StackPanel Grid.Row="3">
+            <TextBlock x:Name="DetectedLangText"
+                       Text=""
+                       FontSize="10"
+                       Foreground="{ThemeResource BlueAccentBrush}"
+                       Margin="0,0,0,2"
+                       Visibility="Collapsed"/>
+            <InfoBar x:Name="LanguageDetectionWarningBar"
+                     AutomationProperties.AutomationId="LanguageDetectionWarningBar"
+                     Severity="Warning"
+                     Visibility="Collapsed"
+                     IsOpen="False"
+                     IsClosable="False"
+                     Margin="0,4,0,4"/>
+        </StackPanel>
 
         <!-- Multi-Service Results -->
         <ScrollViewer

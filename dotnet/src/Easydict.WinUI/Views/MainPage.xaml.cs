@@ -31,6 +31,9 @@ namespace Easydict.WinUI.Views
     {
         private const double SavedItemsHeaderBreakpoint = 600;
         private LanguageDetectionService? _detectionService;
+        private LanguageDetectionWarningPresenter? _detectionWarning;
+        private LanguageDetectionWarningPresenter DetectionWarning =>
+            _detectionWarning ??= new(LanguageDetectionWarningBar);
         // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
         // Other code may Cancel() but must NOT Dispose().
         private CancellationTokenSource? _currentQueryCts;
@@ -1902,6 +1905,7 @@ namespace Easydict.WinUI.Views
             var sourceLanguage = GetSourceLanguage();
             if (sourceLanguage != TranslationLanguage.Auto)
             {
+                _detectionWarning?.Reset();
                 DetectedLanguageText.Visibility = Visibility.Collapsed;
                 return sourceLanguage;
             }
@@ -1916,28 +1920,14 @@ namespace Easydict.WinUI.Views
             return detectedLanguage;
         }
 
-        private static async Task<TranslationLanguage> DetectAutoSourceLanguageAsync(
+        private Task<TranslationLanguage> DetectAutoSourceLanguageAsync(
             string inputText,
             LanguageDetectionService detectionService,
             CancellationToken ct,
             bool allowMinimalTimeout = true)
         {
-            if (!MinimalThemeService.IsActive || !allowMinimalTimeout)
-            {
-                return await Task.Run(() => detectionService.DetectAsync(inputText, ct));
-            }
-
-            using var detectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            detectionCts.CancelAfter(MinimalLanguageDetectionTimeout);
-
-            try
-            {
-                return await detectionService.DetectAsync(inputText, detectionCts.Token);
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                return TranslationLanguage.Auto;
-            }
+            return DetectionWarning.DetectAsync(detectionService, inputText, ct,
+                MinimalThemeService.IsActive && allowMinimalTimeout ? MinimalLanguageDetectionTimeout : null);
         }
 
         private bool HasEnabledGrammarCorrectionService(TranslationLanguage sourceLanguage)
@@ -3518,6 +3508,7 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private void OnSourceLanguageChanged(object sender, SelectionChangedEventArgs e)
         {
+            _detectionWarning?.Reset();
             if (!_isLoaded || _suppressSourceLanguageSelectionChanged)
             {
                 return;

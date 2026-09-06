@@ -1553,4 +1553,8 @@
   <data name="FluentCopyFailed" xml:space="preserve"><value>复制失败，请重试。</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>已复制</value></data>
   <data name="FluentDictionaryFallback" xml:space="preserve"><value>富词典内容暂时无法显示，已切换为文字版本。</value></data>
+  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>?????????429?</value></data>
+  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>???????????</value></data>
+  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>????????{0}???????</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>???????????????????????</value></data>
 </root>

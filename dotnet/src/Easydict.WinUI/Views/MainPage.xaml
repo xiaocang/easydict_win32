@@ -328,15 +328,21 @@
                             </Button>
                         </Grid>
 
-                        <TextBlock
-                            x:Name="DetectedLanguageText"
-                            Grid.Row="1"
-                            Text=""
-                            FontSize="11"
-                            Foreground="{ThemeResource BlueAccentBrush}"
-                            Margin="4,0,0,0"
-                            VerticalAlignment="Top"
-                            Visibility="Collapsed"/>
+                        <StackPanel Grid.Row="1">
+                            <TextBlock x:Name="DetectedLanguageText"
+                                       Text=""
+                                       FontSize="11"
+                                       Foreground="{ThemeResource BlueAccentBrush}"
+                                       Margin="4,0,0,0"
+                                       Visibility="Collapsed"/>
+                            <InfoBar x:Name="LanguageDetectionWarningBar"
+                                     AutomationProperties.AutomationId="LanguageDetectionWarningBar"
+                                     Severity="Warning"
+                                     Visibility="Collapsed"
+                                     IsOpen="False"
+                                     IsClosable="False"
+                                     Margin="0,4,0,4"/>
+                        </StackPanel>
 
                         <Border
                             x:Name="InputTextContainer"

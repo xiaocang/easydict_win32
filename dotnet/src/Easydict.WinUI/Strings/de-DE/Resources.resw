@@ -1553,4 +1553,8 @@
   <data name="FluentCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>Copied</value></data>
   <data name="FluentDictionaryFallback" xml:space="preserve"><value>Rich dictionary content could not be displayed. A text version is shown.</value></data>
+  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>Anfragelimit f?r Spracherkennung (429)</value></data>
+  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Ein Ersatzdienst wird versucht.</value></data>
+  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Der Ersatzdienst hat {0} erkannt. Sie k?nnen fortfahren.</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Die Ausgangssprache konnte nicht erkannt werden. W?hlen Sie sie manuell aus oder versuchen Sie es sp?ter erneut.</value></data>
 </root>

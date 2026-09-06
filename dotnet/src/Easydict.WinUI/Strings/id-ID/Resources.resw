@@ -1553,4 +1553,8 @@
   <data name="FluentCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>Copied</value></data>
   <data name="FluentDictionaryFallback" xml:space="preserve"><value>Rich dictionary content could not be displayed. A text version is shown.</value></data>
+  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>Batas permintaan deteksi bahasa (429)</value></data>
+  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Mencoba layanan deteksi cadangan.</value></data>
+  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Layanan cadangan mendeteksi {0}. Anda dapat melanjutkan.</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Bahasa sumber tidak dapat dideteksi. Pilih secara manual atau coba lagi nanti.</value></data>
 </root>

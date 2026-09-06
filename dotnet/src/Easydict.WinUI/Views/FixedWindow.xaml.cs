@@ -30,6 +30,9 @@ public sealed partial class FixedWindow : Window
     private static extern IntPtr GetForegroundWindow();
 
     private LanguageDetectionService? _detectionService;
+    private LanguageDetectionWarningPresenter? _detectionWarning;
+    private LanguageDetectionWarningPresenter DetectionWarning =>
+        _detectionWarning ??= new(LanguageDetectionWarningBar, RequestResize);
     // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
     // Other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _currentQueryCts;
@@ -631,7 +634,7 @@ public sealed partial class FixedWindow : Window
             // Run detection on thread pool to avoid blocking UI thread
             var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
-                : await Task.Run(() => _detectionService.DetectAsync(inputText, CancellationToken.None));
+                : await DetectionWarning.DetectAsync(_detectionService, inputText, CancellationToken.None);
             _lastDetectedLanguage = detectedLanguage;
             var resolution = ResolveQuickQueryLanguage(
                 detectedLanguage,
@@ -976,11 +979,12 @@ public sealed partial class FixedWindow : Window
             TranslationLanguage detectedLanguage;
             if (sourceLanguage == TranslationLanguage.Auto)
             {
-                detectedLanguage = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
+                detectedLanguage = await DetectionWarning.DetectAsync(detectionService, inputText, ct);
                 UpdateDetectedLanguageDisplay(detectedLanguage);
             }
             else
             {
+                _detectionWarning?.Reset();
                 detectedLanguage = sourceLanguage;
                 DetectedLangText.Text = "";
                 DetectedLangText.Visibility = Visibility.Collapsed;
@@ -1932,6 +1936,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     private void OnSourceLangChanged(object sender, SelectionChangedEventArgs e)
     {
+        _detectionWarning?.Reset();
         if (!_isLoaded || _suppressSourceLanguageSelectionChanged)
             return;
 

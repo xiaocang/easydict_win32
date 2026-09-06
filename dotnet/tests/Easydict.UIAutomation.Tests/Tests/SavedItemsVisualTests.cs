@@ -392,9 +392,12 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         var main = launcher.GetMainWindow();
         Invoke(Wait(main, "SettingsButton"));
         Wait(main, "MainScrollViewer");
-        main.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Minimized);
-        Retry.WhileFalse(() => main.Patterns.Window.Pattern.WindowVisualState.Value == WindowVisualState.Minimized,
-            TimeSpan.FromSeconds(5)).Result.Should().BeTrue();
+        // This is test setup, so use the native HWND instead of relying on the
+        // WinUI WindowPattern provider to apply and report the minimized state.
+        var mainHandle = main.Properties.NativeWindowHandle.Value;
+        ShowWindowAsync(mainHandle, 6 /* SW_MINIMIZE */).Should().BeTrue();
+        Retry.WhileFalse(() => IsIconic(mainHandle) && GetForegroundWindow() != mainHandle, TimeSpan.FromSeconds(5)).Result
+            .Should().BeTrue("the main HWND must finish minimizing and relinquish foreground before the Mini hotkey");
         UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
         var mini = WaitForMiniWindow(launcher, main);
         var draft = multiline ? string.Join("\n", Enumerable.Repeat("Fluent 2 draft 中文", 6)) : "Fluent 2 draft 中文";
@@ -404,6 +407,7 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             WaitForMiniMenuItem(launcher, mini, "MiniHistoryMenuItem"), WaitForMiniMenuItem(launcher, mini, "MiniFavoritesMenuItem")));
         Invoke(WaitForMiniMenuItem(launcher, mini, "MiniHistoryMenuItem"));
         Wait(main, "SavedItemsSearchBox");
+        IsIconic(mainHandle).Should().BeFalse("Mini navigation must restore the minimized main HWND");
         main.Patterns.Window.Pattern.WindowVisualState.Value.Should().Be(WindowVisualState.Normal);
         UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
         mini = WaitForMiniWindow(launcher, main);
@@ -416,6 +420,17 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         Invoke(Wait(main, "SavedItemsReturnToTranslationButton"));
         Wait(main, "SettingsButton");
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
 
     private AutomationElement WaitForMiniMenuItem(AppLauncher launcher, Window mini, string id)
     {
@@ -450,6 +465,12 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             .FirstOrDefault(candidate => candidate.Properties.NativeWindowHandle.Value != main.Properties.NativeWindowHandle.Value && !candidate.IsOffscreen &&
                 Find(candidate, "InputTextBox") is { IsOffscreen: false }),
             TimeSpan.FromSeconds(12)).Result;
+        if (mini is null)
+        {
+            output.WriteLine($"Mini readiness timeout; foreground HWND={GetForegroundWindow()}");
+            foreach (var candidate in launcher.Application.GetAllTopLevelWindows(launcher.Automation))
+                output.WriteLine($"App window: title={candidate.Name}, handle={candidate.Properties.NativeWindowHandle.Value}, offscreen={candidate.IsOffscreen}, input={Find(candidate, "InputTextBox") is not null}");
+        }
         mini.Should().NotBeNull("the Mini window must finish loading before entering a draft");
         output.WriteLine($"Mini candidate: title={mini!.Name}, class={mini.Properties.ClassName.ValueOrDefault}, handle={mini.Properties.NativeWindowHandle.Value}; main={main.Properties.NativeWindowHandle.Value}");
         mini!.SetForeground();
@@ -500,9 +521,18 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         OpenHistory(window);
         var search = Wait(window, "SavedItemsSearchBox").FindFirstDescendant(cf => cf.ByControlType(ControlType.Edit)).AsTextBox();
         search.Text = "innovation";
-        Thread.Sleep(500);
-        var first = Wait(window, "SavedItemsList").FindFirstDescendant(cf => cf.ByControlType(ControlType.ListItem))!;
-        first.Name.Should().Contain("Bing").And.Contain("innovation");
+        // Searching debounces for 150 ms, then awaits storage and list layout.
+        // The old first row remains visible during that work, so list existence
+        // (or a fixed sleep) does not establish that this search has completed.
+        var first = Retry.WhileNull(() =>
+        {
+            var row = Find(window, "SavedItemsList")?.FindFirstDescendant(cf => cf.ByControlType(ControlType.ListItem));
+            var name = row?.Name;
+            return name?.Contains("Bing", StringComparison.Ordinal) == true &&
+                name.Contains("innovation", StringComparison.Ordinal) ? row : null;
+        }, TimeSpan.FromSeconds(12)).Result;
+        first.Should().NotBeNull("the first row must show the matching Bing preview after the search completes");
+        first!.Name.Should().Contain("Bing").And.Contain("innovation");
         first.Click();
         Wait(window, "ServiceResultItem_bing");
         var selectedName = first.Name;

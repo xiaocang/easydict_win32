@@ -239,8 +239,12 @@ public class KanbanTodoUxRegressionTests
             "the inner result viewer should not stop after a single outer-scroll hop");
         code.Should().Contain("MeasureDictionaryHeightAsync(sender)",
             "dictionary WebView results should keep a lightweight post-navigation sizing pass");
-        code.Should().Contain("await Task.Delay(50);",
-            "dictionary WebView sizing should wait briefly for the CSS normalization/layout pass to settle");
+        code.Should().Contain("new ResizeObserver(reportSize).observe(document.body)",
+            "dictionary sizing should follow browser layout changes instead of relying on a fixed delay");
+        code.Should().Contain("requestAnimationFrame(() =>",
+            "dictionary size reports should be coalesced until the browser layout pass");
+        code.Should().Contain("document.fonts?.ready.then(reportSize)",
+            "late-loading fonts must also update the measured dictionary height");
         code.Should().Contain("sender.DispatcherQueue.TryEnqueue(() =>",
             "dictionary WebView height changes should be deferred out of the navigation callback to avoid re-entrant XAML layout cycles");
         code.Should().NotContain("document.querySelectorAll('*')",
@@ -458,7 +462,7 @@ public class KanbanTodoUxRegressionTests
             AssertContainsInOrder(snippet, "service.Hide();", "await Task.Delay(150, cancellationToken);",
                 "hiding a foreground or pending window must be immediate");
             snippet.Should().Contain("service.ShowRequests.IsPending || (service.IsVisible && service.IsForeground)");
-            snippet.Should().Contain("service.ShowWithText(text)");
+            snippet.Should().Contain("service.ShowWithText(text, QuerySourceKind.Selection)");
             snippet.Should().Contain("GetForegroundWindow() == sourceWindow");
             serviceCode.Should().Contain("SelectionCaptureInterrupted += ShowRequests.Invalidate");
             windowCode.Should().Contain("_appWindow?.Show(false)");

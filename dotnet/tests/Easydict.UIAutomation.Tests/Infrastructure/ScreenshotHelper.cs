@@ -61,6 +61,7 @@ public static class ScreenshotHelper
     /// </summary>
     public static string CaptureWindowPhysical(Window window, string name)
     {
+        using var dpiScope = new PerMonitorDpiScope();
         EnsureWindowReadyForCapture(window, name);
 
         var bounds = GetWindowPhysicalBounds(window);
@@ -130,8 +131,29 @@ public static class ScreenshotHelper
             (int)Math.Round(Convert.ToDouble(bounds.Bottom)));
     }
 
+    /// <summary>Include native flyouts that extend beyond their owning window.</summary>
+    public static string CaptureWindowWithPopup(Window window, string name, params AutomationElement[] popupItems)
+    {
+        using var dpiScope = new PerMonitorDpiScope();
+        var bounds = GetWindowPhysicalBounds(window);
+        foreach (var item in popupItems)
+        {
+            var popupBounds = item.BoundingRectangle;
+            popupBounds.Inflate(8, 8);
+            bounds = Rectangle.Union(bounds, popupBounds);
+        }
+        bounds = IntersectWithVirtualScreen(bounds);
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+            graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
+        var path = SaveBitmap(bitmap, name);
+        ValidateSavedScreenshot(path, name);
+        return path;
+    }
+
     public static bool TrySetWindowPhysicalBounds(Window window, Rectangle bounds)
     {
+        using var dpiScope = new PerMonitorDpiScope();
         var hwnd = window.Properties.NativeWindowHandle.Value;
         return hwnd != IntPtr.Zero && SetWindowPos(
             hwnd,

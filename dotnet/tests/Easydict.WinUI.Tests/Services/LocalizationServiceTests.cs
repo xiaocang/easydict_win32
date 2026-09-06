@@ -1,3 +1,4 @@
+using System.Xml;
 using System.Xml.Linq;
 using FluentAssertions;
 using Xunit;
@@ -118,6 +119,45 @@ public class LocalizationServiceTests
                 $"{lang}/Resources.resw should have the same number of translation resources as {baselineLanguage}");
             keys.Should().BeEquivalentTo(baselineKeys,
                 $"{lang}/Resources.resw should expose the same translation resource keys as {baselineLanguage}");
+        }
+    }
+
+    [Fact]
+    public void AllLanguages_HaveSameResourceLineLayout()
+    {
+        var baselinePath = Path.Combine(StringsPath, "en-US", "Resources.resw");
+        var baselineLines = File.ReadAllLines(baselinePath).Length;
+        var baselineLayout = ReadLayout(baselinePath);
+        foreach (var language in SupportedLanguages.Where(language => language != "en-US"))
+        {
+            var path = Path.Combine(StringsPath, language, "Resources.resw");
+            File.ReadAllLines(path).Length.Should().Be(baselineLines,
+                $"{language} must have the same line count as en-US; run Align-LocaleResources.ps1 -AlignLayout");
+            ReadLayout(path).Should().Equal(baselineLayout,
+                $"{language} resource keys must appear in the same order and on the same lines as en-US");
+        }
+
+        static (string Key, int Line)[] ReadLayout(string path) =>
+            XDocument.Load(path, LoadOptions.SetLineInfo).Root!.Elements("data")
+                .Select(element => (element.Attribute("name")!.Value, ((IXmlLineInfo)element).LineNumber))
+                .ToArray();
+    }
+
+    [Fact]
+    public void HistoryDisabledMessage_AllLanguagesPreserveSettingsPathPlaceholders()
+    {
+        foreach (var language in SupportedLanguages)
+        {
+            var document = XDocument.Load(Path.Combine(StringsPath, language, "Resources.resw"));
+            var message = document.Root!.Elements("data")
+                .Single(element => element.Attribute("name")?.Value == "SavedItemsHistoryDisabledMessage")
+                .Element("value")!.Value;
+            var placeholders = System.Text.RegularExpressions.Regex.Matches(message, @"\{\d+\}")
+                .Select(match => match.Value).ToArray();
+            placeholders.Should().BeEquivalentTo(new[] { "{0}", "{1}", "{2}", "{3}" },
+                $"{language} must include all four parts of the settings path exactly once");
+            var format = () => string.Format(message, "settings", "general", "privacy", "history");
+            format.Should().NotThrow($"{language} must contain a valid composite format string");
         }
     }
 

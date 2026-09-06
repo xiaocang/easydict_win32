@@ -5,7 +5,7 @@ namespace Easydict.SidecarClient;
 
 /// <summary>
 /// Resolves large managed assemblies that MSIX publishing dedupes into
-/// workers/shared instead of copying once per worker.
+/// workers/shared or reuses from the package root instead of copying once per worker.
 /// </summary>
 public static class WorkerSharedAssemblyResolver
 {
@@ -45,6 +45,11 @@ public static class WorkerSharedAssemblyResolver
     }
 
     private static Assembly? ResolveFromSharedDirectory(AssemblyLoadContext context, AssemblyName assemblyName)
+        => ResolveFromDirectories(context, assemblyName, ResolveSharedDirectory(),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..")));
+
+    internal static Assembly? ResolveFromDirectories(AssemblyLoadContext context, AssemblyName assemblyName,
+        string sharedDirectory, string packageDirectory)
     {
         if (string.IsNullOrWhiteSpace(assemblyName.Name)
             || !AllowedAssemblies.Contains(assemblyName.Name))
@@ -52,7 +57,13 @@ public static class WorkerSharedAssemblyResolver
             return null;
         }
 
-        var candidate = Path.Combine(ResolveSharedDirectory(), assemblyName.Name + ".dll");
+        // Worker-specific shared versions take precedence over the host. The
+        // packaging script removes them only after verifying identical SHA-256.
+        var candidate = Path.Combine(sharedDirectory, assemblyName.Name + ".dll");
+        if (!File.Exists(candidate))
+        {
+            candidate = Path.Combine(packageDirectory, assemblyName.Name + ".dll");
+        }
         if (!File.Exists(candidate))
         {
             return null;

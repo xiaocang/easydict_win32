@@ -20,11 +20,18 @@ internal static class SystemThemeProbe
     /// registry value cannot be read.
     /// </summary>
     public static bool? IsSystemDark()
+        => ReadDarkPreference(AppsUseLightThemeValue);
+
+    // The shell can use a different theme from Windows apps.
+    public static bool? IsTaskbarDark()
+        => ReadDarkPreference("SystemUsesLightTheme");
+
+    private static bool? ReadDarkPreference(string valueName)
     {
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKeyPath, writable: false);
-            if (key?.GetValue(AppsUseLightThemeValue) is int value)
+            if (key?.GetValue(valueName) is int value)
             {
                 return value == 0;
             }

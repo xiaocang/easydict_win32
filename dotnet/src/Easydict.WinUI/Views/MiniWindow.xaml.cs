@@ -5,11 +5,14 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.System;
@@ -38,6 +41,9 @@ public sealed partial class MiniWindow : Window
     }
 
     private LanguageDetectionService? _detectionService;
+    private LanguageDetectionWarningPresenter? _detectionWarning;
+    private LanguageDetectionWarningPresenter DetectionWarning =>
+        _detectionWarning ??= new(LanguageDetectionWarningBar, RequestResize);
     // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
     // Other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _currentQueryCts;
@@ -71,6 +77,8 @@ public sealed partial class MiniWindow : Window
     private bool _resizePending;      // resize requested but not yet executed
     private bool _resizeThrottling;   // inside cooldown window
     private bool _isSourceTextExpanded = false;
+    private int _inputFocusGeneration;
+    private bool _isSavedItemsMenuOpen;
 
     // Frame-rate-coalesced streaming text applicator. See StreamingTextCoalescer for
     // the rationale; nutshell: multiple services pushing StreamingText updates every
@@ -114,6 +122,7 @@ public sealed partial class MiniWindow : Window
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
+        SavedItemsMoreButton.Flyout = CreateSavedItemsMenu();
         InitializeCompactWindowControls();
 
         // Construct the streaming coalescer on the UI dispatcher — its timer is
@@ -170,7 +179,7 @@ public sealed partial class MiniWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { PinButton, OcrButton, CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, SavedItemsMoreButton, CloseButton },
                 "MiniWindow");
             _titleBarHelper.Initialize();
         }
@@ -245,7 +254,7 @@ public sealed partial class MiniWindow : Window
             return;
         }
 
-        _compactWindowControls = new CompactWindowControlsView();
+        _compactWindowControls = new CompactWindowControlsView(showMore: true);
         surfaceGrid.Children.Add(_compactWindowControls.Root);
         _compactWindowControls.Root.PointerEntered += OnCompactWindowControlsPointerEntered;
         _compactWindowControls.Root.PointerExited += OnCompactWindowControlsPointerExited;
@@ -255,6 +264,7 @@ public sealed partial class MiniWindow : Window
         _compactWindowControls.DragIsland.PointerCanceled += OnCompactDragIslandPointerCanceled;
         _compactWindowControls.DragIsland.PointerCaptureLost += OnCompactDragIslandPointerCaptureLost;
         _compactWindowControls.CloseButton.Click += OnCompactCloseClicked;
+        _compactWindowControls.MoreButton.Flyout = CreateSavedItemsMenu();
         _compactWindowControls.RefreshTheme(Content as FrameworkElement);
     }
 
@@ -551,7 +561,7 @@ public sealed partial class MiniWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionFallbackNotice",
                 "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
-            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+            DetectedLangText.Visibility = Visibility.Visible;
             RequestResize();
             return;
         }
@@ -561,7 +571,7 @@ public sealed partial class MiniWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionActiveNotice",
                 "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
-            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+            DetectedLangText.Visibility = Visibility.Visible;
             RequestResize();
             return;
         }
@@ -692,7 +702,7 @@ public sealed partial class MiniWindow : Window
             // Run detection on thread pool to avoid blocking UI thread
             var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
-                : await Task.Run(() => _detectionService.DetectAsync(inputText, ct));
+                : await DetectionWarning.DetectAsync(_detectionService, inputText, ct);
             _lastDetectedLanguage = detectedLanguage;
             var resolution = ResolveQuickQueryLanguage(
                 detectedLanguage,
@@ -1106,7 +1116,7 @@ public sealed partial class MiniWindow : Window
         LoadingRing.Visibility = Visibility.Collapsed;
     }
 
-    private async Task StartQueryAsync()
+    private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
     {
         if (_isClosing)
         {
@@ -1150,6 +1160,7 @@ public sealed partial class MiniWindow : Window
         var oldManualCts = Interlocked.Exchange(ref _manualQueryCts, null);
         try { oldManualCts?.Cancel(); } catch (ObjectDisposedException) { }
 
+        QuerySnapshotDraft? snapshotDraft = null;
         var ct = currentCts.Token;
 
         try
@@ -1158,11 +1169,12 @@ public sealed partial class MiniWindow : Window
             TranslationLanguage detectedLanguage;
             if (sourceLanguage == TranslationLanguage.Auto)
             {
-                detectedLanguage = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
+                detectedLanguage = await DetectionWarning.DetectAsync(detectionService, inputText, ct);
                 UpdateDetectedLanguageDisplay(detectedLanguage);
             }
             else
             {
+                _detectionWarning?.Reset();
                 detectedLanguage = sourceLanguage;
                 DetectedLangText.Text = "";
                 DetectedLangText.Visibility = Visibility.Collapsed;
@@ -1235,6 +1247,16 @@ public sealed partial class MiniWindow : Window
                 }
             }
 
+            // The preparation prompt can disable the last grammar service and
+            // change both the query mode and target language.
+            snapshotDraft = _settings.HistoryEnabled ? new QuerySnapshotDraft(
+                inputText,
+                detectedLanguage.ToIso639(),
+                targetLanguage.ToIso639(),
+                SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
+                sourceKind,
+                historyEnabled: true) : null;
+
             SetLoading(true);
             _hasAutoPlayedCurrentQuery = false;
 
@@ -1253,7 +1275,7 @@ public sealed partial class MiniWindow : Window
             if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
             {
                 await StartGrammarCorrectionInternalAsync(
-                    inputText, detectedLanguage, targetLanguage, ct);
+                    inputText, detectedLanguage, targetLanguage, ct, snapshotDraft);
                 return;
             }
 
@@ -1290,7 +1312,7 @@ public sealed partial class MiniWindow : Window
                     {
                         // Streaming path for LLM services (pass manager to avoid re-acquiring)
                         await ExecuteStreamingTranslationForServiceAsync(
-                            manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                            manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
                         outcome = QueryExecutionOutcome.Success;
                     }
                     else
@@ -1300,6 +1322,11 @@ public sealed partial class MiniWindow : Window
                         // HTTP response processing, JSON parsing, and retry logic
                         var result = await Task.Run(
                             () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
+                        snapshotDraft?.TryAddTranslation(
+                            serviceResult.ServiceId,
+                            serviceResult.ServiceDisplayName,
+                            _serviceResults.IndexOf(serviceResult),
+                            result);
 
                         DispatcherQueue.TryEnqueue(() =>
                         {
@@ -1401,6 +1428,11 @@ public sealed partial class MiniWindow : Window
         {
             if (!_isClosing) SetLoading(false);
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
+            if (snapshotDraft is not null)
+            {
+                using var recordCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await SavedItemsService.Instance.RecordSnapshotAsync(snapshotDraft, recordCts.Token);
+            }
         }
     }
 
@@ -1408,10 +1440,10 @@ public sealed partial class MiniWindow : Window
     /// Wrapper that always tracks the query task before returning.
     /// Avoids "downgrading" from a running real task to a no-op completed task.
     /// </summary>
-    private Task StartQueryTrackedAsync()
+    private Task StartQueryTrackedAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
     {
         var oldTask = _currentQueryTask;
-        var newTask = StartQueryAsync();
+        var newTask = StartQueryAsync(sourceKind);
         Task trackedTask;
 
         // Only update _currentQueryTask if:
@@ -1453,7 +1485,8 @@ public sealed partial class MiniWindow : Window
         string inputText,
         TranslationLanguage detectedLang,
         TranslationLanguage targetLanguage,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null)
     {
         var grammarRequest = new GrammarCorrectionRequest
         {
@@ -1472,8 +1505,8 @@ public sealed partial class MiniWindow : Window
         var tasks = _serviceResults
             .Where(sr => sr.EnabledQuery)
             .Select(sr => sr.IsGrammarCapable
-                ? ExecuteGrammarCorrectionForServiceAsync(sr, grammarRequest, ct)
-                : ExecuteTranslationForServiceAsync(sr, translationRequest, detectedLang, targetLanguage, ct))
+                ? ExecuteGrammarCorrectionForServiceAsync(sr, grammarRequest, ct, snapshotDraft, _serviceResults.IndexOf(sr))
+                : ExecuteTranslationForServiceAsync(sr, translationRequest, detectedLang, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(sr)))
             .ToArray();
 
         var taskResults = await Task.WhenAll(tasks);
@@ -1497,7 +1530,9 @@ public sealed partial class MiniWindow : Window
         TranslationRequest request,
         TranslationLanguage detectedLanguage,
         TranslationLanguage targetLanguage,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null,
+        int displayOrder = 0)
     {
         serviceResult.MarkQueried();
 
@@ -1509,13 +1544,18 @@ public sealed partial class MiniWindow : Window
             if (manager.IsStreamingService(serviceResult.ServiceId))
             {
                 await ExecuteStreamingTranslationForServiceAsync(
-                    manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                    manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, displayOrder);
                 return true;
             }
 
             var result = await Task.Run(
                 () => manager.TranslateAsync(request, ct, serviceResult.ServiceId), ct);
 
+            snapshotDraft?.TryAddTranslation(
+                serviceResult.ServiceId,
+                serviceResult.ServiceDisplayName,
+                displayOrder,
+                result);
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isClosing) return;
@@ -1581,7 +1621,9 @@ public sealed partial class MiniWindow : Window
     private async Task<bool?> ExecuteGrammarCorrectionForServiceAsync(
         ServiceQueryResult serviceResult,
         GrammarCorrectionRequest request,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null,
+        int displayOrder = 0)
     {
         serviceResult.MarkQueried();
 
@@ -1635,6 +1677,11 @@ public sealed partial class MiniWindow : Window
                 serviceResult.GrammarResult = grammarResult;
                 RequestResize();
             });
+            snapshotDraft?.TryAddGrammar(
+                serviceResult.ServiceId,
+                serviceResult.ServiceDisplayName,
+                displayOrder,
+                grammarResult);
 
             return true;
         }
@@ -1680,7 +1727,9 @@ public sealed partial class MiniWindow : Window
         TranslationRequest request,
         TranslationLanguage detectedLanguage,
         TranslationLanguage targetLanguage,
-        CancellationToken ct)
+        CancellationToken ct,
+        QuerySnapshotDraft? snapshotDraft = null,
+        int displayOrder = 0)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var sb = new StringBuilder();
@@ -1758,6 +1807,11 @@ public sealed partial class MiniWindow : Window
         {
             // Best-effort: continue with original result if enrichment fails
         }
+        snapshotDraft?.TryAddTranslation(
+            serviceResult.ServiceId,
+            serviceResult.ServiceDisplayName,
+            displayOrder,
+            result);
 
         DispatcherQueue.TryEnqueue(() =>
         {
@@ -1818,7 +1872,7 @@ public sealed partial class MiniWindow : Window
             DetectedLangText.Text = string.Format(
                 LocalizationService.Instance.GetString("DetectedLanguage"),
                 displayName);
-            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
+            DetectedLangText.Visibility = Visibility.Visible;
         }
         else
         {
@@ -1862,6 +1916,37 @@ public sealed partial class MiniWindow : Window
     private void OnOcrClicked(object sender, RoutedEventArgs e)
     {
         _ = App.TriggerOcrTranslateAsync();
+    }
+
+    private MenuFlyout CreateSavedItemsMenu()
+    {
+        var history = new MenuFlyoutItem
+        {
+            Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsHistory", "History")
+        };
+        AutomationProperties.SetAutomationId(history, "MiniHistoryMenuItem");
+        history.Click += (_, _) => App.OpenSavedItems(SavedItemsSection.History);
+        var favorites = new MenuFlyoutItem
+        {
+            Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsFavorites", "Favorites")
+        };
+        AutomationProperties.SetAutomationId(favorites, "MiniFavoritesMenuItem");
+        favorites.Click += (_, _) => App.OpenSavedItems(SavedItemsSection.Favorites);
+
+        var menu = new MenuFlyout();
+        menu.Items.Add(history);
+        menu.Items.Add(favorites);
+        menu.Opening += (_, _) =>
+        {
+            // The button owns the flyout's lifetime and activation. Cancel pending
+            // input focus and keep activation callbacks from stealing menu focus.
+            ++_inputFocusGeneration;
+            _isSavedItemsMenuOpen = true;
+            history.Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsHistory", "History");
+            favorites.Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsFavorites", "Favorites");
+        };
+        menu.Closed += (_, _) => _isSavedItemsMenuOpen = false;
+        return menu;
     }
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
@@ -2054,6 +2139,7 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private void OnSourceLangChanged(object sender, SelectionChangedEventArgs e)
     {
+        _detectionWarning?.Reset();
         if (!_isLoaded || _suppressSourceLanguageSelectionChanged)
             return;
 
@@ -2105,7 +2191,7 @@ public sealed partial class MiniWindow : Window
     /// <summary>
     /// Set text and start translation (called from external sources).
     /// </summary>
-    public void SetTextAndTranslate(string text)
+    public void SetTextAndTranslate(string text, QuerySourceKind sourceKind)
     {
         _targetLanguageSelector.Reset();
 
@@ -2116,7 +2202,7 @@ public sealed partial class MiniWindow : Window
         }
 
         InputTextBox.Text = text;
-        _ = StartQueryTrackedAsync();
+        _ = StartQueryTrackedAsync(sourceKind);
     }
 
     /// <summary>
@@ -2195,11 +2281,13 @@ public sealed partial class MiniWindow : Window
         return true;
     }
 
-    private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts)
+    private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts, int? generation = null)
     {
-        if (InputTextBox == null) return;
+        if (InputTextBox == null || _isSavedItemsMenuOpen) return;
+        var focusGeneration = generation ?? ++_inputFocusGeneration;
         DispatcherQueue.TryEnqueue(async () =>
         {
+            if (focusGeneration != _inputFocusGeneration) return;
             var attempt = InputFocusMaxAttempts - attemptsRemaining + 1;
 
             if (_isClosing)
@@ -2216,7 +2304,7 @@ public sealed partial class MiniWindow : Window
                 if (attemptsRemaining > 1)
                 {
                     await Task.Delay(InputFocusRetryDelayMs);
-                    QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                    QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
                 }
                 return;
             }
@@ -2229,7 +2317,7 @@ public sealed partial class MiniWindow : Window
                 if (attemptsRemaining > 1)
                 {
                     await Task.Delay(InputFocusRetryDelayMs);
-                    QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                    QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
                 }
                 return;
             }
@@ -2254,7 +2342,7 @@ public sealed partial class MiniWindow : Window
             if (attemptsRemaining > 1)
             {
                 await Task.Delay(InputFocusRetryDelayMs);
-                QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
             }
         });
     }
@@ -2343,6 +2431,7 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
+        WindowIconService.SetWindowIcon(_appWindow);
         if (this.Content is FrameworkElement root)
         {
             MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);
@@ -2417,7 +2506,9 @@ public sealed partial class MiniWindow : Window
         {
             RefreshDetectedLanguageChrome();
         }
-        StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        StatusText.Visibility = Visibility.Visible;
+        WindowSurface.Padding = new Thickness(compact ? 8 : 12);
+        RefreshDetectedLanguageChrome();
         DispatcherQueue.TryEnqueue(() => _titleBarHelper?.UpdateDragRegions());
     }
 
@@ -2542,6 +2633,7 @@ public sealed partial class MiniWindow : Window
 
         PinButton.Visibility = !compact && settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
         OcrButton.Visibility = !compact && settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+        SavedItemsMoreButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         SwapButton.Visibility = !compact && settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
         SourcePlayButton.Visibility = (!compact && settings.ShowSourcePlayButton)
             ? Visibility.Visible

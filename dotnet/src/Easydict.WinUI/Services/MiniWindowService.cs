@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Easydict.TranslationService.Models;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
 
@@ -131,11 +132,11 @@ public sealed class MiniWindowService : IDisposable
     /// <summary>
     /// Show the mini window with text to translate.
     /// </summary>
-    public void ShowWithText(string text)
+    public void ShowWithText(string text, QuerySourceKind sourceKind)
     {
         ShowRequests.Invalidate();
         EnsureWindowCreated();
-        _miniWindow?.SetTextAndTranslate(text);
+        _miniWindow?.SetTextAndTranslate(text, sourceKind);
         _miniWindow?.ShowAndActivate();
     }
 

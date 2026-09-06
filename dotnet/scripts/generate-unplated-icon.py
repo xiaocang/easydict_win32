@@ -7,8 +7,7 @@ via flood fill, preserving the speech bubble graphics with transparency.
 Usage:
     python3 scripts/generate-unplated-icon.py [source_png] [output_png]
 
-Defaults:
-    source: dotnet/src/Easydict.WinUI/Assets/macos/white-black-icon.appiconset/icon_512x512@2x.png
+    source: dotnet/src/Easydict.WinUI/Assets/Branding/AppIconSource.png
     output: dotnet/src/Easydict.WinUI/Assets/icon_unplated_1024.png
 """
 import sys
@@ -20,6 +19,10 @@ def create_unplated_icon(src_path: str, out_path: str) -> None:
     """Remove white rounded-rect background via flood fill from border pixels."""
     img = Image.open(src_path).convert("RGBA")
     w, h = img.size
+    if img.getchannel("A").getextrema()[0] < 255:
+        img.save(out_path, "PNG")
+        print(f"  Source already has transparency; saved unchanged: {out_path}")
+        return
     pixels = img.load()
 
     visited = [[False] * w for _ in range(h)]
@@ -90,8 +93,7 @@ def create_unplated_icon(src_path: str, out_path: str) -> None:
 
 def main() -> None:
     src = sys.argv[1] if len(sys.argv) > 1 else (
-        "dotnet/src/Easydict.WinUI/Assets/macos/"
-        "white-black-icon.appiconset/icon_512x512@2x.png"
+        "dotnet/src/Easydict.WinUI/Assets/Branding/AppIconSource.png"
     )
     out = sys.argv[2] if len(sys.argv) > 2 else (
         "dotnet/src/Easydict.WinUI/Assets/icon_unplated_1024.png"

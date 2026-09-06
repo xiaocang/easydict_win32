@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Easydict.TranslationService.Models;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
 
@@ -176,7 +177,7 @@ public sealed class PopButtonService : IDisposable
         _dispatcherQueue.TryEnqueue(() =>
         {
             TextInsertionService.CaptureSourceWindow();
-            MiniWindowService.Instance.ShowWithText(text);
+            MiniWindowService.Instance.ShowWithText(text, QuerySourceKind.Selection);
         });
     }
 

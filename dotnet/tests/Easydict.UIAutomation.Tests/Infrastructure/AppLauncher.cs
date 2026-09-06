@@ -258,6 +258,14 @@ public sealed class AppLauncher : IDisposable
             {
                 lastException = ex;
             }
+            catch (System.ComponentModel.Win32Exception ex) when (
+                ex.NativeErrorCode is 1460 or unchecked((int)0x800705B4) ||
+                ex.Message.Contains("(0x800705B4)", StringComparison.OrdinalIgnoreCase))
+            {
+                // FlaUI 4 Com.Call preserves the COM message but replaces its
+                // HRESULT with Marshal.GetLastWin32Error, which may be unrelated.
+                lastException = ex;
+            }
 
             Thread.Sleep(500);
         }

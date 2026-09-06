@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -101,6 +102,33 @@ namespace Easydict.WinUI
         /// Gets the main window instance.
         /// </summary>
         public static Window? MainWindow => Instance._window;
+
+        /// <summary>
+        /// Opens a saved-items section from any application window without rebuilding the
+        /// main window or accumulating duplicate history entries.
+        /// </summary>
+        internal static void OpenSavedItems(SavedItemsSection section)
+        {
+            var app = Instance;
+            var dispatcher = app._window?.DispatcherQueue;
+            dispatcher?.TryEnqueue(async () =>
+            {
+                app.ShowAndActivateWindow();
+                var frame = app.EnsureRootFrame();
+                if (frame is null)
+                {
+                    return;
+                }
+
+                if (frame.Content is Views.SavedItemsPage savedItemsPage)
+                {
+                    await savedItemsPage.ShowSectionAsync(section);
+                    return;
+                }
+
+                _ = frame.Navigate(typeof(Views.SavedItemsPage), new SavedItemsNavigationRequest(section));
+            });
+        }
 
         /// <summary>
         /// Gets the HotkeyService instance for dynamic reloading.
@@ -249,6 +277,7 @@ namespace Easydict.WinUI
             // Initialize services
             CrashDiagnostics.Log("[OnLaunched] Initializing services...");
             InitializeServices();
+            _ = InitializeSavedItemsAsync();
             _servicesInitialized = true;
             CrashDiagnostics.Log("[OnLaunched] Launch complete!");
 
@@ -508,7 +537,7 @@ namespace Easydict.WinUI
                     if (!string.IsNullOrWhiteSpace(text)
                         && _window?.Content is Frame frame && frame.Content is MainPage mainPage)
                     {
-                        mainPage.SetTextAndTranslate(text);
+                        mainPage.SetTextAndTranslate(text, QuerySourceKind.Selection);
                     }
                 });
             }
@@ -545,7 +574,7 @@ namespace Easydict.WinUI
                     text =>
                     {
                         if (!string.IsNullOrWhiteSpace(text))
-                            service.ShowWithText(text);
+                            service.ShowWithText(text, QuerySourceKind.Selection);
                         else
                             service.Show();
                         CrashDiagnostics.Log($"[WindowShow] Mini: activation requested={stopwatch.ElapsedMilliseconds}ms");
@@ -586,7 +615,7 @@ namespace Easydict.WinUI
                     text =>
                     {
                         if (!string.IsNullOrWhiteSpace(text))
-                            service.ShowWithText(text);
+                            service.ShowWithText(text, QuerySourceKind.Selection);
                         else
                             service.Show();
                         CrashDiagnostics.Log($"[WindowShow] Fixed: activation requested={stopwatch.ElapsedMilliseconds}ms");
@@ -671,7 +700,7 @@ namespace Easydict.WinUI
 
                     if (_window?.Content is Frame frame && frame.Content is MainPage mainPage)
                     {
-                        mainPage.SetTextAndTranslate(text);
+                        mainPage.SetTextAndTranslate(text, QuerySourceKind.Clipboard);
                     }
                 });
             }
@@ -1330,6 +1359,7 @@ namespace Easydict.WinUI
                     // Resume on the UI thread before disposing WinUI windows below.
                     await ocrService.DisposeAsync();
                 }
+                await Services.SavedItems.SavedItemsService.Instance.CleanupServicesAsync();
             }
             finally
             {
@@ -1355,6 +1385,7 @@ namespace Easydict.WinUI
 
         private OcrTranslateService? BeginCleanupServices()
         {
+            Services.SavedItems.SavedItemsService.Instance.BeginCleanupServices();
             MiniWindowService.Instance.ShowRequests.Invalidate();
             FixedWindowService.Instance.ShowRequests.Invalidate();
             // Dispose OCR signal event first — this unblocks the listener thread's WaitOne()
@@ -1376,6 +1407,22 @@ namespace Easydict.WinUI
             _trayIconService?.Dispose();
 
             return Interlocked.Exchange(ref _ocrTranslateService, null);
+        }
+
+        private static async Task InitializeSavedItemsAsync()
+        {
+            try
+            {
+                await Services.SavedItems.SavedItemsService.Instance.InitializeAsync();
+            }
+            catch (Exception exception)
+            {
+                CrashDiagnostics.LogException(
+                    "App.InitializeSavedItems",
+                    exception,
+                    isTerminating: false,
+                    isHandled: true);
+            }
         }
 
         private void FinishCleanupServices()
@@ -1488,10 +1535,13 @@ namespace Easydict.WinUI
 
             var elementTheme = MinimalThemeService.ToElementTheme(theme);
             ApplyMainWindowTitleBarChrome(theme, elementTheme);
+            WindowIconService.SetWindowIcon(Instance._appWindow);
+            Instance._trayIconService?.RefreshThemeIcon();
 
             if (Instance._window?.Content is Frame frame)
             {
                 ApplyFrameTheme(frame, theme, forceThemeResourceRefresh);
+                if (frame.Content is SavedItemsPage savedPage) savedPage.RefreshSavedAppearance();
             }
             else if (Instance._window?.Content is FrameworkElement mainRoot)
             {
@@ -1518,6 +1568,8 @@ namespace Easydict.WinUI
             {
                 mainPage.ApplyAppearance();
             }
+            if (Instance._window?.Content is Frame savedFrame && savedFrame.Content is SavedItemsPage savedPage)
+                savedPage.RefreshSavedAppearance();
 
             MiniWindowService.Instance.ApplyAppearance();
             FixedWindowService.Instance.ApplyAppearance();
@@ -1636,11 +1688,6 @@ namespace Easydict.WinUI
 
         private void QueueSystemThemeRefresh()
         {
-            if (!IsSystemTheme(SettingsService.Instance.AppTheme))
-            {
-                return;
-            }
-
             if (Interlocked.Exchange(ref _systemThemeRefreshQueued, 1) == 1)
             {
                 return;
@@ -1659,6 +1706,8 @@ namespace Easydict.WinUI
         private void RefreshSystemThemeIfChanged()
         {
             _systemThemeRefreshQueued = 0;
+            // Taskbar theme changes must apply even with an explicit app theme.
+            _trayIconService?.RefreshThemeIcon();
 
             if (!IsSystemTheme(SettingsService.Instance.AppTheme))
             {

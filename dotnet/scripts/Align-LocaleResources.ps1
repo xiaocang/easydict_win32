@@ -8,11 +8,15 @@ When a key is present in en-US but missing in a locale, this script appends the
 key to the locale file using the en-US value as fallback. Existing translations
 are left untouched. The translation team can replace the English fallback values
 later without re-running this script.
+
+Use -AlignLayout to also match the en-US key order and line layout while keeping
+existing translated values. This makes corresponding resource keys line up in all locales.
 #>
 
 [CmdletBinding()]
 param(
-    [string] $StringsRoot = (Join-Path $PSScriptRoot '..\src\Easydict.WinUI\Strings')
+    [string] $StringsRoot = (Join-Path $PSScriptRoot '..\src\Easydict.WinUI\Strings'),
+    [switch] $AlignLayout
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +45,34 @@ function Read-DataBlocks {
 
 $enUs = Read-DataBlocks -Path $enUsPath
 Write-Host "en-US has $($enUs.Blocks.Count) keys"
+
+if ($AlignLayout) {
+    $valueRegex = [regex] '(?s)<value>(?<value>.*?)</value>'
+    $template = $enUs.Text.Replace("`r`n", "`n").Replace("`r", "`n")
+    foreach ($file in Get-ChildItem -File -Path (Join-Path $StringsRoot '*\Resources.resw')) {
+        $loc = Read-DataBlocks -Path $file.FullName
+        $extra = @($loc.Blocks.Keys | Where-Object { -not $enUs.Blocks.Contains($_) })
+        if ($extra.Count -gt 0) {
+            throw "Cannot align $($file.Directory.Name): keys absent from en-US: $($extra -join ', ')"
+        }
+        $newText = $dataRegex.Replace($template, [System.Text.RegularExpressions.MatchEvaluator] {
+            param($match)
+            $key = $match.Groups['name'].Value
+            if (-not $loc.Blocks.Contains($key)) { return $match.Value }
+            $valueMatch = $valueRegex.Match($loc.Blocks[$key])
+            if (-not $valueMatch.Success) { throw "Missing string value for $key in $($file.FullName)" }
+            # XML character references preserve embedded newlines without moving later keys.
+            $value = $valueMatch.Groups['value'].Value.Replace("`r`n", "`n").Replace("`r", "`n").Replace("`n", '&#xA;')
+            return $valueRegex.Replace($match.Value, [System.Text.RegularExpressions.MatchEvaluator] {
+                param($valueNode)
+                return "<value>$value</value>"
+            })
+        })
+        [System.IO.File]::WriteAllText($file.FullName, $newText.Replace("`n", "`r`n"), [System.Text.UTF8Encoding]::new($false))
+        Write-Host "  $($file.Directory.Name): layout aligned"
+    }
+    return
+}
 
 $locales = Get-ChildItem -Directory -Path $StringsRoot |
     Where-Object { $_.Name -ne 'en-US' } |

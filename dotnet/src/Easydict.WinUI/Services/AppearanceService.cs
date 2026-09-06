@@ -25,7 +25,7 @@ public readonly struct AppearanceSettings
 internal static class AppearanceService
 {
     // Base font sizes hardcoded in the result-item XAML today.
-    private const double BaseResultFontSize = 13.0;
+    private const double BaseResultFontSize = 14.0;
     private const double BaseServiceNameFontSize = 12.0;
     private const double BaseStatusFontSize = 10.0;
 

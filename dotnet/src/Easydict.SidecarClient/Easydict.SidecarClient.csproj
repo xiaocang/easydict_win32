@@ -9,5 +9,9 @@
     <AssemblyName>Easydict.SidecarClient</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
+  </ItemGroup>
+
 </Project>
 

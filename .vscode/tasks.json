@@ -493,7 +493,7 @@
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                "${workspaceFolder}/dotnet/scripts/generate-assets-from-macos-icon.ps1"
+                "${workspaceFolder}/dotnet/scripts/generate-windows-assets.ps1"
             ],
             "problemMatcher": [],
             "presentation": {

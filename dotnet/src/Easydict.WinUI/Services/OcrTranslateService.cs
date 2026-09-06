@@ -60,7 +60,7 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
 
         if (!_dispatcherQueue.TryEnqueue(() =>
         {
-            MiniWindowService.Instance.ShowWithText(text);
+            MiniWindowService.Instance.ShowWithText(text, QuerySourceKind.Ocr);
         }))
         {
             Debug.WriteLine("[OcrTranslate] Failed to enqueue MiniWindow show — dispatcher shut down?");

@@ -14,23 +14,38 @@ internal static class ServiceResultViewHost
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
         FrameworkElement? themeRoot = null,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        bool isSavedItemView = false,
+        EventHandler? copyCompleted = null)
     {
         IServiceResultView control = MinimalThemeService.IsActive
             ? new MinimalServiceResultItem()
             : new ServiceResultItem();
 
         control.ThemeRoot = themeRoot;
+        control.IsSavedItemView = isSavedItemView;
         control.CollapseToggled += collapseToggled;
         control.QueryRequested += queryRequested;
         if (foundryLocalStartRequested is not null)
         {
             control.FoundryLocalStartRequested += foundryLocalStartRequested;
         }
+        if (favoriteRequested is not null)
+        {
+            control.FavoriteRequested += favoriteRequested;
+        }
+        if (copyCompleted is not null)
+        {
+            control.CopyCompleted += copyCompleted;
+        }
+        control.RenderingStatusChanged += OnRenderingStatusChanged;
+        if (copyCompleted is null) control.CopyCompleted += OnCopyCompleted;
         control.ServiceResult = result;
         ApplyAutomationProperties(control, result);
         control.RefreshThemeChrome();
         control.ApplyAppearance(AppearanceService.CurrentSnapshot());
+        control.SetFavoriteState(favoriteRequested is not null, isFavorited: false);
         return control;
     }
 
@@ -41,18 +56,38 @@ internal static class ServiceResultViewHost
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
         FrameworkElement? themeRoot = null,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        bool isSavedItemView = false,
+        EventHandler? copyCompleted = null)
     {
         var control = Create(
             result,
             collapseToggled,
             queryRequested,
             themeRoot ?? resultsPanel,
-            foundryLocalStartRequested);
+            foundryLocalStartRequested,
+            favoriteRequested,
+            isSavedItemView,
+            copyCompleted);
         controls.Add(control);
         resultsPanel.Items.Add(control.Element);
         control.RefreshThemeChrome();
         return control;
+    }
+
+    private static void OnRenderingStatusChanged(object? sender, ResultRenderingEventArgs e)
+    {
+        if (sender is not IServiceResultView view) return;
+        if (e.IsFallback) view.Feedback.Show("FluentDictionaryFallback", error: true);
+        else view.Feedback.Cleanup();
+    }
+
+    private static void OnCopyCompleted(object? sender, EventArgs e)
+    {
+        if (sender is not IServiceResultView view) return;
+        var failed = e is ResultCopyEventArgs { Error: not null };
+        view.Feedback.Show(failed ? "FluentCopyFailed" : "FluentCopied", error: failed, transient: !failed);
     }
 
     private static void ApplyAutomationProperties(IServiceResultView control, ServiceQueryResult result)
@@ -81,22 +116,33 @@ internal static class ServiceResultViewHost
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
         FrameworkElement? themeRoot = null,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        bool isSavedItemView = false,
+        EventHandler? copyCompleted = null)
     {
         using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.RebuildForCurrentTheme");
 
-        Release(controls, resultsPanel, collapseToggled, queryRequested, foundryLocalStartRequested);
+        var favoriteStates = controls
+            .Where(control => control.ServiceResult is not null)
+            .ToDictionary(control => control.ServiceResult!, control => control.FavoriteState);
+        Release(controls, resultsPanel, collapseToggled, queryRequested, foundryLocalStartRequested, favoriteRequested, copyCompleted);
 
         foreach (var result in results)
         {
-            Add(
+            var control = Add(
                 result,
                 controls,
                 resultsPanel,
                 collapseToggled,
                 queryRequested,
                 themeRoot,
-                foundryLocalStartRequested);
+                foundryLocalStartRequested,
+                favoriteRequested,
+                isSavedItemView,
+                copyCompleted);
+            if (favoriteStates.TryGetValue(result, out var favoriteState))
+                control.SetFavoriteState(favoriteState.IsVisible, favoriteState.IsFavorited);
         }
     }
 
@@ -105,7 +151,9 @@ internal static class ServiceResultViewHost
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
-        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null,
+        EventHandler<ServiceQueryResult>? favoriteRequested = null,
+        EventHandler? copyCompleted = null)
     {
         using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.Release");
 
@@ -117,6 +165,16 @@ internal static class ServiceResultViewHost
             {
                 control.FoundryLocalStartRequested -= foundryLocalStartRequested;
             }
+            if (favoriteRequested is not null)
+            {
+                control.FavoriteRequested -= favoriteRequested;
+            }
+            if (copyCompleted is not null)
+            {
+                control.CopyCompleted -= copyCompleted;
+            }
+            control.RenderingStatusChanged -= OnRenderingStatusChanged;
+            control.CopyCompleted -= OnCopyCompleted;
             control.Cleanup();
         }
 

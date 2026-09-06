@@ -379,9 +379,11 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void MiniEntry_RestoresMainFromSettingsAndPreservesDraft(bool compact)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void MiniEntry_RestoresMainFromSettingsAndPreservesDraft(bool compact, bool multiline)
     {
         using var dpiScope = new PerMonitorDpiScope();
         using var fixture = new Fixture("Light", 200, compact, enableMini: true);
@@ -391,23 +393,23 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         Invoke(Wait(main, "SettingsButton"));
         Wait(main, "MainScrollViewer");
         main.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Minimized);
+        Retry.WhileFalse(() => main.Patterns.Window.Pattern.WindowVisualState.Value == WindowVisualState.Minimized,
+            TimeSpan.FromSeconds(5)).Result.Should().BeTrue();
         UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
-        var mini = Retry.WhileNull(() => launcher.Application.GetAllTopLevelWindows(launcher.Automation)
-            .FirstOrDefault(candidate => candidate.Properties.NativeWindowHandle.Value != main.Properties.NativeWindowHandle.Value && !candidate.IsOffscreen), TimeSpan.FromSeconds(8)).Result!;
-        mini.Should().NotBeNull();
-        Wait(mini, "InputTextBox").AsTextBox().Text = "Fluent 2 draft 中文";
+        var mini = WaitForMiniWindow(launcher, main);
+        var draft = multiline ? string.Join("\n", Enumerable.Repeat("Fluent 2 draft 中文", 6)) : "Fluent 2 draft 中文";
+        Wait(mini, "InputTextBox").AsTextBox().Text = draft;
         OpenMiniSavedItemsMenu(mini, compact);
-        output.WriteLine(ScreenshotHelper.CaptureWindowWithPopup(mini, $"fluent2_mini_{(compact ? "compact" : "standard")}_menu",
+        output.WriteLine(ScreenshotHelper.CaptureWindowWithPopup(mini, $"fluent2_mini_{(compact ? "compact" : "standard")}{(multiline ? "_multiline" : "")}_menu",
             WaitForMiniMenuItem(launcher, mini, "MiniHistoryMenuItem"), WaitForMiniMenuItem(launcher, mini, "MiniFavoritesMenuItem")));
         Invoke(WaitForMiniMenuItem(launcher, mini, "MiniHistoryMenuItem"));
         Wait(main, "SavedItemsSearchBox");
         main.Patterns.Window.Pattern.WindowVisualState.Value.Should().Be(WindowVisualState.Normal);
         UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
-        mini = Retry.WhileNull(() => launcher.Application.GetAllTopLevelWindows(launcher.Automation)
-            .FirstOrDefault(candidate => candidate.Properties.NativeWindowHandle.Value != main.Properties.NativeWindowHandle.Value && !candidate.IsOffscreen), TimeSpan.FromSeconds(8)).Result!;
+        mini = WaitForMiniWindow(launcher, main);
         var input = Find(mini, "InputTextBox") ?? Find(mini, "SourceTextCollapsed");
         input.Should().NotBeNull();
-        (input!.Patterns.Value.PatternOrDefault?.Value.Value ?? input.Name).Should().Contain("Fluent 2 draft 中文");
+        (input!.Patterns.Value.PatternOrDefault?.Value.Value ?? input.Name).ReplaceLineEndings("\n").Should().Be(draft);
         OpenMiniSavedItemsMenu(mini, compact);
         Invoke(WaitForMiniMenuItem(launcher, mini, "MiniFavoritesMenuItem"));
         Wait(main, "SavedItemsPageTitle").Properties.HelpText.Value.Should().Be("SavedItemsSection:Favorites");
@@ -441,6 +443,20 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         throw new InvalidOperationException($"Missing {id} in mini window and application popup roots");
     }
 
+    private Window WaitForMiniWindow(AppLauncher launcher, Window main)
+    {
+        // A popup or a window whose XAML root is still loading is not a ready Mini.
+        var mini = Retry.WhileNull(() => launcher.Application.GetAllTopLevelWindows(launcher.Automation)
+            .FirstOrDefault(candidate => candidate.Properties.NativeWindowHandle.Value != main.Properties.NativeWindowHandle.Value && !candidate.IsOffscreen &&
+                Find(candidate, "InputTextBox") is { IsOffscreen: false }),
+            TimeSpan.FromSeconds(12)).Result;
+        mini.Should().NotBeNull("the Mini window must finish loading before entering a draft");
+        output.WriteLine($"Mini candidate: title={mini!.Name}, class={mini.Properties.ClassName.ValueOrDefault}, handle={mini.Properties.NativeWindowHandle.Value}; main={main.Properties.NativeWindowHandle.Value}");
+        mini!.SetForeground();
+        Wait(mini, "InputTextBox").Focus();
+        return mini;
+    }
+
     private static void OpenMiniSavedItemsMenu(Window mini, bool compact)
     {
         mini.SetForeground();
@@ -450,6 +466,26 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         button.Focus();
         Retry.WhileFalse(() => button.Properties.HasKeyboardFocus.ValueOrDefault,
             TimeSpan.FromSeconds(5)).Result.Should().BeTrue("menu button must have focus before opening");
+        // Focus is observable before the text-change resize queue and LostFocus
+        // layout have drained. Keep the window and anchor stable across the
+        // Mini's 150 ms resize throttle before opening a light-dismiss flyout.
+        var stable = System.Diagnostics.Stopwatch.StartNew();
+        var windowBounds = mini.BoundingRectangle;
+        var buttonBounds = button.BoundingRectangle;
+        Retry.WhileFalse(() =>
+        {
+            var currentWindowBounds = mini.BoundingRectangle;
+            var currentButtonBounds = button.BoundingRectangle;
+            var collapsed = Find(mini, "SourceTextCollapsed") is { IsOffscreen: false };
+            if (!collapsed || !button.Properties.HasKeyboardFocus.ValueOrDefault ||
+                currentWindowBounds != windowBounds || currentButtonBounds != buttonBounds)
+            {
+                windowBounds = currentWindowBounds;
+                buttonBounds = currentButtonBounds;
+                stable.Restart();
+            }
+            return stable.ElapsedMilliseconds >= 300;
+        }, TimeSpan.FromSeconds(8)).Result.Should().BeTrue("the collapsed input and menu anchor must settle before opening");
         Invoke(button);
     }
 

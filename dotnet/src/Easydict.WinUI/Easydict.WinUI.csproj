@@ -292,10 +292,10 @@
     <Target Name="GenerateAppIconIco"
             Condition="$([MSBuild]::IsOSPlatform('Windows'))"
             BeforeTargets="BeforeBuild"
-            Inputs="$(ProjectDir)Assets\Branding\AppIconSource.png;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1;$(ProjectDir)..\..\scripts\IconRasterizer.cs"
-            Outputs="&quot;$(IntermediateOutputPath)AppIcon.ico&quot;">
+            Inputs="$(MSBuildProjectFullPath);$(ProjectDir)Assets\icon_unplated_1024.png;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1;$(ProjectDir)..\..\scripts\IconRasterizer.cs"
+            Outputs="$(IntermediateOutputPath)AppIcon.ico;$(IntermediateOutputPath)TrayIcon.png">
         <Exec
-            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\Branding\AppIconSource.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
+            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\..\scripts\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\icon_unplated_1024.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
     </Target>
 
     <Target Name="CopyAppIconToOutput"

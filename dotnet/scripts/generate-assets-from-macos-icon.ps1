@@ -73,6 +73,7 @@ try {
         $_.FullName -notmatch ([Regex]::Escape([System.IO.Path]::Combine($assetsFull, 'Branding'))) -and
         # Exclude the transparent source master and its derivatives.
         $_.Name -ne 'icon_unplated_1024.png' -and
+        $_.Name -notlike 'Square44x44Logo.*' -and
         $_.Name -notlike '*_altform-unplated.png'
     }
 

@@ -94,8 +94,9 @@ public sealed class TrayIconService : IDisposable
         System.Drawing.Icon? next = null;
         try
         {
-            next = dark && File.Exists(ThemedIconService.DarkIconPath)
-                ? new System.Drawing.Icon(ThemedIconService.DarkIconPath)
+            var themedIconPath = ThemedIconService.GetTrayIconPath(dark);
+            next = File.Exists(themedIconPath)
+                ? new System.Drawing.Icon(themedIconPath)
                 : GetTrayIconPath() is { } path ? new System.Drawing.Icon(path) : null;
             if (next is null)
             {

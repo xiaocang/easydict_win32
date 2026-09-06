@@ -171,11 +171,7 @@ if (-not (Test-Path $SourceIcon)) {
 }
 
 if (-not (Test-Path $UnplatedIcon)) {
-    Write-Host "WARNING: Unplated icon not found: $UnplatedIcon" -ForegroundColor Yellow
-    Write-Host "  Unplated variants will use the same source as plated variants." -ForegroundColor Yellow
-    Write-Host "  To generate a proper unplated icon (transparent background), run:" -ForegroundColor Yellow
-    Write-Host "    python3 scripts/generate-unplated-icon.py" -ForegroundColor Yellow
-    $UnplatedIcon = $SourceIcon
+    throw "Unplated icon not found: $UnplatedIcon. Run python dotnet/scripts/generate-unplated-icon.py first."
 }
 
 Write-Host "Using source icon: $SourceIcon (1024x1024)" -ForegroundColor Cyan
@@ -204,7 +200,8 @@ foreach ($asset in $assets) {
             }
         } else {
             $size = $scaleValue
-            if (Resize-Image -SourcePath $SourceIcon -OutputPath $outputPath -Width $size -Height $size) {
+            $assetSource = if ($asset.Name -eq 'Square44x44Logo') { $UnplatedIcon } else { $SourceIcon }
+            if (Resize-Image -SourcePath $assetSource -OutputPath $outputPath -Width $size -Height $size) {
                 $successCount++
             } else {
                 $failCount++
@@ -226,18 +223,18 @@ if (Resize-Image -SourcePath $SourceIcon -OutputPath (Join-Path $OutputDir "Stor
 Write-Host "Generating: Square44x44Logo targetsize variants" -ForegroundColor Yellow
 $targetSizes = @(16, 24, 32, 48, 256)
 foreach ($size in $targetSizes) {
-    # Plated version
+    # Default shell resource, also used when no altform qualifier is requested.
     $outputPath = Join-Path $OutputDir "Square44x44Logo.targetsize-$size.png"
-    if (Resize-Image -SourcePath $SourceIcon -OutputPath $outputPath -Width $size -Height $size) {
+    if (Resize-Image -SourcePath $UnplatedIcon -OutputPath $outputPath -Width $size -Height $size) {
         $successCount++
     } else {
         $failCount++
     }
 
     # Windows also selects altform-unplated for Start, search, and pinned taskbar icons.
-    # Keep the plate in this shared shell resource; native window icons below use UnplatedIcon.
+    # Use the transparent artwork consistently across these shell surfaces.
     $outputPath = Join-Path $OutputDir "Square44x44Logo.targetsize-${size}_altform-unplated.png"
-    if (Resize-Image -SourcePath $SourceIcon -OutputPath $outputPath -Width $size -Height $size) {
+    if (Resize-Image -SourcePath $UnplatedIcon -OutputPath $outputPath -Width $size -Height $size) {
         $successCount++
     } else {
         $failCount++
@@ -251,7 +248,7 @@ Write-Host "  Successful: $successCount" -ForegroundColor Green
 Write-Host "  Failed: $failCount" -ForegroundColor $(if ($failCount -gt 0) { "Red" } else { "Gray" })
 Write-Host "========================================" -ForegroundColor Cyan
 
-# Native title bars require ICO assets, including an outlined variant for dark themes.
+# Native title bars and the system tray share ICO assets, with a subtle outline for dark themes.
 $windowIconDir = Join-Path $OutputDir 'Branding/Unplated'
 foreach ($dark in @($false, $true)) {
     $iconName = if ($dark) { 'AppIcon.Dark.ico' } else { 'AppIcon.ico' }

@@ -65,14 +65,21 @@ public sealed class SavedItemsService : IAsyncDisposable
         if (draft is null || !_acceptBackgroundRecords)
             return;
 
-        var snapshot = draft.Snapshot();
-        if (snapshot.Results.Count == 0)
+        if (!draft.HasResults)
             return;
 
         try
         {
             await SerializeWriteAsync(async token =>
             {
+                if (!draft.HistoryEnabled)
+                {
+                    var favorites = await _store.GetFavoriteStatesAsync(draft.Id, token).ConfigureAwait(false);
+                    if (!favorites.IsQueryFavorited && favorites.FavoritedResultIds.Count == 0)
+                        return;
+                }
+
+                var snapshot = draft.Snapshot();
                 var changed = await _store.UpsertTrackedSnapshotAsync(snapshot, draft.HistoryEnabled, token).ConfigureAwait(false);
                 if (changed)
                     OnChanged(new SavedItemsChangedEventArgs(SavedItemsChangeKind.History, snapshot.Id));

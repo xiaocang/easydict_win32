@@ -17,6 +17,70 @@ namespace Easydict.UIAutomation.Tests.Tests;
 public sealed class SavedItemsVisualTests(ITestOutputHelper output)
 {
     [Fact]
+    public void History_BoundedWindowSupportsBackwardPagingAndNavigationRestore()
+    {
+        var previousDiagnostics = Environment.GetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS");
+        Environment.SetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS", "1");
+        try
+        {
+            using var dpiScope = new PerMonitorDpiScope();
+            using var fixture = new Fixture("Light", 300);
+            using var launcher = new AppLauncher();
+            launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+            var window = launcher.GetMainWindow();
+            OpenHistory(window);
+            Wait(window, "SavedItemsList").FindAllChildren(cf => cf.ByControlType(ControlType.ListItem))
+                .First(row => !row.IsOffscreen).Patterns.SelectionItem.Pattern.Select();
+            var source = Wait(window, "SavedItemsDetailSourceText").Name;
+            var metrics = ReadMetrics();
+            for (var page = 0; page < 20 && RowIndex(metrics, "LastRow") < 299; page++)
+            {
+                ScrollHelper.ScrollToPercent(Wait(window, "SavedItemsList"), 100);
+                Thread.Sleep(300);
+                metrics = ReadMetrics();
+            }
+            RowIndex(metrics, "LastRow").Should().Be(299, "evicting old rows must not prevent reaching the final page");
+            RowIndex(metrics, "FirstRow").Should().BeGreaterThan(0, "the list must evict previously loaded rows");
+
+            var firstRow = metrics.GetProperty("FirstRow").GetString();
+            Invoke(Wait(window, "SavedItemsReturnToTranslationButton"));
+            OpenHistory(window);
+            Wait(window, "SavedItemsDetailSourceText").Name.Should().Be(source,
+                "an open detail must be restored even when its list row was evicted");
+            metrics = ReadMetrics();
+            metrics.GetProperty("FirstRow").GetString().Should().Be(firstRow, "navigation restores the bounded window without replaying all earlier pages");
+
+            for (var page = 0; page < 20 && RowIndex(metrics, "FirstRow") > 0; page++)
+            {
+                ScrollHelper.ScrollToPercent(Wait(window, "SavedItemsList"), 0);
+                Thread.Sleep(300);
+                metrics = ReadMetrics();
+            }
+            RowIndex(metrics, "FirstRow").Should().Be(0, "evicted records must remain reachable by scrolling backwards");
+
+            JsonElement ReadMetrics()
+            {
+                var path = Path.Combine(Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR")!, "saved-items-metrics.json");
+                File.Delete(path);
+                window.SetForeground();
+                FlaUI.Core.Input.Keyboard.TypeSimultaneously(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL,
+                    FlaUI.Core.WindowsAPI.VirtualKeyShort.SHIFT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F12);
+                Retry.WhileFalse(() => File.Exists(path), TimeSpan.FromSeconds(10)).Result.Should().BeTrue();
+                using var report = JsonDocument.Parse(File.ReadAllText(path));
+                var value = report.RootElement.Clone();
+                value.GetProperty("LoadedRows").GetInt32().Should().BeLessThanOrEqualTo(100);
+                value.GetProperty("CachedRows").GetInt32().Should().BeLessThanOrEqualTo(200);
+                output.WriteLine(value.ToString());
+                return value;
+            }
+
+            static int RowIndex(JsonElement metrics, string key) => int.Parse(
+                System.Text.RegularExpressions.Regex.Match(metrics.GetProperty(key).GetString()!, @"\[(\d+)\]").Groups[1].Value);
+        }
+        finally { Environment.SetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS", previousDiagnostics); }
+    }
+
+    [Fact]
     public void Favorites_BackgroundNotification_RefreshesDetailAndPreservesUnsavedNote()
     {
         var previousDiagnostics = Environment.GetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS");

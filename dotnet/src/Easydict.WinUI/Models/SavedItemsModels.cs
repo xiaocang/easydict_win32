@@ -156,7 +156,10 @@ public sealed record HistoryListRequest(
     DateTimeOffset? StartUtc = null,
     DateTimeOffset? EndUtc = null,
     SavedItemsCursor? Cursor = null,
-    int PageSize = 50);
+    int PageSize = 50,
+    bool BeforeCursor = false,
+    bool IncludeCursor = false,
+    int SourceTextLimit = 0);
 
 public sealed record FavoriteListRequest(
     string? SearchText = null,
@@ -164,7 +167,10 @@ public sealed record FavoriteListRequest(
     IReadOnlyList<string>? Tags = null,
     bool PinnedOnly = false,
     SavedItemsCursor? Cursor = null,
-    int PageSize = 50);
+    int PageSize = 50,
+    bool BeforeCursor = false,
+    bool IncludeCursor = false,
+    int SourceTextLimit = 0);
 
 public sealed record SavedItemsFilterOptions(
     IReadOnlyList<(string Id, string Name)> Providers,
@@ -285,7 +291,29 @@ public static class SavedResultPreview
 public sealed class QuerySnapshotDraft
 {
     private readonly object _gate = new();
-    private readonly Dictionary<string, SavedProviderResultSnapshot> _results = new(StringComparer.Ordinal);
+    // Keep immutable result data (sharing strings), not serialized copies of every result.
+    // JSON and search documents exist only for the duration of a persistence operation.
+    private readonly Dictionary<string, PendingResult> _results = new(StringComparer.Ordinal);
+
+    private sealed record PendingResult(Guid Id, string ProviderId, string ProviderName, int DisplayOrder,
+        DateTimeOffset CreatedUtc, TranslationResult? Translation, GrammarCorrectionResult? Grammar)
+    {
+        public SavedProviderResultSnapshot Materialize()
+        {
+            if (Translation is { } translation)
+                return new(Id, ProviderId, ProviderName, DisplayOrder, SavedResultContentType.Translation,
+                    translation.TranslatedText, SavedResultPreview.FromTranslation(translation),
+                    System.Text.Json.JsonSerializer.Serialize(translation), BuildTranslationSearchText(translation),
+                    translation.TimingMs, CreatedUtc);
+
+            var grammar = Grammar!;
+            return new(Id, ProviderId, ProviderName, DisplayOrder, SavedResultContentType.GrammarCorrection,
+                grammar.CorrectedText, SavedResultPreview.FromGrammar(grammar),
+                System.Text.Json.JsonSerializer.Serialize(grammar),
+                string.Join(' ', new[] { grammar.CorrectedText, grammar.Explanation }
+                    .Where(static value => !string.IsNullOrWhiteSpace(value))), grammar.TimingMs, CreatedUtc);
+        }
+    }
 
     public QuerySnapshotDraft(
         string sourceText,
@@ -315,39 +343,41 @@ public sealed class QuerySnapshotDraft
     public bool HistoryEnabled { get; }
     public DateTimeOffset CreatedUtc { get; }
 
+    public bool HasResults { get { lock (_gate) return _results.Count > 0; } }
+
+    public Guid? GetResultId(string providerId)
+    {
+        lock (_gate) return _results.TryGetValue(providerId, out var result) ? result.Id : null;
+    }
+
     public bool TryAddTranslation(string providerId, string providerName, int displayOrder, TranslationResult result)
     {
-        if (result.ResultKind != TranslationResultKind.Success || string.IsNullOrWhiteSpace(SavedResultPreview.CollapseWhitespace(result.TranslatedText)))
+        if (string.IsNullOrWhiteSpace(providerId) || result.ResultKind != TranslationResultKind.Success || string.IsNullOrWhiteSpace(result.TranslatedText))
             return false;
 
-        var payload = System.Text.Json.JsonSerializer.Serialize(result);
-        return Add(providerId, providerName, displayOrder, SavedResultContentType.Translation,
-            result.TranslatedText, SavedResultPreview.FromTranslation(result), payload,
-            BuildTranslationSearchText(result), result.TimingMs);
+        // Providers can expose mutable collections through IReadOnlyList. Freeze their
+        // structure now so deferred serialization still describes the completed query.
+        return Add(providerId, providerName, displayOrder, Freeze(result), null);
     }
 
     public bool TryAddGrammar(string providerId, string providerName, int displayOrder, GrammarCorrectionResult result)
     {
-        if (string.IsNullOrWhiteSpace(SavedResultPreview.CollapseWhitespace(result.CorrectedText)))
+        if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(result.CorrectedText))
             return false;
 
-        var payload = System.Text.Json.JsonSerializer.Serialize(result);
-        return Add(providerId, providerName, displayOrder, SavedResultContentType.GrammarCorrection,
-            result.CorrectedText, SavedResultPreview.FromGrammar(result), payload,
-            string.Join(' ', new[] { result.CorrectedText, result.Explanation }.Where(static value => !string.IsNullOrWhiteSpace(value))), result.TimingMs);
+        return Add(providerId, providerName, displayOrder, null, result);
     }
 
     public QuerySnapshot Snapshot()
     {
-        lock (_gate)
-        {
-            return new QuerySnapshot(Id, SourceText, SourceLanguage, TargetLanguage, Kind, SourceKind, CreatedUtc,
-                _results.Values.OrderBy(static result => result.DisplayOrder).ToArray());
-        }
+        PendingResult[] results;
+        lock (_gate) results = _results.Values.ToArray();
+        return new QuerySnapshot(Id, SourceText, SourceLanguage, TargetLanguage, Kind, SourceKind, CreatedUtc,
+            results.OrderBy(static result => result.DisplayOrder).Select(static result => result.Materialize()).ToArray());
     }
 
-    private bool Add(string providerId, string providerName, int displayOrder, SavedResultContentType contentType,
-        string plainText, string previewText, string payloadJson, string searchText, long latencyMs)
+    private bool Add(string providerId, string providerName, int displayOrder,
+        TranslationResult? translation, GrammarCorrectionResult? grammar)
     {
         if (string.IsNullOrWhiteSpace(providerId))
             return false;
@@ -355,11 +385,24 @@ public sealed class QuerySnapshotDraft
         lock (_gate)
         {
             var id = _results.TryGetValue(providerId, out var existing) ? existing.Id : Guid.NewGuid();
-            _results[providerId] = new SavedProviderResultSnapshot(id, providerId, providerName, displayOrder,
-                contentType, plainText, previewText, payloadJson, searchText, latencyMs, DateTimeOffset.UtcNow);
+            _results[providerId] = new PendingResult(id, providerId, providerName, displayOrder,
+                DateTimeOffset.UtcNow, translation, grammar);
             return true;
         }
     }
+
+    private static TranslationResult Freeze(TranslationResult result) => result with
+    {
+        Alternatives = result.Alternatives?.ToArray(),
+        WordResult = result.WordResult is not { } word ? null : new WordResult
+        {
+            Phonetics = word.Phonetics?.Select(p => new Phonetic { Text = p.Text, AudioUrl = p.AudioUrl, Accent = p.Accent }).ToArray(),
+            Definitions = word.Definitions?.Select(d => new Definition { PartOfSpeech = d.PartOfSpeech, Meanings = d.Meanings?.ToArray() }).ToArray(),
+            Examples = word.Examples?.ToArray(),
+            WordForms = word.WordForms?.Select(w => new WordForm { Name = w.Name, Value = w.Value }).ToArray(),
+            Synonyms = word.Synonyms?.Select(s => new Synonym { PartOfSpeech = s.PartOfSpeech, Meaning = s.Meaning, Words = s.Words?.ToArray() }).ToArray()
+        }
+    };
 
     private static string BuildTranslationSearchText(TranslationResult result)
     {

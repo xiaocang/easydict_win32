@@ -18,8 +18,11 @@ public sealed partial class SavedItemsPage : Page
 {
     private const double NarrowBreakpoint = 960;
     private const int PageSize = 25;
+    private const int MaxLoadedRows = 100;
+    private const int SourcePreviewLength = 256;
 
     private readonly ObservableCollection<SavedItemsRow> _items = [];
+    private readonly SavedItemsListWindow<SavedItemsRow> _listWindow = new(MaxLoadedRows, row => row.Cursor);
     private readonly ObservableCollection<string> _favoriteTags = [];
     private readonly List<IServiceResultView> _detailResultControls = [];
     private readonly List<IServiceResultView> _otherResultControls = [];
@@ -30,7 +33,7 @@ public sealed partial class SavedItemsPage : Page
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _searchTimer;
     private CancellationTokenSource? _loadCts;
     private SavedItemsSection _section = SavedItemsSection.History;
-    private SavedItemsCursor? _nextCursor;
+    private SavedItemsCursor? _nextCursor => _listWindow.NextCursor;
     private SavedQueryDetail? _activeDetail;
     private FavoriteDetail? _activeFavoriteDetail;
     private FavoriteStateMap _favoriteStates = new(false, new HashSet<Guid>());
@@ -131,10 +134,11 @@ public sealed partial class SavedItemsPage : Page
         _loadCts?.Dispose();
         _loadCts = null;
         Interlocked.Increment(ref _detailGeneration);
-        ReleaseResultViews();
-        _activeDetail = null;
-        _activeFavoriteDetail = null;
-        _pendingOtherResults = [];
+        ClearDetail();
+        _items.Clear();
+        _listWindow.Clear();
+        if (_listScrollViewer is not null) _listScrollViewer.ViewChanged -= OnListViewChanged;
+        _listScrollViewer = null;
     }
 
     private void OnSavedItemsChanged(object? sender, SavedItemsChangedEventArgs e)
@@ -173,7 +177,7 @@ public sealed partial class SavedItemsPage : Page
         else SavedItemsSearchBox.Text = _appliedSearch;
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(SavedItemsCursor? startCursor = null, bool includeCursor = false)
     {
         if (!_isInitialized || !_isPageLoaded)
             return;
@@ -185,23 +189,23 @@ public sealed partial class SavedItemsPage : Page
         _loadCts?.Dispose();
         _loadCts = new CancellationTokenSource();
         var cancellationToken = _loadCts.Token;
-        _nextCursor = null;
+        _listWindow.Clear();
         SetLoading(true);
 
         try
         {
             ApplySectionState();
-            var page = await QueryRowsAsync(null, cancellationToken);
+            var page = await QueryRowsAsync(startCursor, cancellationToken, includeCursor: includeCursor);
             if (generation != _loadGeneration || cancellationToken.IsCancellationRequested)
                 return;
 
             _appliedSearch = SavedItemsSearchBox.Text ?? string.Empty;
+            _listWindow.Reset(page, startCursor is null ? null : page.Items.FirstOrDefault()?.Cursor);
             _restoringSelection = true;
             _items.Clear();
-            AddRows(page.Items);
+            AddRows(_listWindow.Items);
             _restoringSelection = false;
             _lastDataRevision = SavedItemsService.Instance.Revision;
-            _nextCursor = page.NextCursor;
             UpdateEmptyState();
 
             var preserved = _items.FirstOrDefault(row =>
@@ -244,9 +248,9 @@ public sealed partial class SavedItemsPage : Page
         }
     }
 
-    private async Task LoadNextPageAsync()
+    private async Task LoadNextPageAsync(bool previous = false)
     {
-        if (_nextCursor is not { } cursor || _isLoadingNextPage || _loadCts is null)
+        if ((previous ? _listWindow.PreviousCursor : _nextCursor) is not { } cursor || _isLoadingNextPage || _loadCts is null)
             return;
 
         var generation = _loadGeneration;
@@ -255,12 +259,16 @@ public sealed partial class SavedItemsPage : Page
         SetLoading(true);
         try
         {
-            var page = await QueryRowsAsync(cursor, cancellationToken);
+            var page = await QueryRowsAsync(cursor, cancellationToken, beforeCursor: previous);
             if (generation != _loadGeneration || cancellationToken.IsCancellationRequested)
                 return;
 
-            AddRows(page.Items.Where(row => !_items.Any(existing => existing.StableId == row.StableId)));
-            _nextCursor = page.NextCursor;
+            page = page with { Items = page.Items.Where(row => !_items.Any(existing => existing.StableId == row.StableId)).ToArray() };
+            var anchor = CaptureListAnchor();
+            if (previous) _listWindow.Prepend(page);
+            else _listWindow.Append(page);
+            ReplaceWindowRows();
+            RestoreListAnchor(anchor);
         }
         catch (OperationCanceledException)
         {
@@ -280,7 +288,9 @@ public sealed partial class SavedItemsPage : Page
 
     private async Task<SavedItemsPageResult<SavedItemsRow>> QueryRowsAsync(
         SavedItemsCursor? cursor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool beforeCursor = false,
+        bool includeCursor = false)
     {
         if (_section == SavedItemsSection.History)
         {
@@ -293,7 +303,7 @@ public sealed partial class SavedItemsPage : Page
                     startUtc,
                     endUtc,
                     cursor,
-                    PageSize),
+                    PageSize, beforeCursor, includeCursor, SourcePreviewLength),
                 cancellationToken);
             var rows = page.Items.Select(item => new SavedItemsRow(
                 item.Id,
@@ -304,7 +314,11 @@ public sealed partial class SavedItemsPage : Page
                 FormatListTime(item.CreatedUtc),
                 [],
                 item.CreatedUtc,
-                string.Empty) { IconGlyph = item.Kind == SavedQueryKind.Ocr ? "\uE8A7" : item.Kind == SavedQueryKind.GrammarCorrection ? "\uE8F2" : "\uE8A5" }).ToArray();
+                string.Empty)
+                {
+                    Cursor = new SavedItemsCursor(item.RelevanceRank, item.CreatedUtc, item.Id),
+                    IconGlyph = item.Kind == SavedQueryKind.Ocr ? "\uE8A7" : item.Kind == SavedQueryKind.GrammarCorrection ? "\uE8F2" : "\uE8A5"
+                }).ToArray();
             return new SavedItemsPageResult<SavedItemsRow>(rows, page.NextCursor);
         }
 
@@ -315,7 +329,7 @@ public sealed partial class SavedItemsPage : Page
                 _appliedTags,
                 _pinnedOnly,
                 cursor,
-                PageSize),
+                PageSize, beforeCursor, includeCursor, SourcePreviewLength),
             cancellationToken);
         var favoriteRows = favoritesPage.Items.Select(item =>
         {
@@ -329,7 +343,7 @@ public sealed partial class SavedItemsPage : Page
                 FormatListTime(item.CreatedUtc),
                 item.Tags,
                 item.CreatedUtc,
-                string.Empty) { IconGlyph = item.IsPinned ? "\uE718" : "\uE734" };
+                string.Empty) { IconGlyph = item.IsPinned ? "\uE718" : "\uE734", Cursor = new SavedItemsCursor(0, item.CreatedUtc, item.Id, item.IsPinned) };
         }).ToArray();
         return new SavedItemsPageResult<SavedItemsRow>(favoriteRows, favoritesPage.NextCursor);
     }
@@ -346,7 +360,7 @@ public sealed partial class SavedItemsPage : Page
                 : string.Empty;
             _items.Add(new SavedItemsRow(row.QueryId, row.FavoriteId, row.SourceText,
                 row.Metadata, row.PreviewText, FormatListTime(row.CreatedUtc), row.Tags,
-                row.CreatedUtc, groupTitle) { IconGlyph = row.IconGlyph });
+                row.CreatedUtc, groupTitle) { IconGlyph = row.IconGlyph, Cursor = row.Cursor });
             previous = row.CreatedUtc;
         }
     }
@@ -651,6 +665,7 @@ public sealed partial class SavedItemsPage : Page
 
     private void OnListContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
+        ObserveListScrolling();
         if (!args.InRecycleQueue && args.Item is SavedItemsRow row)
         {
             AutomationProperties.SetName(args.ItemContainer, $"{row.SourceText}. {row.Metadata}. {row.PreviewText}");
@@ -658,19 +673,6 @@ public sealed partial class SavedItemsPage : Page
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isPageLoaded) RefreshListHighlights(container);
-            });
-        }
-        if (!args.InRecycleQueue && args.ItemIndex >= _items.Count - 5 && !_nextPageQueued)
-        {
-            // SQLite can complete synchronously. Never mutate ItemsSource while
-            // WinUI is realizing/recycling containers inside a layout pass.
-            _nextPageQueued = true;
-            var generation = _loadGeneration;
-            DispatcherQueue.TryEnqueue(async () =>
-            {
-                _nextPageQueued = false;
-                if (_isPageLoaded && generation == _loadGeneration)
-                    await LoadNextPageAsync();
             });
         }
     }
@@ -704,6 +706,11 @@ public sealed partial class SavedItemsPage : Page
             SavedItemsList.SelectedItem = row;
             _restoringSelection = false;
         }
+        await LoadDetailAsync(row);
+    }
+
+    private async Task LoadDetailAsync(SavedItemsRow row)
+    {
         _displayedRow = row;
         foreach (var item in _items)
             item.IsSelected = ReferenceEquals(item, row);
@@ -723,8 +730,7 @@ public sealed partial class SavedItemsPage : Page
             }
 
             if (generation != _detailGeneration ||
-                SavedItemsList.SelectedItem is not SavedItemsRow selected ||
-                selected.StableId != row.StableId ||
+                _displayedRow?.StableId != row.StableId ||
                 detail is null)
                 return;
 
@@ -1581,6 +1587,7 @@ public sealed partial class SavedItemsPage : Page
         string GroupTitle) : System.ComponentModel.INotifyPropertyChanged
     {
         public Guid StableId => FavoriteId ?? QueryId;
+        public SavedItemsCursor Cursor { get; init; } = null!;
         public string IconGlyph { get; init; } = "\uE8A5";
         private bool _isSelected;
         public bool IsSelected

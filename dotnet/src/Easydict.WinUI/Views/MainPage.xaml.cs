@@ -2262,16 +2262,14 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            var savedResult = draft.Snapshot().Results
-                .FirstOrDefault(result => string.Equals(result.ProviderId, serviceResult.ServiceId, StringComparison.Ordinal));
-            if (savedResult is null)
+            if (draft.GetResultId(serviceResult.ServiceId) is not { } resultId)
             {
                 return;
             }
 
             try
             {
-                var toggle = await SavedItemsService.Instance.ToggleResultFavoriteAsync(draft, savedResult.Id);
+                var toggle = await SavedItemsService.Instance.ToggleResultFavoriteAsync(draft, resultId);
                 foreach (var control in _resultControls.Where(control => ReferenceEquals(control.ServiceResult, serviceResult)))
                 {
                     control.SetFavoriteState(isVisible: true, toggle.IsFavorited);
@@ -2289,7 +2287,7 @@ namespace Easydict.WinUI.Views
         private async void OnCurrentQueryFavoriteClicked(object sender, RoutedEventArgs e)
         {
             var draft = _currentSnapshotDraft;
-            if (draft is null || draft.Snapshot().Results.Count == 0)
+            if (draft is null || !draft.HasResults)
                 return;
 
             CurrentQueryFavoriteButton.IsEnabled = false;
@@ -2316,14 +2314,13 @@ namespace Easydict.WinUI.Views
             if (_isClosing || !ReferenceEquals(draft, _currentSnapshotDraft))
                 return;
 
-            var snapshot = draft.Snapshot();
-            CurrentQueryFavoriteButton.Visibility = snapshot.Results.Count > 0 && _currentQuickQueryMode != QueryMode.LongDocument
+            CurrentQueryFavoriteButton.Visibility = draft.HasResults && _currentQuickQueryMode != QueryMode.LongDocument
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-            if (snapshot.Results.Count == 0)
+            if (!draft.HasResults)
                 return;
 
-            var states = await SavedItemsService.Instance.TryGetFavoriteStatesAsync(snapshot.Id);
+            var states = await SavedItemsService.Instance.TryGetFavoriteStatesAsync(draft.Id);
             if (_isClosing || !ReferenceEquals(draft, _currentSnapshotDraft))
                 return;
             if (states is null)

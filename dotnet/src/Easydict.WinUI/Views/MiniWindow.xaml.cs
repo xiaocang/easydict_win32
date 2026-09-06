@@ -50,7 +50,6 @@ public sealed partial class MiniWindow : Window
     private Task? _currentQueryTask;
     private readonly SettingsService _settings = SettingsService.Instance;
     private readonly List<ServiceQueryResult> _serviceResults = new();
-    private QuerySnapshotDraft? _currentSnapshotDraft;
     private readonly List<IServiceResultView> _resultControls = new();
     private readonly TargetLanguageSelector _targetLanguageSelector;
     private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
@@ -1184,7 +1183,6 @@ public sealed partial class MiniWindow : Window
             ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
 
             var targetLanguage = resolution.EffectiveTargetLanguage;
-            _currentSnapshotDraft = null;
             if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
             {
                 UpdateTargetLanguageSelector(targetLanguage);
@@ -1247,14 +1245,13 @@ public sealed partial class MiniWindow : Window
 
             // The preparation prompt can disable the last grammar service and
             // change both the query mode and target language.
-            snapshotDraft = new QuerySnapshotDraft(
+            snapshotDraft = _settings.HistoryEnabled ? new QuerySnapshotDraft(
                 inputText,
                 detectedLanguage.ToIso639(),
                 targetLanguage.ToIso639(),
                 SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
                 sourceKind,
-                _settings.HistoryEnabled);
-            _currentSnapshotDraft = snapshotDraft;
+                historyEnabled: true) : null;
 
             SetLoading(true);
             _hasAutoPlayedCurrentQuery = false;
@@ -1321,7 +1318,7 @@ public sealed partial class MiniWindow : Window
                         // HTTP response processing, JSON parsing, and retry logic
                         var result = await Task.Run(
                             () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
-                        snapshotDraft.TryAddTranslation(
+                        snapshotDraft?.TryAddTranslation(
                             serviceResult.ServiceId,
                             serviceResult.ServiceDisplayName,
                             _serviceResults.IndexOf(serviceResult),

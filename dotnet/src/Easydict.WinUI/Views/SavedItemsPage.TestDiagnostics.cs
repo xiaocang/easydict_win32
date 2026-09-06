@@ -27,6 +27,9 @@ public sealed partial class SavedItemsPage
                 AliveResults = ObservedResults.Count,
                 ActiveResults = _detailResultControls.Count + _otherResultControls.Count,
                 LoadedRows = _items.Count,
+                CachedRows = _sectionStates.Values.Sum(state => state.Rows.Length),
+                FirstRow = _items.FirstOrDefault()?.SourceText,
+                LastRow = _items.LastOrDefault()?.SourceText,
                 RealizedRows = realized,
                 PageWidth = ActualWidth,
                 Dpi = XamlRoot.RasterizationScale

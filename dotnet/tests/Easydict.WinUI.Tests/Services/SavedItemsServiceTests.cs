@@ -79,6 +79,33 @@ public sealed class SavedItemsServiceTests : IAsyncLifetime
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task DisabledHistory_LateProvidersStillUpdateLiveFavorites(bool wholeQuery)
+    {
+        var draft = CreateDraft("private source", historyEnabled: false);
+        var resultId = draft.GetResultId("provider")!.Value;
+        if (wholeQuery) await _service.ToggleQueryFavoriteAsync(draft);
+        else await _service.ToggleResultFavoriteAsync(draft, resultId);
+        draft.TryAddTranslation("late", "Late provider", 1, new TranslationResult
+        {
+            OriginalText = "private source", TranslatedText = "late result", ServiceName = "Late provider"
+        });
+        await _service.RecordSnapshotAsync(draft);
+
+        (await _service.GetQueryDetailAsync(draft.Id))!.Results.Should().HaveCount(2);
+        (await _service.ListHistoryAsync(new HistoryListRequest())).Items.Should().BeEmpty();
+        var states = await _service.GetFavoriteStatesAsync(draft.Id);
+        if (wholeQuery) states.IsQueryFavorited.Should().BeTrue();
+        else states.FavoritedResultIds.Should().Contain(resultId);
+
+        if (wholeQuery) await _service.ToggleQueryFavoriteAsync(draft);
+        else await _service.ToggleResultFavoriteAsync(draft, resultId);
+        await _service.RecordSnapshotAsync(draft);
+        (await _service.GetQueryDetailAsync(draft.Id)).Should().BeNull("a removed private favorite must not be recreated by background completion");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task QueryCompletion_WhenStorageIsUnavailable_RecordAndFavoriteRefreshAreBestEffort(bool corrupt)
     {
         var path = Path.Combine(_directory, "unavailable.db");

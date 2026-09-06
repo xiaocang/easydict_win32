@@ -280,7 +280,12 @@ public sealed class SavedItemsStore
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var query = SavedItemsSearch.Normalize(request.SearchText);
-        var sql = new StringBuilder("""
+        var dateComparison = request.BeforeCursor ? ">" : "<";
+        var idComparison = dateComparison + (request.IncludeCursor ? "=" : "");
+        var rankComparison = request.BeforeCursor ? "<" : ">";
+        var rankOrder = request.BeforeCursor ? "DESC" : "ASC";
+        var dateOrder = request.BeforeCursor ? "ASC" : "DESC";
+        var sql = new StringBuilder($"""
             WITH matching_results AS (
               SELECT r.*,
                 ROW_NUMBER() OVER (
@@ -313,7 +318,10 @@ public sealed class SavedItemsStore
                 AND (@start = '' OR q.created_utc >= @start)
                 AND (@end = '' OR q.created_utc < @end)
             )
-            SELECT q.id, q.mode, q.source_text, q.source_language, q.target_language,
+            SELECT q.id, q.mode,
+                   CASE WHEN @sourceLimit > 0 AND length(q.source_text) > @sourceLimit
+                        THEN substr(q.source_text, 1, @sourceLimit) || '…' ELSE q.source_text END AS source_text,
+                   q.source_language, q.target_language,
                    q.source_kind, q.created_utc, q.success_result_count, q.relevance_rank,
                    CASE WHEN @provider <> '' THEN selected_provider.provider_id WHEN @search = '' OR mr.id IS NULL THEN q.preview_provider_id ELSE mr.provider_id END AS preview_provider_id,
                    CASE WHEN @provider <> '' THEN selected_provider.provider_name WHEN @search = '' OR mr.id IS NULL THEN q.preview_provider_name ELSE mr.provider_name END AS preview_provider_name,
@@ -321,20 +329,21 @@ public sealed class SavedItemsStore
             FROM ranked q
             LEFT JOIN matching_results mr ON mr.query_id = q.id AND mr.match_order = 1
             LEFT JOIN saved_results selected_provider ON selected_provider.query_id = q.id AND selected_provider.provider_id = @provider
-            WHERE (@cursorId = '' OR q.relevance_rank > @cursorRank OR (q.relevance_rank = @cursorRank AND (q.created_utc < @cursorCreated OR (q.created_utc = @cursorCreated AND q.id < @cursorId))))
-            ORDER BY q.relevance_rank, q.created_utc DESC, q.id DESC
+            WHERE (@cursorId = '' OR q.relevance_rank {rankComparison} @cursorRank OR (q.relevance_rank = @cursorRank AND (q.created_utc {dateComparison} @cursorCreated OR (q.created_utc = @cursorCreated AND q.id {idComparison} @cursorId))))
+            ORDER BY q.relevance_rank {rankOrder}, q.created_utc {dateOrder}, q.id {dateOrder}
             LIMIT @take
             """);
         await using var command = connection.CreateCommand();
         command.CommandText = sql.ToString();
         AddHistoryParameters(command, request, query);
         command.Parameters.AddWithValue("@take", Math.Clamp(request.PageSize, 1, 50) + 1);
+        command.Parameters.AddWithValue("@sourceLimit", Math.Max(0, request.SourceTextLimit));
         var items = new List<SavedQueryListItem>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             items.Add(ReadQueryListItem(reader));
 
-        return Page(items, request.PageSize);
+        return Page(items, request.PageSize, request.BeforeCursor);
     }
 
     public async Task<SavedQueryDetail?> GetQueryDetailAsync(Guid queryId, CancellationToken cancellationToken = default)
@@ -386,8 +395,14 @@ public sealed class SavedItemsStore
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT f.*, q.source_text, q.source_language, q.target_language, q.mode, q.success_result_count,
+        var comparison = request.BeforeCursor ? ">" : "<";
+        var idComparison = comparison + (request.IncludeCursor ? "=" : "");
+        var order = request.BeforeCursor ? "ASC" : "DESC";
+        command.CommandText = $"""
+            SELECT f.*,
+                   CASE WHEN @sourceLimit > 0 AND length(q.source_text) > @sourceLimit
+                        THEN substr(q.source_text, 1, @sourceLimit) || '…' ELSE q.source_text END AS source_text,
+                   q.source_language, q.target_language, q.mode, q.success_result_count,
                    COALESCE(r.provider_id, q.preview_provider_id) AS provider_id,
                    COALESCE(r.provider_name, q.preview_provider_name) AS provider_name,
                    COALESCE(r.preview_text, q.preview_text) AS preview_text
@@ -414,8 +429,8 @@ public sealed class SavedItemsStore
                       AND filter_tag.tag_search_text IN (
                         @tag0, @tag1, @tag2, @tag3, @tag4, @tag5, @tag6, @tag7, @tag8, @tag9,
                         @tag10, @tag11, @tag12, @tag13, @tag14, @tag15, @tag16, @tag17, @tag18, @tag19)))
-              AND (@cursorId = '' OR f.pinned < @cursorPinned OR (f.pinned = @cursorPinned AND (f.created_utc < @cursorCreated OR (f.created_utc = @cursorCreated AND f.id < @cursorId))))
-            ORDER BY f.pinned DESC, f.created_utc DESC, f.id DESC
+              AND (@cursorId = '' OR f.pinned {comparison} @cursorPinned OR (f.pinned = @cursorPinned AND (f.created_utc {comparison} @cursorCreated OR (f.created_utc = @cursorCreated AND f.id {idComparison} @cursorId))))
+            ORDER BY f.pinned {order}, f.created_utc {order}, f.id {order}
             LIMIT @take
             """;
         var search = SavedItemsSearch.Normalize(request.SearchText);
@@ -427,6 +442,7 @@ public sealed class SavedItemsStore
         command.Parameters.AddWithValue("@cursorPinned", request.Cursor?.IsPinned == true ? 1 : 0);
         command.Parameters.AddWithValue("@cursorCreated", request.Cursor is { } cursor ? FormatUtc(cursor.CreatedUtc) : string.Empty);
         command.Parameters.AddWithValue("@take", Math.Clamp(request.PageSize, 1, 50) + 1);
+        command.Parameters.AddWithValue("@sourceLimit", Math.Max(0, request.SourceTextLimit));
         var tags = (request.Tags ?? [])
             .Select(SavedItemsSearch.Normalize)
             .Where(static tag => tag.Length > 0)
@@ -446,7 +462,7 @@ public sealed class SavedItemsStore
         for (var index = 0; index < items.Count; index++)
             items[index] = items[index] with { Tags = await GetTagsAsync(connection, items[index].Id, cancellationToken).ConfigureAwait(false) };
 
-        return Page(items, request.PageSize);
+        return Page(items, request.PageSize, request.BeforeCursor);
     }
 
     public async Task<FavoriteDetail?> GetFavoriteDetailAsync(Guid favoriteId, CancellationToken cancellationToken = default)
@@ -635,7 +651,7 @@ public sealed class SavedItemsStore
             Convert.ToInt32(reader.GetInt64(reader.GetOrdinal("success_result_count"))));
     }
 
-    private static SavedItemsPageResult<T> Page<T>(List<T> items, int pageSize) where T : notnull
+    private static SavedItemsPageResult<T> Page<T>(List<T> items, int pageSize, bool reverse = false) where T : notnull
     {
         var take = Math.Clamp(pageSize, 1, 50);
         var hasMore = items.Count > take;
@@ -646,6 +662,7 @@ public sealed class SavedItemsStore
             FavoriteListItem favorite => new SavedItemsCursor(0, favorite.CreatedUtc, favorite.Id, favorite.IsPinned),
             _ => null
         };
+        if (reverse) items.Reverse();
         return new SavedItemsPageResult<T>(items, hasMore ? cursor : null);
     }
 

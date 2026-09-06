@@ -75,6 +75,55 @@ public sealed class SavedResultPreviewTests
 public sealed class QuerySnapshotDraftTests
 {
     [Fact]
+    public void CaptureLargeResult_DoesNotAllocateSerializedOrSearchCopies()
+    {
+        var draft = new QuerySnapshotDraft("source", "en", "zh-CN", SavedQueryKind.Translation, QuerySourceKind.Manual, false);
+        var result = new TranslationResult
+        {
+            OriginalText = "source", TranslatedText = new string('中', 250_000),
+            RawHtml = "<p>" + new string('x', 250_000) + "</p>", ServiceName = "Dictionary"
+        };
+        draft.TryAddTranslation("warmup", "Dictionary", 0, result);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        draft.TryAddTranslation("dictionary", "Dictionary", 1, result);
+        var hasResults = draft.HasResults;
+        var id = draft.GetResultId("dictionary");
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        allocated.Should().BeLessThan(64 * 1024, "capturing a result and reading favorite state must not copy large text payloads");
+        hasResults.Should().BeTrue();
+        id.Should().NotBeNull();
+        var saved = draft.Snapshot().Results.Single(item => item.Id == id);
+        saved.PlainText.Should().BeSameAs(result.TranslatedText);
+        System.Text.Json.JsonSerializer.Deserialize<TranslationResult>(saved.PayloadJson)!.RawHtml.Should().Be(result.RawHtml);
+    }
+
+    [Fact]
+    public void DeferredSnapshot_FreezesProviderCollectionsAndPreservesResultIdentity()
+    {
+        var meanings = new List<string> { "original meaning" };
+        var examples = new List<string> { "original example" };
+        var draft = new QuerySnapshotDraft("word", "en", "zh-CN", SavedQueryKind.Translation, QuerySourceKind.Manual, false);
+        var result = new TranslationResult
+        {
+            OriginalText = "word", TranslatedText = "result", ServiceName = "Dictionary",
+            WordResult = new WordResult { Definitions = [new Definition { Meanings = meanings }], Examples = examples }
+        };
+        draft.TryAddTranslation("dictionary", "Dictionary", 0, result);
+        var id = draft.GetResultId("dictionary");
+        meanings[0] = "changed meaning";
+        examples.Clear();
+
+        var first = draft.Snapshot();
+        first.Results[0].PreviewText.Should().Be("original meaning");
+        first.Results[0].SearchText.Should().Contain("original example").And.NotContain("changed meaning");
+        draft.TryAddTranslation("dictionary", "Dictionary", 0, result with { TranslatedText = "updated" });
+        draft.GetResultId("dictionary").Should().Be(id);
+        first.Results[0].PlainText.Should().Be("result");
+        draft.Snapshot().Results[0].PlainText.Should().Be("updated");
+    }
+
+    [Fact]
     public void Draft_StoresOnlySuccessfulNonemptyProviderResults()
     {
         var draft = new QuerySnapshotDraft("source", "en", "zh-CN", SavedQueryKind.Translation, QuerySourceKind.Manual, true);
@@ -294,6 +343,72 @@ public sealed class SavedItemsStoreTests : IAsyncLifetime
         detail.Favorite.Tags.Should().BeEquivalentTo(first, "Other");
         var filtered = await _store.ListFavoritesAsync(new FavoriteListRequest(Tags: [equivalent]));
         filtered.Items.Should().ContainSingle(item => item.Id == favorite.FavoriteId);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("needle")]
+    public async Task History_BidirectionalPagingPreservesRankDateAndIdOrder(string search)
+    {
+        var now = DateTimeOffset.UtcNow;
+        for (var i = 0; i < 36; i++)
+        {
+            var source = (i % 3) switch { 0 => "needle", 1 => "needle prefix", _ => "contains needle" };
+            var draft = CreateTranslationDraft(source, "provider", "Provider", "result", true, now.AddMinutes(-(i / 6)));
+            await _store.UpsertTrackedSnapshotAsync(draft.Snapshot(), true);
+        }
+        var all = (await _store.ListHistoryAsync(new HistoryListRequest(search))).Items;
+        all.Should().HaveCount(36);
+        var first = await _store.ListHistoryAsync(new HistoryListRequest(search, PageSize: 7));
+        var second = await _store.ListHistoryAsync(new HistoryListRequest(search, Cursor: first.NextCursor, PageSize: 7));
+        second.Items.Select(row => row.Id).Should().Equal(all.Skip(7).Take(7).Select(row => row.Id));
+        var boundary = second.Items[0];
+        var cursor = new SavedItemsCursor(boundary.RelevanceRank, boundary.CreatedUtc, boundary.Id);
+        var previous = await _store.ListHistoryAsync(new HistoryListRequest(search, Cursor: cursor, PageSize: 7, BeforeCursor: true));
+        previous.Items.Select(row => row.Id).Should().Equal(first.Items.Select(row => row.Id));
+        previous.NextCursor.Should().BeNull();
+        var restored = await _store.ListHistoryAsync(new HistoryListRequest(search, Cursor: cursor, PageSize: 7, IncludeCursor: true));
+        restored.Items.Select(row => row.Id).Should().Equal(second.Items.Select(row => row.Id));
+        await _store.DeleteHistoryAsync(boundary.Id);
+        restored = await _store.ListHistoryAsync(new HistoryListRequest(search, Cursor: cursor, PageSize: 7, IncludeCursor: true));
+        restored.Items.Select(row => row.Id).Should().Equal(all.Skip(8).Take(7).Select(row => row.Id));
+    }
+
+    [Fact]
+    public async Task Favorites_CanPageBackAcrossPinnedBoundary()
+    {
+        for (var i = 0; i < 14; i++)
+        {
+            var draft = CreateTranslationDraft($"source {i}", "provider", "Provider", "result", false);
+            var favorite = await _store.AddQueryFavoriteAsync(draft.Snapshot());
+            if (i % 3 == 0) await _store.SetFavoritePinnedAsync(favorite.FavoriteId, true);
+        }
+        var first = await _store.ListFavoritesAsync(new FavoriteListRequest(PageSize: 7));
+        var second = await _store.ListFavoritesAsync(new FavoriteListRequest(Cursor: first.NextCursor, PageSize: 7));
+        second.NextCursor.Should().BeNull();
+        var boundary = second.Items[0];
+        var cursor = new SavedItemsCursor(0, boundary.CreatedUtc, boundary.Id, boundary.IsPinned);
+        var previous = await _store.ListFavoritesAsync(new FavoriteListRequest(Cursor: cursor, PageSize: 7, BeforeCursor: true));
+        previous.Items.Select(row => row.Id).Should().Equal(first.Items.Select(row => row.Id));
+        previous.NextCursor.Should().BeNull();
+        var restored = await _store.ListFavoritesAsync(new FavoriteListRequest(Cursor: cursor, PageSize: 7, IncludeCursor: true));
+        restored.Items.Select(row => row.Id).Should().Equal(second.Items.Select(row => row.Id));
+    }
+
+    [Fact]
+    public async Task ListSummaries_AreBoundedButSearchAndDetailStillUseFullSource()
+    {
+        var source = new string('中', 20_000) + " tail-search-token";
+        var draft = CreateTranslationDraft(source, "provider", "Provider", "result", true);
+        await _store.UpsertTrackedSnapshotAsync(draft.Snapshot(), true);
+        var favorite = await _store.ToggleStoredQueryFavoriteAsync(draft.Id);
+
+        var history = await _store.ListHistoryAsync(new HistoryListRequest("tail-search-token", SourceTextLimit: 256));
+        var favorites = await _store.ListFavoritesAsync(new FavoriteListRequest("tail-search-token", SourceTextLimit: 256));
+        history.Items.Should().ContainSingle().Which.SourceText.Should().Be(new string('中', 256) + "…");
+        favorites.Items.Should().ContainSingle().Which.SourceText.Should().Be(new string('中', 256) + "…");
+        (await _store.GetQueryDetailAsync(draft.Id))!.Query.SourceText.Should().Be(source);
+        (await _store.GetFavoriteDetailAsync(favorite.FavoriteId))!.Favorite.SourceText.Should().Be(source);
     }
 
     [Fact]

@@ -95,6 +95,12 @@ public sealed partial class SettingsPage
             return;
         }
 
+        // The listener only needs to live from "build the auth URL" through "receive the
+        // callback": it is bound as late as possible (right before this method builds the URL,
+        // since the port must be embedded in it) and stopped as early as possible, before the
+        // key exchange network call runs — the loopback port should not stay occupied any
+        // longer than it takes to get the authorization code back.
+        LoopbackCallbackResult callback;
         using (listener)
         {
             var authorizeUri = OrcaRouterAuthClient.BuildAuthorizeUri(
@@ -112,7 +118,6 @@ public sealed partial class SettingsPage
             if (_isUnloaded) return;
             SetOrcaRouterSignInStatus(loc.GetString("OrcaRouterSignInWaiting"));
 
-            LoopbackCallbackResult callback;
             try
             {
                 callback = await listener.WaitForCallbackAsync(session.State, linked.Token);
@@ -122,58 +127,60 @@ public sealed partial class SettingsPage
                 ReportOrcaRouterSignInCancelled(loc, timeoutCts);
                 return;
             }
-
-            if (_isUnloaded) return;
-
-            if (!callback.IsSuccess)
-            {
-                var reason = callback.ErrorDescription ?? callback.Error ?? "unknown";
-                SetOrcaRouterSignInStatus(string.Format(loc.GetString("OrcaRouterSignInFailed"), reason));
-                return;
-            }
-
-            string apiKey;
-            try
-            {
-                using var handle = TranslationManagerService.Instance.AcquireHandle();
-                var client = new OrcaRouterAuthClient(handle.Manager.SharedHttpClient);
-                apiKey = await client.ExchangeCodeForApiKeyAsync(callback.Code!, session.CodeVerifier, linked.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                ReportOrcaRouterSignInCancelled(loc, timeoutCts);
-                return;
-            }
-            catch (TranslationException ex)
-            {
-                Debug.WriteLine($"[OrcaRouterSignIn] Key exchange failed: {ex.Message}");
-                if (!_isUnloaded)
-                {
-                    SetOrcaRouterSignInStatus(string.Format(loc.GetString("OrcaRouterSignInFailed"), ex.Message));
-                }
-                return;
-            }
-
-            if (_isUnloaded) return;
-
-            // Persist first so OnSettingChanged's SameSecret() sees no diff when the box updates.
-            _settings.OrcaRouterApiKey = apiKey;
-            OrcaRouterKeyBox.Password = apiKey;
-            _settings.Save();
-            TranslationManagerService.Instance.ReconfigureServices();
-
-            SetOrcaRouterSignInStatus(loc.GetString("OrcaRouterSignInSucceeded"));
-
-            _hasRefreshedOrcaRouterModels = true;
-            await RefreshCatalogModelsAsync(
-                "orcarouter",
-                OrcaRouterModelCombo,
-                RefreshOrcaRouterModelsButton,
-                "orcarouter/free",
-                forceRefresh: true,
-                showErrorDialog: false,
-                FetchOrcaRouterModelsAsync);
         }
+        // listener is now stopped and the port released; everything below only makes network
+        // calls to OrcaRouter's API, not to the loopback socket.
+
+        if (_isUnloaded) return;
+
+        if (!callback.IsSuccess)
+        {
+            var reason = callback.ErrorDescription ?? callback.Error ?? "unknown";
+            SetOrcaRouterSignInStatus(string.Format(loc.GetString("OrcaRouterSignInFailed"), reason));
+            return;
+        }
+
+        string apiKey;
+        try
+        {
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var client = new OrcaRouterAuthClient(handle.Manager.SharedHttpClient);
+            apiKey = await client.ExchangeCodeForApiKeyAsync(callback.Code!, session.CodeVerifier, linked.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            ReportOrcaRouterSignInCancelled(loc, timeoutCts);
+            return;
+        }
+        catch (TranslationException ex)
+        {
+            Debug.WriteLine($"[OrcaRouterSignIn] Key exchange failed: {ex.Message}");
+            if (!_isUnloaded)
+            {
+                SetOrcaRouterSignInStatus(string.Format(loc.GetString("OrcaRouterSignInFailed"), ex.Message));
+            }
+            return;
+        }
+
+        if (_isUnloaded) return;
+
+        // Persist first so OnSettingChanged's SameSecret() sees no diff when the box updates.
+        _settings.OrcaRouterApiKey = apiKey;
+        OrcaRouterKeyBox.Password = apiKey;
+        _settings.Save();
+        TranslationManagerService.Instance.ReconfigureServices();
+
+        SetOrcaRouterSignInStatus(loc.GetString("OrcaRouterSignInSucceeded"));
+
+        _hasRefreshedOrcaRouterModels = true;
+        await RefreshCatalogModelsAsync(
+            "orcarouter",
+            OrcaRouterModelCombo,
+            RefreshOrcaRouterModelsButton,
+            "orcarouter/free",
+            forceRefresh: true,
+            showErrorDialog: false,
+            FetchOrcaRouterModelsAsync);
     }
 
     private void ReportOrcaRouterSignInCancelled(LocalizationService loc, CancellationTokenSource timeoutCts)

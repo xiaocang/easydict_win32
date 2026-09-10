@@ -1557,4 +1557,11 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Pr?ver en alternativ tjeneste.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Den alternative tjeneste genkendte {0}. Du kan forts?tte.</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Kildesproget kunne ikke genkendes. V?lg det manuelt, eller pr?v igen senere.</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Log ind med OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>Venter på, at du fuldfører login i din browser…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Logget ind. Din OrcaRouter API-nøgle er gemt.</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>Login mislykkedes: {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Login fik timeout. Prøv igen.</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Login annulleret.</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Browseren kunne ikke åbnes. Brug i stedet linket "Hent en API-nøgle" nedenfor.</value></data>
 </root>

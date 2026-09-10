@@ -74,6 +74,19 @@ public class OrcaRouterServiceTests
     }
 
     [Fact]
+    public void ReferralCode_IsEmbeddedInReferralUrl()
+    {
+        OrcaRouterService.ReferralCode.Should().Be("ref_a42265f998f62828c4d6");
+        OrcaRouterService.ReferralUrl.Should().EndWith("/" + OrcaRouterService.ReferralCode);
+    }
+
+    [Fact]
+    public void AppTitle_IdentifiesEasydictForWindows()
+    {
+        OrcaRouterService.AppTitle.Should().Be("Easydict for Windows");
+    }
+
+    [Fact]
     public void AvailableModels_ContainsFreeAndAutoRouters()
     {
         OrcaRouterService.AvailableModels.Should().Contain("orcarouter/free");

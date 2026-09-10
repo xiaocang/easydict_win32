@@ -1557,4 +1557,11 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Sedang mencuba perkhidmatan pengesanan sandaran.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Perkhidmatan sandaran mengenal pasti {0}. Anda boleh meneruskan.</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Bahasa sumber tidak dapat dikesan. Pilih secara manual atau cuba lagi kemudian.</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Log masuk dengan OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>Menunggu anda melengkapkan log masuk dalam pelayar…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Berjaya log masuk. Kunci API OrcaRouter anda telah disimpan.</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>Log masuk gagal: {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Log masuk tamat masa. Sila cuba lagi.</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Log masuk dibatalkan.</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Tidak dapat membuka pelayar. Gunakan pautan "Dapatkan kunci API" di bawah sebagai ganti.</value></data>
 </root>

@@ -1557,4 +1557,11 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Tentativo con un servizio di rilevamento alternativo.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Il servizio alternativo ha rilevato {0}. Puoi continuare.</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Impossibile rilevare la lingua di origine. Selezionala manualmente o riprova pi? tardi.</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Accedi con OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>In attesa che tu completi l'accesso nel browser…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Accesso effettuato. La tua chiave API OrcaRouter è stata salvata.</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>Accesso non riuscito: {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Accesso scaduto. Riprova.</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Accesso annullato.</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Impossibile aprire il browser. Usa invece il link "Ottieni una chiave API" qui sotto.</value></data>
 </root>

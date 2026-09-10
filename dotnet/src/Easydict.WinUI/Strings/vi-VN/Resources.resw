@@ -1557,4 +1557,11 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>?ang th? d?ch v? nh?n di?n d? ph?ng.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>D?ch v? d? ph?ng ?? nh?n di?n {0}. B?n c? th? ti?p t?c.</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Kh?ng th? nh?n di?n ng?n ng? ngu?n. H?y ch?n th? c?ng ho?c th? l?i sau.</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Đăng nhập bằng OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>Đang chờ bạn hoàn tất đăng nhập trong trình duyệt…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Đã đăng nhập. Khóa API OrcaRouter của bạn đã được lưu.</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>Đăng nhập thất bại: {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Đăng nhập đã hết thời gian chờ. Vui lòng thử lại.</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Đã hủy đăng nhập.</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Không thể mở trình duyệt. Hãy dùng liên kết "Lấy khóa API" bên dưới.</value></data>
 </root>

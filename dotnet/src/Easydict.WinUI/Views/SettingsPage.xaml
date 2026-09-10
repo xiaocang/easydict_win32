@@ -1390,6 +1390,21 @@
                                                       FontSize="14"/>
                                         </Button>
                                     </Grid>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8"
+                                                Margin="0,4,0,0">
+                                        <Button x:Name="SignInWithOrcaRouterButton"
+                                                AutomationProperties.AutomationId="SignInWithOrcaRouterButton"
+                                                Content="Sign in with OrcaRouter"
+                                                Click="OnSignInWithOrcaRouter"
+                                                Padding="12,6"/>
+                                        <TextBlock x:Name="OrcaRouterSignInStatusText"
+                                                   FontSize="12"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="Collapsed"/>
+                                    </StackPanel>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal"
                                         Spacing="8">

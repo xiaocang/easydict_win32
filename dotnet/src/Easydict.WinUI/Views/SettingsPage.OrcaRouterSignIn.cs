@@ -32,8 +32,9 @@ public sealed partial class SettingsPage
         // While a sign-in is waiting the button reads "Cancel"; don't clobber that.
         if (_orcaRouterSignInCts == null)
         {
-            SignInWithOrcaRouterButton.Content = loc.GetString(
-                IsOrcaRouterSignedInViaSso ? "DisconnectOrcaRouter" : "SignInWithOrcaRouter");
+            SignInWithOrcaRouterButton.Content = IsOrcaRouterSignedInViaSso
+                ? loc.GetString("DisconnectOrcaRouter")
+                : loc.GetString("SignInWithOrcaRouter");
         }
 
         // Lock the key box while it holds a key obtained via sign-in, so it's clear this isn't

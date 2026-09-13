@@ -1557,4 +1557,12 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>???????????</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>????????{0}???????</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>?????????????????????????</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>使用 OrcaRouter 登入</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>正在等待您在瀏覽器中完成登入…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>登入成功。OrcaRouter API 金鑰已儲存。</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>登入失敗：{0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>登入逾時，請再試一次。</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>登入已取消。</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>無法開啟瀏覽器。請改用下方的「取得 API 金鑰」連結。</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>中斷連線</value></data>
 </root>

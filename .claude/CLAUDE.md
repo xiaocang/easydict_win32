@@ -27,6 +27,7 @@ easydict_win32/
 │   │   │   └── Themes/                  # Theme resources
 │   │   ├── Easydict.TranslationService/ # Translation service library
 │   │   │   ├── Services/                # Translation service implementations
+│   │   │   │   └── Auth/                # OrcaRouter PKCE sign-in (loopback listener, code exchange)
 │   │   │   ├── Models/                  # Translation models
 │   │   │   ├── Streaming/               # LLM streaming support
 │   │   │   ├── LongDocument/            # Long doc core library
@@ -131,7 +132,7 @@ make run
 
 ## Key Features
 
-- **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, OpenRouter, OrcaRouter (both with a live free-first model catalog), custom OpenAI-compatible services, and local agent CLIs (Claude Code / Codex) that reuse the user's subscription without an API key
+- **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, OpenRouter, OrcaRouter (both with a live free-first model catalog; OrcaRouter also offers one-click browser sign-in via PKCE on a 127.0.0.1 loopback listener), custom OpenAI-compatible services, and local agent CLIs (Claude Code / Codex) that reuse the user's subscription without an API key
 - **LLM Streaming Translation**: Real-time display of translation results
 - **Multiple Window Modes**: Main, Mini, Fixed windows
 - **Long Document Translation**: PDF/Text/Markdown translation with ML layout detection, formula protection, parallel processing, bilingual output, and translation cache

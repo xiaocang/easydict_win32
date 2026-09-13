@@ -1557,4 +1557,12 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>???? ????? ???? ?????? ?????.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>???? ?????? ??????? ?????: {0}. ????? ????????.</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>???? ?????? ??? ??????. ????? ?????? ?? ???? ??? ???? ??????.</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>تسجيل الدخول باستخدام OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>في انتظار إكمال تسجيل الدخول في المتصفح…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>تم تسجيل الدخول. تم حفظ مفتاح OrcaRouter API الخاص بك.</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>فشل تسجيل الدخول: {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>انتهت مهلة تسجيل الدخول. يرجى المحاولة مرة أخرى.</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>تم إلغاء تسجيل الدخول.</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>تعذر فتح المتصفح. استخدم رابط "الحصول على مفتاح API" أدناه بدلاً من ذلك.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>قطع الاتصال</value></data>
 </root>

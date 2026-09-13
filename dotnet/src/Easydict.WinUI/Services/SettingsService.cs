@@ -162,6 +162,10 @@ public sealed class SettingsService
     // OrcaRouter settings
     public string? OrcaRouterApiKey { get; set; }
     public string OrcaRouterModel { get; set; } = "orcarouter/free";
+    // True once the API key above was obtained via "Sign in with OrcaRouter" (PKCE), rather
+    // than pasted in manually. The Settings UI locks the key box while this is set, so the
+    // user isn't left wondering whether it's still safe to hand-edit; Disconnect clears both.
+    public bool OrcaRouterSignedInViaSso { get; set; }
 
     // Gemini settings
     public string? GeminiApiKey { get; set; }
@@ -758,6 +762,7 @@ public sealed class SettingsService
         // OrcaRouter settings
         OrcaRouterApiKey = GetSensitiveSetting(nameof(OrcaRouterApiKey));
         OrcaRouterModel = GetValue(nameof(OrcaRouterModel), "orcarouter/free");
+        OrcaRouterSignedInViaSso = GetValue(nameof(OrcaRouterSignedInViaSso), false);
 
         // Gemini settings
         GeminiApiKey = GetSensitiveSetting(nameof(GeminiApiKey));
@@ -1051,6 +1056,7 @@ public sealed class SettingsService
         // OrcaRouter settings
         SaveSensitiveSetting(nameof(OrcaRouterApiKey), OrcaRouterApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(OrcaRouterModel)] = OrcaRouterModel;
+        _settings[nameof(OrcaRouterSignedInViaSso)] = OrcaRouterSignedInViaSso;
 
         // Gemini settings
         SaveSensitiveSetting(nameof(GeminiApiKey), GeminiApiKey, preserveUnmigratedSensitiveSettings);

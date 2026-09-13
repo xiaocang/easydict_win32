@@ -15,10 +15,22 @@ public sealed class OrcaRouterService : BaseOpenAIService, IModelCatalogProvider
     private const string DefaultModel = "orcarouter/free";
 
     /// <summary>
+    /// Maintainer referral code, passed as <c>ref</c> to the PKCE sign-in page and embedded
+    /// in <see cref="ReferralUrl"/>.
+    /// </summary>
+    public const string ReferralCode = "ref_a42265f998f62828c4d6";
+
+    /// <summary>
     /// Referral link used to sign up for OrcaRouter. Settings explicitly labels it as a
     /// referral link so users can make an informed choice before opening it.
     /// </summary>
-    public const string ReferralUrl = "https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6";
+    public const string ReferralUrl = "https://www.orcarouter.ai/ref/" + ReferralCode;
+
+    /// <summary>
+    /// How Easydict identifies itself to OrcaRouter (the <c>X-Title</c> header on API calls
+    /// and <c>app_name</c> on the PKCE sign-in page).
+    /// </summary>
+    public const string AppTitle = "Easydict for Windows";
 
     /// <summary>
     /// Seed model list used before the live catalog has been fetched.
@@ -77,7 +89,7 @@ public sealed class OrcaRouterService : BaseOpenAIService, IModelCatalogProvider
         request.Headers.TryAddWithoutValidation(
             "HTTP-Referer",
             "https://github.com/xiaocang/easydict_win32");
-        request.Headers.TryAddWithoutValidation("X-Title", "Easydict for Windows");
+        request.Headers.TryAddWithoutValidation("X-Title", AppTitle);
     }
 
     /// <summary>

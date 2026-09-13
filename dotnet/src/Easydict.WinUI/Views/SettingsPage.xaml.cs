@@ -1452,6 +1452,7 @@ public sealed partial class SettingsPage : Page
         OrcaRouterGetKeyLink.Content = loc.GetString("GetApiKeyReferralLink");
         OrcaRouterGetKeyLink.NavigateUri = new Uri(OrcaRouterService.ReferralUrl);
         RefreshOrcaRouterModelsButton.Content = loc.GetString("Refresh");
+        ApplyOrcaRouterSignInLocalization(loc);
         DoubaoKeyHeaderText.Text = loc.GetString("ApiKey");
         DoubaoEndpointBox.Header = loc.GetString("EndpointOptional");
         DoubaoModelBox.Header = loc.GetString("Model");
@@ -2266,6 +2267,7 @@ public sealed partial class SettingsPage : Page
         TeardownPhiSilicaPanel();
         TeardownFoundryLocalPanel();
         TeardownOpenVinoPanel();
+        TeardownOrcaRouterSignIn();
         HideSettingsTabSwitchProgress();
 
         try { _currentDialog?.Hide(); } catch (COMException) { }
@@ -3108,6 +3110,7 @@ public sealed partial class SettingsPage : Page
             // OrcaRouter settings
             SetEditableComboValue(OrcaRouterModelCombo, _settings.OrcaRouterModel);
             OrcaRouterKeyBox.Password = _settings.OrcaRouterApiKey ?? string.Empty;
+            ApplyOrcaRouterSignInLocalization(LocalizationService.Instance);
 
             // Doubao settings
             DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;

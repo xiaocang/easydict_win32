@@ -21,6 +21,7 @@ public class SettingsPageSplitTabsTests
     private static readonly string SettingsPagePhiSilicaPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.PhiSilica.cs");
     private static readonly string SettingsPageFoundryLocalPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.FoundryLocal.cs");
     private static readonly string SettingsPageOpenVinoPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.OpenVino.cs");
+    private static readonly string SettingsPageOrcaRouterSignInPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.OrcaRouterSignIn.cs");
     private static readonly string TranslationManagerServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "TranslationManagerService.cs");
     private static readonly string AppCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml.cs");
     private static readonly string ServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
@@ -607,6 +608,57 @@ public class SettingsPageSplitTabsTests
             "OrcaRouterGetKeyLink.Content = loc.GetString(\"GetApiKeyReferralLink\");");
         codeBehind.Should().Contain(
             "OpenRouterGetKeyLink.Content = loc.GetString(\"GetApiKeyLink\");");
+    }
+
+    /// <summary>
+    /// "Sign in with OrcaRouter" (PKCE loopback SSO) must be wired end to end: a button and a
+    /// status line in the OrcaRouter expander, a localized label, the key exchange going
+    /// through the proxy-aware shared client, and teardown cancelling an in-flight sign-in.
+    /// </summary>
+    [Fact]
+    public void SettingsPage_OrcaRouterSignInIsWiredUp()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var signIn = File.ReadAllText(SettingsPageOrcaRouterSignInPath);
+
+        xaml.Should().Contain("x:Name=\"SignInWithOrcaRouterButton\"");
+        xaml.Should().Contain("Click=\"OnSignInWithOrcaRouter\"");
+        xaml.Should().Contain("x:Name=\"OrcaRouterSignInStatusText\"");
+
+        signIn.Should().Contain("loc.GetString(\"SignInWithOrcaRouter\")");
+        signIn.Should().Contain("TranslationManagerService.Instance.AcquireHandle()");
+        signIn.Should().Contain("handle.Manager.SharedHttpClient");
+        signIn.Should().NotContain("new HttpClient(");
+        signIn.Should().Contain("listener.WaitForCallbackAsync(session.State,",
+            "the callback must be validated against this attempt's CSRF state");
+
+        codeBehind.Should().Contain("ApplyOrcaRouterSignInLocalization(loc);");
+        codeBehind.Should().Contain("TeardownOrcaRouterSignIn();");
+    }
+
+    /// <summary>
+    /// A key obtained via sign-in locks the key box and swaps the button to Disconnect, so the
+    /// user isn't left wondering whether it's still safe to hand-edit the field (issue: a
+    /// signed-in key looked exactly like a manually-pasted one with no way to tell them apart).
+    /// </summary>
+    [Fact]
+    public void SettingsPage_OrcaRouterSignInLocksKeyBoxAndOffersDisconnect()
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var signIn = File.ReadAllText(SettingsPageOrcaRouterSignInPath);
+
+        signIn.Should().Contain("IsOrcaRouterSignedInViaSso");
+        signIn.Should().Contain("OrcaRouterKeyBox.IsEnabled = !IsOrcaRouterSignedInViaSso;");
+        signIn.Should().Contain("loc.GetString(\"DisconnectOrcaRouter\")");
+        signIn.Should().Contain("private void DisconnectOrcaRouter()");
+        signIn.Should().Contain("_settings.OrcaRouterSignedInViaSso = false;",
+            "Disconnect must clear the flag, not just the key, or the box stays locked");
+        signIn.Should().Contain("_settings.OrcaRouterSignedInViaSso = true;",
+            "a successful sign-in must record that the key came from SSO, not manual entry");
+
+        // Applied on initial load too, not only after a fresh sign-in this session.
+        codeBehind.Should().Contain("ApplyOrcaRouterSignInLocalization(LocalizationService.Instance);");
     }
 
     [Theory]

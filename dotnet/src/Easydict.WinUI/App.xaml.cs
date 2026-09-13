@@ -313,6 +313,7 @@ namespace Easydict.WinUI
                 _trayIconService.OnOcrTranslate += OnTrayOcrTranslate;
                 _trayIconService.OnOpenSettings += OnTrayOpenSettings;
                 _trayIconService.OnBrowserSupportAction += OnBrowserSupportAction;
+                _trayIconService.OnHoverWordLookupToggled += OnTrayHoverWordLookupToggled;
                 _trayIconService.Initialize();
             }
             catch (Exception ex)
@@ -1500,6 +1501,7 @@ namespace Easydict.WinUI
         {
             var app = Instance;
             var settings = SettingsService.Instance;
+            app._trayIconService?.SetHoverWordLookupChecked(settings.HoverWordLookupEnabled);
 
             if (IsMouseSelectionTranslateDisabledForDebug())
             {
@@ -1509,6 +1511,17 @@ namespace Easydict.WinUI
 
             app._hoverWordLookupService?.ApplyOptions(HoverLookupOptions.FromSettings(settings));
             app.UpdateMouseHookInstallation();
+        }
+
+        /// <summary>
+        /// Tray menu "Hover word lookup" toggle: persist the setting and apply it.
+        /// </summary>
+        private void OnTrayHoverWordLookupToggled(bool enabled)
+        {
+            var settings = SettingsService.Instance;
+            settings.HoverWordLookupEnabled = enabled;
+            settings.Save();
+            ApplyHoverWordLookup();
         }
 
         /// <summary>

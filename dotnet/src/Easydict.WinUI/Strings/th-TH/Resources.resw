@@ -1269,6 +1269,21 @@
   <data name="ExcludedApps" xml:space="preserve"><value>แอปที่ยกเว้น</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>ชื่อโปรเซสที่ต้องการยกเว้นจากการแปลเมื่อเลือกข้อความ คั่นด้วยเครื่องหมายจุลภาค ตัวอย่าง: "code" สำหรับ VS Code</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>ค้นหาคำเมื่อชี้เมาส์ (กดปุ่มเรียกใช้ค้างไว้แล้วชี้ไปที่คำ)</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>ปุ่มเรียกใช้</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>ไม่ใช้ปุ่ม (ชี้เมาส์อย่างเดียว)</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + ชี้เมาส์</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Shift + ชี้เมาส์</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + ชี้เมาส์</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>ใช้ OCR เมื่อแอปไม่มีข้อความให้อ่าน</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>บริการค้นหา</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>อัตโนมัติ (บริการพจนานุกรมแรกที่เปิดใช้)</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>แสดงหน้าต่างเล็ก ๆ ข้างตัวชี้พร้อมคำ เสียงอ่าน และความหมาย แอปที่ยกเว้นด้านบนมีผลด้วย</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>ค้นหาคำเมื่อชี้เมาส์</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>เปิดในหน้าต่างมินิ</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>กำลังค้นหา…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>ไม่พบผลลัพธ์</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>ค้นหาไม่สำเร็จ</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>

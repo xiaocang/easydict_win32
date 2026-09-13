@@ -157,6 +157,7 @@ make run
 - **Mouse Selection Translate**: Select text in any app (drag, double-click, triple-click) → floating action strip appears → click the translate icon, or one of the configured text actions (uses `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks)
 - **Text Actions**: Declarative actions over the selected/entered text — `OpenUrl` (URL template) and `RunService` (query one specific service). Shown in each window's Actions menu and, optionally, on the selection strip
 - **Bob Plugin Compatibility**: Install `.bobplugin` translate plugins; each runs in an embedded JavaScript engine as its own `bob:<identifier>:<instance>` service, conservative by default
+- **Hover Word Lookup** (悬浮取词): Hold a trigger key (Ctrl by default; None/Shift/Alt) and rest the pointer on a word → non-activating popup shows the word, phonetics and meaning. Reads the word via UI Automation first, then OCR of the pixels around the pointer. Toggle in Settings → Behavior or the tray menu
 - **System Tray**: Minimize to tray, background operation, OCR translate in context menu
 - **Clipboard Monitoring**: Auto-translate copied text
 - **Shell Context Menu**: Right-click any file or desktop background → "OCR Translate"
@@ -316,8 +317,19 @@ selection strip), and an explanatory header tooltip. Three theme tokens carry it
 - **PopButtonWindow**: 30×30 WinUI 3 window with `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` — does not steal focus from source app
 - **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms, queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
 - **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new selection
-- **Setting**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior
+- **Setting**: `MouseSelectionTranslate` in SettingsService (default: on), toggle in Settings → Behavior
 - **Flow**: `MouseHookService.OnDragSelectionEnd` → `PopButtonService.OnDragSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
+- **Hook lifetime**: the hooks are installed when mouse selection translate OR hover word lookup is enabled (`App.UpdateMouseHookInstallation`), and uninstalled only when both are off
+
+### Hover Word Lookup (悬浮取词)
+- **HoverWordLookupService** (`Services/HoverWordLookupService.cs`): Orchestrator. Consumes `MouseHookService.OnMouseMove` / `OnKeyboardEvent` (vk-aware key down + key up) on the UI thread, tracks the trigger key, runs a 50 ms `DispatcherQueueTimer` only while the trigger condition holds, and starts a lookup when `HoverDwellDetector` fires. Lookups run on the thread pool under a CTS (`CancelAfter(6000)`) and report back through the dispatcher with a generation counter so stale results never show
+- **HoverDwellDetector** (`Services/HoverDwellDetector.cs`): Pure pointer-rest detector — 350 ms dwell, 3 px jitter tolerance, fires once per rest, re-arms after 8 px of movement; `Rearm()` lets the same rest fire again after a dismiss / trigger-key release
+- **WordUnderCursorService** (`Services/WordUnderCursorService.cs`): UIA first (FlaUI `FromPoint` → nearest ancestor with TextPattern → `RangeFromPoint` → `ExpandToEnclosingUnit(Word)`, rectangles must contain the pointer), then OCR fallback (`ScreenRegionCapture` GDI crop of ~320×64 DIP around the pointer, 2× upscale at ≤ 125 % scale, in-process `WindowsOcrService`, `OcrWordHitTester` picks the word box under the pointer). Shares `TextSelectionService`'s UIA single-flight gate and 200 ms / 800 ms timeouts. `NormalizeWord` / `LooksLikeWord` reject URLs, numbers, mixed scripts and long CJK runs
+- **HoverLookupWindow** (`Views/HoverLookupWindow.xaml`): Non-activating card (`WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`, `WDA_EXCLUDEFROMCAPTURE`, never `Activate()`) with word, phonetics, meaning, service name and an "open in Mini window" button. Sized to content on the anchor monitor's DPI (`DpiHelper.GetDpiForPoint`), placed by `HoverLookupPlacement` (below the word, else above, clamped to the work area)
+- **Translation**: one service per lookup via `TranslationManager.TranslateAsync(request, ct, serviceId)` (manager cache + phonetic enrichment); `HoverLookupRules.SelectServiceId` picks the configured service or, in Auto mode, `youdao` → `google_web` → any `mdx::*` → first usable enabled service; target language from `TargetLanguageSelector.ResolveAutoTargetLanguage(HoverLookupRules.GuessSourceLanguage(word))`; text formatted by `HoverLookupContentBuilder`
+- **Dismiss rules**: pointer leaves the safe zone (word rect ∪ popup rect, inflated 12 DIP); click / scroll / right click / any non-modifier key (`DismissForInput` also blocks further lookups until the trigger key is released, so Ctrl+C never triggers a lookup); feature disabled; pointer moving > 16 px away from the dwell point cancels an in-flight lookup; own-process windows, excluded apps (`MouseSelectionExcludedApps`), an active screen capture and drags are skipped
+- **Settings**: `HoverWordLookupEnabled` (default: off), `HoverWordLookupModifier` (`HoverLookupModifier` name, default `Ctrl`), `HoverWordLookupUseOcrFallback` (default: on), `HoverWordLookupServiceId` (`""` = Auto); UI in Settings → Behavior under the mouse selection rows, plus a checkable tray menu item (`TrayIconService.OnHoverWordLookupToggled`). Toggling from the tray while the Settings page is open is overwritten by the next Settings save
+- **Saved items**: hover queries handed to the Mini window use `QuerySourceKind.Hover` (stored as `"hover"`)
 
 ### OCR Screenshot Translate
 
@@ -344,8 +356,9 @@ OcrTextMerger                            # CJK-aware text line merging (pure log
 
 #### OCR Data Models
 - **OcrResult** (`Models/OcrResult.cs`): `Text`, `Lines: IReadOnlyList<OcrLine>`, `DetectedLanguage`, `TextAngle`
-- **OcrLine**: `Text`, `BoundingRect: OcrRect`
-- **OcrRect** (record struct): `X, Y, Width, Height` — platform-independent rectangle
+- **OcrLine**: `Text`, `BoundingRect: OcrRect`, `Words: IReadOnlyList<OcrWord>` (per-word boxes from Windows OCR; empty for line-only engines)
+- **OcrWord**: `Text`, `BoundingRect: OcrRect`
+- **OcrRect** (record struct): `X, Y, Width, Height` — platform-independent rectangle, with `OcrRectExtensions` (`Contains`, `Inflate`, `Union`, `Intersects`)
 - **OcrLanguage**: `Tag` (BCP-47), `DisplayName`
 - **ScreenCaptureResult** (`Models/ScreenCaptureResult.cs`): `PixelData: byte[]` (BGRA8), `PixelWidth`, `PixelHeight`, `ScreenRect`
 

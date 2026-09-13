@@ -2780,6 +2780,66 @@
                                                MaxWidth="350"
                                                HorizontalAlignment="Left"/>
                                 </StackPanel>
+                                <!-- Hover word lookup (悬浮取词) -->
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=HoverWordLookupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="HoverWordLookupToggle"
+                                        AutomationProperties.AutomationId="HoverWordLookupToggle"
+                                        Header="Hover word lookup">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <StackPanel x:Name="HoverWordLookupPanel"
+                                        Spacing="8"
+                                        Margin="44,0,0,0"
+                                            Visibility="Collapsed">
+                                    <ComboBox x:Name="HoverWordLookupModifierCombo"
+                                              AutomationProperties.AutomationId="HoverWordLookupModifierCombo"
+                                              Header="Trigger key"
+                                              Width="250"
+                                              HorizontalAlignment="Left">
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierNoneItem"
+                                                Content="No key (hover only)"
+                                                Tag="None"/>
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierCtrlItem"
+                                                Content="Ctrl + hover"
+                                                Tag="Ctrl"/>
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierShiftItem"
+                                                Content="Shift + hover"
+                                                Tag="Shift"/>
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierAltItem"
+                                                Content="Alt + hover"
+                                                Tag="Alt"/>
+                                    </ComboBox>
+                                    <ComboBox x:Name="HoverWordLookupServiceCombo"
+                                              AutomationProperties.AutomationId="HoverWordLookupServiceCombo"
+                                              Header="Lookup service"
+                                              Width="250"
+                                              HorizontalAlignment="Left"/>
+                                    <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=HoverWordLookupOcrFallbackToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="HoverWordLookupOcrFallbackToggle"
+                                        AutomationProperties.AutomationId="HoverWordLookupOcrFallbackToggle"
+                                        Header="Use OCR when the app exposes no text">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                    <TextBlock x:Name="HoverWordLookupDescriptionText"
+                                               Text="Shows a small popup with the word, its phonetics and meaning next to the pointer."
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               MaxWidth="350"
+                                               HorizontalAlignment="Left"/>
+                                </StackPanel>
                                 <controls:FluentSettingRow>
 <TextBlock Text="{Binding Header, ElementName=AlwaysOnTopToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 <ToggleSwitch x:Name="AlwaysOnTopToggle"

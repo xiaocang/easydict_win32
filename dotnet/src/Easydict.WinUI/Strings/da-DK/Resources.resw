@@ -1269,6 +1269,21 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Ekskluderede apps</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Procesnavne der skal ekskluderes fra musemarkerings-oversættelse, adskilt med kommaer. Eksempel: "code" for VS Code.</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>Ordopslag ved at pege (hold udløsertasten nede og peg på et ord)</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>Udløsertast</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>Ingen tast (kun pegning)</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + pegning</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Skift + pegning</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + pegning</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>Brug OCR, når appen ikke stiller tekst til rådighed</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>Opslagstjeneste</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>Automatisk (første aktiverede ordbogstjeneste)</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>Viser en lille pop op ved siden af markøren med ordet, dets lydskrift og betydning. De udelukkede apps ovenfor gælder også.</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Ordopslag ved at pege</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Åbn i minivindue</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>Slår op…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>Intet resultat</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>Opslag mislykkedes</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>

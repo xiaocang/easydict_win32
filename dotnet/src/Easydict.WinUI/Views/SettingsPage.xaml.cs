@@ -1586,6 +1586,10 @@ public sealed partial class SettingsPage : Page
         ClipboardMonitorToggle.OffContent = toggleOff;
         MouseSelectionTranslateToggle.OnContent = toggleOn;
         MouseSelectionTranslateToggle.OffContent = toggleOff;
+        HoverWordLookupToggle.OnContent = toggleOn;
+        HoverWordLookupToggle.OffContent = toggleOff;
+        HoverWordLookupOcrFallbackToggle.OnContent = toggleOn;
+        HoverWordLookupOcrFallbackToggle.OffContent = toggleOff;
         AlwaysOnTopToggle.OnContent = toggleOn;
         AlwaysOnTopToggle.OffContent = toggleOff;
         LaunchAtStartupToggle.OnContent = toggleOn;
@@ -1695,6 +1699,17 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.Header = loc.GetString("ExcludedApps");
         MouseSelectionExcludedAppsBox.PlaceholderText = loc.GetString("ExcludedAppsPlaceholder");
         MouseSelectionExcludedAppsDescriptionText.Text = loc.GetString("ExcludedAppsDescription");
+        HoverWordLookupToggle.Header = loc.GetString("HoverWordLookup");
+        HoverWordLookupModifierCombo.Header = loc.GetString("HoverWordLookupModifier");
+        HoverWordLookupModifierNoneItem.Content = loc.GetString("HoverWordLookupModifierNone");
+        HoverWordLookupModifierCtrlItem.Content = loc.GetString("HoverWordLookupModifierCtrl");
+        HoverWordLookupModifierShiftItem.Content = loc.GetString("HoverWordLookupModifierShift");
+        HoverWordLookupModifierAltItem.Content = loc.GetString("HoverWordLookupModifierAlt");
+        HoverWordLookupServiceCombo.Header = loc.GetString("HoverWordLookupService");
+        if (_hoverWordLookupServiceAutoItem != null)
+            _hoverWordLookupServiceAutoItem.Content = loc.GetString("HoverWordLookupServiceAuto");
+        HoverWordLookupOcrFallbackToggle.Header = loc.GetString("HoverWordLookupOcrFallback");
+        HoverWordLookupDescriptionText.Text = loc.GetString("HoverWordLookupDescription");
         AlwaysOnTopToggle.Header = loc.GetString("AlwaysOnTop");
         CompactModeToggle.Header = loc.GetString("CompactMode");
         CompactModeDescriptionText.Text = loc.GetString("CompactModeDescription");
@@ -2334,6 +2349,11 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled += OnSettingChanged;
         MouseSelectionTranslateToggle.Toggled += OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
+        HoverWordLookupToggle.Toggled += OnSettingChanged;
+        HoverWordLookupToggle.Toggled += OnHoverWordLookupToggled;
+        HoverWordLookupModifierCombo.SelectionChanged += OnSettingChanged;
+        HoverWordLookupServiceCombo.SelectionChanged += OnSettingChanged;
+        HoverWordLookupOcrFallbackToggle.Toggled += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         CompactModeToggle.Toggled += OnSettingChanged;
         ShowOcrButtonToggle.Toggled += OnSettingChanged;
@@ -2457,6 +2477,11 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled -= OnSettingChanged;
         MouseSelectionTranslateToggle.Toggled -= OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged -= OnSettingChanged;
+        HoverWordLookupToggle.Toggled -= OnSettingChanged;
+        HoverWordLookupToggle.Toggled -= OnHoverWordLookupToggled;
+        HoverWordLookupModifierCombo.SelectionChanged -= OnSettingChanged;
+        HoverWordLookupServiceCombo.SelectionChanged -= OnSettingChanged;
+        HoverWordLookupOcrFallbackToggle.Toggled -= OnSettingChanged;
         AlwaysOnTopToggle.Toggled -= OnSettingChanged;
         LaunchAtStartupToggle.Toggled -= OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
@@ -2765,6 +2790,16 @@ public sealed partial class SettingsPage : Page
             return !SameSetting(GetSelectedTag(AppThemeCombo) ?? "System", _settings.AppTheme);
         }
 
+        if (ReferenceEquals(sender, HoverWordLookupModifierCombo))
+        {
+            return !SameSetting(GetTagComboValue(HoverWordLookupModifierCombo, "Ctrl"), _settings.HoverWordLookupModifier);
+        }
+
+        if (ReferenceEquals(sender, HoverWordLookupServiceCombo))
+        {
+            return !SameSetting(GetTagComboValue(HoverWordLookupServiceCombo, ""), _settings.HoverWordLookupServiceId ?? "");
+        }
+
         if (ReferenceEquals(sender, UILanguageCombo))
         {
             return !SameUiLanguageSetting(GetSelectedTag(UILanguageCombo), _settings.UILanguage);
@@ -2893,6 +2928,10 @@ public sealed partial class SettingsPage : Page
             || ClipboardMonitorToggle.IsOn != _settings.ClipboardMonitoring
             || MouseSelectionTranslateToggle.IsOn != _settings.MouseSelectionTranslate
             || !SameSequence(GetCommaSeparatedValues(MouseSelectionExcludedAppsBox.Text), _settings.MouseSelectionExcludedApps)
+            || HoverWordLookupToggle.IsOn != _settings.HoverWordLookupEnabled
+            || !SameSetting(GetTagComboValue(HoverWordLookupModifierCombo, "Ctrl"), _settings.HoverWordLookupModifier)
+            || HoverWordLookupOcrFallbackToggle.IsOn != _settings.HoverWordLookupUseOcrFallback
+            || !SameSetting(GetTagComboValue(HoverWordLookupServiceCombo, ""), _settings.HoverWordLookupServiceId ?? "")
             || AlwaysOnTopToggle.IsOn != _settings.AlwaysOnTop
             || LaunchAtStartupToggle.IsOn != _settings.LaunchAtStartup
             || !SameDouble(TtsSpeedSlider.Value, _settings.TtsSpeed)
@@ -3199,6 +3238,13 @@ public sealed partial class SettingsPage : Page
             HistoryRetentionDaysBox.IsEnabled = _settings.HistoryEnabled;
             MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
             MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
+                ? Visibility.Visible : Visibility.Collapsed;
+            HoverWordLookupToggle.IsOn = _settings.HoverWordLookupEnabled;
+            SetTagComboValue(HoverWordLookupModifierCombo, _settings.HoverWordLookupModifier, "Ctrl");
+            HoverWordLookupOcrFallbackToggle.IsOn = _settings.HoverWordLookupUseOcrFallback;
+            PopulateHoverWordLookupServiceCombo();
+            SetTagComboValue(HoverWordLookupServiceCombo, _settings.HoverWordLookupServiceId, "");
+            HoverWordLookupPanel.Visibility = _settings.HoverWordLookupEnabled
                 ? Visibility.Visible : Visibility.Collapsed;
             AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
             ResultFontScaleSlider.Value = _settings.ResultFontScale;
@@ -4627,6 +4673,10 @@ public sealed partial class SettingsPage : Page
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(s => s.Length > 0)
             .ToList();
+        _settings.HoverWordLookupEnabled = HoverWordLookupToggle.IsOn;
+        _settings.HoverWordLookupModifier = GetTagComboValue(HoverWordLookupModifierCombo, "Ctrl");
+        _settings.HoverWordLookupUseOcrFallback = HoverWordLookupOcrFallbackToggle.IsOn;
+        _settings.HoverWordLookupServiceId = GetTagComboValue(HoverWordLookupServiceCombo, "");
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.ResultFontScale = ResultFontScaleSlider.Value;
         _settings.CompactMode = CompactModeToggle.IsOn;
@@ -4726,6 +4776,7 @@ public sealed partial class SettingsPage : Page
         // Apply clipboard monitoring immediately
         App.ApplyClipboardMonitoring(_settings.ClipboardMonitoring);
         App.ApplyMouseSelectionTranslate(_settings.MouseSelectionTranslate);
+        App.ApplyHoverWordLookup();
 
         // Hide the floating save button and reset unsaved changes flag
         _hasUnsavedChanges = false;
@@ -4838,6 +4889,60 @@ public sealed partial class SettingsPage : Page
     {
         MouseSelectionExcludedAppsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnHoverWordLookupToggled(object sender, RoutedEventArgs e)
+    {
+        HoverWordLookupPanel.Visibility = HoverWordLookupToggle.IsOn
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private ComboBoxItem? _hoverWordLookupServiceAutoItem;
+
+    /// <summary>
+    /// Fill the hover word lookup service combo: "Auto" plus the services enabled in the
+    /// Mini/Main windows (user order). A saved id that is registered but no longer enabled is
+    /// kept so the selection round-trips.
+    /// </summary>
+    private void PopulateHoverWordLookupServiceCombo()
+    {
+        var loc = LocalizationService.Instance;
+        HoverWordLookupServiceCombo.Items.Clear();
+
+        _hoverWordLookupServiceAutoItem = new ComboBoxItem
+        {
+            Content = loc.GetString("HoverWordLookupServiceAuto"),
+            Tag = ""
+        };
+        HoverWordLookupServiceCombo.Items.Add(_hoverWordLookupServiceAutoItem);
+
+        try
+        {
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var services = handle.Manager.Services;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var candidates = _settings.MiniWindowEnabledServices
+                .Concat(_settings.MainWindowEnabledServices)
+                .Append(_settings.HoverWordLookupServiceId ?? "");
+
+            foreach (var serviceId in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(serviceId) || !seen.Add(serviceId))
+                    continue;
+                if (!services.TryGetValue(serviceId, out var service))
+                    continue;
+
+                HoverWordLookupServiceCombo.Items.Add(new ComboBoxItem
+                {
+                    Content = service.DisplayName,
+                    Tag = serviceId
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsPage] Failed to enumerate services for hover lookup: {ex.Message}");
+        }
     }
 
     private void OnHistoryEnabledToggled(object sender, RoutedEventArgs e)

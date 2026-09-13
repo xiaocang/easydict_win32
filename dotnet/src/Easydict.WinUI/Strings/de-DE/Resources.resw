@@ -1269,6 +1269,21 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Ausgeschlossene Apps</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Prozessnamen, die von der Mausauswahl-Übersetzung ausgeschlossen werden sollen, durch Kommas getrennt. Beispiel: "code" für VS Code.</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>Wortsuche beim Zeigen (Auslösetaste halten und auf ein Wort zeigen)</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>Auslösetaste</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>Keine Taste (nur Zeigen)</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Strg + Zeigen</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Umschalt + Zeigen</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + Zeigen</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>OCR verwenden, wenn die App keinen Text bereitstellt</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>Nachschlagedienst</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>Automatisch (erster aktivierter Wörterbuchdienst)</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>Zeigt neben dem Mauszeiger ein kleines Popup mit dem Wort, seiner Lautschrift und Bedeutung. Die oben ausgeschlossenen Apps gelten ebenfalls.</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Wortsuche beim Zeigen</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Im Mini-Fenster öffnen</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>Wird nachgeschlagen…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>Kein Ergebnis</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>Nachschlagen fehlgeschlagen</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>

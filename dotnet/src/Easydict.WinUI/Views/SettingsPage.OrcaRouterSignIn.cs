@@ -20,13 +20,25 @@ public sealed partial class SettingsPage
     // Non-null means a sign-in is in flight; other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _orcaRouterSignInCts;
 
+    /// <summary>
+    /// True once the current key was obtained via sign-in rather than pasted manually. Derived
+    /// from settings (not cached) so it always reflects the true source of the key.
+    /// </summary>
+    private bool IsOrcaRouterSignedInViaSso =>
+        _settings.OrcaRouterSignedInViaSso && !string.IsNullOrWhiteSpace(_settings.OrcaRouterApiKey);
+
     private void ApplyOrcaRouterSignInLocalization(LocalizationService loc)
     {
         // While a sign-in is waiting the button reads "Cancel"; don't clobber that.
         if (_orcaRouterSignInCts == null)
         {
-            SignInWithOrcaRouterButton.Content = loc.GetString("SignInWithOrcaRouter");
+            SignInWithOrcaRouterButton.Content = loc.GetString(
+                IsOrcaRouterSignedInViaSso ? "DisconnectOrcaRouter" : "SignInWithOrcaRouter");
         }
+
+        // Lock the key box while it holds a key obtained via sign-in, so it's clear this isn't
+        // meant to be hand-edited; Disconnect clears the key and unlocks it again.
+        OrcaRouterKeyBox.IsEnabled = !IsOrcaRouterSignedInViaSso;
     }
 
     private void TeardownOrcaRouterSignIn()
@@ -43,6 +55,12 @@ public sealed partial class SettingsPage
         {
             // Second click while waiting acts as Cancel; never start a second listener.
             try { inFlight.Cancel(); } catch (ObjectDisposedException) { }
+            return;
+        }
+
+        if (IsOrcaRouterSignedInViaSso)
+        {
+            DisconnectOrcaRouter();
             return;
         }
 
@@ -68,9 +86,28 @@ public sealed partial class SettingsPage
             _orcaRouterSignInCts = null;
             if (!_isUnloaded)
             {
-                SignInWithOrcaRouterButton.Content = loc.GetString("SignInWithOrcaRouter");
+                // Restores "Sign in with OrcaRouter", or "Disconnect" + a locked key box when
+                // the run above just succeeded.
+                ApplyOrcaRouterSignInLocalization(loc);
             }
         }
+    }
+
+    /// <summary>
+    /// Clears a key obtained via sign-in and unlocks the key box. Manually-pasted keys never
+    /// set <see cref="SettingsService.OrcaRouterSignedInViaSso"/>, so this never runs for them.
+    /// </summary>
+    private void DisconnectOrcaRouter()
+    {
+        // Persist first so OnSettingChanged's SameSecret() sees no diff when the box updates.
+        _settings.OrcaRouterApiKey = null;
+        _settings.OrcaRouterSignedInViaSso = false;
+        _settings.Save();
+        TranslationManagerService.Instance.ReconfigureServices();
+
+        OrcaRouterKeyBox.Password = string.Empty;
+        SetOrcaRouterSignInStatus(null);
+        ApplyOrcaRouterSignInLocalization(LocalizationService.Instance);
     }
 
     private async Task RunOrcaRouterSignInAsync(CancellationToken userCancellation)
@@ -166,9 +203,15 @@ public sealed partial class SettingsPage
 
         // Persist first so OnSettingChanged's SameSecret() sees no diff when the box updates.
         _settings.OrcaRouterApiKey = apiKey;
+        _settings.OrcaRouterSignedInViaSso = true;
         OrcaRouterKeyBox.Password = apiKey;
         _settings.Save();
         TranslationManagerService.Instance.ReconfigureServices();
+
+        // Lock the box now, not just when the button label is restored in the caller's
+        // `finally`: RefreshCatalogModelsAsync below awaits, and the box should already read
+        // as "managed by sign-in" for that whole stretch, not just once this method returns.
+        ApplyOrcaRouterSignInLocalization(loc);
 
         SetOrcaRouterSignInStatus(loc.GetString("OrcaRouterSignInSucceeded"));
 

@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Đăng nhập đã hết thời gian chờ. Vui lòng thử lại.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Đã hủy đăng nhập.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Không thể mở trình duyệt. Hãy dùng liên kết "Lấy khóa API" bên dưới.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Ngắt kết nối</value></data>
 </root>

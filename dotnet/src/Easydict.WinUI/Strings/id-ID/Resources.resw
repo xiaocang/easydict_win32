@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Proses masuk kehabisan waktu. Silakan coba lagi.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Proses masuk dibatalkan.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Tidak dapat membuka browser. Gunakan tautan "Dapatkan kunci API" di bawah ini.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Putuskan koneksi</value></data>
 </root>

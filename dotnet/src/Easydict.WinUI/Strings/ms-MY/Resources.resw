@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Log masuk tamat masa. Sila cuba lagi.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Log masuk dibatalkan.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Tidak dapat membuka pelayar. Gunakan pautan "Dapatkan kunci API" di bawah sebagai ganti.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Putuskan sambungan</value></data>
 </root>

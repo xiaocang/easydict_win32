@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>La connexion a expiré. Veuillez réessayer.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Connexion annulée.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Impossible d'ouvrir votre navigateur. Utilisez plutôt le lien « Obtenir une clé API » ci-dessous.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Déconnecter</value></data>
 </root>

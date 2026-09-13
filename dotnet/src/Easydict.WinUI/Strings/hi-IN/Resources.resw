@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>साइन इन का समय समाप्त हो गया। कृपया पुनः प्रयास करें।</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>साइन इन रद्द किया गया।</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>ब्राउज़र नहीं खोला जा सका। इसके बजाय नीचे दिए गए "API कुंजी प्राप्त करें" लिंक का उपयोग करें।</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>डिस्कनेक्ट करें</value></data>
 </root>

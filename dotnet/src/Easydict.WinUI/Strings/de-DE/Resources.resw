@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Zeitüberschreitung bei der Anmeldung. Bitte versuchen Sie es erneut.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Anmeldung abgebrochen.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Der Browser konnte nicht geöffnet werden. Verwenden Sie stattdessen den Link „API-Schlüssel abrufen“ unten.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Verbindung trennen</value></data>
 </root>

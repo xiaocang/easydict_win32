@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>การลงชื่อเข้าใช้หมดเวลา โปรดลองอีกครั้ง</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>ยกเลิกการลงชื่อเข้าใช้แล้ว</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>ไม่สามารถเปิดเบราว์เซอร์ได้ โปรดใช้ลิงก์ "รับคีย์ API" ด้านล่างแทน</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>ยกเลิกการเชื่อมต่อ</value></data>
 </root>

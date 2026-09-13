@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Login fik timeout. Prøv igen.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Login annulleret.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Browseren kunne ikke åbnes. Brug i stedet linket "Hent en API-nøgle" nedenfor.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Afbryd forbindelse</value></data>
 </root>

@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>登入逾時，請再試一次。</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>登入已取消。</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>無法開啟瀏覽器。請改用下方的「取得 API 金鑰」連結。</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>中斷連線</value></data>
 </root>

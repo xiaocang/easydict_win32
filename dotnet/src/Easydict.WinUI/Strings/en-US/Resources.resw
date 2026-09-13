@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Sign-in timed out. Please try again.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Sign-in cancelled.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Could not open your browser. Use the "Get an API key" link below instead.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Disconnect</value></data>
 </root>

@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>انتهت مهلة تسجيل الدخول. يرجى المحاولة مرة أخرى.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>تم إلغاء تسجيل الدخول.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>تعذر فتح المتصفح. استخدم رابط "الحصول على مفتاح API" أدناه بدلاً من ذلك.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>قطع الاتصال</value></data>
 </root>

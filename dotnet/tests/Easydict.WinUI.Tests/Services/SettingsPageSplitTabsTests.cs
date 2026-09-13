@@ -637,6 +637,30 @@ public class SettingsPageSplitTabsTests
         codeBehind.Should().Contain("TeardownOrcaRouterSignIn();");
     }
 
+    /// <summary>
+    /// A key obtained via sign-in locks the key box and swaps the button to Disconnect, so the
+    /// user isn't left wondering whether it's still safe to hand-edit the field (issue: a
+    /// signed-in key looked exactly like a manually-pasted one with no way to tell them apart).
+    /// </summary>
+    [Fact]
+    public void SettingsPage_OrcaRouterSignInLocksKeyBoxAndOffersDisconnect()
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var signIn = File.ReadAllText(SettingsPageOrcaRouterSignInPath);
+
+        signIn.Should().Contain("IsOrcaRouterSignedInViaSso");
+        signIn.Should().Contain("OrcaRouterKeyBox.IsEnabled = !IsOrcaRouterSignedInViaSso;");
+        signIn.Should().Contain("loc.GetString(\"DisconnectOrcaRouter\")");
+        signIn.Should().Contain("private void DisconnectOrcaRouter()");
+        signIn.Should().Contain("_settings.OrcaRouterSignedInViaSso = false;",
+            "Disconnect must clear the flag, not just the key, or the box stays locked");
+        signIn.Should().Contain("_settings.OrcaRouterSignedInViaSso = true;",
+            "a successful sign-in must record that the key came from SSO, not manual entry");
+
+        // Applied on initial load too, not only after a fresh sign-in this session.
+        codeBehind.Should().Contain("ApplyOrcaRouterSignInLocalization(LocalizationService.Instance);");
+    }
+
     [Theory]
     [InlineData("FetchDeepSeekModelsAsync")]
     [InlineData("FetchZhipuModelsAsync")]

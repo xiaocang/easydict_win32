@@ -3110,6 +3110,7 @@ public sealed partial class SettingsPage : Page
             // OrcaRouter settings
             SetEditableComboValue(OrcaRouterModelCombo, _settings.OrcaRouterModel);
             OrcaRouterKeyBox.Password = _settings.OrcaRouterApiKey ?? string.Empty;
+            ApplyOrcaRouterSignInLocalization(LocalizationService.Instance);
 
             // Doubao settings
             DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;

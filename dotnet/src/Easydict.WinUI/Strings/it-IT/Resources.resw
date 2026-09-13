@@ -1564,4 +1564,5 @@
   <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Accesso scaduto. Riprova.</value></data>
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Accesso annullato.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Impossibile aprire il browser. Usa invece il link "Ottieni una chiave API" qui sotto.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Disconnetti</value></data>
 </root>

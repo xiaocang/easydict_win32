@@ -15,6 +15,9 @@ public static partial class DpiHelper
 {
     private const uint StandardDpi = 96; // 96 DPI = 100% scale
 
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+    private const int MDT_EFFECTIVE_DPI = 0;
+
     /// <summary>
     /// Gets the DPI for a window using Win32 API.
     /// </summary>
@@ -22,6 +25,47 @@ public static partial class DpiHelper
     /// <returns>DPI value (e.g., 96 for 100%, 144 for 150%, 192 for 200%)</returns>
     [LibraryImport("user32.dll")]
     private static partial uint GetDpiForWindow(IntPtr hwnd);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr MonitorFromPoint(NativePoint pt, uint dwFlags);
+
+    [LibraryImport("shcore.dll")]
+    private static partial int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    /// <summary>
+    /// Gets the effective DPI of the monitor containing (or nearest to) a screen point.
+    /// Unlike GetDpiForWindow(WindowFromPoint(...)), this does not depend on the DPI awareness
+    /// of whatever application happens to own the window under the point.
+    /// </summary>
+    /// <param name="x">Screen X in physical pixels</param>
+    /// <param name="y">Screen Y in physical pixels</param>
+    /// <returns>DPI value, or 96 when it cannot be determined</returns>
+    public static uint GetDpiForPoint(int x, int y)
+    {
+        try
+        {
+            var monitor = MonitorFromPoint(new NativePoint { X = x, Y = y }, MONITOR_DEFAULTTONEAREST);
+            if (monitor != IntPtr.Zero &&
+                GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, out var dpiX, out _) == 0 &&
+                dpiX > 0)
+            {
+                return dpiX;
+            }
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // Fall through to the standard DPI below.
+        }
+
+        return StandardDpi;
+    }
 
     /// <summary>
     /// Calculates the DPI scale factor for a window.

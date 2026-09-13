@@ -1504,7 +1504,7 @@ public sealed partial class FixedWindow : Window
     /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
     /// Manager is passed from caller who already acquired a handle to ensure consistent instance.
     /// </summary>
-    private async Task ExecuteStreamingTranslationForServiceAsync(
+    private async Task<TranslationResult> ExecuteStreamingTranslationForServiceAsync(
         TranslationManager manager,
         ServiceQueryResult serviceResult,
         TranslationRequest request,
@@ -1534,10 +1534,24 @@ public sealed partial class FixedWindow : Window
         // process them. The original double-TryEnqueue + RequestResize per chunk
         // was the worst offender — full content.Measure() per snapshot. Window
         // resize now happens once in the final-state lambda below.
-        await foreach (var chunk in manager.TranslateStreamAsync(
+        TranslationResult? completed = null;
+        await foreach (var update in manager.TranslateStreamUpdatesAsync(
             request, ct, serviceResult.ServiceId).ConfigureAwait(false))
         {
-            sb.Append(chunk);
+            switch (update)
+            {
+                case TranslationStreamUpdate.TextDelta delta:
+                    sb.Append(delta.Text);
+                    break;
+                case TranslationStreamUpdate.TextSnapshot snapshot:
+                    sb.Clear().Append(snapshot.Text);
+                    break;
+                case TranslationStreamUpdate.Completed done:
+                    // Authoritative structured result delivered in-band (e.g. a plugin returning
+                    // dictionary data). It supersedes the accumulated text; no second request needed.
+                    completed = done.Result;
+                    continue;
+            }
 
             var now = DateTime.UtcNow;
             if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
@@ -1549,33 +1563,49 @@ public sealed partial class FixedWindow : Window
 
         stopwatch.Stop();
 
-        // Final update with complete result
-        var finalText = sb.ToString().Trim();
-        if (string.IsNullOrWhiteSpace(finalText))
+        TranslationResult result;
+        if (completed is not null)
         {
-            throw new TranslationException("Streaming service returned an empty response")
+            // Rich-streaming services deliver the final result themselves. An empty text is
+            // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
+            result = completed with
             {
-                ErrorCode = TranslationErrorCode.InvalidResponse,
-                ServiceId = serviceResult.ServiceId
+                ServiceName = string.IsNullOrEmpty(completed.ServiceName)
+                    ? serviceResult.ServiceDisplayName
+                    : completed.ServiceName,
+                TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
+            };
+        }
+        else
+        {
+            // Final update with complete result
+            var finalText = sb.ToString().Trim();
+            if (string.IsNullOrWhiteSpace(finalText))
+            {
+                throw new TranslationException("Streaming service returned an empty response")
+                {
+                    ErrorCode = TranslationErrorCode.InvalidResponse,
+                    ServiceId = serviceResult.ServiceId
+                };
+            }
+
+            // Create initial result
+            result = new TranslationResult
+            {
+                TranslatedText = finalText,
+                OriginalText = request.Text,
+                DetectedLanguage = detectedLanguage,
+                TargetLanguage = targetLanguage,
+                ServiceName = serviceResult.ServiceDisplayName,
+                TimingMs = stopwatch.ElapsedMilliseconds
             };
         }
 
-        // Create initial result
-        var result = new TranslationResult
-        {
-            TranslatedText = finalText,
-            OriginalText = request.Text,
-            DetectedLanguage = detectedLanguage,
-            TargetLanguage = targetLanguage,
-            ServiceName = serviceResult.ServiceDisplayName,
-            TimingMs = stopwatch.ElapsedMilliseconds
-        };
-
-        // Enrich with phonetics from Youdao if missing (for word queries)
-        // Run on thread pool to avoid blocking UI thread
+        // Enrich with phonetics from Youdao if missing (for word queries).
+        // Run on thread pool to avoid blocking UI thread; honors the service's execution policy.
         try
         {
-            result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct));
+            result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct, serviceResult.ServiceId));
         }
         catch
         {
@@ -1602,6 +1632,8 @@ public sealed partial class FixedWindow : Window
             // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
             DispatcherQueue.TryEnqueue(() => RequestResize());
         });
+
+        return result;
     }
 
     private TranslationLanguage GetSourceLanguage()

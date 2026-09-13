@@ -2732,9 +2732,11 @@ namespace Easydict.WinUI.Views
                         if (manager.IsStreamingService(serviceResult.ServiceId))
                         {
                             // Streaming path for LLM services
-                            await ExecuteStreamingTranslationForServiceAsync(
+                            var streamedResult = await ExecuteStreamingTranslationForServiceAsync(
                                 manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
-                            outcome = QueryExecutionOutcome.Success;
+                            outcome = streamedResult.ResultKind == TranslationResultKind.Success
+                                ? QueryExecutionOutcome.Success
+                                : QueryExecutionOutcome.Neutral;
                         }
                         else
                         {
@@ -3231,7 +3233,7 @@ namespace Easydict.WinUI.Views
         /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
         /// Manager is passed from caller who already acquired a handle to ensure consistent instance.
         /// </summary>
-        private async Task ExecuteStreamingTranslationForServiceAsync(
+        private async Task<TranslationResult> ExecuteStreamingTranslationForServiceAsync(
             TranslationManager manager,
             ServiceQueryResult serviceResult,
             TranslationRequest request,
@@ -3260,10 +3262,24 @@ namespace Easydict.WinUI.Views
             // would otherwise see N × 1/throttleMs callbacks per second, each
             // invalidating a wrapped-TextBlock measure pass. The coalescer collapses
             // all N services into ≤1 UI callback per frame (~16ms).
-            await foreach (var chunk in manager.TranslateStreamAsync(
+            TranslationResult? completed = null;
+            await foreach (var update in manager.TranslateStreamUpdatesAsync(
                 request, ct, serviceResult.ServiceId).ConfigureAwait(false))
             {
-                sb.Append(chunk);
+                switch (update)
+                {
+                    case TranslationStreamUpdate.TextDelta delta:
+                        sb.Append(delta.Text);
+                        break;
+                    case TranslationStreamUpdate.TextSnapshot snapshot:
+                        sb.Clear().Append(snapshot.Text);
+                        break;
+                    case TranslationStreamUpdate.Completed done:
+                        // Authoritative structured result delivered in-band (e.g. a plugin returning
+                        // dictionary data). It supersedes the accumulated text; no second request needed.
+                        completed = done.Result;
+                        continue;
+                }
 
                 // Per-stream snapshot rate caps sb.ToString() allocations on the
                 // background thread; scaling with text length stays from the original
@@ -3285,33 +3301,49 @@ namespace Easydict.WinUI.Views
 
             stopwatch.Stop();
 
-            // Final update with complete result (apply same cleanup as non-streaming path)
-            var finalText = CleanupStreamingResult(sb.ToString());
-            if (string.IsNullOrWhiteSpace(finalText))
+            TranslationResult result;
+            if (completed is not null)
             {
-                throw new TranslationException("Streaming service returned an empty response")
+                // Rich-streaming services deliver the final result themselves. An empty text is
+                // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
+                result = completed with
                 {
-                    ErrorCode = TranslationErrorCode.InvalidResponse,
-                    ServiceId = serviceResult.ServiceId
+                    ServiceName = string.IsNullOrEmpty(completed.ServiceName)
+                        ? serviceResult.ServiceDisplayName
+                        : completed.ServiceName,
+                    TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
+                };
+            }
+            else
+            {
+                // Final update with complete result (apply same cleanup as non-streaming path)
+                var finalText = CleanupStreamingResult(sb.ToString());
+                if (string.IsNullOrWhiteSpace(finalText))
+                {
+                    throw new TranslationException("Streaming service returned an empty response")
+                    {
+                        ErrorCode = TranslationErrorCode.InvalidResponse,
+                        ServiceId = serviceResult.ServiceId
+                    };
+                }
+
+                // Create initial result
+                result = new TranslationResult
+                {
+                    TranslatedText = finalText,
+                    OriginalText = request.Text,
+                    DetectedLanguage = detectedLanguage,
+                    TargetLanguage = targetLanguage,
+                    ServiceName = serviceResult.ServiceDisplayName,
+                    TimingMs = stopwatch.ElapsedMilliseconds
                 };
             }
 
-            // Create initial result
-            var result = new TranslationResult
-            {
-                TranslatedText = finalText,
-                OriginalText = request.Text,
-                DetectedLanguage = detectedLanguage,
-                TargetLanguage = targetLanguage,
-                ServiceName = serviceResult.ServiceDisplayName,
-                TimingMs = stopwatch.ElapsedMilliseconds
-            };
-
-            // Enrich with phonetics from Youdao if missing (for word queries)
-            // Run on thread pool to avoid blocking UI thread
+            // Enrich with phonetics from Youdao if missing (for word queries).
+            // Run on thread pool to avoid blocking UI thread; honors the service's execution policy.
             try
             {
-                result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct));
+                result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct, serviceResult.ServiceId));
             }
             catch
             {
@@ -3348,6 +3380,8 @@ namespace Easydict.WinUI.Views
                     }
                 }
             });
+
+            return result;
         }
 
         /// <summary>

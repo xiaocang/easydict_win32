@@ -37,6 +37,17 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public string ServiceIconPath => $"ms-appx:///Assets/ServiceIcons/{ServiceId}.png";
 
     /// <summary>
+    /// Where the service comes from (built-in, imported dictionary, third-party plugin).
+    /// Set once at row creation time so UI can mark non-native services distinctly.
+    /// </summary>
+    public ServiceOrigin Origin { get; init; } = ServiceOrigin.BuiltIn;
+
+    /// <summary>
+    /// True when the service is provided by a third-party plugin runtime.
+    /// </summary>
+    public bool IsPluginService => Origin.Kind == ServiceOriginKind.Plugin;
+
+    /// <summary>
     /// Whether this service is capable of grammar correction for the source
     /// language under which this row was initialized. Set once at row creation
     /// time by the window's InitializeServiceResults().

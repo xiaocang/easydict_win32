@@ -41,6 +41,15 @@ internal static class ClaudeCodeEventParser
         "no api key",
     ];
 
+    // Anthropic returns this for requests from a region it does not serve
+    // directly; the fix is a working proxy/gateway, not re-authenticating, so
+    // it is classified and worded separately from AuthPatterns even though the
+    // CLI also tags these failures "authentication_failed" internally.
+    private static readonly string[] NetworkRestrictionPatterns =
+    [
+        "request not allowed",
+    ];
+
     /// <summary>
     /// Extract an incremental text chunk from a stream_event line:
     /// {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}}
@@ -132,6 +141,19 @@ internal static class ClaudeCodeEventParser
                 "Claude Code usage limit reached. Try again later or check your subscription quota.")
             {
                 ErrorCode = TranslationErrorCode.RateLimited,
+                ServiceId = serviceId,
+            };
+        }
+
+        if (ContainsAny(haystack, NetworkRestrictionPatterns))
+        {
+            var networkDetail = AgentCliErrorFormatter.BuildDetail(controlLines, stdErr);
+            return new TranslationException(
+                "Claude Code CLI request was rejected, which usually means this network cannot "
+                + "reach Anthropic directly (e.g. a region restriction). Configure a working proxy "
+                + $"or gateway for the CLI (HTTPS_PROXY, or the env/apiKeyHelper settings it reads) and try again{networkDetail}")
+            {
+                ErrorCode = TranslationErrorCode.NetworkError,
                 ServiceId = serviceId,
             };
         }

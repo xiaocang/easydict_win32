@@ -15,6 +15,17 @@ internal static class AgentCliErrorFormatter
         @"(?i)\b(?:sk|key)-[A-Za-z0-9_-]{12,}\b",
         RegexOptions.CultureInvariant);
 
+    // Startup metadata lines (session init / status pings) carry no failure
+    // information but can be large (e.g. --verbose lists every slash command),
+    // so they crowd out the actual error when control lines are joined and
+    // capped. Excluded only as a fallback; a parsed `result` line is preferred
+    // by the caller whenever one is available.
+    private static readonly string[] MetadataLineMarkers =
+    [
+        "\"subtype\":\"init\"",
+        "\"subtype\":\"status\"",
+    ];
+
     /// <summary>
     /// Returns ": &lt;excerpt&gt;" built from stderr (preferred) or the stdout control
     /// lines, capped at a display-friendly length; empty string when there is nothing.
@@ -23,7 +34,7 @@ internal static class AgentCliErrorFormatter
     {
         var source = !string.IsNullOrWhiteSpace(stdErr)
             ? stdErr
-            : string.Join('\n', controlLines);
+            : string.Join('\n', FilterMetadataLines(controlLines));
 
         var text = string.Join(
             ' ',
@@ -38,9 +49,23 @@ internal static class AgentCliErrorFormatter
 
         if (text.Length > MaxDetailLength)
         {
-            text = text[..MaxDetailLength] + "…";
+            // Keep the tail: the most recent control line is the one most likely
+            // to carry the actual failure, and a long preamble (e.g. a verbose
+            // session-init event) should not push it out of the excerpt.
+            text = "…" + text[^MaxDetailLength..];
         }
 
         return $": {text}";
+    }
+
+    private static IEnumerable<string> FilterMetadataLines(IReadOnlyList<string> controlLines)
+    {
+        var filtered = controlLines
+            .Where(line => !MetadataLineMarkers.Any(marker => line.Contains(marker, StringComparison.Ordinal)))
+            .ToList();
+
+        // If every line looked like metadata, fall back to the unfiltered set
+        // rather than showing nothing.
+        return filtered.Count > 0 ? filtered : controlLines;
     }
 }

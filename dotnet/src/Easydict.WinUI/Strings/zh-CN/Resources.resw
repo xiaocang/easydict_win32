@@ -1553,10 +1553,10 @@
   <data name="FluentCopyFailed" xml:space="preserve"><value>复制失败，请重试。</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>已复制</value></data>
   <data name="FluentDictionaryFallback" xml:space="preserve"><value>富词典内容暂时无法显示，已切换为文字版本。</value></data>
-  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>?????????429?</value></data>
-  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>???????????</value></data>
-  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>????????{0}???????</value></data>
-  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>???????????????????????</value></data>
+  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>语言识别请求受限（429）</value></data>
+  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>正在尝试备用识别服务。</value></data>
+  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>备用服务已识别为 {0}，可以继续操作。</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>无法识别源语言。请手动选择语言，或稍后重试。</value></data>
   <data name="SignInWithOrcaRouter" xml:space="preserve"><value>使用 OrcaRouter 登录</value></data>
   <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>正在等待您在浏览器中完成登录…</value></data>
   <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>登录成功。OrcaRouter API 密钥已保存。</value></data>

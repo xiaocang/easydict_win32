@@ -143,6 +143,56 @@ public class LocalizationServiceTests
                 .ToArray();
     }
 
+    /// <summary>
+    /// Translations written through a non-UTF-8 console lose every non-ASCII character to "?"
+    /// (issue #209: the language-detection warning showed "?????????429?" in Chinese).
+    /// A literal "?" is only legitimate as sentence-ending punctuation, so anything else is corruption.
+    /// </summary>
+    [Fact]
+    public void AllLanguages_HaveNoQuestionMarkCorruptedTranslations()
+    {
+        var corrupted = new List<string>();
+
+        foreach (var language in SupportedLanguages)
+        {
+            var document = XDocument.Load(Path.Combine(StringsPath, language, "Resources.resw"));
+            foreach (var element in document.Root!.Elements("data"))
+            {
+                var value = element.Element("value")?.Value ?? string.Empty;
+                for (var index = value.IndexOf('?'); index >= 0; index = value.IndexOf('?', index + 1))
+                {
+                    if (!IsSentenceEndingQuestionMark(value, index))
+                    {
+                        corrupted.Add($"{language}/{element.Attribute("name")?.Value}: {value}");
+                        break;
+                    }
+                }
+            }
+        }
+
+        corrupted.Should().BeEmpty(
+            "non-ASCII characters must survive translation; re-save the affected values as UTF-8");
+    }
+
+    /// <summary>
+    /// A real question mark ends the value, closes a parenthesis, or is followed by whitespace and a
+    /// new sentence. A "?" that replaced a lost character sits inside a word or next to another "?".
+    /// </summary>
+    private static bool IsSentenceEndingQuestionMark(string value, int index)
+    {
+        var next = index + 1;
+        if (next >= value.Length || value[next] == ')')
+            return true;
+
+        if (!char.IsWhiteSpace(value[next]))
+            return false;
+
+        while (next < value.Length && char.IsWhiteSpace(value[next]))
+            next++;
+
+        return next >= value.Length || !char.IsLower(value[next]);
+    }
+
     [Fact]
     public void HistoryDisabledMessage_AllLanguagesPreserveSettingsPathPlaceholders()
     {

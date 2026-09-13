@@ -1553,10 +1553,10 @@
   <data name="FluentCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>Copied</value></data>
   <data name="FluentDictionaryFallback" xml:space="preserve"><value>Rich dictionary content could not be displayed. A text version is shown.</value></data>
-  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>?? ????? ?? ?????? ????? (429)</value></data>
-  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>???? ????? ???? ?????? ?????.</value></data>
-  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>???? ?????? ??????? ?????: {0}. ????? ????????.</value></data>
-  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>???? ?????? ??? ??????. ????? ?????? ?? ???? ??? ???? ??????.</value></data>
+  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>تم بلوغ حد طلبات اكتشاف اللغة (429)</value></data>
+  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>جارٍ تجربة خدمة اكتشاف بديلة.</value></data>
+  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>اكتشفت الخدمة البديلة {0}. يمكنك المتابعة.</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>تعذر اكتشاف اللغة المصدر. اخترها يدويًا أو أعد المحاولة لاحقًا.</value></data>
   <data name="SignInWithOrcaRouter" xml:space="preserve"><value>تسجيل الدخول باستخدام OrcaRouter</value></data>
   <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>في انتظار إكمال تسجيل الدخول في المتصفح…</value></data>
   <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>تم تسجيل الدخول. تم حفظ مفتاح OrcaRouter API الخاص بك.</value></data>

@@ -1553,10 +1553,10 @@
   <data name="FluentCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>Copied</value></data>
   <data name="FluentDictionaryFallback" xml:space="preserve"><value>Rich dictionary content could not be displayed. A text version is shown.</value></data>
-  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>Gr?nse for sproggenkendelse (429)</value></data>
-  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Pr?ver en alternativ tjeneste.</value></data>
-  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Den alternative tjeneste genkendte {0}. Du kan forts?tte.</value></data>
-  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Kildesproget kunne ikke genkendes. V?lg det manuelt, eller pr?v igen senere.</value></data>
+  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>Grænse for sproggenkendelse (429)</value></data>
+  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Prøver en alternativ tjeneste.</value></data>
+  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Den alternative tjeneste genkendte {0}. Du kan fortsætte.</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Kildesproget kunne ikke genkendes. Vælg det manuelt, eller prøv igen senere.</value></data>
   <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Log ind med OrcaRouter</value></data>
   <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>Venter på, at du fuldfører login i din browser…</value></data>
   <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Logget ind. Din OrcaRouter API-nøgle er gemt.</value></data>

@@ -16,24 +16,31 @@ public class DictionaryWebViewRenderingTests : IDisposable
 {
     private readonly AppLauncher _launcher;
     private readonly ITestOutputHelper _output;
-
-    private const int TranslationWaitMs = 10000;
-
-    private static string DictionaryQuery =>
-        Environment.GetEnvironmentVariable("EASYDICT_UIA_DICTIONARY_QUERY") ?? "no";
+    private readonly DictionaryRenderingFixture _fixture;
 
     public DictionaryWebViewRenderingTests(ITestOutputHelper output)
     {
         _output = output;
+        _fixture = new DictionaryRenderingFixture();
         _launcher = new AppLauncher();
-        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+        try
+        {
+            _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+        }
+        catch
+        {
+            _launcher.Dispose();
+            _fixture.Dispose();
+            throw;
+        }
     }
 
     [Fact]
     public void MainWindow_DictionaryWebView_CapturesScreenshotForManualReview()
     {
         var window = _launcher.GetMainWindow();
-        Thread.Sleep(2000);
+        Retry.WhileNull(() => window.FindFirstDescendant(cf => cf.ByName(DictionaryRenderingFixture.ServiceName)),
+            TimeSpan.FromSeconds(10)).Result.Should().NotBeNull("the isolated local dictionary must be configured before querying");
 
         var inputBox = UITestHelper.FindInputTextBox(window);
 
@@ -41,7 +48,7 @@ public class DictionaryWebViewRenderingTests : IDisposable
 
         inputBox!.Click();
         Thread.Sleep(300);
-        inputBox.Text = DictionaryQuery;
+        inputBox.Text = DictionaryRenderingFixture.Query;
         Thread.Sleep(500);
 
         var pathBeforeTranslate = ScreenshotHelper.CaptureWindow(window, "50_dictionary_webview_before_query");
@@ -50,8 +57,10 @@ public class DictionaryWebViewRenderingTests : IDisposable
 
         Keyboard.Type(VirtualKeyShort.ENTER);
 
-        _output.WriteLine($"Waiting {TranslationWaitMs}ms for dictionary results...");
-        Thread.Sleep(TranslationWaitMs);
+        var visibleResult = Retry.WhileNull(
+            () => TryFindVisibleDescendant(window, "DictWebView")
+                ?? TryFindVisibleDescendant(window, "ResultText"),
+            TimeSpan.FromSeconds(20)).Result;
 
         _output.WriteLine($"App has exited after dictionary query: {_launcher.Application.HasExited}");
         _launcher.Application.HasExited.Should().BeFalse(
@@ -61,13 +70,18 @@ public class DictionaryWebViewRenderingTests : IDisposable
         _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
         File.Exists(pathAfterTranslate).Should().BeTrue("the post-query screenshot should be written for manual review");
 
+        visibleResult.Should().NotBeNull("the local MDX fixture must render HTML or its plain-text fallback without an online service");
+
         var visibleDictWebView = Retry.WhileNull(
             () => TryFindVisibleDescendant(window, "DictWebView"),
             TimeSpan.FromSeconds(5)).Result;
 
         if (visibleDictWebView != null)
         {
-            var pathElement = ScreenshotHelper.CaptureElement(visibleDictWebView, "52_dictionary_webview_element");
+            Retry.WhileFalse(() => TryFindVisibleDescendant(window, "DictWebView")?.BoundingRectangle.Height > 20,
+                TimeSpan.FromSeconds(10)).Result.Should().BeTrue("the WebView must finish laying out its dictionary content");
+            visibleDictWebView = TryFindVisibleDescendant(window, "DictWebView")!;
+            var pathElement = ScreenshotHelper.CaptureElementPhysical(window, visibleDictWebView, "52_dictionary_webview_element");
             _output.WriteLine($"Element screenshot saved: {pathElement}");
             File.Exists(pathElement).Should().BeTrue("the dictionary WebView element screenshot should be written when the WebView is present");
         }
@@ -79,6 +93,7 @@ public class DictionaryWebViewRenderingTests : IDisposable
 
             visibleResultText.Should().NotBeNull(
                 "when WebView2 cannot render the MDX HTML, the plain-text fallback should still be visible for dictionary entries that exist");
+            visibleResultText!.Name.Should().Contain(DictionaryRenderingFixture.Definition);
             _output.WriteLine("Dictionary WebView not visible; plain-text fallback is visible instead.");
         }
 
@@ -99,15 +114,16 @@ public class DictionaryWebViewRenderingTests : IDisposable
 
     public void Dispose()
     {
-        _launcher.Dispose();
+        try { _launcher.Dispose(); }
+        finally { _fixture.Dispose(); }
     }
 
     private static AutomationElement? TryFindVisibleDescendant(AutomationElement root, string automationId)
     {
         try
         {
-            var candidate = root.FindFirstDescendant(cf => cf.ByAutomationId(automationId));
-            return candidate != null && !candidate.IsOffscreen ? candidate : null;
+            return root.FindAllDescendants(cf => cf.ByAutomationId(automationId))
+                .FirstOrDefault(candidate => !candidate.IsOffscreen);
         }
         catch (COMException)
         {

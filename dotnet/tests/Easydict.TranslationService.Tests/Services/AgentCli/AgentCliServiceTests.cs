@@ -152,7 +152,7 @@ public class AgentCliServiceTests
         arguments.Should().Contain("--strict-mcp-config");
         arguments.Should().ContainInOrder("--model", "sonnet");
         arguments.Should().ContainInOrder("--tools", "");
-        arguments.Should().ContainInOrder("--setting-sources", "");
+        arguments.Should().ContainInOrder("--setting-sources", "user");
         arguments.Should().ContainInOrder("--system-prompt", BaseOpenAIService.TranslationSystemPrompt);
 
         // The prompt itself must never be on the command line — it goes to stdin.
@@ -262,6 +262,69 @@ public class AgentCliServiceTests
 
         detail.Should().Contain("[redacted]");
         detail.Should().NotContain("secretvalue");
+    }
+
+    [Fact]
+    public void ErrorFormatter_LongStdErr_PreservesLeadingErrorBeforeUsage()
+    {
+        const string error = "error: unknown option '--unsupported'";
+        var usage = string.Join('\n', Enumerable.Repeat("  --help  Display help for command", 20));
+
+        var detail = AgentCliErrorFormatter.BuildDetail(
+            ["control-line fallback"], $"{error}\nUsage: claude [options]\n{usage}");
+
+        detail.Should().StartWith($": {error} Usage:");
+        detail.Should().EndWith("…");
+        detail.Length.Should().BeLessThanOrEqualTo(303);
+        detail.Should().NotContain("control-line fallback");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" \r\n ")]
+    public void ErrorFormatter_LongControlLines_PreserveTrailingError(string stdErr)
+    {
+        var preamble = new string('x', 400);
+        const string error = "Failed to authenticate: 403 Request not allowed";
+
+        var detail = AgentCliErrorFormatter.BuildDetail([preamble, error], stdErr);
+
+        detail.Should().StartWith(": …");
+        detail.Should().EndWith(error);
+        detail.Length.Should().BeLessThanOrEqualTo(303);
+    }
+
+    [Fact]
+    public void ErrorFormatter_FallsBackToControlLines_SkipsVerboseInitNoise()
+    {
+        // Regression for easydict_win32#205: --verbose makes the system/init line huge
+        // (it lists every slash command), which used to crowd the real error out of the
+        // 300-char excerpt when stderr was empty and the join fell back to control lines.
+        var hugeInitLine =
+            """{"type":"system","subtype":"init","slash_commands":["""
+            + string.Join(',', Enumerable.Range(0, 60).Select(i => $"\"cmd-{i}\""))
+            + "]}";
+        var statusLine = """{"type":"system","subtype":"status","status":"requesting"}""";
+        var resultLine = """{"type":"result","is_error":true,"result":"Failed to authenticate. API Error: 403 Request not allowed"}""";
+
+        var detail = AgentCliErrorFormatter.BuildDetail([hugeInitLine, statusLine, resultLine], stdErr: "");
+
+        detail.Should().Contain("403 Request not allowed");
+        detail.Should().NotContain("cmd-0");
+    }
+
+    [Fact]
+    public void ErrorFormatter_AllMetadataLines_FallsBackToUnfilteredRatherThanEmpty()
+    {
+        var detail = AgentCliErrorFormatter.BuildDetail(
+            [
+                """{"type":"system","subtype":"init","session_id":"abc"}""",
+                """{"type":"system","subtype":"status","status":"requesting"}""",
+            ],
+            stdErr: "");
+
+        detail.Should().NotBe("");
+        detail.Should().Contain("subtype");
     }
 
     [Fact]

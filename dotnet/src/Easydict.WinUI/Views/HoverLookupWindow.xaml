@@ -26,7 +26,7 @@
         </Grid.RowDefinitions>
 
         <!-- Header: word + "open in Mini window" -->
-        <Grid Grid.Row="0" ColumnSpacing="8">
+        <Grid x:Name="HeaderGrid" Grid.Row="0" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -36,8 +36,7 @@
                        AutomationProperties.AutomationId="HoverLookupWord"
                        FontSize="15"
                        FontWeight="SemiBold"
-                       TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis"
+                       TextWrapping="Wrap"
                        VerticalAlignment="Center"
                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
             <Button x:Name="OpenInMiniButton"

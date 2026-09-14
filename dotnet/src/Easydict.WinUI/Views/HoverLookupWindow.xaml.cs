@@ -264,11 +264,30 @@ public sealed partial class HoverLookupWindow : Window
         {
             try
             {
-                RootGrid.Measure(new Windows.Foundation.Size(MaxWidthDips, double.PositiveInfinity));
+                // Measure each row's natural width independently. The header's star column and
+                // wrapping result must not constrain each other before we choose the popup width.
+                var headerWidth = MeasureNaturalWidth(WordText)
+                    + HeaderGrid.ColumnSpacing + MeasureNaturalWidth(OpenInMiniButton);
+                var contentWidth = new[]
+                {
+                    headerWidth,
+                    MeasureNaturalWidth(PhoneticText),
+                    MeasureNaturalWidth(LoadingPanel),
+                    MeasureNaturalWidth(BodyText),
+                    MeasureNaturalWidth(ServiceText),
+                }.Max();
+                var horizontalChrome = RootGrid.Padding.Left + RootGrid.Padding.Right
+                    + RootGrid.BorderThickness.Left + RootGrid.BorderThickness.Right;
+                var measuredWidth = Math.Min(MaxWidthDips, Math.Ceiling(contentWidth + horizontalChrome));
+
+                // Re-measure at the chosen width so both the source and result can wrap, and
+                // derive the height from that final layout rather than the wider first pass.
+                RootGrid.InvalidateMeasure();
+                RootGrid.Measure(new Windows.Foundation.Size(measuredWidth, double.PositiveInfinity));
                 var desired = RootGrid.DesiredSize;
                 if (desired.Width > 0 && desired.Height > 0)
                 {
-                    widthDips = Math.Min(MaxWidthDips, Math.Ceiling(desired.Width));
+                    widthDips = measuredWidth;
                     heightDips = Math.Ceiling(desired.Height);
                 }
             }
@@ -302,6 +321,14 @@ public sealed partial class HoverLookupWindow : Window
 
         Debug.WriteLine($"[HoverLookupWindow] Shown at ({x}, {y}), size={width}x{height}, scale={scale}");
         BoundsChanged?.Invoke();
+    }
+
+    private static double MeasureNaturalWidth(FrameworkElement element)
+    {
+        if (element.Visibility == Visibility.Collapsed) return 0;
+
+        element.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        return element.DesiredSize.Width;
     }
 
     private void OnOpenInMiniButtonClick(object sender, RoutedEventArgs e)

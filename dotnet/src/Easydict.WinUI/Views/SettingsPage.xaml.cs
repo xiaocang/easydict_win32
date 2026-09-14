@@ -33,9 +33,9 @@ internal enum SettingsTabId
 {
     General,
     Services,
-    Plugins,
     Views,
     Hotkeys,
+    Plugins,
     Advanced,
     Language,
     About
@@ -244,9 +244,9 @@ public sealed partial class SettingsPage : Page
     [
         new() { Id = SettingsTabId.General, IconGlyph = "\uE713", IsSelected = true },
         new() { Id = SettingsTabId.Services, IconGlyph = "\uE90F" },
-        new() { Id = SettingsTabId.Plugins, IconGlyph = "\uEA86" },
         new() { Id = SettingsTabId.Views, IconGlyph = "\uE8A7" },
         new() { Id = SettingsTabId.Hotkeys, IconGlyph = "\uE765" },
+        new() { Id = SettingsTabId.Plugins, IconGlyph = "\uEA86" },
         new() { Id = SettingsTabId.Advanced, IconGlyph = "\uE771" },
         new() { Id = SettingsTabId.Language, IconGlyph = "\uE774" },
         new() { Id = SettingsTabId.About, IconGlyph = "\uE946" }
@@ -1132,12 +1132,12 @@ public sealed partial class SettingsPage : Page
 
         GeneralTabContent.Visibility = tabId == SettingsTabId.General ? Visibility.Visible : Visibility.Collapsed;
         ServicesTabContent.Visibility = tabId == SettingsTabId.Services ? Visibility.Visible : Visibility.Collapsed;
-        PluginsTabContent.Visibility = tabId == SettingsTabId.Plugins ? Visibility.Visible : Visibility.Collapsed;
         if (ViewsTabContent != null)
         {
             ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;
         }
         HotkeysTabContent.Visibility = tabId == SettingsTabId.Hotkeys ? Visibility.Visible : Visibility.Collapsed;
+        PluginsTabContent.Visibility = tabId == SettingsTabId.Plugins ? Visibility.Visible : Visibility.Collapsed;
         AdvancedTabContent.Visibility = tabId == SettingsTabId.Advanced ? Visibility.Visible : Visibility.Collapsed;
         LanguageTabContent.Visibility = tabId == SettingsTabId.Language ? Visibility.Visible : Visibility.Collapsed;
         AboutTabContent.Visibility = tabId == SettingsTabId.About ? Visibility.Visible : Visibility.Collapsed;

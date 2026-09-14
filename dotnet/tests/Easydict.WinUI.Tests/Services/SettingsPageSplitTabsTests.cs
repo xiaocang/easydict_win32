@@ -35,9 +35,9 @@ public class SettingsPageSplitTabsTests
     [
         "General",
         "Services",
-        "Plugins",
         "Views",
         "Hotkeys",
+        "Plugins",
         "Advanced",
         "Language",
         "About"

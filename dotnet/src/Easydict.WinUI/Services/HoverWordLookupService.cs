@@ -30,8 +30,8 @@ public sealed record HoverLookupOptions(bool Enabled, HoverLookupModifier Modifi
 
 /// <summary>
 /// Orchestrates hover word lookup (悬浮取词): while the trigger key is held and the pointer
-/// rests on a word, finds the word under the pointer (UIA, then OCR), translates it with one
-/// service and shows a small non-activating popup next to the word.
+/// rests on a word, finds the word under the pointer (UIA, then OCR), tries translation services
+/// in priority order and shows the first useful result in a small non-activating popup.
 ///
 /// Threading: hook events and the dwell timer run on the UI thread and only do O(1) work;
 /// word extraction and translation run on the thread pool; results come back through the
@@ -42,7 +42,7 @@ public sealed partial class HoverWordLookupService : IDisposable
     /// <summary>Dwell timer interval while the trigger condition holds.</summary>
     public const int TickIntervalMs = 50;
 
-    /// <summary>Hard cap for one lookup (word extraction + translation).</summary>
+    /// <summary>Timeout for word extraction; translation has a separate timeout per service.</summary>
     public const int LookupTimeoutMs = 6000;
 
     /// <summary>Per-request translation timeout.</summary>
@@ -72,12 +72,12 @@ public sealed partial class HoverWordLookupService : IDisposable
     private readonly MouseHookService _mouseHook;
     private readonly WordUnderCursorService _wordService;
     private readonly HoverDwellDetector _detector = new();
+    private readonly HoverLookupKeyHold _keyHold = new();
     private readonly ConcurrentDictionary<uint, string?> _processNames = new();
 
     private DispatcherQueueTimer? _timer;
     private HoverLookupWindow? _window;
     private HoverLookupOptions _options = HoverLookupOptions.Disabled;
-    private bool _modifierDown;
     private bool _blockedUntilModifierRelease;
     private bool _isDisposed;
 
@@ -125,6 +125,7 @@ public sealed partial class HoverWordLookupService : IDisposable
 
         _options = options;
         _detector.Reset();
+        _keyHold.SetDown(false, Environment.TickCount64);
         _hasLastMiss = false;
         _blockedUntilModifierRelease = false;
 
@@ -132,12 +133,11 @@ public sealed partial class HoverWordLookupService : IDisposable
         {
             Dismiss("Disabled");
             StopTimer();
-            _modifierDown = false;
             Debug.WriteLine("[HoverLookup] Disabled");
             return;
         }
 
-        _modifierDown = options.Modifier != HoverLookupModifier.None && IsModifierPhysicallyHeld();
+        _keyHold.SetDown(options.Modifier != HoverLookupModifier.None && IsModifierPhysicallyHeld(), Environment.TickCount64);
         Debug.WriteLine($"[HoverLookup] Enabled: modifier={options.Modifier}, ocrFallback={options.UseOcrFallback}, service='{options.ServiceId}'");
     }
 
@@ -165,7 +165,8 @@ public sealed partial class HoverWordLookupService : IDisposable
             Dismiss("PointerLeftPending");
         }
 
-        if (_detector.IsArmed && IsTriggerSatisfied())
+        // Start the timer even before the key-hold threshold, so a stationary pointer can fire later.
+        if (_detector.IsArmed && IsTriggerActive())
         {
             EnsureTimerRunning();
         }
@@ -184,18 +185,18 @@ public sealed partial class HoverWordLookupService : IDisposable
         {
             if (e.IsKeyDown)
             {
-                if (!_modifierDown)
+                if (!_keyHold.IsDown)
                 {
-                    _modifierDown = true;
+                    _keyHold.SetDown(true, Environment.TickCount64);
                     _blockedUntilModifierRelease = false;
-                    // Pressing the trigger key over a word the pointer already rests on looks it up.
+                    // A resting pointer may fire once the trigger key has been held long enough.
                     _detector.Rearm();
                     EnsureTimerRunning();
                 }
             }
             else
             {
-                _modifierDown = false;
+                _keyHold.SetDown(false, Environment.TickCount64);
                 _blockedUntilModifierRelease = false;
                 // The next press over the same word should look it up again.
                 _detector.Rearm();
@@ -221,7 +222,7 @@ public sealed partial class HoverWordLookupService : IDisposable
     public void DismissForInput(string reason)
     {
         if (_isDisposed) return;
-        if (_modifierDown)
+        if (_keyHold.IsDown)
         {
             _blockedUntilModifierRelease = true;
         }
@@ -267,11 +268,14 @@ public sealed partial class HoverWordLookupService : IDisposable
     // Dwell timer (UI thread)
     // ---------------------------------------------------------------------
 
-    private bool IsTriggerSatisfied()
+    private bool IsTriggerActive()
     {
         return _options.Modifier == HoverLookupModifier.None
-            || (_modifierDown && !_blockedUntilModifierRelease);
+            || (_keyHold.IsDown && !_blockedUntilModifierRelease);
     }
+
+    private bool IsTriggerSatisfied(long nowTicks) => IsTriggerActive() &&
+        (_options.Modifier == HoverLookupModifier.None || _keyHold.IsSatisfied(nowTicks));
 
     private bool IsModifierPhysicallyHeld()
     {
@@ -321,9 +325,9 @@ public sealed partial class HoverWordLookupService : IDisposable
             {
                 // Re-validate against the physical key state to recover from missed key-ups.
                 var held = IsModifierPhysicallyHeld();
-                if (_modifierDown && !held)
+                if (_keyHold.IsDown && !held)
                 {
-                    _modifierDown = false;
+                    _keyHold.SetDown(false, Environment.TickCount64);
                     _blockedUntilModifierRelease = false;
                     _detector.Rearm();
                 }
@@ -340,7 +344,8 @@ public sealed partial class HoverWordLookupService : IDisposable
                 return;
             }
 
-            var result = _detector.Tick(Environment.TickCount64, IsTriggerSatisfied());
+            var nowTicks = Environment.TickCount64;
+            var result = _detector.Tick(nowTicks, IsTriggerSatisfied(nowTicks));
             if (result.Fired)
             {
                 StartLookup(result.Point);
@@ -421,6 +426,7 @@ public sealed partial class HoverWordLookupService : IDisposable
             }
 
             ct.ThrowIfCancellationRequested();
+            cts.CancelAfter(Timeout.Infinite);
             Debug.WriteLine($"[HoverLookup] Word '{word.Text}' via {word.Source} at {word.ScreenRect}");
 
             var foundWord = word;
@@ -428,8 +434,8 @@ public sealed partial class HoverWordLookupService : IDisposable
 
             using var handle = TranslationManagerService.Instance.AcquireHandle();
             var manager = handle.Manager;
-            var serviceId = ResolveServiceId(options.ServiceId, manager);
-            if (serviceId is null)
+            var serviceIds = ResolveServiceIds(options.ServiceId, manager);
+            if (serviceIds.Count == 0)
             {
                 Debug.WriteLine("[HoverLookup] No usable translation service enabled");
                 _dispatcherQueue.TryEnqueue(() => ShowMessageOnUiThread(foundWord, "HoverLookupNoResult", generation));
@@ -446,8 +452,18 @@ public sealed partial class HoverWordLookupService : IDisposable
                 TimeoutMs = TranslationTimeoutMs,
             };
 
-            var result = await manager.TranslateAsync(request, ct, serviceId);
+            var result = await HoverLookupFallback.TranslateAsync(
+                serviceIds,
+                (serviceId, attemptToken) => manager.TranslateAsync(request, attemptToken, serviceId),
+                TimeSpan.FromMilliseconds(TranslationTimeoutMs),
+                ct);
             ct.ThrowIfCancellationRequested();
+
+            if (result is null)
+            {
+                _dispatcherQueue.TryEnqueue(() => ShowMessageOnUiThread(foundWord, "HoverLookupNoResult", generation));
+                return;
+            }
 
             _dispatcherQueue.TryEnqueue(() =>
             {
@@ -477,7 +493,7 @@ public sealed partial class HoverWordLookupService : IDisposable
         }
     }
 
-    private static string? ResolveServiceId(string configured, TranslationManager manager)
+    private static IReadOnlyList<string> ResolveServiceIds(string configured, TranslationManager manager)
     {
         var settings = SettingsService.Instance;
         var enabled = settings.MiniWindowEnabledServices
@@ -485,7 +501,7 @@ public sealed partial class HoverWordLookupService : IDisposable
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return HoverLookupRules.SelectServiceId(
+        return HoverLookupRules.SelectServiceIds(
             configured,
             enabled,
             id => IsServiceUsable(manager, settings, id),

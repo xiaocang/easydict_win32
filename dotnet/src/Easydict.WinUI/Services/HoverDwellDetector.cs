@@ -60,8 +60,8 @@ public sealed class HoverDwellDetector
 
     /// <summary>
     /// Evaluate the detector. Fires (once per rest) when the pointer has rested for at least
-    /// <see cref="DwellMs"/> and <paramref name="triggerSatisfied"/> is true. Pressing the trigger
-    /// key while the pointer already rests therefore fires on the next tick.
+    /// <see cref="DwellMs"/> and <paramref name="triggerSatisfied"/> is true. The caller checks
+    /// the trigger key's minimum hold duration before passing true.
     /// </summary>
     public DwellResult Tick(long nowTicks, bool triggerSatisfied)
     {

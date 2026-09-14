@@ -1269,17 +1269,17 @@
   <data name="ExcludedApps" xml:space="preserve"><value>बहिष्कृत ऐप्स</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>माउस चयन अनुवाद से बाहर रखने के लिए प्रक्रिया नाम, अल्पविराम से अलग करें। उदाहरण: VS Code के लिए "code"।</value></data>
-  <data name="HoverWordLookup" xml:space="preserve"><value>होवर शब्द खोज (ट्रिगर कुंजी दबाए रखें और किसी शब्द पर पॉइंटर रखें)</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>होवर शब्द खोज (प्रायोगिक) (ट्रिगर कुंजी दबाए रखें और किसी शब्द पर पॉइंटर रखें)</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>ट्रिगर कुंजी</value></data>
   <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>कोई कुंजी नहीं (केवल होवर)</value></data>
   <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + होवर</value></data>
   <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Shift + होवर</value></data>
   <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + होवर</value></data>
   <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>जब ऐप टेक्स्ट उपलब्ध न कराए तो OCR का उपयोग करें</value></data>
-  <data name="HoverWordLookupService" xml:space="preserve"><value>खोज सेवा</value></data>
-  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>स्वचालित (पहली सक्षम शब्दकोश सेवा)</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>प्राथमिक शब्द खोज सेवा</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>स्वचालित (पहले शब्दकोश, विफल होने पर अगली सेवा)</value></data>
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>पॉइंटर के पास शब्द, उसका उच्चारण और अर्थ दिखाने वाला एक छोटा पॉपअप दिखाता है। ऊपर दिए गए बहिष्कृत ऐप भी लागू होते हैं।</value></data>
-  <data name="TrayHoverWordLookup" xml:space="preserve"><value>होवर शब्द खोज</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>होवर शब्द खोज (प्रायोगिक)</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>मिनी विंडो में खोलें</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>खोजा जा रहा है…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>कोई परिणाम नहीं</value></data>

@@ -18,64 +18,64 @@ public class HoverLookupRulesTests
     private static bool IsRegistered(string id) => Registered.Contains(id);
 
     [Fact]
-    public void SelectServiceId_ExplicitUsableService_Wins()
+    public void SelectServiceIds_ExplicitUsableService_ComesFirstWithoutDuplicates()
     {
-        var result = HoverLookupRules.SelectServiceId("deepl", ["google", "youdao"], _ => true, IsRegistered);
+        var result = HoverLookupRules.SelectServiceIds("deepl", ["google", "deepl", "youdao", "GOOGLE"], _ => true, IsRegistered);
 
-        result.Should().Be("deepl");
+        result.Should().Equal("deepl", "youdao", "google");
     }
 
     [Fact]
-    public void SelectServiceId_ExplicitButUnusableOrUnknown_FallsBackToAuto()
+    public void SelectServiceIds_ExplicitButUnusableOrUnknown_FallsBackToAuto()
     {
-        HoverLookupRules.SelectServiceId("deepl", ["google", "youdao"], id => id != "deepl", IsRegistered)
-            .Should().Be("youdao");
-        HoverLookupRules.SelectServiceId("nonexistent", ["google"], _ => true, IsRegistered)
-            .Should().Be("google");
+        HoverLookupRules.SelectServiceIds("deepl", ["google", "youdao"], id => id != "deepl", IsRegistered)
+            .Should().Equal("youdao", "google");
+        HoverLookupRules.SelectServiceIds("nonexistent", ["google"], _ => true, IsRegistered)
+            .Should().Equal("google");
     }
 
     [Theory]
     [InlineData("")]
     [InlineData(null)]
     [InlineData("   ")]
-    public void SelectServiceId_Auto_PrefersYoudao_ThenGoogleWeb(string? configured)
+    public void SelectServiceIds_Auto_PrefersYoudao_ThenGoogleWeb(string? configured)
     {
-        HoverLookupRules.SelectServiceId(configured, ["google", "google_web", "youdao"], _ => true, IsRegistered)
-            .Should().Be("youdao");
-        HoverLookupRules.SelectServiceId(configured, ["google", "google_web"], _ => true, IsRegistered)
-            .Should().Be("google_web");
+        HoverLookupRules.SelectServiceIds(configured, ["google", "google_web", "youdao"], _ => true, IsRegistered)
+            .Should().Equal("youdao", "google_web", "google");
+        HoverLookupRules.SelectServiceIds(configured, ["google", "google_web"], _ => true, IsRegistered)
+            .Should().Equal("google_web", "google");
     }
 
     [Fact]
-    public void SelectServiceId_Auto_ThenEnabledMdxDictionary_ThenFirstUsable()
+    public void SelectServiceIds_Auto_ThenEnabledMdxDictionary_ThenFirstUsable()
     {
-        HoverLookupRules.SelectServiceId("", ["openai", "mdx::oxford", "google"], _ => true, IsRegistered)
-            .Should().Be("mdx::oxford");
-        HoverLookupRules.SelectServiceId("", ["openai", "google"], _ => true, IsRegistered)
-            .Should().Be("openai");
+        HoverLookupRules.SelectServiceIds("", ["openai", "mdx::oxford", "google"], _ => true, IsRegistered)
+            .Should().Equal("mdx::oxford", "openai", "google");
+        HoverLookupRules.SelectServiceIds("", ["openai", "google"], _ => true, IsRegistered)
+            .Should().Equal("openai", "google");
     }
 
     [Fact]
-    public void SelectServiceId_SkipsUnusableAndUnregisteredEntries()
+    public void SelectServiceIds_SkipsUnusableAndUnregisteredEntries()
     {
-        HoverLookupRules.SelectServiceId("", ["youdao", "openai", "google"], id => id != "youdao" && id != "openai", IsRegistered)
-            .Should().Be("google");
-        HoverLookupRules.SelectServiceId("", ["ghost", "google"], _ => true, IsRegistered)
-            .Should().Be("google");
+        HoverLookupRules.SelectServiceIds("", ["youdao", "openai", "google"], id => id != "youdao" && id != "openai", IsRegistered)
+            .Should().Equal("google");
+        HoverLookupRules.SelectServiceIds("", ["ghost", "google"], _ => true, IsRegistered)
+            .Should().Equal("google");
     }
 
     [Fact]
-    public void SelectServiceId_NothingUsable_ReturnsNull()
+    public void SelectServiceIds_NothingUsable_ReturnsEmpty()
     {
-        HoverLookupRules.SelectServiceId("", ["youdao", "google"], _ => false, IsRegistered).Should().BeNull();
-        HoverLookupRules.SelectServiceId("", [], _ => true, IsRegistered).Should().BeNull();
+        HoverLookupRules.SelectServiceIds("", ["youdao", "google"], _ => false, IsRegistered).Should().BeEmpty();
+        HoverLookupRules.SelectServiceIds("", [], _ => true, IsRegistered).Should().BeEmpty();
     }
 
     [Fact]
-    public void SelectServiceId_IsCaseInsensitiveForPreferredServices()
+    public void SelectServiceIds_IsCaseInsensitiveForPreferredServices()
     {
-        HoverLookupRules.SelectServiceId("", ["Google", "YouDao"], _ => true, IsRegistered)
-            .Should().Be("YouDao");
+        HoverLookupRules.SelectServiceIds("", ["Google", "YouDao"], _ => true, IsRegistered)
+            .Should().Equal("YouDao", "Google");
     }
 
     [Theory]

@@ -69,7 +69,7 @@ public class HoverDwellDetectorTests
         _detector.Tick(5_000, triggerSatisfied: false).Fired.Should().BeFalse();
         _detector.IsArmed.Should().BeTrue();
 
-        // Pressing the trigger key while already resting fires immediately.
+        // Once the caller's key-hold requirement is satisfied, an already resting pointer fires.
         _detector.Tick(5_001, triggerSatisfied: true).Fired.Should().BeTrue();
     }
 

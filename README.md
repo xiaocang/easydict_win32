@@ -85,7 +85,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Bob Plugin Compatibility** - Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services. Plugins run in an embedded JavaScript engine with manual queries and optional caching and retries. Each installed plugin gets a selection button, configurable from the Plugins page. Ordinary translation leaves plugin services inactive and grayed out. Plugin results always carry a "Bob plugin" badge.
 
-- **Hover Word Lookup** - Hold `Ctrl` (configurable, or no key at all) and rest the pointer on any word to see a small popup with the word, its phonetics and meaning. Reads text via UI Automation with an OCR fallback for apps that expose no text; toggle it from the tray menu or Settings → Behavior
+- **Hover Word Lookup (Experimental)** - Disabled by default; enable it from the tray menu or Settings → Behavior. Hold `Ctrl` for at least 50 ms (configurable key, or no key at all) and rest the pointer on any word to see a small popup with the word, its phonetics and meaning. Reads text via UI Automation with an OCR fallback for apps that expose no text. Tries the preferred lookup service first, then falls back through enabled services if a request fails, times out or returns no meaning
 
 - **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
 
@@ -276,7 +276,7 @@ If Easydict for Windows is useful to you, please [give the repository a star on 
 | OCR Screenshot Translation | Yes | Yes |
 | TTS | Yes | Yes |
 | Selection Translation | Yes | Yes |
-| Hover Word Lookup | No | Yes |
+| Hover Word Lookup (Experimental) | No | Yes (disabled by default) |
 | Grammar Correction | No | Yes |
 | Long Document Translation | No | Yes |
 | Dictionary Mode | Yes | Yes |

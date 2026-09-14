@@ -17,14 +17,14 @@ public static class HoverLookupRules
     public const string MdxServiceIdPrefix = "mdx::";
 
     /// <summary>
-    /// Pick the translation service that powers the popup.
+    /// Order translation services for the popup, with the configured service first.
     /// </summary>
     /// <param name="configured">The configured service id ("" or null = Auto).</param>
     /// <param name="enabledInOrder">Enabled service ids in the user's display order.</param>
     /// <param name="isUsable">Whether a registered service can currently be used (configured, region-available).</param>
     /// <param name="isRegistered">Whether a service id is registered with the translation manager.</param>
-    /// <returns>A service id, or null when nothing usable is enabled.</returns>
-    public static string? SelectServiceId(
+    /// <returns>Usable service ids in fallback order, without duplicates.</returns>
+    public static IReadOnlyList<string> SelectServiceIds(
         string? configured,
         IReadOnlyList<string> enabledInOrder,
         Func<string, bool> isUsable,
@@ -34,30 +34,36 @@ public static class HoverLookupRules
         ArgumentNullException.ThrowIfNull(isUsable);
         ArgumentNullException.ThrowIfNull(isRegistered);
 
-        var explicitId = configured?.Trim();
-        if (!string.IsNullOrEmpty(explicitId) && isRegistered(explicitId) && isUsable(explicitId))
+        var candidates = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string? id)
         {
-            return explicitId;
-        }
-
-        // Auto: dictionary-capable services first, then any enabled MDX dictionary, then the first usable one.
-        foreach (var preferred in PreferredDictionaryServiceIds)
-        {
-            var enabled = enabledInOrder.FirstOrDefault(id => string.Equals(id, preferred, StringComparison.OrdinalIgnoreCase));
-            if (enabled is not null && isRegistered(enabled) && isUsable(enabled))
+            if (!string.IsNullOrWhiteSpace(id) && seen.Add(id) && isRegistered(id) && isUsable(id))
             {
-                return enabled;
+                candidates.Add(id);
             }
         }
 
-        var mdx = enabledInOrder.FirstOrDefault(id =>
-            id.StartsWith(MdxServiceIdPrefix, StringComparison.OrdinalIgnoreCase) && isRegistered(id) && isUsable(id));
-        if (mdx is not null)
+        Add(configured?.Trim());
+
+        // Auto: dictionary-capable services, enabled MDX dictionaries, then remaining enabled services.
+        foreach (var preferred in PreferredDictionaryServiceIds)
         {
-            return mdx;
+            var enabled = enabledInOrder.FirstOrDefault(id => string.Equals(id, preferred, StringComparison.OrdinalIgnoreCase));
+            Add(enabled);
         }
 
-        return enabledInOrder.FirstOrDefault(id => isRegistered(id) && isUsable(id));
+        foreach (var id in enabledInOrder.Where(id => id.StartsWith(MdxServiceIdPrefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            Add(id);
+        }
+
+        foreach (var id in enabledInOrder)
+        {
+            Add(id);
+        }
+
+        return candidates;
     }
 
     /// <summary>

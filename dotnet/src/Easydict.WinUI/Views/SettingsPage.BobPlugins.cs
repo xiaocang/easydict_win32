@@ -22,11 +22,9 @@ public sealed partial class SettingsPage
     private const string BobTextActionSource = "bob";
 
     /// <summary>
-    /// Bob's own plugin catalog. The tab links out to it rather than browsing or fetching a
-    /// listing in-app: verify against https://bobtranslate.com/plugin if this ever needs to
-    /// change.
+    /// Bob's third-party plugin catalog, opened in the browser from the Plugins tab.
     /// </summary>
-    private const string BobPluginStoreUrl = "https://bobtranslate.com/plugin";
+    private const string BobPluginStoreUrl = "https://bobplugin.ripperhe.com/";
 
     /// <summary>Editable option fields per plugin, read back by <see cref="SaveBobPluginOptions"/>.</summary>
     private readonly Dictionary<string, List<(BobPluginOption Option, FrameworkElement Field)>> _bobOptionFields = new(StringComparer.Ordinal);
@@ -75,7 +73,7 @@ public sealed partial class SettingsPage
             // run on every keystroke until the user asks for it.
             EnableBobPluginAsManualQuery(plugin.ServiceId);
 
-            // The selection pop-up gets a button for it, which is how a plugin is meant to be used.
+            // The selection pop-up gets a button for it, configurable from the Plugins tab.
             _settings.AddOrReplaceTextAction(TextActionValidator.ForService(
                 plugin.ServiceId,
                 plugin.DisplayName,

@@ -1743,7 +1743,8 @@ namespace Easydict.WinUI.Views
                 }
 
                 // Get EnabledQuery setting (default true if not found)
-                var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
+                var enabledQuery = ServiceQuerySelection.IsEnabled(
+                    serviceId, ServiceOriginHelper.Resolve(service, serviceId), enabledQuerySettings);
                 descriptors.Add(new ServiceResultDescriptor(serviceId, displayName, enabledQuery));
             }
 

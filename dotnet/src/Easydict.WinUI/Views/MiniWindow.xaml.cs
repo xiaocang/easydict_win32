@@ -89,11 +89,6 @@ public sealed partial class MiniWindow : Window
     // callback per frame.
     private StreamingTextCoalescer? _streamingCoalescer;
 
-    // Service id that the next query must include even if it is configured as manual-query.
-    // Set by SetTextAndQueryService (a text action, e.g. a plugin button on the selection pop-up)
-    // and consumed inside StartQueryAsync once the row list has settled.
-    private string? _pendingFocusedServiceId;
-
     private const int ResizeThrottleMs = 150;
     private const int InputFocusRetryDelayMs = 50;
     private const int InputFocusMaxAttempts = 10;
@@ -476,7 +471,8 @@ public sealed partial class MiniWindow : Window
                 && GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage);
 
             // Get EnabledQuery setting (default true if not found)
-            var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
+            var enabledQuery = ServiceQuerySelection.IsEnabled(
+                serviceId, ServiceOriginHelper.Resolve(service, serviceId), enabledQuerySettings);
 
             var result = new ServiceQueryResult
             {
@@ -503,9 +499,15 @@ public sealed partial class MiniWindow : Window
         ReorderResultsPanel();
     }
 
-    private bool HasEnabledGrammarCorrectionService(TranslationLanguage sourceLanguage)
+    private bool HasEnabledGrammarCorrectionService(TranslationLanguage sourceLanguage, string? focusedServiceId = null)
     {
         var manager = TranslationManagerService.Instance.Manager;
+        if (focusedServiceId is not null)
+        {
+            return manager.Services.TryGetValue(focusedServiceId, out var focusedService)
+                && GrammarCorrectionServiceAvailability.IsAvailable(focusedService, sourceLanguage);
+        }
+
         return _settings.MiniWindowEnabledServices.Any(serviceId =>
             manager.Services.TryGetValue(serviceId, out var service)
             && GrammarCorrectionServiceAvailability.IsAvailable(service, sourceLanguage));
@@ -693,6 +695,7 @@ public sealed partial class MiniWindow : Window
                 (Content as FrameworkElement)?.XamlRoot,
                 async dialog => await dialog.ShowAsync(),
                 ct);
+            ct.ThrowIfCancellationRequested();
             if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
             {
                 InitializeServiceResults();
@@ -1126,7 +1129,7 @@ public sealed partial class MiniWindow : Window
         LoadingRing.Visibility = Visibility.Collapsed;
     }
 
-    private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
+    private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual, string? focusedServiceId = null)
     {
         if (_isClosing)
         {
@@ -1171,7 +1174,6 @@ public sealed partial class MiniWindow : Window
         try { oldManualCts?.Cancel(); } catch (ObjectDisposedException) { }
 
         QuerySnapshotDraft? snapshotDraft = null;
-        ServiceQueryResult? focusedService = null;
         var ct = currentCts.Token;
 
         try
@@ -1190,12 +1192,14 @@ public sealed partial class MiniWindow : Window
                 DetectedLangText.Text = "";
                 DetectedLangText.Visibility = Visibility.Collapsed;
             }
+            ct.ThrowIfCancellationRequested();
             _lastDetectedLanguage = detectedLanguage;
 
             var resolution = ResolveQuickQueryLanguage(
                 detectedLanguage,
-                HasEnabledGrammarCorrectionService(detectedLanguage));
+                HasEnabledGrammarCorrectionService(detectedLanguage, focusedServiceId));
             ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
+            ApplyQueryServiceSelection(focusedServiceId);
 
             var targetLanguage = resolution.EffectiveTargetLanguage;
             if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
@@ -1223,11 +1227,12 @@ public sealed partial class MiniWindow : Window
                 (Content as FrameworkElement)?.XamlRoot,
                 async dialog => await dialog.ShowAsync(),
                 ct);
+            ct.ThrowIfCancellationRequested();
             if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
             {
                 InitializeServiceResults();
                 if (resolution.EffectiveMode == QueryMode.GrammarCorrection &&
-                    !HasEnabledGrammarCorrectionService(detectedLanguage))
+                    !HasEnabledGrammarCorrectionService(detectedLanguage, focusedServiceId))
                 {
                     resolution = ResolveQuickQueryLanguage(
                         detectedLanguage,
@@ -1252,6 +1257,7 @@ public sealed partial class MiniWindow : Window
                     return;
                 }
 
+                ApplyQueryServiceSelection(focusedServiceId);
                 if (!_serviceResults.Any(result => result.EnabledQuery))
                 {
                     return;
@@ -1270,11 +1276,6 @@ public sealed partial class MiniWindow : Window
 
             SetLoading(true);
             _hasAutoPlayedCurrentQuery = false;
-
-            // A text action may target a service this window keeps as manual-query. The rows are
-            // final at this point (language resolution and the Phi Silica prompt can both rebuild
-            // them), so promote it now and restore the setting in the finally block below.
-            focusedService = PromoteFocusedService();
 
             // Reset all service results
             foreach (var result in _serviceResults)
@@ -1445,11 +1446,6 @@ public sealed partial class MiniWindow : Window
         finally
         {
             if (!_isClosing) SetLoading(false);
-            // Restore the manual-query setting of a service promoted for this query only.
-            if (focusedService is not null && _serviceResults.Contains(focusedService))
-            {
-                focusedService.EnabledQuery = false;
-            }
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
             if (snapshotDraft is not null)
             {
@@ -1463,10 +1459,10 @@ public sealed partial class MiniWindow : Window
     /// Wrapper that always tracks the query task before returning.
     /// Avoids "downgrading" from a running real task to a no-op completed task.
     /// </summary>
-    private Task StartQueryTrackedAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
+    private Task StartQueryTrackedAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual, string? focusedServiceId = null)
     {
         var oldTask = _currentQueryTask;
-        var newTask = StartQueryAsync(sourceKind);
+        var newTask = StartQueryAsync(sourceKind, focusedServiceId);
         Task trackedTask;
 
         // Only update _currentQueryTask if:
@@ -1921,9 +1917,9 @@ public sealed partial class MiniWindow : Window
     }
 
     /// <summary>
-    /// Set text and make sure one specific service is queried, even when it is configured as
+    /// Set text and query only one specific service, even when it is configured as
     /// manual-query. Called from a text action (for example a plugin button on the selection pop-up).
-    /// The service joins the normal fan-out exactly once; the other auto-query services run as usual.
+    /// Other services remain visible but inactive until another query is requested.
     /// </summary>
     public void SetTextAndQueryService(string text, string serviceId, QuerySourceKind sourceKind)
     {
@@ -1935,42 +1931,27 @@ public sealed partial class MiniWindow : Window
         }
 
         InputTextBox.Text = text;
-        // Consumed by PromoteFocusedService() inside StartQueryAsync, after the row list has settled
-        // (language resolution and the Phi Silica prompt can both rebuild the rows).
-        _pendingFocusedServiceId = serviceId;
-        _ = StartQueryTrackedAsync(sourceKind);
+        _ = StartQueryTrackedAsync(sourceKind, serviceId);
     }
 
     /// <summary>
-    /// Include <see cref="_pendingFocusedServiceId"/> in the current query. Returns the row whose
-    /// EnabledQuery was flipped on for this query only, so the caller can restore it afterwards.
+    /// Apply this query's selection without changing saved settings. A missing action target
+    /// leaves every row inactive instead of falling back to unrelated services.
     /// </summary>
-    private ServiceQueryResult? PromoteFocusedService()
+    private void ApplyQueryServiceSelection(string? serviceId)
     {
-        var serviceId = _pendingFocusedServiceId;
-        _pendingFocusedServiceId = null;
-        if (string.IsNullOrEmpty(serviceId))
+        if (serviceId is not null && !_serviceResults.Any(r => string.Equals(r.ServiceId, serviceId, StringComparison.Ordinal)))
         {
-            return null;
+            TryAddTransientServiceResult(serviceId);
         }
 
-        var target = _serviceResults.FirstOrDefault(r => string.Equals(r.ServiceId, serviceId, StringComparison.Ordinal))
-            ?? TryAddTransientServiceResult(serviceId);
-        if (target is null)
+        foreach (var result in _serviceResults)
         {
-            Debug.WriteLine($"[MiniWindow] Focused service '{serviceId}' is not registered; running a normal query");
-            return null;
+            result.EnabledQuery = ServiceQuerySelection.IsEnabled(
+                result.ServiceId, result.Origin, _settings.MiniWindowServiceEnabledQuery, serviceId)
+                && (serviceId is not null || _settings.MiniWindowEnabledServices.Contains(result.ServiceId));
+            result.Reset();
         }
-
-        target.IsExpanded = true;
-        target.ManuallyToggled = true;
-        if (target.EnabledQuery)
-        {
-            return null;   // already part of the fan-out; nothing to restore
-        }
-
-        target.EnabledQuery = true;
-        return target;
     }
 
     /// <summary>

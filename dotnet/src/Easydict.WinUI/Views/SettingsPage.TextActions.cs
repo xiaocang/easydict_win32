@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Easydict.WinUI.Views;
 
 /// <summary>
-/// Settings → Advanced → Text Actions: the editor for the declarative actions that appear on the
+/// Settings → Plugins → Text Actions: the editor for the declarative actions that appear on the
 /// selection pop-up strip and in each window's Actions menu.
 /// </summary>
 public sealed partial class SettingsPage

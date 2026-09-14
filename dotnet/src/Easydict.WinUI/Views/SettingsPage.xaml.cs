@@ -3175,6 +3175,7 @@ public sealed partial class SettingsPage : Page
         {
             UpdateBobPluginsSummary();
             BuildInstalledBobPluginsConfigUI();
+            BuildTextActionsUI();
         }
 
         if (ShouldLoadSettingsTab(SettingsTabId.General, deferLazyTabData))
@@ -3349,7 +3350,6 @@ public sealed partial class SettingsPage : Page
 
         UpdateImportedMdxSummary();
         BuildImportedMdxConfigUI();
-        BuildTextActionsUI();
     }
 
     private void UpdateImportedMdxSummary()

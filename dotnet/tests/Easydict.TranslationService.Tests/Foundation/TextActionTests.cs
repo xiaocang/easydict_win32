@@ -77,7 +77,8 @@ public class TextActionTests
             uri!.Scheme.Should().Be("https");
         }
 
-        TextActionCatalog.Defaults.Count(a => a.ShowOnPopButton).Should().Be(1, "only one search button is on the pop-up by default");
+        TextActionCatalog.Defaults.Should().OnlyContain(a => !a.ShowOnPopButton,
+            "selection search buttons are enabled explicitly from the Plugins page");
     }
 
     [Fact]

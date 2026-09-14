@@ -81,9 +81,9 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window. The pop-up is a strip: next to the translate icon it shows your configured text actions
 
-- **Text Actions** - Run the selected or entered text through one specific service, or send it to Google, Bing, GitHub, Wikipedia, Baidu or your own URL template. Available from the Actions menu in every window and, optionally, on the selection pop-up (Settings → Advanced → Text Actions)
+- **Text Actions** - Run the selected or entered text through one specific service, or send it to Google, Bing, GitHub, Wikipedia, Baidu or your own URL template. Available from the Actions menu in every window. Selection search buttons are off by default and can be enabled under Settings → Plugins → Text Actions. Clicking a service icon queries only that service and grays out the others.
 
-- **Bob Plugin Compatibility** - Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services. Plugins run in an embedded JavaScript engine with conservative defaults (manual query, no caching, no retries) until you opt in per plugin, each installed plugin gets its own button on the selection pop-up, and plugin results always carry a "Bob plugin" badge so they are never mistaken for a built-in service
+- **Bob Plugin Compatibility** - Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services. Plugins run in an embedded JavaScript engine with manual queries and optional caching and retries. Each installed plugin gets a selection button, configurable from the Plugins page. Ordinary translation leaves plugin services inactive and grayed out. Plugin results always carry a "Bob plugin" badge.
 
 - **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
 

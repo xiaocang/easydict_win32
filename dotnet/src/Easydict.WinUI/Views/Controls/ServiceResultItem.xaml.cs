@@ -458,7 +458,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             _serviceResult.IsExpanded = false;
         }
-        RootBorder.Opacity = hideEmpty ? 0.5 : 1.0;
+        RootBorder.Opacity = hideEmpty || _serviceResult.ShowPendingQueryHint ? 0.5 : 1.0;
         ArrowIcon.Visibility = hideEmpty ? Visibility.Collapsed : Visibility.Visible;
         var minimal = MinimalThemeService.IsActive;
 

@@ -2040,6 +2040,41 @@
                                         Spacing="8"/>
                             </StackPanel>
                         </StackPanel>
+                        <!-- Text Actions -->
+                        <StackPanel x:Name="TextActionsSection"
+                                Spacing="12">
+                            <TextBlock x:Name="TextActionsHeaderText"
+                                    Text="Text Actions"
+                                    FontSize="18"
+                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                            <TextBlock x:Name="TextActionsDescriptionText"
+                                       Text="Actions run on the selected or entered text: open a search site, or run one specific service (for example a Bob plugin)."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+
+                            <Border Style="{StaticResource SettingsSectionStyle}">
+                                <StackPanel Spacing="8">
+                                    <StackPanel x:Name="TextActionsPanel"
+                                                Spacing="4"/>
+                                    <StackPanel Orientation="Horizontal"
+                                            Spacing="8">
+                                        <Button x:Name="AddTextActionButton"
+                                                Content="Add action"
+                                                Click="OnAddTextActionClicked"/>
+                                        <Button x:Name="ResetTextActionsButton"
+                                                Content="Reset to defaults"
+                                                Click="OnResetTextActionsClicked"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TextActionsPopButtonHintText"
+                                               Text="Actions marked 'Show on selection button' appear next to the translate icon after you select text (requires Mouse Selection Translate)."
+                                               FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
                     </StackPanel>
 
                     <StackPanel x:Name="ViewsTabContent"
@@ -3443,41 +3478,6 @@
                                 </StackPanel>
                                 <TextBlock x:Name="TranslationCacheNoteText"
                                            Text="Cached translations are stored locally in SQLite. Clear cache if translations become stale."
-                                           FontSize="12"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-
-                    <!-- Text Actions -->
-                    <StackPanel x:Name="TextActionsSection"
-                            Spacing="12">
-                        <TextBlock x:Name="TextActionsHeaderText"
-                                Text="Text Actions"
-                                FontSize="18"
-                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                        <TextBlock x:Name="TextActionsDescriptionText"
-                                   Text="Actions run on the selected or entered text: open a search site, or run one specific service (for example a Bob plugin)."
-                                   FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                TextWrapping="Wrap"/>
-
-                        <Border Style="{StaticResource SettingsSectionStyle}">
-                            <StackPanel Spacing="8">
-                                <StackPanel x:Name="TextActionsPanel"
-                                            Spacing="4"/>
-                                <StackPanel Orientation="Horizontal"
-                                        Spacing="8">
-                                    <Button x:Name="AddTextActionButton"
-                                            Content="Add action"
-                                            Click="OnAddTextActionClicked"/>
-                                    <Button x:Name="ResetTextActionsButton"
-                                            Content="Reset to defaults"
-                                            Click="OnResetTextActionsClicked"/>
-                                </StackPanel>
-                                <TextBlock x:Name="TextActionsPopButtonHintText"
-                                           Text="Actions marked 'Show on selection button' appear next to the translate icon after you select text (requires Mouse Selection Translate)."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>

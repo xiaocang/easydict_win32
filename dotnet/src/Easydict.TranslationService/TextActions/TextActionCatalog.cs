@@ -7,7 +7,7 @@ namespace Easydict.TranslationService.TextActions;
 /// </summary>
 public static class TextActionCatalog
 {
-    /// <summary>Actions shipped with Easydict. Only the first one is on the pop-up strip by default.</summary>
+    /// <summary>Actions shipped with Easydict. Selection buttons are opt-in.</summary>
     public static IReadOnlyList<TextAction> Defaults { get; } =
     [
         new TextAction
@@ -18,7 +18,7 @@ public static class TextActionCatalog
             UrlTemplate = "https://www.google.com/search?q={encodedText}",
             IconGlyph = "\uE721",
             IsBuiltIn = true,
-            ShowOnPopButton = true
+            ShowOnPopButton = false
         },
         new TextAction
         {

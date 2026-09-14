@@ -102,12 +102,26 @@ public class DictionaryWebViewRenderingTests : IDisposable
         _launcher.Dispose();
     }
 
+    // Every ServiceResultItem card exposes the same automation ID (e.g. "ResultText"), so a
+    // single FindFirstDescendant can return a collapsed/loading card's element while a
+    // different, already-populated card lower in the tree is fully visible (the same class of
+    // bug SavedItemsTests.FindRendered works around). Scan every match and take the first one
+    // that is actually on screen instead of trusting tree order.
     private static AutomationElement? TryFindVisibleDescendant(AutomationElement root, string automationId)
     {
         try
         {
-            var candidate = root.FindFirstDescendant(cf => cf.ByAutomationId(automationId));
-            return candidate != null && !candidate.IsOffscreen ? candidate : null;
+            return root.FindAllDescendants(cf => cf.ByAutomationId(automationId))
+                .FirstOrDefault(element =>
+                {
+                    if (element.IsOffscreen)
+                    {
+                        return false;
+                    }
+
+                    var bounds = element.BoundingRectangle;
+                    return bounds.Width > 1 && bounds.Height > 1;
+                });
         }
         catch (COMException)
         {

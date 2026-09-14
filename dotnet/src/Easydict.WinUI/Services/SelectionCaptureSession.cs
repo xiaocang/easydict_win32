@@ -9,6 +9,19 @@ internal sealed class SelectionCaptureSession(
     internal nint SourceWindow => sourceWindow;
     internal CancellationToken CancellationToken => cancellationToken;
 
+    private bool IsValid => !cancellationToken.IsCancellationRequested
+        && sourceWindow != 0 && getForegroundWindow() == sourceWindow;
+
+    // Synchronous UIA calls cannot be interrupted and may outlive their awaiter.
+    // Discard stale reads without throwing from the background worker; the awaiting
+    // capture still uses ThrowIfInvalid before accepting text or trying clipboard.
+    internal T? ReadIfValid<T>(Func<T?> read) where T : class
+    {
+        if (!IsValid) return null;
+        var result = read();
+        return IsValid ? result : null;
+    }
+
     internal void ThrowIfInvalid()
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -348,11 +348,7 @@ public static class TextSelectionService
                 try
                 {
                     session.ThrowIfInvalid();
-                    var uiaTask = Task.Run(() =>
-                    {
-                        session.ThrowIfInvalid();
-                        return GetSelectedTextViaUIA(session);
-                    }, cancellationToken);
+                    var uiaTask = Task.Run(() => GetSelectedTextViaUIA(session), cancellationToken);
                     _ = uiaTask.ContinueWith(task =>
                     {
                         _ = task.Exception; // Observe failures after the caller times out.
@@ -381,6 +377,10 @@ public static class TextSelectionService
         {
             if (semaphoreAcquired) _automationSemaphore.Release();
         }
+
+        // UIA may finish after cancellation or return no text for a stale source.
+        // Observe cancellation here before accepting its result or sending Ctrl+C.
+        session.ThrowIfInvalid();
 
         if (!string.IsNullOrWhiteSpace(uiaText))
         {
@@ -426,9 +426,7 @@ public static class TextSelectionService
     {
         try
         {
-            session.ThrowIfInvalid();
-            var focused = _automation.FocusedElement();
-            session.ThrowIfInvalid();
+            var focused = session.ReadIfValid(() => _automation.FocusedElement());
             if (focused == null)
             {
                 Debug.WriteLine("[TextSelectionService] No focused element");
@@ -436,7 +434,7 @@ public static class TextSelectionService
             }
 
             // Try to get text pattern from focused element
-            var text = GetSelectionFromElement(focused);
+            var text = session.ReadIfValid(() => GetSelectionFromElement(focused));
             if (!string.IsNullOrEmpty(text))
             {
                 return text;

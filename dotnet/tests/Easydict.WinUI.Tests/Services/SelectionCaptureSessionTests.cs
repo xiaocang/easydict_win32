@@ -28,6 +28,80 @@ public class SelectionCaptureSessionTests
         check.Should().Throw<OperationCanceledException>();
     }
 
+    [Fact]
+    public void ReadIfValid_ValidSource_ReturnsSelection()
+    {
+        var session = new SelectionCaptureSession(123, () => 123, CancellationToken.None);
+
+        session.ReadIfValid(() => "selection").Should().Be("selection");
+    }
+
+    [Fact]
+    public void ReadIfValid_MissingSource_DoesNotRead()
+    {
+        var session = new SelectionCaptureSession(0, () => 0, CancellationToken.None);
+        var read = false;
+
+        session.ReadIfValid(() => { read = true; return "selection"; }).Should().BeNull();
+
+        read.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReadIfValid_InvalidatedBeforeWorkerStarts_SkipsRead(bool cancel)
+    {
+        using var cancellation = new CancellationTokenSource();
+        nint foreground = 123;
+        var session = new SelectionCaptureSession(foreground, () => foreground, cancellation.Token);
+        var read = false;
+        if (cancel) cancellation.Cancel();
+        else foreground = 456;
+
+        var worker = Task.Run(() => session.ReadIfValid(() => { read = true; return "selection"; }));
+
+        (await worker).Should().BeNull();
+        worker.Status.Should().Be(TaskStatus.RanToCompletion);
+        read.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReadIfValid_InvalidatedDuringUiaCall_DiscardsResultWithoutThrowingFromWorker(bool cancel)
+    {
+        using var cancellation = new CancellationTokenSource();
+        nint foreground = 123;
+        var session = new SelectionCaptureSession(foreground, () => foreground, cancellation.Token);
+        var worker = Task.Run(() => session.ReadIfValid(() =>
+        {
+            // A native UIA call returns only after the capture has been dismissed.
+            if (cancel) cancellation.Cancel();
+            else foreground = 456;
+            return "stale selection";
+        }));
+
+        (await worker).Should().BeNull();
+        worker.Status.Should().Be(TaskStatus.RanToCompletion);
+
+        // The awaiting capture must still stop before accepting text or using clipboard.
+        Action validateCapture = session.ThrowIfInvalid;
+        validateCapture.Should().Throw<OperationCanceledException>()
+            .Which.CancellationToken.Should().Be(cancellation.Token);
+    }
+
+    [Fact]
+    public void ReadIfValid_ReadFailure_IsNotSwallowed()
+    {
+        var session = new SelectionCaptureSession(123, () => 123, CancellationToken.None);
+        var failure = new InvalidOperationException("UIA failed");
+
+        Action read = () => session.ReadIfValid<string>(() => throw failure);
+
+        read.Should().Throw<InvalidOperationException>().Which.Should().BeSameAs(failure);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

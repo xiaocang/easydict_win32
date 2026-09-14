@@ -16,26 +16,41 @@
           Padding="0"
           Opacity="0.75">
 
-        <Button x:Name="TranslateButton"
-                Width="30" Height="30"
-                Padding="0"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Background="Transparent"
-                BorderBrush="{ThemeResource PopButtonBorderBrush}"
-                BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
-                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                Click="OnTranslateButtonClick"
-                PointerEntered="OnTranslateButtonPointerEntered"
-                PointerExited="OnTranslateButtonPointerExited"
-                PointerPressed="OnTranslateButtonPointerPressed"
-                PointerReleased="OnTranslateButtonPointerReleased"
-                PointerCanceled="OnTranslateButtonPointerCanceled"
-                PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
-            <FontIcon x:Name="ModeIcon"
-                      Glyph="&#xE8C1;"
-                      FontSize="14"
-                      Foreground="{ThemeResource PopButtonForegroundBrush}" />
-        </Button>
+        <!-- Action strip: native translate button, then (optionally) a divider and configured text actions.
+             Plugin actions carry a corner mark so third-party buttons are visually distinct. -->
+        <StackPanel x:Name="ButtonsPanel"
+                    Orientation="Horizontal"
+                    Spacing="2"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center">
+            <Button x:Name="TranslateButton"
+                    Width="30" Height="30"
+                    Padding="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderBrush="{ThemeResource PopButtonBorderBrush}"
+                    BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
+                    CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                    Click="OnTranslateButtonClick"
+                    PointerEntered="OnTranslateButtonPointerEntered"
+                    PointerExited="OnTranslateButtonPointerExited"
+                    PointerPressed="OnTranslateButtonPointerPressed"
+                    PointerReleased="OnTranslateButtonPointerReleased"
+                    PointerCanceled="OnTranslateButtonPointerCanceled"
+                    PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
+                <FontIcon x:Name="ModeIcon"
+                          Glyph="&#xE8C1;"
+                          FontSize="14"
+                          Foreground="{ThemeResource PopButtonForegroundBrush}" />
+            </Button>
+
+            <Rectangle x:Name="ActionsDivider"
+                       Width="1"
+                       Height="18"
+                       Fill="{ThemeResource PopButtonBorderBrush}"
+                       VerticalAlignment="Center"
+                       Visibility="Collapsed"/>
+        </StackPanel>
     </Grid>
 </Window>

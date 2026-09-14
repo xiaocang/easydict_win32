@@ -1557,4 +1557,39 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>???????????</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>????????{0}???????</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>???????????????????????</value></data>
+  <data name="TextActionsButtonTooltip" xml:space="preserve"><value>文本动作</value></data>
+  <data name="TextActionsSelectTextFirst" xml:space="preserve"><value>请先输入或选中文本</value></data>
+  <data name="TextActionsNoActions" xml:space="preserve"><value>尚未配置动作（设置 → 高级 → 文本动作）</value></data>
+  <data name="TextActionsGroupSearch" xml:space="preserve"><value>搜索</value></data>
+  <data name="TextActionsGroupServices" xml:space="preserve"><value>服务</value></data>
+  <data name="TextActionsGroupPlugins" xml:space="preserve"><value>Bob 插件</value></data>
+  <data name="TextActionsHeader" xml:space="preserve"><value>文本动作</value></data>
+  <data name="TextActionsDescription" xml:space="preserve"><value>对选中或输入的文本执行动作：打开搜索网站，或只运行某个服务（例如 Bob 插件）。动作出现在每个窗口的“动作”菜单中，也可以显示在划词按钮上。</value></data>
+  <data name="TextActionsPopButtonHint" xml:space="preserve"><value>勾选“显示在划词按钮”的动作会在划词后出现在翻译图标旁（需要开启鼠标划词翻译）。</value></data>
+  <data name="TextActionAdd" xml:space="preserve"><value>添加动作</value></data>
+  <data name="TextActionResetDefaults" xml:space="preserve"><value>恢复默认</value></data>
+  <data name="TextActionEnabled" xml:space="preserve"><value>启用</value></data>
+  <data name="TextActionShowOnPopButton" xml:space="preserve"><value>显示在划词按钮</value></data>
+  <data name="TextActionMoveUp" xml:space="preserve"><value>上移</value></data>
+  <data name="TextActionMoveDown" xml:space="preserve"><value>下移</value></data>
+  <data name="TextActionEdit" xml:space="preserve"><value>编辑</value></data>
+  <data name="TextActionDelete" xml:space="preserve"><value>删除</value></data>
+  <data name="TextActionServiceSubtitle" xml:space="preserve"><value>运行服务：{0}</value></data>
+  <data name="TextActionTypeUrl" xml:space="preserve"><value>打开网址</value></data>
+  <data name="TextActionTypeService" xml:space="preserve"><value>运行服务</value></data>
+  <data name="TextActionTitle" xml:space="preserve"><value>标题</value></data>
+  <data name="TextActionUrlTemplate" xml:space="preserve"><value>网址模板</value></data>
+  <data name="TextActionUrlHint" xml:space="preserve"><value>占位符：{encodedText}、{encodedTranslation}、{from}、{to}。仅支持 http/https 网址。</value></data>
+  <data name="TextActionServiceLabel" xml:space="preserve"><value>服务</value></data>
+  <data name="TextActionDialogAddTitle" xml:space="preserve"><value>添加文本动作</value></data>
+  <data name="TextActionDialogEditTitle" xml:space="preserve"><value>编辑文本动作</value></data>
+  <data name="TextActionDuplicate" xml:space="preserve"><value>该服务的动作已存在。</value></data>
+  <data name="TextActionInvalidUrl" xml:space="preserve"><value>请输入包含 {encodedText} 的有效 http(s) 网址模板。</value></data>
+  <data name="Save" xml:space="preserve"><value>保存</value></data>
+  <data name="ServiceOrigin_BobBadge" xml:space="preserve"><value>Bob 插件</value></data>
+  <data name="ServiceOrigin_PluginBadge" xml:space="preserve"><value>插件</value></data>
+  <data name="ServiceOrigin_MdxBadge" xml:space="preserve"><value>MDX 词典</value></data>
+  <data name="ServiceOrigin_PluginTooltip" xml:space="preserve"><value>第三方 {0} 插件{1}。不是 Easydict 内置服务；网络请求与数据处理由插件自行完成。</value></data>
+  <data name="ServiceOrigin_MdxTooltip" xml:space="preserve"><value>您导入的词典文件。本地查询，不是 Easydict 内置服务。</value></data>
+  <data name="ServiceOrigin_NameSuffix" xml:space="preserve"><value>{0}（{1}）</value></data>
 </root>

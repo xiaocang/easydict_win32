@@ -2,19 +2,24 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.TextActions;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using WinRT.Interop;
 
 namespace Easydict.WinUI.Views;
 
 /// <summary>
-/// A tiny floating window (30x30) that appears near text selection.
-/// Clicking the button triggers translation of the selected text.
+/// A tiny floating action strip that appears near text selection: the native translate button,
+/// followed (after a divider) by the configured text actions — search sites and services such as
+/// Bob plugins. Plugin buttons carry a corner mark so third-party actions are visually distinct.
+/// Clicking the translate button translates the selected text; clicking an action runs it.
 ///
 /// Key Win32 properties:
 /// - WS_EX_NOACTIVATE: Does not steal focus from the source application
@@ -76,6 +81,12 @@ public sealed partial class PopButtonWindow : Window
     private readonly AppWindow? _appWindow;
     private bool _isVisible;
 
+    // Strip geometry (logical pixels). Width = translate button + optional divider + action buttons.
+    private const int ButtonSize = 30;
+    private const int ItemSpacing = 2;
+    private const int DividerWidth = 1;
+    private readonly List<Button> _actionButtons = new();
+
     // Hover/pressed interaction state
     private const double BaseOpacity = 0.75;
     private const double DarkBaseOpacity = 0.94;
@@ -105,6 +116,18 @@ public sealed partial class PopButtonWindow : Window
     /// Fired when the user clicks the translate button.
     /// </summary>
     public event Action? OnClicked;
+
+    /// <summary>
+    /// Fired when the user clicks one of the configured action buttons.
+    /// </summary>
+    public event Action<TextAction>? OnActionClicked;
+
+    /// <summary>Number of action buttons currently on the strip.</summary>
+    public int ActionCount => _actionButtons.Count;
+
+    private int LogicalWidth => ButtonSize + (_actionButtons.Count > 0
+        ? ItemSpacing + DividerWidth + _actionButtons.Count * (ItemSpacing + ButtonSize)
+        : 0);
 
     /// <summary>
     /// Gets whether the pop button window is currently visible.
@@ -149,10 +172,10 @@ public sealed partial class PopButtonWindow : Window
         exStyle = (IntPtr)((long)exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST);
         SetWindowLongPtr(_hwnd, GWL_EXSTYLE, exStyle);
 
-        // Set initial size (30x30 logical pixels, scaled for DPI)
+        // Set initial size (30x30 logical pixels, scaled for DPI; grows when actions are added)
         var dpi = GetDpiForWindow(_hwnd);
         var scale = dpi / 96.0;
-        var physicalSize = (int)(30 * scale);
+        var physicalSize = (int)(ButtonSize * scale);
         _appWindow.Resize(new Windows.Graphics.SizeInt32(physicalSize, physicalSize));
 
         // Start hidden
@@ -200,7 +223,8 @@ public sealed partial class PopButtonWindow : Window
     {
         var dpi = GetDpiForWindow(_hwnd);
         var scale = dpi / 96.0;
-        var physicalSize = (int)(30 * scale);
+        var physicalWidth = (int)(LogicalWidth * scale);
+        var physicalHeight = (int)(ButtonSize * scale);
         var offsetX = (int)(8 * scale);
         var offsetY = (int)(32 * scale);
 
@@ -208,32 +232,185 @@ public sealed partial class PopButtonWindow : Window
         var x = screenX + offsetX;
         var y = screenY - offsetY;
 
-        // Clamp to screen bounds so the button never appears off-screen
+        // Clamp to screen bounds so the strip never appears off-screen
         try
         {
             var display = DisplayArea.GetFromPoint(
                 new PointInt32(screenX, screenY), DisplayAreaFallback.Nearest);
             var workArea = display.WorkArea;
 
-            if (x + physicalSize > workArea.X + workArea.Width)
-                x = workArea.X + workArea.Width - physicalSize;
+            if (x + physicalWidth > workArea.X + workArea.Width)
+                x = workArea.X + workArea.Width - physicalWidth;
             if (x < workArea.X)
                 x = workArea.X;
             if (y < workArea.Y)
                 y = workArea.Y;
-            if (y + physicalSize > workArea.Y + workArea.Height)
-                y = workArea.Y + workArea.Height - physicalSize;
+            if (y + physicalHeight > workArea.Y + workArea.Height)
+                y = workArea.Y + workArea.Height - physicalHeight;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[PopButton] Screen bounds check failed, using unclamped position: {ex.Message}");
         }
 
-        SetWindowPos(_hwnd, HWND_TOPMOST, x, y, physicalSize, physicalSize,
+        SetWindowPos(_hwnd, HWND_TOPMOST, x, y, physicalWidth, physicalHeight,
             SWP_NOACTIVATE | SWP_SHOWWINDOW);
         _isVisible = true;
 
-        Debug.WriteLine($"[PopButton] Shown at ({x}, {y}), size={physicalSize}, dpi={dpi}");
+        Debug.WriteLine($"[PopButton] Shown at ({x}, {y}), size={physicalWidth}x{physicalHeight}, actions={_actionButtons.Count}, dpi={dpi}");
+    }
+
+    /// <summary>
+    /// Replace the action buttons on the strip. Must be called on the UI thread before <see cref="ShowAt"/>.
+    /// Internal because <see cref="PresentedTextAction"/> is an assembly-internal presentation type.
+    /// </summary>
+    internal void SetActions(IReadOnlyList<PresentedTextAction> actions, ElementTheme theme)
+    {
+        foreach (var button in _actionButtons)
+        {
+            button.Click -= OnActionButtonClick;
+            DetachInteractionHandlers(button);
+            ButtonsPanel.Children.Remove(button);
+        }
+        _actionButtons.Clear();
+
+        foreach (var entry in actions)
+        {
+            var button = CreateActionButton(entry, theme);
+            _actionButtons.Add(button);
+            ButtonsPanel.Children.Add(button);
+        }
+
+        ActionsDivider.Visibility = _actionButtons.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private Button CreateActionButton(PresentedTextAction entry, ElementTheme theme)
+    {
+        var action = entry.Action;
+        var badge = entry.IsPluginAction ? ServiceOriginHelper.BadgeText(entry.Origin) : null;
+        var tooltip = string.IsNullOrEmpty(badge) ? action.Title : $"{action.Title} · {badge}";
+
+        var button = new Button
+        {
+            Width = ButtonSize,
+            Height = ButtonSize,
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderBrush = TranslateButton.BorderBrush,
+            BorderThickness = TranslateButton.BorderThickness,
+            CornerRadius = TranslateButton.CornerRadius,
+            Tag = action,
+            Content = CreateActionContent(entry, theme)
+        };
+        ToolTipService.SetToolTip(button, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, $"PopButtonAction_{action.Id}");
+        button.Click += OnActionButtonClick;
+        AttachInteractionHandlers(button);
+        return button;
+    }
+
+    private FrameworkElement CreateActionContent(PresentedTextAction entry, ElementTheme theme)
+    {
+        var host = new Grid { Width = 20, Height = 20 };
+        var action = entry.Action;
+
+        FrameworkElement icon;
+        if (action.Type == TextActionType.RunService && !string.IsNullOrEmpty(action.ServiceId))
+        {
+            var image = new Image
+            {
+                Width = 16,
+                Height = 16,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            try
+            {
+                var bitmap = new BitmapImage(ServiceIconAssetResolver.GetIconUri(action.ServiceId, theme));
+                bitmap.ImageFailed += (_, _) =>
+                {
+                    // No icon shipped for this service: fall back to a neutral glyph.
+                    var index = host.Children.IndexOf(image);
+                    if (index >= 0)
+                    {
+                        host.Children[index] = CreateGlyph("\uE8C1");
+                    }
+                };
+                image.Source = bitmap;
+                icon = image;
+            }
+            catch
+            {
+                icon = CreateGlyph("\uE8C1");
+            }
+        }
+        else
+        {
+            icon = CreateGlyph(string.IsNullOrEmpty(action.IconGlyph) ? "\uE721" : action.IconGlyph);
+        }
+
+        host.Children.Add(icon);
+
+        if (entry.IsPluginAction)
+        {
+            // Corner mark shared with the result card: identifies third-party plugin actions.
+            host.Children.Add(new FontIcon
+            {
+                Glyph = "\uEA86",
+                FontSize = 7,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, -2, -1),
+                Foreground = ThemeResourceService.GetBrush("PluginAccentBrush", RootGrid)
+                    ?? ModeIcon.Foreground
+            });
+        }
+
+        return host;
+    }
+
+    private FontIcon CreateGlyph(string glyph)
+    {
+        return new FontIcon
+        {
+            Glyph = glyph,
+            FontSize = 14,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = ModeIcon.Foreground
+        };
+    }
+
+    private void AttachInteractionHandlers(Button button)
+    {
+        button.PointerEntered += OnTranslateButtonPointerEntered;
+        button.PointerExited += OnTranslateButtonPointerExited;
+        button.PointerPressed += OnTranslateButtonPointerPressed;
+        button.PointerReleased += OnTranslateButtonPointerReleased;
+        button.PointerCanceled += OnTranslateButtonPointerCanceled;
+        button.PointerCaptureLost += OnTranslateButtonPointerCaptureLost;
+    }
+
+    private void DetachInteractionHandlers(Button button)
+    {
+        button.PointerEntered -= OnTranslateButtonPointerEntered;
+        button.PointerExited -= OnTranslateButtonPointerExited;
+        button.PointerPressed -= OnTranslateButtonPointerPressed;
+        button.PointerReleased -= OnTranslateButtonPointerReleased;
+        button.PointerCanceled -= OnTranslateButtonPointerCanceled;
+        button.PointerCaptureLost -= OnTranslateButtonPointerCaptureLost;
+    }
+
+    private void OnActionButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: TextAction action })
+        {
+            Debug.WriteLine($"[PopButton] Action button clicked: {action.Id}");
+            OnActionClicked?.Invoke(action);
+        }
     }
 
     /// <summary>

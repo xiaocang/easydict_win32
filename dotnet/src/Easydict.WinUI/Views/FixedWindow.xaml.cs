@@ -4,9 +4,11 @@ using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.TextActions;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.TextActions;
 using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
@@ -146,7 +148,7 @@ public sealed partial class FixedWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { PinButton, OcrButton, CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, TextActionsButton, CloseButton },
                 "FixedWindow");
             _titleBarHelper.Initialize();
         }
@@ -188,6 +190,8 @@ public sealed partial class FixedWindow : Window
         // Tooltips
         ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
         ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
+        ToolTipService.SetToolTip(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("HideWindow"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
@@ -417,6 +421,7 @@ public sealed partial class FixedWindow : Window
                 IsExpanded = enabledQuery, // Manual-query services start collapsed
                 CurrentMode = _currentMode,
                 IsGrammarCapable = isGrammarCapable,
+                Origin = ServiceOriginHelper.Resolve(service, serviceId),
             };
 
             _serviceResults.Add(result);
@@ -1634,6 +1639,26 @@ public sealed partial class FixedWindow : Window
         });
 
         return result;
+    }
+
+    /// <summary>
+    /// Rebuild the Actions menu with the current text each time it opens.
+    /// </summary>
+    private void OnTextActionsFlyoutOpening(object? sender, object e)
+    {
+        TextActionFlyoutBuilder.Populate(TextActionsFlyout, BuildTextActionContext);
+    }
+
+    private TextActionContext? BuildTextActionContext()
+    {
+        var text = InputTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        var translation = _serviceResults.FirstOrDefault(r => r.HasSuccessfulResult)?.Result?.TranslatedText;
+        return new TextActionContext(text, translation, GetSourceLanguage(), GetTargetLanguage());
     }
 
     private TranslationLanguage GetSourceLanguage()

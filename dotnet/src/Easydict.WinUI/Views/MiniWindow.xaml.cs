@@ -4,9 +4,11 @@ using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.TextActions;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.TextActions;
 using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
@@ -86,6 +88,11 @@ public sealed partial class MiniWindow : Window
     // the mouse cursor on the window. Coalescing collapses N services into ≤1 UI
     // callback per frame.
     private StreamingTextCoalescer? _streamingCoalescer;
+
+    // Service id that the next query must include even if it is configured as manual-query.
+    // Set by SetTextAndQueryService (a text action, e.g. a plugin button on the selection pop-up)
+    // and consumed inside StartQueryAsync once the row list has settled.
+    private string? _pendingFocusedServiceId;
 
     private const int ResizeThrottleMs = 150;
     private const int InputFocusRetryDelayMs = 50;
@@ -179,7 +186,7 @@ public sealed partial class MiniWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { PinButton, OcrButton, SavedItemsMoreButton, CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, TextActionsButton, SavedItemsMoreButton, CloseButton },
                 "MiniWindow");
             _titleBarHelper.Initialize();
         }
@@ -221,6 +228,8 @@ public sealed partial class MiniWindow : Window
         // Tooltips
         ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
         ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
+        ToolTipService.SetToolTip(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("Close"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
@@ -477,6 +486,7 @@ public sealed partial class MiniWindow : Window
                 IsExpanded = enabledQuery, // Manual-query services start collapsed
                 CurrentMode = _currentMode,
                 IsGrammarCapable = isGrammarCapable,
+                Origin = ServiceOriginHelper.Resolve(service, serviceId),
             };
 
             _serviceResults.Add(result);
@@ -1161,6 +1171,7 @@ public sealed partial class MiniWindow : Window
         try { oldManualCts?.Cancel(); } catch (ObjectDisposedException) { }
 
         QuerySnapshotDraft? snapshotDraft = null;
+        ServiceQueryResult? focusedService = null;
         var ct = currentCts.Token;
 
         try
@@ -1259,6 +1270,11 @@ public sealed partial class MiniWindow : Window
 
             SetLoading(true);
             _hasAutoPlayedCurrentQuery = false;
+
+            // A text action may target a service this window keeps as manual-query. The rows are
+            // final at this point (language resolution and the Phi Silica prompt can both rebuild
+            // them), so promote it now and restore the setting in the finally block below.
+            focusedService = PromoteFocusedService();
 
             // Reset all service results
             foreach (var result in _serviceResults)
@@ -1429,6 +1445,11 @@ public sealed partial class MiniWindow : Window
         finally
         {
             if (!_isClosing) SetLoading(false);
+            // Restore the manual-query setting of a service promoted for this query only.
+            if (focusedService is not null && _serviceResults.Contains(focusedService))
+            {
+                focusedService.EnabledQuery = false;
+            }
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
             if (snapshotDraft is not null)
             {
@@ -1876,6 +1897,115 @@ public sealed partial class MiniWindow : Window
             RequestResize();
         });
 
+        return result;
+    }
+
+    /// <summary>
+    /// Rebuild the Actions menu with the current text each time it opens.
+    /// </summary>
+    private void OnTextActionsFlyoutOpening(object? sender, object e)
+    {
+        TextActionFlyoutBuilder.Populate(TextActionsFlyout, BuildTextActionContext);
+    }
+
+    private TextActionContext? BuildTextActionContext()
+    {
+        var text = InputTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        var translation = _serviceResults.FirstOrDefault(r => r.HasSuccessfulResult)?.Result?.TranslatedText;
+        return new TextActionContext(text, translation, GetSourceLanguage(), GetTargetLanguage());
+    }
+
+    /// <summary>
+    /// Set text and make sure one specific service is queried, even when it is configured as
+    /// manual-query. Called from a text action (for example a plugin button on the selection pop-up).
+    /// The service joins the normal fan-out exactly once; the other auto-query services run as usual.
+    /// </summary>
+    public void SetTextAndQueryService(string text, string serviceId, QuerySourceKind sourceKind)
+    {
+        _targetLanguageSelector.Reset();
+
+        foreach (var result in _serviceResults)
+        {
+            result.Reset();
+        }
+
+        InputTextBox.Text = text;
+        // Consumed by PromoteFocusedService() inside StartQueryAsync, after the row list has settled
+        // (language resolution and the Phi Silica prompt can both rebuild the rows).
+        _pendingFocusedServiceId = serviceId;
+        _ = StartQueryTrackedAsync(sourceKind);
+    }
+
+    /// <summary>
+    /// Include <see cref="_pendingFocusedServiceId"/> in the current query. Returns the row whose
+    /// EnabledQuery was flipped on for this query only, so the caller can restore it afterwards.
+    /// </summary>
+    private ServiceQueryResult? PromoteFocusedService()
+    {
+        var serviceId = _pendingFocusedServiceId;
+        _pendingFocusedServiceId = null;
+        if (string.IsNullOrEmpty(serviceId))
+        {
+            return null;
+        }
+
+        var target = _serviceResults.FirstOrDefault(r => string.Equals(r.ServiceId, serviceId, StringComparison.Ordinal))
+            ?? TryAddTransientServiceResult(serviceId);
+        if (target is null)
+        {
+            Debug.WriteLine($"[MiniWindow] Focused service '{serviceId}' is not registered; running a normal query");
+            return null;
+        }
+
+        target.IsExpanded = true;
+        target.ManuallyToggled = true;
+        if (target.EnabledQuery)
+        {
+            return null;   // already part of the fan-out; nothing to restore
+        }
+
+        target.EnabledQuery = true;
+        return target;
+    }
+
+    /// <summary>
+    /// Add a row for a registered service that is not in this window's enabled list. The row is not
+    /// persisted and disappears the next time the rows are rebuilt from settings.
+    /// </summary>
+    private ServiceQueryResult? TryAddTransientServiceResult(string serviceId)
+    {
+        var manager = TranslationManagerService.Instance.Manager;
+        if (!manager.Services.TryGetValue(serviceId, out var service))
+        {
+            return null;
+        }
+
+        var result = new ServiceQueryResult
+        {
+            ServiceId = serviceId,
+            ServiceDisplayName = service.DisplayName,
+            EnabledQuery = false,
+            IsExpanded = true,
+            CurrentMode = _currentMode,
+            IsGrammarCapable = GrammarCorrectionServiceAvailability.IsAvailable(
+                service, _lastQuickQueryResolution?.EffectiveSourceLanguage ?? TranslationLanguage.Auto),
+            Origin = ServiceOriginHelper.Resolve(service, serviceId),
+        };
+
+        _serviceResults.Add(result);
+        ServiceResultViewHost.Add(
+            result,
+            _resultControls,
+            ResultsPanel,
+            OnServiceCollapseToggled,
+            OnServiceQueryRequested,
+            Content as FrameworkElement,
+            OnFoundryLocalStartRequested);
         return result;
     }
 

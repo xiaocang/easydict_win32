@@ -2021,14 +2021,23 @@
                                                             <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
                                                         <CheckBox
-                                                            Content="{Binding DisplayName}"
                                                             FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                                             FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
                                                             Tag="{Binding ServiceId}"
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
                                                             MinHeight="32"
-                                                            VerticalAlignment="Center"/>
+                                                            VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                                                                <Border Visibility="{Binding OriginBadgeVisibility}"
+                                                                        Background="{ThemeResource PluginBadgeBackgroundBrush}"
+                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding OriginBadgeText}" FontSize="10"
+                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </CheckBox>
                                                         <ToggleSwitch
                                                             Grid.Column="1"
                                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
@@ -2106,14 +2115,23 @@
                                                             <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
                                                         <CheckBox
-                                                            Content="{Binding DisplayName}"
                                                             FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                                             FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
                                                             Tag="{Binding ServiceId}"
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
                                                             MinHeight="32"
-                                                            VerticalAlignment="Center"/>
+                                                            VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                                                                <Border Visibility="{Binding OriginBadgeVisibility}"
+                                                                        Background="{ThemeResource PluginBadgeBackgroundBrush}"
+                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding OriginBadgeText}" FontSize="10"
+                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </CheckBox>
                                                         <ToggleSwitch
                                                             Grid.Column="1"
                                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
@@ -2191,14 +2209,23 @@
                                                             <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
                                                         <CheckBox
-                                                            Content="{Binding DisplayName}"
                                                             FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                                             FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
                                                             Tag="{Binding ServiceId}"
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
                                                             MinHeight="32"
-                                                            VerticalAlignment="Center"/>
+                                                            VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                                                                <Border Visibility="{Binding OriginBadgeVisibility}"
+                                                                        Background="{ThemeResource PluginBadgeBackgroundBrush}"
+                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding OriginBadgeText}" FontSize="10"
+                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </CheckBox>
                                                         <ToggleSwitch
                                                             Grid.Column="1"
                                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
@@ -3334,6 +3361,41 @@
                                 </StackPanel>
                                 <TextBlock x:Name="TranslationCacheNoteText"
                                            Text="Cached translations are stored locally in SQLite. Clear cache if translations become stale."
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Text Actions -->
+                    <StackPanel x:Name="TextActionsSection"
+                            Spacing="12">
+                        <TextBlock x:Name="TextActionsHeaderText"
+                                Text="Text Actions"
+                                FontSize="18"
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <TextBlock x:Name="TextActionsDescriptionText"
+                                   Text="Actions run on the selected or entered text: open a search site, or run one specific service (for example a Bob plugin)."
+                                   FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap"/>
+
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="8">
+                                <StackPanel x:Name="TextActionsPanel"
+                                            Spacing="4"/>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <Button x:Name="AddTextActionButton"
+                                            Content="Add action"
+                                            Click="OnAddTextActionClicked"/>
+                                    <Button x:Name="ResetTextActionsButton"
+                                            Content="Reset to defaults"
+                                            Click="OnResetTextActionsClicked"/>
+                                </StackPanel>
+                                <TextBlock x:Name="TextActionsPopButtonHintText"
+                                           Text="Actions marked 'Show on selection button' appear next to the translate icon after you select text (requires Mouse Selection Translate)."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>

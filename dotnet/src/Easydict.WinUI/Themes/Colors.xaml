@@ -186,6 +186,9 @@
             <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
             <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource PosTagBackgroundColor}" />
             <SolidColorBrush x:Key="PosTagTextBrush" Color="{StaticResource PosTagTextColor}" />
+            <SolidColorBrush x:Key="PluginAccentBrush" Color="#7C3AED" />
+            <SolidColorBrush x:Key="PluginBadgeBackgroundBrush" Color="#EDE9FE" />
+            <SolidColorBrush x:Key="PluginBadgeForegroundBrush" Color="#5B21B6" />
             <SolidColorBrush x:Key="ExampleTextBrush" Color="{StaticResource ExampleTextColor}" />
             <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="{StaticResource SettingsTabBackgroundColor}" />
             <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="{StaticResource SettingsTabBorderColor}" />
@@ -390,6 +393,9 @@
             <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="#CDA4E0" />
             <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="#1E3A5F" />
             <SolidColorBrush x:Key="PosTagTextBrush" Color="#93C5FD" />
+            <SolidColorBrush x:Key="PluginAccentBrush" Color="#A78BFA" />
+            <SolidColorBrush x:Key="PluginBadgeBackgroundBrush" Color="#3B2A5E" />
+            <SolidColorBrush x:Key="PluginBadgeForegroundBrush" Color="#DDD6FE" />
             <SolidColorBrush x:Key="ExampleTextBrush" Color="#9CA3AF" />
             <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="#202127" />
             <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="#3A4250" />
@@ -578,6 +584,9 @@
             <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="PosTagTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PluginAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="PluginBadgeBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PluginBadgeForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="ExampleTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />

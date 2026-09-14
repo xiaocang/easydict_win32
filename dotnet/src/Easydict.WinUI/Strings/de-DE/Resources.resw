@@ -1557,4 +1557,39 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Ein Ersatzdienst wird versucht.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Der Ersatzdienst hat {0} erkannt. Sie k?nnen fortfahren.</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Die Ausgangssprache konnte nicht erkannt werden. W?hlen Sie sie manuell aus oder versuchen Sie es sp?ter erneut.</value></data>
+  <data name="TextActionsButtonTooltip" xml:space="preserve"><value>Text actions</value></data>
+  <data name="TextActionsSelectTextFirst" xml:space="preserve"><value>Enter or select some text first</value></data>
+  <data name="TextActionsNoActions" xml:space="preserve"><value>No actions configured (Settings → Advanced → Text Actions)</value></data>
+  <data name="TextActionsGroupSearch" xml:space="preserve"><value>Search</value></data>
+  <data name="TextActionsGroupServices" xml:space="preserve"><value>Services</value></data>
+  <data name="TextActionsGroupPlugins" xml:space="preserve"><value>Bob plugins</value></data>
+  <data name="TextActionsHeader" xml:space="preserve"><value>Text Actions</value></data>
+  <data name="TextActionsDescription" xml:space="preserve"><value>Actions run on the selected or entered text: open a search site, or run one specific service (for example a Bob plugin). They appear in the Actions menu of every window and, optionally, on the selection pop-up.</value></data>
+  <data name="TextActionsPopButtonHint" xml:space="preserve"><value>Actions marked 'Show on selection button' appear next to the translate icon after you select text (requires Mouse Selection Translate).</value></data>
+  <data name="TextActionAdd" xml:space="preserve"><value>Add action</value></data>
+  <data name="TextActionResetDefaults" xml:space="preserve"><value>Reset to defaults</value></data>
+  <data name="TextActionEnabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="TextActionShowOnPopButton" xml:space="preserve"><value>Show on selection button</value></data>
+  <data name="TextActionMoveUp" xml:space="preserve"><value>Move up</value></data>
+  <data name="TextActionMoveDown" xml:space="preserve"><value>Move down</value></data>
+  <data name="TextActionEdit" xml:space="preserve"><value>Edit</value></data>
+  <data name="TextActionDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="TextActionServiceSubtitle" xml:space="preserve"><value>Run service: {0}</value></data>
+  <data name="TextActionTypeUrl" xml:space="preserve"><value>Open a URL</value></data>
+  <data name="TextActionTypeService" xml:space="preserve"><value>Run a service</value></data>
+  <data name="TextActionTitle" xml:space="preserve"><value>Title</value></data>
+  <data name="TextActionUrlTemplate" xml:space="preserve"><value>URL template</value></data>
+  <data name="TextActionUrlHint" xml:space="preserve"><value>Placeholders: {encodedText}, {encodedTranslation}, {from}, {to}. Only http/https URLs.</value></data>
+  <data name="TextActionServiceLabel" xml:space="preserve"><value>Service</value></data>
+  <data name="TextActionDialogAddTitle" xml:space="preserve"><value>Add text action</value></data>
+  <data name="TextActionDialogEditTitle" xml:space="preserve"><value>Edit text action</value></data>
+  <data name="TextActionDuplicate" xml:space="preserve"><value>An action for this service already exists.</value></data>
+  <data name="TextActionInvalidUrl" xml:space="preserve"><value>Enter a valid http(s) URL template containing {encodedText}.</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
+  <data name="ServiceOrigin_BobBadge" xml:space="preserve"><value>Bob plugin</value></data>
+  <data name="ServiceOrigin_PluginBadge" xml:space="preserve"><value>Plugin</value></data>
+  <data name="ServiceOrigin_MdxBadge" xml:space="preserve"><value>MDX dictionary</value></data>
+  <data name="ServiceOrigin_PluginTooltip" xml:space="preserve"><value>Third-party {0} plugin{1}. Not an Easydict built-in service; network requests and data handling are done by the plugin.</value></data>
+  <data name="ServiceOrigin_MdxTooltip" xml:space="preserve"><value>Dictionary file imported by you. Looked up locally; not an Easydict built-in service.</value></data>
+  <data name="ServiceOrigin_NameSuffix" xml:space="preserve"><value>{0} ({1})</value></data>
 </root>

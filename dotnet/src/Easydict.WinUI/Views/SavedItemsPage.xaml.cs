@@ -863,6 +863,7 @@ public sealed partial class SavedItemsPage : Page
             {
                 ServiceId = result.ProviderId,
                 ServiceDisplayName = result.ProviderName,
+                Origin = ServiceOriginHelper.ResolveFromId(result.ProviderId),
                 CurrentMode = result.ContentType == SavedResultContentType.GrammarCorrection
                     ? QueryMode.GrammarCorrection
                     : QueryMode.Translation

@@ -31,6 +31,18 @@ public class ServiceCheckItem : INotifyPropertyChanged
     public bool IsUnconfigured { get; init; }
 
     /// <summary>
+    /// Badge text for non-native services ("Bob plugin", "MDX dictionary"); null for built-ins.
+    /// </summary>
+    public string? OriginBadgeText { get; init; }
+
+    /// <summary>
+    /// Visibility of the origin badge (bound by the settings service lists).
+    /// </summary>
+    public Microsoft.UI.Xaml.Visibility OriginBadgeVisibility => string.IsNullOrEmpty(OriginBadgeText)
+        ? Microsoft.UI.Xaml.Visibility.Collapsed
+        : Microsoft.UI.Xaml.Visibility.Visible;
+
+    /// <summary>
     /// Whether this service is enabled/checked.
     /// </summary>
     public bool IsChecked

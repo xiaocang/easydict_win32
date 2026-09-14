@@ -464,6 +464,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
         // Service info
         ServiceNameText.Text = _serviceResult.ServiceDisplayName;
+        UpdateOriginChrome(minimal);
         var iconTheme = GetEffectiveIconTheme();
 
         // Load service icon only when ServiceId changes (avoid repeated allocations during streaming)
@@ -551,6 +552,41 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         return ThemeRoot?.ActualTheme ?? ActualTheme;
     }
 
+    /// <summary>
+    /// Mark non-native services (plugins, imported dictionaries): badge next to the name, accent
+    /// stripe at the left edge, corner mark on the icon and an explanatory tooltip on the header.
+    /// </summary>
+    private void UpdateOriginChrome(bool minimal)
+    {
+        if (_serviceResult is null)
+        {
+            return;
+        }
+
+        var origin = _serviceResult.Origin;
+        var badge = origin.IsNative ? null : ServiceOriginHelper.BadgeText(origin);
+        var show = !string.IsNullOrEmpty(badge);
+
+        OriginBadgeText.Text = badge ?? string.Empty;
+        OriginBadge.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        OriginAccentStripe.Visibility = show && !minimal ? Visibility.Visible : Visibility.Collapsed;
+        UpdateOriginCornerIcon();
+
+        var tooltip = show ? ServiceOriginHelper.Tooltip(origin) : null;
+        ToolTipService.SetToolTip(HeaderBar, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OriginBadge, tooltip ?? badge ?? string.Empty);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(
+            OriginBadge, $"ServiceResultOriginBadge_{_serviceResult.ServiceId}");
+    }
+
+    private void UpdateOriginCornerIcon()
+    {
+        var show = _serviceResult is { IsPluginService: true }
+            && !MinimalThemeService.IsActive
+            && ServiceIcon.Visibility == Visibility.Visible;
+        OriginCornerIcon.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void HideServiceIcon()
     {
         _cachedServiceId = null;
@@ -628,6 +664,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             _cachedIcon = icon;
             ServiceIcon.Source = icon;
             ServiceIcon.Visibility = Visibility.Visible;
+            UpdateOriginCornerIcon();
         }
         catch
         {

@@ -3327,6 +3327,7 @@ public sealed partial class SettingsPage : Page
 
         UpdateImportedMdxSummary();
         BuildImportedMdxConfigUI();
+        BuildTextActionsUI();
     }
 
     private void UpdateImportedMdxSummary()
@@ -3877,7 +3878,8 @@ public sealed partial class SettingsPage : Page
                     IsChecked = isAvailable && enabledServices.Contains(serviceId),
                     EnabledQuery = enabledQuery,
                     IsAvailable = isAvailable,
-                    IsUnconfigured = service.RequiresApiKey && !service.IsConfigured
+                    IsUnconfigured = service.RequiresApiKey && !service.IsConfigured,
+                    OriginBadgeText = ServiceOriginHelper.BadgeText(ServiceOriginHelper.Resolve(service, serviceId))
                 };
 
                 collection.Add(item);

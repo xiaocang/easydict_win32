@@ -260,10 +260,10 @@ internal sealed class BobScriptHost : IDisposable
         engine.SetValue("__ed_hmac", new Func<string, string, string, string>(CryptoBridge.Hmac));
         engine.SetValue("__ed_aes", new Func<bool, string, string, string, string>(CryptoBridge.Aes));
 
-        engine.SetValue("__ed_setTimeout", new Func<JsValue, double, double>((fn, ms) => _timers!.SetTimeout(fn, ms)));
+        engine.SetValue("__ed_setTimeout", new Func<JsValue?, double, double>((fn, ms) => _timers!.SetTimeout(fn, ms)));
         engine.SetValue("__ed_clearTimeout", new Action<double>(id => _timers!.ClearTimeout(id)));
 
-        engine.SetValue("__ed_http", new Action<double, string, JsValue, JsValue>(
+        engine.SetValue("__ed_http", new Action<double, string, JsValue?, JsValue?>(
             (callId, optionsJson, streamCallback, doneCallback) => _http!.Send(callId, optionsJson, streamCallback, doneCallback)));
 
         engine.SetValue("__ed_readModule", new Func<string, string?>(ReadModuleSource));
@@ -325,7 +325,7 @@ internal sealed class BobScriptHost : IDisposable
     }
 
     /// <summary>Invoke a JS callback with one JSON string argument, on the loop thread.</summary>
-    private void PostCallback(JsValue callback, string json)
+    private void PostCallback(JsValue? callback, string json)
     {
         if (callback is null || callback.IsNull() || callback.IsUndefined())
         {

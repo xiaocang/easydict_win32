@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using Jint;
 using Jint.Native;
+using Jint.Runtime;
 
 namespace Easydict.BobPlugin.Runtime.Bridges;
 
@@ -10,14 +12,14 @@ namespace Easydict.BobPlugin.Runtime.Bridges;
 internal sealed class TimerBridge : IDisposable
 {
     private readonly ConcurrentDictionary<int, CancellationTokenSource> _timers = new();
-    private readonly Action<JsValue, string> _postCallback;
+    private readonly Action<JsValue?, string> _postCallback;
     private int _nextId;
     private bool _disposed;
 
-    public TimerBridge(Action<JsValue, string> postCallback) => _postCallback = postCallback;
+    public TimerBridge(Action<JsValue?, string> postCallback) => _postCallback = postCallback;
 
     /// <summary>Schedule a callback and return its id.</summary>
-    public double SetTimeout(JsValue callback, double delayMs)
+    public double SetTimeout(JsValue? callback, double delayMs)
     {
         if (_disposed || callback is null || callback.IsNull() || callback.IsUndefined())
         {

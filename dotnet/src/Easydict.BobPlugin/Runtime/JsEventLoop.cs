@@ -40,12 +40,13 @@ internal sealed class JsEventLoop : IDisposable
         {
             _queue.Add(action);
         }
+        catch (ObjectDisposedException)
+        {
+            // Disposed between the check above and the add.
+        }
         catch (InvalidOperationException)
         {
             // The queue was completed concurrently with this call; dropping the work is correct.
-        }
-        catch (ObjectDisposedException)
-        {
         }
     }
 

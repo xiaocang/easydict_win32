@@ -2,7 +2,9 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Jint;
 using Jint.Native;
+using Jint.Runtime;
 
 namespace Easydict.BobPlugin.Runtime.Bridges;
 
@@ -25,13 +27,13 @@ internal sealed class HttpBridge
 
     private readonly HttpClient _httpClient;
     private readonly Func<int, BobCallContext?> _resolveCall;
-    private readonly Action<JsValue, string> _postCallback;
+    private readonly Action<JsValue?, string> _postCallback;
     private readonly IBobHostLogger _logger;
 
     public HttpBridge(
         HttpClient httpClient,
         Func<int, BobCallContext?> resolveCall,
-        Action<JsValue, string> postCallback,
+        Action<JsValue?, string> postCallback,
         IBobHostLogger logger)
     {
         _httpClient = httpClient;
@@ -45,7 +47,7 @@ internal sealed class HttpBridge
     /// thread with the response envelope, and <paramref name="streamCallback"/> receives chunks
     /// when the plugin used <c>$http.streamRequest</c>.
     /// </summary>
-    public void Send(double callId, string optionsJson, JsValue streamCallback, JsValue doneCallback)
+    public void Send(double callId, string optionsJson, JsValue? streamCallback, JsValue? doneCallback)
     {
         BobHttpRequestDto? options;
         try
@@ -82,7 +84,7 @@ internal sealed class HttpBridge
         BobHttpRequestDto options,
         BobCallContext? context,
         JsValue? streamCallback,
-        JsValue doneCallback)
+        JsValue? doneCallback)
     {
         // Linked so cancelling the plugin call (user cancel or timeout) aborts the request too.
         using var cts = context is null
@@ -301,13 +303,13 @@ internal sealed class HttpBridge
         return headers;
     }
 
-    private void CompleteWithError(JsValue doneCallback, string message)
+    private void CompleteWithError(JsValue? doneCallback, string message)
     {
         _logger.Log("warn", message);
         PostEnvelope(doneCallback, new BobHttpResponseDto { Error = message });
     }
 
-    private void PostEnvelope(JsValue doneCallback, BobHttpResponseDto envelope)
+    private void PostEnvelope(JsValue? doneCallback, BobHttpResponseDto envelope)
         => _postCallback(doneCallback, JsonSerializer.Serialize(envelope, JsonOptions));
 
     private sealed class BobHttpRequestDto

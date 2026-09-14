@@ -39,11 +39,89 @@ public sealed class WindowsOcrService : IOcrService
                 $"pixelData length ({pixelData.Length}) is less than expected ({expectedLength}) for {pixelWidth}x{pixelHeight} BGRA8",
                 nameof(pixelData));
 
+        var engine = CreateEngine(preferredLanguageTag);
+        if (engine is null)
+        {
+            Debug.WriteLine("[WindowsOcrService] No OCR engine available");
+            return new OcrResult();
+        }
+
+        var result = await RecognizePixelsAsync(
+            engine, pixelData, pixelWidth, pixelHeight, cancellationToken);
+
+        return await RefineWithUpscaledPassAsync(
+            engine, result, pixelData, pixelWidth, pixelHeight, cancellationToken);
+    }
+
+    /// <summary>
+    /// Screenshots taken on a laptop panel often carry text too small for the engine, which
+    /// then returns partial text or nothing at all. When the first pass came back with
+    /// small (or no) lines, recognize the capture again enlarged and keep the better reading.
+    /// </summary>
+    private static async Task<OcrResult> RefineWithUpscaledPassAsync(
+        WinOcr.OcrEngine engine,
+        OcrResult firstPass,
+        ReadOnlyMemory<byte> pixelData,
+        int pixelWidth,
+        int pixelHeight,
+        CancellationToken cancellationToken)
+    {
+        var scale = OcrImageScaling.ComputeRetryScale(
+            firstPass.Lines, pixelWidth, pixelHeight, (int)WinOcr.OcrEngine.MaxImageDimension);
+        if (scale <= 1.0) return firstPass;
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var (scaledWidth, scaledHeight) = OcrImageScaling.ScaledSize(pixelWidth, pixelHeight, scale);
+        Debug.WriteLine(
+            $"[WindowsOcrService] Retrying at {scaledWidth}x{scaledHeight} (x{scale:F2}) — " +
+            $"first pass median line height {OcrImageScaling.MedianLineHeight(firstPass.Lines):F1}px");
+
+        byte[] scaledPixels;
+        try
+        {
+            scaledPixels = OcrImageScaling.ScaleBgra(
+                pixelData.Span, pixelWidth, pixelHeight, scaledWidth, scaledHeight);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Debug.WriteLine($"[WindowsOcrService] Upscale skipped: {ex.Message}");
+            return firstPass;
+        }
+
+        try
+        {
+            var secondPass = await RecognizePixelsAsync(
+                engine, scaledPixels, scaledWidth, scaledHeight, cancellationToken);
+
+            if (!OcrImageScaling.ShouldPreferRetry(firstPass, secondPass))
+            {
+                return firstPass;
+            }
+
+            return OcrImageScaling.MapToSourceCoordinates(
+                secondPass,
+                (double)scaledWidth / pixelWidth,
+                (double)scaledHeight / pixelHeight);
+        }
+        finally
+        {
+            Array.Clear(scaledPixels);
+        }
+    }
+
+    private static async Task<OcrResult> RecognizePixelsAsync(
+        WinOcr.OcrEngine engine,
+        ReadOnlyMemory<byte> pixelData,
+        int pixelWidth,
+        int pixelHeight,
+        CancellationToken cancellationToken)
+    {
         var bitmap = CreateSoftwareBitmap(pixelData, pixelWidth, pixelHeight);
 
         try
         {
-            return await RecognizeBitmapAsync(bitmap, preferredLanguageTag, cancellationToken);
+            return await RecognizeBitmapAsync(engine, bitmap, cancellationToken);
         }
         finally
         {
@@ -87,17 +165,10 @@ public sealed class WindowsOcrService : IOcrService
     }
 
     private static async Task<OcrResult> RecognizeBitmapAsync(
+        WinOcr.OcrEngine engine,
         SoftwareBitmap bitmap,
-        string? preferredLanguageTag,
         CancellationToken cancellationToken)
     {
-        var engine = CreateEngine(preferredLanguageTag);
-        if (engine is null)
-        {
-            Debug.WriteLine("[WindowsOcrService] No OCR engine available");
-            return new OcrResult();
-        }
-
         cancellationToken.ThrowIfCancellationRequested();
 
         var winResult = await engine.RecognizeAsync(bitmap).AsTask(cancellationToken);

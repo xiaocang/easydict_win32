@@ -1622,4 +1622,12 @@
   <data name="BobPluginsTabHeader" xml:space="preserve"><value>Bob Plugins</value></data>
   <data name="BobPluginsTabDescription" xml:space="preserve"><value>Install third-party Bob translate plugins. They run in an embedded JavaScript engine, separate from Easydict's built-in services.</value></data>
   <data name="BobPluginGetMoreLink" xml:space="preserve"><value>Get more plugins</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Se connecter avec OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>En attente de la fin de la connexion dans votre navigateur…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Connecté. Votre clé API OrcaRouter a été enregistrée.</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>Échec de la connexion : {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>La connexion a expiré. Veuillez réessayer.</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Connexion annulée.</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Impossible d'ouvrir votre navigateur. Utilisez plutôt le lien « Obtenir une clé API » ci-dessous.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Déconnecter</value></data>
 </root>

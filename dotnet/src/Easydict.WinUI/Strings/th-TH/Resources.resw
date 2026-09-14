@@ -1622,4 +1622,12 @@
   <data name="BobPluginsTabHeader" xml:space="preserve"><value>Bob Plugins</value></data>
   <data name="BobPluginsTabDescription" xml:space="preserve"><value>Install third-party Bob translate plugins. They run in an embedded JavaScript engine, separate from Easydict's built-in services.</value></data>
   <data name="BobPluginGetMoreLink" xml:space="preserve"><value>Get more plugins</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>ลงชื่อเข้าใช้ด้วย OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>กำลังรอให้คุณลงชื่อเข้าใช้ในเบราว์เซอร์ให้เสร็จ…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>ลงชื่อเข้าใช้แล้ว บันทึกคีย์ API ของ OrcaRouter เรียบร้อย</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>ลงชื่อเข้าใช้ล้มเหลว: {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>การลงชื่อเข้าใช้หมดเวลา โปรดลองอีกครั้ง</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>ยกเลิกการลงชื่อเข้าใช้แล้ว</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>ไม่สามารถเปิดเบราว์เซอร์ได้ โปรดใช้ลิงก์ "รับคีย์ API" ด้านล่างแทน</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>ยกเลิกการเชื่อมต่อ</value></data>
 </root>

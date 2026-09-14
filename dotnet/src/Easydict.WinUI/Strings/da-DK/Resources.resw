@@ -1622,4 +1622,12 @@
   <data name="BobPluginsTabHeader" xml:space="preserve"><value>Bob Plugins</value></data>
   <data name="BobPluginsTabDescription" xml:space="preserve"><value>Install third-party Bob translate plugins. They run in an embedded JavaScript engine, separate from Easydict's built-in services.</value></data>
   <data name="BobPluginGetMoreLink" xml:space="preserve"><value>Get more plugins</value></data>
+  <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Log ind med OrcaRouter</value></data>
+  <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>Venter på, at du fuldfører login i din browser…</value></data>
+  <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Logget ind. Din OrcaRouter API-nøgle er gemt.</value></data>
+  <data name="OrcaRouterSignInFailed" xml:space="preserve"><value>Login mislykkedes: {0}</value></data>
+  <data name="OrcaRouterSignInTimedOut" xml:space="preserve"><value>Login fik timeout. Prøv igen.</value></data>
+  <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Login annulleret.</value></data>
+  <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Browseren kunne ikke åbnes. Brug i stedet linket "Hent en API-nøgle" nedenfor.</value></data>
+  <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Afbryd forbindelse</value></data>
 </root>

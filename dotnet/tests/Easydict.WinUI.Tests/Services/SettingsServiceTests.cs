@@ -312,6 +312,13 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void OrcaRouterSignedInViaSso_DefaultsToFalse()
+    {
+        _settings.OrcaRouterSignedInViaSso.Should().BeFalse(
+            "a manually-pasted key should never appear locked in the UI");
+    }
+
+    [Fact]
     public void DeepSeekModel_HasDefaultValue()
     {
         _settings.DeepSeekModel.Should().Be("deepseek-chat");

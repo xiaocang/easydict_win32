@@ -1,0 +1,15 @@
+{
+  "identifier": "test.error.secretkey",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Missing key",
+  "summary": "Always reports a secretKey error.",
+  "options": [
+    {
+      "identifier": "apiKey",
+      "type": "text",
+      "title": "API key",
+      "textConfig": { "type": "secure" }
+    }
+  ]
+}

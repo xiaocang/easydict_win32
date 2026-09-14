@@ -1,0 +1,7 @@
+{
+  "identifier": "test.crypto",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Crypto",
+  "summary": "Exercises the bundled crypto-js shim."
+}

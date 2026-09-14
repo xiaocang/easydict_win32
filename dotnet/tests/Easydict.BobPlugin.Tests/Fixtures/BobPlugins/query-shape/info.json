@@ -1,0 +1,7 @@
+{
+  "identifier": "test.query.shape",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Query shape",
+  "summary": "Reports the query fields it was handed."
+}

@@ -1,0 +1,7 @@
+{
+  "identifier": "test.noentry",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "No entry point",
+  "summary": "Loads cleanly but exposes no translate function."
+}

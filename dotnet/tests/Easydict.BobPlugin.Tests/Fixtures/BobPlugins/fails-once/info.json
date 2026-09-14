@@ -1,0 +1,7 @@
+{
+  "identifier": "test.failsonce",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Fails once",
+  "summary": "Fails its first call with a transient error, then reports the attempt number."
+}

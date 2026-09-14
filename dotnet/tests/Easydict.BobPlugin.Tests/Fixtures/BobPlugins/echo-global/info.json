@@ -1,0 +1,7 @@
+{
+  "identifier": "test.echo.global",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Echo (global)",
+  "summary": "Echoes the query text back, defining translate as a top-level function."
+}

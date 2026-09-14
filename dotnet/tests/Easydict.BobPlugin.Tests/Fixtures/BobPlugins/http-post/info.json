@@ -1,0 +1,7 @@
+{
+  "identifier": "test.http.post",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "HTTP POST",
+  "summary": "Posts a JSON body and completes from the handler callback."
+}

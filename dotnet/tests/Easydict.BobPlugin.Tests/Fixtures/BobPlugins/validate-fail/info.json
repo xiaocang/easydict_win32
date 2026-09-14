@@ -1,0 +1,7 @@
+{
+  "identifier": "test.validate.fail",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Validate fail",
+  "summary": "Reports a broken configuration."
+}

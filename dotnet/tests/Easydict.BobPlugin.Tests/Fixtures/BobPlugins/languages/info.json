@@ -1,0 +1,7 @@
+{
+  "identifier": "test.languages",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Languages",
+  "summary": "Declares a restricted language list."
+}

@@ -1,0 +1,7 @@
+{
+  "identifier": "test.badsyntax",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Bad syntax",
+  "summary": "Fails to parse, so loading it must fail rather than the host."
+}

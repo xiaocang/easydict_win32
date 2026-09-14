@@ -1,0 +1,7 @@
+{
+  "identifier": "test.http.badurl",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "HTTP bad URL",
+  "summary": "Requests a non-http scheme, which the host refuses."
+}

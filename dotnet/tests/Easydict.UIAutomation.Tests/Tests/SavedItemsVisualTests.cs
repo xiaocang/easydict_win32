@@ -722,12 +722,19 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             var handle = WindowHandles.GetValue(window, current => new WindowHandle(current));
             try
             {
+                var found = FindDescendant(handle.Root, id);
+                if (found is not null) return found;
+
+                // A detached WinUI provider can return no match without throwing.
+                // Refresh on a miss as well as on COM invalidation: CI reported a
+                // missing result card that was present in the window's fresh tree.
+                handle.Root = window.Automation.FromHandle(handle.Value);
                 return FindDescendant(handle.Root, id);
             }
             catch (Exception ex) when (IsUiaTransitionError(ex))
             {
                 // ElementFromHandle itself sends a cross-process request. Only
-                // reacquire after invalidation, rather than on every lookup.
+                // reacquire after a miss/invalidation, rather than on every lookup.
                 handle.Root = window.Automation.FromHandle(handle.Value);
                 return FindDescendant(handle.Root, id);
             }

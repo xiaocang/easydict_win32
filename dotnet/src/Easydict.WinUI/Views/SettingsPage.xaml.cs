@@ -2350,6 +2350,7 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled += OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
         HoverWordLookupToggle.Toggled += OnSettingChanged;
+        _settings.HoverWordLookupEnabledChanged += OnHoverWordLookupEnabledChanged;
         HoverWordLookupToggle.Toggled += OnHoverWordLookupToggled;
         HoverWordLookupModifierCombo.SelectionChanged += OnSettingChanged;
         HoverWordLookupServiceCombo.SelectionChanged += OnSettingChanged;
@@ -2478,6 +2479,7 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled -= OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged -= OnSettingChanged;
         HoverWordLookupToggle.Toggled -= OnSettingChanged;
+        _settings.HoverWordLookupEnabledChanged -= OnHoverWordLookupEnabledChanged;
         HoverWordLookupToggle.Toggled -= OnHoverWordLookupToggled;
         HoverWordLookupModifierCombo.SelectionChanged -= OnSettingChanged;
         HoverWordLookupServiceCombo.SelectionChanged -= OnSettingChanged;
@@ -4889,6 +4891,23 @@ public sealed partial class SettingsPage : Page
     {
         MouseSelectionExcludedAppsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnHoverWordLookupEnabledChanged(object? sender, EventArgs e)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => OnHoverWordLookupEnabledChanged(sender, e));
+            return;
+        }
+        if (_isUnloaded || _isTornDown || HoverWordLookupToggle.IsOn == _settings.HoverWordLookupEnabled) return;
+
+        var wasLoading = _isLoading;
+        _isLoading = true;
+        try { HoverWordLookupToggle.IsOn = _settings.HoverWordLookupEnabled; }
+        finally { _isLoading = wasLoading; }
+        // A tray change is already persisted; keep any other pending page edits.
+        OnSettingChanged(HoverWordLookupToggle, e);
     }
 
     private void OnHoverWordLookupToggled(object sender, RoutedEventArgs e)

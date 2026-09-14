@@ -15,89 +15,79 @@
           BorderBrush="{ThemeResource PopButtonBorderBrush}"
           BorderThickness="1"
           Padding="12,8,12,10"
-          MaxWidth="320"
-          RowSpacing="4">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+          MaxWidth="320">
+        <Grid x:Name="ContentViewport" SizeChanged="OnContentViewportSizeChanged">
+            <StackPanel x:Name="ContentPanel" Spacing="4" VerticalAlignment="Top">
+                <!-- Header: word + "open in Mini window" -->
+                <Grid x:Name="HeaderGrid" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="WordText"
+                               Grid.Column="0"
+                               AutomationProperties.AutomationId="HoverLookupWord"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <Button x:Name="OpenInMiniButton"
+                            Grid.Column="1"
+                            AutomationProperties.AutomationId="HoverLookupOpenInMiniButton"
+                            Width="26"
+                            Height="26"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            VerticalAlignment="Center"
+                            Click="OnOpenInMiniButtonClick">
+                        <FontIcon Glyph="&#xE8A7;"
+                                  FontSize="12"
+                                  Foreground="{ThemeResource PopButtonForegroundBrush}"/>
+                    </Button>
+                </Grid>
 
-        <!-- Header: word + "open in Mini window" -->
-        <Grid x:Name="HeaderGrid" Grid.Row="0" ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock x:Name="WordText"
-                       Grid.Column="0"
-                       AutomationProperties.AutomationId="HoverLookupWord"
-                       FontSize="15"
-                       FontWeight="SemiBold"
-                       TextWrapping="Wrap"
-                       VerticalAlignment="Center"
-                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-            <Button x:Name="OpenInMiniButton"
-                    Grid.Column="1"
-                    AutomationProperties.AutomationId="HoverLookupOpenInMiniButton"
-                    Width="26"
-                    Height="26"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    VerticalAlignment="Center"
-                    Click="OnOpenInMiniButtonClick">
-                <FontIcon Glyph="&#xE8A7;"
-                          FontSize="12"
-                          Foreground="{ThemeResource PopButtonForegroundBrush}"/>
-            </Button>
+                <!-- Phonetics -->
+                <TextBlock x:Name="PhoneticText"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Visibility="Collapsed"/>
+
+                <!-- Loading -->
+                <StackPanel x:Name="LoadingPanel"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            Visibility="Collapsed">
+                    <ProgressRing IsActive="True"
+                                  Width="14"
+                                  Height="14"
+                                  MinWidth="14"
+                                  MinHeight="14"/>
+                    <TextBlock x:Name="LoadingText"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+
+                <!-- Result body -->
+                <TextBlock x:Name="BodyText"
+                           AutomationProperties.AutomationId="HoverLookupBody"
+                           FontSize="13"
+                           TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                           Visibility="Collapsed"/>
+
+                <!-- Service name -->
+                <TextBlock x:Name="ServiceText"
+                           AutomationProperties.AutomationId="HoverLookupService"
+                           FontSize="10"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                           Visibility="Collapsed"/>
+            </StackPanel>
         </Grid>
-
-        <!-- Phonetics -->
-        <TextBlock x:Name="PhoneticText"
-                   Grid.Row="1"
-                   FontSize="12"
-                   TextWrapping="Wrap"
-                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                   Visibility="Collapsed"/>
-
-        <!-- Loading -->
-        <StackPanel x:Name="LoadingPanel"
-                    Grid.Row="2"
-                    Orientation="Horizontal"
-                    Spacing="8"
-                    Visibility="Collapsed">
-            <ProgressRing IsActive="True"
-                          Width="14"
-                          Height="14"
-                          MinWidth="14"
-                          MinHeight="14"/>
-            <TextBlock x:Name="LoadingText"
-                       FontSize="12"
-                       VerticalAlignment="Center"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-        </StackPanel>
-
-        <!-- Result body -->
-        <TextBlock x:Name="BodyText"
-                   Grid.Row="3"
-                   AutomationProperties.AutomationId="HoverLookupBody"
-                   FontSize="13"
-                   TextWrapping="Wrap"
-                   MaxLines="8"
-                   TextTrimming="CharacterEllipsis"
-                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                   Visibility="Collapsed"/>
-
-        <!-- Service name -->
-        <TextBlock x:Name="ServiceText"
-                   Grid.Row="4"
-                   FontSize="10"
-                   TextWrapping="NoWrap"
-                   TextTrimming="CharacterEllipsis"
-                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                   Visibility="Collapsed"/>
     </Grid>
 </Window>

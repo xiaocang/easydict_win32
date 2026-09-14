@@ -45,6 +45,17 @@ public sealed partial class HoverLookupWindow : Window
     private const double DefaultWidthDips = 280;
     private const double DefaultHeightDips = 80;
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetClientRect(IntPtr hwnd, out NativeRect rect);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetWindowRect(IntPtr hwnd, out NativeRect rect);
+
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     private static partial IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
@@ -67,6 +78,7 @@ public sealed partial class HoverLookupWindow : Window
     private readonly AppWindow? _appWindow;
     private bool _isVisible;
     private bool _isRootLoaded;
+    private bool _refitQueued;
     private OcrRect _anchorRect;
     private OcrRect _currentBounds;
 
@@ -107,6 +119,8 @@ public sealed partial class HoverLookupWindow : Window
         ApplyLocalization();
 
         RootGrid.Loaded += OnRootGridLoaded;
+        ContentPanel.SizeChanged += OnContentPanelSizeChanged;
+        Closed += (_, _) => _isVisible = false;
     }
 
     /// <summary>
@@ -227,6 +241,7 @@ public sealed partial class HoverLookupWindow : Window
         if (this.Content is FrameworkElement root)
         {
             MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);
+            if (_isVisible) FitAndPlace();
         }
     }
 
@@ -248,6 +263,28 @@ public sealed partial class HoverLookupWindow : Window
         }
     }
 
+    private void OnContentPanelSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_isVisible || _refitQueued) return;
+
+        // Actual wrapping can settle after the HWND resize or a DPI change. Refit on the next
+        // dispatcher turn, never recursively from inside XAML layout.
+        _refitQueued = DispatcherQueue.TryEnqueue(() =>
+        {
+            _refitQueued = false;
+            if (_isVisible) FitAndPlace();
+        });
+    }
+
+    private void OnContentViewportSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Keep oversized results inside the card's padding. The hover popup never scrolls.
+        ContentViewport.Clip = new Microsoft.UI.Xaml.Media.RectangleGeometry
+        {
+            Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height),
+        };
+    }
+
     /// <summary>
     /// Measure the content, size the window to it (DPI of the anchor's monitor) and place it
     /// next to the anchor word inside the work area. Never activates the window.
@@ -257,7 +294,30 @@ public sealed partial class HoverLookupWindow : Window
         var anchorX = (int)Math.Round(_anchorRect.X);
         var anchorY = (int)Math.Round(_anchorRect.Y);
         var scale = DpiHelper.DpiToScaleFactor(DpiHelper.GetDpiForPoint(anchorX, anchorY));
+        var frameWidth = 0;
+        var frameHeight = 0;
+        if (GetWindowRect(_hwnd, out var outer) && GetClientRect(_hwnd, out var client))
+        {
+            // SetWindowPos sizes the outer HWND, while XAML uses the client area. Even a
+            // titleless non-resizable popup can retain a small native frame on Windows.
+            var frameScale = scale / DpiHelper.GetScaleFactorForWindow(_hwnd);
+            frameWidth = (int)Math.Ceiling(Math.Max(0, outer.Right - outer.Left - client.Right + client.Left) * frameScale);
+            frameHeight = (int)Math.Ceiling(Math.Max(0, outer.Bottom - outer.Top - client.Bottom + client.Top) * frameScale);
+        }
 
+        OcrRect workArea = default;
+        try
+        {
+            var display = DisplayArea.GetFromPoint(new PointInt32(anchorX, anchorY), DisplayAreaFallback.Nearest);
+            var area = display.WorkArea;
+            workArea = new OcrRect(area.X, area.Y, area.Width, area.Height);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[HoverLookupWindow] Work area lookup failed, using unclamped position: {ex.Message}");
+        }
+
+        var maxWidthDips = workArea.IsEmpty() ? MaxWidthDips : Math.Min(MaxWidthDips, (workArea.Width - frameWidth) / scale);
         var widthDips = DefaultWidthDips;
         var heightDips = DefaultHeightDips;
         if (_isRootLoaded)
@@ -278,17 +338,21 @@ public sealed partial class HoverLookupWindow : Window
                 }.Max();
                 var horizontalChrome = RootGrid.Padding.Left + RootGrid.Padding.Right
                     + RootGrid.BorderThickness.Left + RootGrid.BorderThickness.Right;
-                var measuredWidth = Math.Min(MaxWidthDips, Math.Ceiling(contentWidth + horizontalChrome));
+                var measuredWidth = Math.Min(maxWidthDips, Math.Ceiling(contentWidth + horizontalChrome));
 
-                // Re-measure at the chosen width so both the source and result can wrap, and
-                // derive the height from that final layout rather than the wider first pass.
-                RootGrid.InvalidateMeasure();
-                RootGrid.Measure(new Windows.Foundation.Size(measuredWidth, double.PositiveInfinity));
-                var desired = RootGrid.DesiredSize;
+                // Measure the inner content, not the window root: the root and clipped viewport
+                // are constrained by the previous HWND height. Invalidate the header too, since
+                // its children were just measured without wrapping during the width pass.
+                HeaderGrid.InvalidateMeasure();
+                ContentPanel.InvalidateMeasure();
+                ContentPanel.Measure(new Windows.Foundation.Size(
+                    Math.Max(1, measuredWidth - horizontalChrome), double.PositiveInfinity));
+                var desired = ContentPanel.DesiredSize;
                 if (desired.Width > 0 && desired.Height > 0)
                 {
                     widthDips = measuredWidth;
-                    heightDips = Math.Ceiling(desired.Height);
+                    heightDips = Math.Ceiling(desired.Height + RootGrid.Padding.Top + RootGrid.Padding.Bottom
+                        + RootGrid.BorderThickness.Top + RootGrid.BorderThickness.Bottom);
                 }
             }
             catch (Exception ex)
@@ -297,26 +361,30 @@ public sealed partial class HoverLookupWindow : Window
             }
         }
 
-        var width = Math.Max(1, DpiHelper.DipsToPhysicalPixels(widthDips, scale));
-        var height = Math.Max(1, DpiHelper.DipsToPhysicalPixels(heightDips, scale));
-
-        OcrRect workArea = default;
-        try
+        // Round up so fractional DPI scaling cannot clip the last line or bottom border.
+        var width = Math.Max(1, (int)Math.Ceiling(widthDips * scale) + frameWidth);
+        var height = Math.Max(1, (int)Math.Ceiling(heightDips * scale) + frameHeight);
+        if (!workArea.IsEmpty())
         {
-            var display = DisplayArea.GetFromPoint(new PointInt32(anchorX, anchorY), DisplayAreaFallback.Nearest);
-            var area = display.WorkArea;
-            workArea = new OcrRect(area.X, area.Y, area.Width, area.Height);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[HoverLookupWindow] Work area lookup failed, using unclamped position: {ex.Message}");
+            width = Math.Min(width, (int)workArea.Width);
+            height = Math.Min(height, (int)workArea.Height);
         }
 
         var gap = (int)Math.Round(HoverLookupPlacement.GapPx * scale);
         var (x, y) = HoverLookupPlacement.Compute(_anchorRect, width, height, workArea, gap);
 
+        var bounds = new OcrRect(x, y, width, height);
+#if WINUI_TEST
+        AutomationProperties.SetHelpText(BodyText,
+            $"frame={frameWidth}x{frameHeight}; content desired={ContentPanel.DesiredSize}, actual={ContentPanel.ActualWidth}x{ContentPanel.ActualHeight}; " +
+            $"viewport={ContentViewport.ActualWidth}x{ContentViewport.ActualHeight}; " +
+            $"body desired={BodyText.DesiredSize}, actual={BodyText.ActualWidth}x{BodyText.ActualHeight}; " +
+            $"service desired={ServiceText.DesiredSize}, actual={ServiceText.ActualWidth}x{ServiceText.ActualHeight}");
+#endif
+        if (_isVisible && _currentBounds == bounds) return;
+
         SetWindowPos(_hwnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        _currentBounds = new OcrRect(x, y, width, height);
+        _currentBounds = bounds;
         _isVisible = true;
 
         Debug.WriteLine($"[HoverLookupWindow] Shown at ({x}, {y}), size={width}x{height}, scale={scale}");

@@ -292,7 +292,19 @@ public sealed class SettingsService
     /// Enable hover word lookup (悬浮取词): hold the trigger key and rest the pointer on a word
     /// to see a small popup with its meaning. Shares <see cref="MouseSelectionExcludedApps"/>.
     /// </summary>
-    public bool HoverWordLookupEnabled { get; set; } = false;
+    public bool HoverWordLookupEnabled
+    {
+        get => _hoverWordLookupEnabled;
+        set
+        {
+            if (_hoverWordLookupEnabled == value) return;
+            _hoverWordLookupEnabled = value;
+            HoverWordLookupEnabledChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+    private bool _hoverWordLookupEnabled;
+
+    public event EventHandler? HoverWordLookupEnabledChanged;
 
     /// <summary>
     /// Trigger key for hover word lookup, stored as a <see cref="Models.HoverLookupModifier"/> name

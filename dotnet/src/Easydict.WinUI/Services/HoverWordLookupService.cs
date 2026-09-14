@@ -442,8 +442,11 @@ public sealed partial class HoverWordLookupService : IDisposable
                 return;
             }
 
-            var source = HoverLookupRules.GuessSourceLanguage(word.Text);
-            var target = new TargetLanguageSelector(SettingsService.Instance).ResolveAutoTargetLanguage(source);
+            var settings = SettingsService.Instance;
+            var source = HoverLookupRules.GuessSourceLanguage(word.Text,
+                LanguageExtensions.FromCode(settings.FirstLanguage),
+                LanguageExtensions.FromCode(settings.SecondLanguage));
+            var target = new TargetLanguageSelector(settings).ResolveAutoTargetLanguage(source);
             var request = new TranslationRequest
             {
                 Text = word.Text,
@@ -637,6 +640,14 @@ public sealed partial class HoverWordLookupService : IDisposable
         _window.ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme));
         Debug.WriteLine("[HoverLookup] Popup window created");
     }
+
+#if WINUI_TEST
+    internal HoverLookupWindow GetWindowForLayoutTest()
+    {
+        EnsureWindowCreated();
+        return _window!;
+    }
+#endif
 
     private void OnPopupBoundsChanged()
     {

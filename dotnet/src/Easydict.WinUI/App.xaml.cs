@@ -1694,6 +1694,14 @@ namespace Easydict.WinUI
                 switch (uMsg)
                 {
 #if WINUI_TEST
+                    case 0x8000 + 205 when wParam is 0 or 1:
+                        OnTrayHoverWordLookupToggled(wParam == 1);
+                        return 1;
+                    case 0x8000 + 203 when wParam >= 0 && wParam <= 5 && _hoverWordLookupService is not null:
+                        return HoverLookupLayoutTestHost.Show(_hoverWordLookupService.GetWindowForLayoutTest(), (int)wParam);
+                    case 0x8000 + 204 when _hoverWordLookupService is not null:
+                        _hoverWordLookupService.DismissForInput("MouseScroll");
+                        return 1;
                     // Test-only control works with both EXE and MSIX activation.
                     case 0x8000 + 202 when wParam >= 0 && wParam <= 10000:
                         TextSelectionService.TestCaptureDelayMs = (int)wParam;

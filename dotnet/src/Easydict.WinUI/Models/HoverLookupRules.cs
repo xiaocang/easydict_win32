@@ -70,7 +70,10 @@ public static class HoverLookupRules
     /// Cheap script-based guess of a single word's language, used only to pick the
     /// first/second target language (the service itself still auto-detects the source).
     /// </summary>
-    public static Language GuessSourceLanguage(string word)
+    public static Language GuessSourceLanguage(
+        string word,
+        Language firstLanguage = Language.SimplifiedChinese,
+        Language secondLanguage = Language.English)
     {
         if (string.IsNullOrEmpty(word))
         {
@@ -78,6 +81,7 @@ public static class HoverLookupRules
         }
 
         var hasHan = false;
+        var script = "Latin";
         foreach (var c in word)
         {
             if (c >= '\u3040' && c <= '\u30FF')
@@ -94,8 +98,58 @@ public static class HoverLookupRules
             {
                 hasHan = true;
             }
+
+            if (c is >= '\u0400' and <= '\u052F') script = "Cyrillic";
+            else if (c is >= '\u0600' and <= '\u06FF') script = "Arabic";
+            else if (c is >= '\u0370' and <= '\u03FF') script = "Greek";
+            else if (c is >= '\u0590' and <= '\u05FF') script = "Hebrew";
+            else if (c is >= '\u0900' and <= '\u097F') script = "Devanagari";
+            else if (c is >= '\u0980' and <= '\u09FF') script = "Bengali";
+            else if (c is >= '\u0B80' and <= '\u0BFF') script = "Tamil";
+            else if (c is >= '\u0C00' and <= '\u0C7F') script = "Telugu";
+            else if (c is >= '\u0E00' and <= '\u0E7F') script = "Thai";
         }
 
-        return hasHan ? Language.SimplifiedChinese : Language.English;
+        if (hasHan) script = "Han";
+        // A script cannot distinguish Haus from an English word, or Russian from
+        // Ukrainian. Prefer a compatible language in the user's pair, first then second.
+        return FromPreferences(language => GetScript(language) == script, script switch
+        {
+            "Han" => Language.SimplifiedChinese,
+            "Cyrillic" => Language.Russian,
+            "Arabic" => Language.Arabic,
+            "Greek" => Language.Greek,
+            "Hebrew" => Language.Hebrew,
+            "Devanagari" => Language.Hindi,
+            "Bengali" => Language.Bengali,
+            "Tamil" => Language.Tamil,
+            "Telugu" => Language.Telugu,
+            "Thai" => Language.Thai,
+            _ => Language.English,
+        });
+
+        Language FromPreferences(Func<Language, bool> matches, Language fallback)
+        {
+            if (firstLanguage != Language.Auto && matches(firstLanguage)) return firstLanguage;
+            if (secondLanguage != Language.Auto && matches(secondLanguage)) return secondLanguage;
+            return fallback;
+        }
     }
+
+    private static string GetScript(Language language) => language switch
+    {
+        Language.Auto => "Unknown",
+        Language.SimplifiedChinese or Language.TraditionalChinese or Language.ClassicalChinese or Language.Japanese => "Han",
+        Language.Korean => "Hangul",
+        Language.Russian or Language.Ukrainian or Language.Bulgarian => "Cyrillic",
+        Language.Arabic or Language.Persian or Language.Urdu => "Arabic",
+        Language.Greek => "Greek",
+        Language.Hebrew => "Hebrew",
+        Language.Hindi => "Devanagari",
+        Language.Bengali => "Bengali",
+        Language.Tamil => "Tamil",
+        Language.Telugu => "Telugu",
+        Language.Thai => "Thai",
+        _ => "Latin",
+    };
 }

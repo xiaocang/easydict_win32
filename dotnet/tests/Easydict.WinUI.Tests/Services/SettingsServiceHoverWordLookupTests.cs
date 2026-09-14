@@ -26,6 +26,23 @@ public class SettingsServiceHoverWordLookupTests
     }
 
     [Fact]
+    public void HoverWordLookupEnabled_NotifiesOnlyOnChanges_AndCanUnsubscribe()
+    {
+        using var directory = new TemporaryDirectory();
+        var settings = CreateIsolatedSettingsService(directory.Path);
+        var values = new List<bool>();
+        EventHandler handler = (_, _) => values.Add(settings.HoverWordLookupEnabled);
+        settings.HoverWordLookupEnabledChanged += handler;
+        settings.HoverWordLookupEnabled = false;
+        settings.HoverWordLookupEnabled = true;
+        settings.HoverWordLookupEnabled = true;
+        settings.HoverWordLookupEnabled = false;
+        settings.HoverWordLookupEnabledChanged -= handler;
+        settings.HoverWordLookupEnabled = true;
+        values.Should().Equal(true, false);
+    }
+
+    [Fact]
     public void HoverWordLookupSettings_RoundTripThroughSave()
     {
         using var directory = new TemporaryDirectory();

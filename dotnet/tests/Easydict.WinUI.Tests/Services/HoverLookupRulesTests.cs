@@ -90,4 +90,28 @@ public class HoverLookupRulesTests
     {
         HoverLookupRules.GuessSourceLanguage(word).Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("Haus", Language.German, Language.English, Language.German)]
+    [InlineData("maison", Language.French, Language.English, Language.French)]
+    [InlineData("Haus", Language.SimplifiedChinese, Language.German, Language.German)]
+    [InlineData("hello", Language.Russian, Language.English, Language.English)]
+    [InlineData("привет", Language.Russian, Language.English, Language.Russian)]
+    [InlineData("привіт", Language.Ukrainian, Language.English, Language.Ukrainian)]
+    [InlineData("привет", Language.English, Language.Russian, Language.Russian)]
+    [InlineData("مرحبا", Language.Arabic, Language.English, Language.Arabic)]
+    [InlineData("سلام", Language.Persian, Language.English, Language.Persian)]
+    [InlineData("سلام", Language.English, Language.Urdu, Language.Urdu)]
+    [InlineData("漢字", Language.Japanese, Language.English, Language.Japanese)]
+    [InlineData("繁體", Language.TraditionalChinese, Language.English, Language.TraditionalChinese)]
+    [InlineData("こんにちは", Language.German, Language.English, Language.Japanese)]
+    [InlineData("안녕하세요", Language.German, Language.English, Language.Korean)]
+    [InlineData("hello", Language.Auto, Language.English, Language.English)]
+    [InlineData("привет", Language.SimplifiedChinese, Language.English, Language.Russian)]
+    [InlineData("مرحبا", Language.SimplifiedChinese, Language.English, Language.Arabic)]
+    public void GuessSourceLanguage_PrefersCompatibleConfiguredLanguage(
+        string word, Language first, Language second, Language expected)
+    {
+        HoverLookupRules.GuessSourceLanguage(word, first, second).Should().Be(expected);
+    }
 }

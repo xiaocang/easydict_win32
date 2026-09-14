@@ -143,6 +143,80 @@ public class LocalizationServiceTests
                 .ToArray();
     }
 
+    /// <summary>
+    /// Translations written through a non-UTF-8 console lose every non-ASCII character to "?"
+    /// (issue #209: the language-detection warning showed "?????????429?" in Chinese).
+    /// A key whose en-US source is not itself a question should never contain "?" in any
+    /// language: nothing there was a real question mark, so any "?" is a lost character (for
+    /// example "Café" corrupted to "Caf?" right at the end of a value, or just before a
+    /// trailing ")" - the exact positions a naively "sentence-ending punctuation is fine" check
+    /// would wave through). For a key whose en-US source genuinely contains a "?", a "?" is only
+    /// accepted in a sentence-ending position (end of value, before a trailing ")", or before a
+    /// new sentence); anything else - including two "?" back to back, or one mid-word - is
+    /// corruption.
+    /// </summary>
+    [Fact]
+    public void AllLanguages_HaveNoQuestionMarkCorruptedTranslations()
+    {
+        var baselineValues = GetResourceValues("en-US");
+        var questionKeys = baselineValues
+            .Where(pair => pair.Value.Contains('?'))
+            .Select(pair => pair.Key)
+            .ToHashSet();
+
+        var corrupted = new List<string>();
+
+        foreach (var language in SupportedLanguages)
+        {
+            foreach (var (key, value) in GetResourceValues(language))
+            {
+                var isQuestion = questionKeys.Contains(key);
+                for (var index = value.IndexOf('?'); index >= 0; index = value.IndexOf('?', index + 1))
+                {
+                    if (!isQuestion || !IsSentenceEndingQuestionMark(value, index))
+                    {
+                        corrupted.Add($"{language}/{key}: {value}");
+                        break;
+                    }
+                }
+            }
+        }
+
+        corrupted.Should().BeEmpty(
+            "non-ASCII characters must survive translation; re-save the affected values as UTF-8");
+    }
+
+    /// <summary>
+    /// A real question mark ends the value, closes a parenthesis, or is followed by whitespace and a
+    /// new sentence. A "?" that replaced a lost character sits inside a word or next to another "?".
+    /// Only meaningful for a key whose en-US source is itself a genuine question.
+    /// </summary>
+    private static bool IsSentenceEndingQuestionMark(string value, int index)
+    {
+        var next = index + 1;
+        if (next >= value.Length || value[next] == ')')
+            return true;
+
+        if (!char.IsWhiteSpace(value[next]))
+            return false;
+
+        while (next < value.Length && char.IsWhiteSpace(value[next]))
+            next++;
+
+        // Scripts without letter case (CJK, Korean, Thai, Arabic, Hindi, ...) can start a new
+        // sentence with any character; only a lowercase Latin letter suggests the "?" actually
+        // landed mid-word (e.g. a corrupted character immediately before a word continuation).
+        return next >= value.Length || !char.IsLower(value[next]);
+    }
+
+    private static Dictionary<string, string> GetResourceValues(string language)
+    {
+        var document = XDocument.Load(Path.Combine(StringsPath, language, "Resources.resw"));
+        return document.Root!.Elements("data").ToDictionary(
+            element => element.Attribute("name")!.Value,
+            element => element.Element("value")?.Value ?? string.Empty);
+    }
+
     [Fact]
     public void HistoryDisabledMessage_AllLanguagesPreserveSettingsPathPlaceholders()
     {

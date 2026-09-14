@@ -107,17 +107,22 @@ public class BobTranslationServiceLifetimeTests
     {
         using var fixture = PluginFixture.Create("cancel");
         var service = fixture.Service();
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
+
+        var query = service.TranslateAsync(PluginFixture.Request(), cts.Token);
+        await PluginFixture.WaitForLogAsync(service, "translate running");
+        cts.Cancel();
 
         try
         {
-            await service.TranslateAsync(PluginFixture.Request(), cts.Token);
+            await query;
         }
         catch (OperationCanceledException)
         {
         }
 
-        // Give the cancel notification a moment to reach the plugin's subscriber.
+        // The cancel notification reaches the plugin on its own loop thread; the next call into
+        // that loop cannot start before it has run.
         await service.ValidateAsync();
 
         service.RecentLogLines.Should().Contain(line => line.Contains("cancelSignal received"));

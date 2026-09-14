@@ -106,6 +106,9 @@ public static class BobLanguageMap
     /// Best-effort source code for a plugin's <c>detectFrom</c> when the host has not detected a
     /// language. Plugins generally expect a concrete code, and a wrong guess is better than "auto"
     /// for the ones that reject it outright.
+    ///
+    /// The whole string is examined rather than its first character: Japanese text routinely opens
+    /// with kanji ("日本語のテキスト"), which on its own is indistinguishable from Chinese.
     /// </summary>
     public static string GuessByScript(string? text)
     {
@@ -114,21 +117,57 @@ public static class BobLanguageMap
             return "en";
         }
 
+        var kana = 0;
+        var hangul = 0;
+        var han = 0;
+        var cyrillic = 0;
+        var arabic = 0;
+        var hebrew = 0;
+        var thai = 0;
+        var devanagari = 0;
+        var greek = 0;
+
         foreach (var rune in text.EnumerateRunes())
         {
-            var value = rune.Value;
-            if (value is >= 0x3040 and <= 0x30FF) return "ja";                       // kana
-            if (value is >= 0xAC00 and <= 0xD7AF or >= 0x1100 and <= 0x11FF) return "ko";
-            if (value is >= 0x4E00 and <= 0x9FFF or >= 0x3400 and <= 0x4DBF) return "zh-Hans";
-            if (value is >= 0x0400 and <= 0x04FF) return "ru";
-            if (value is >= 0x0600 and <= 0x06FF) return "ar";
-            if (value is >= 0x0590 and <= 0x05FF) return "he";
-            if (value is >= 0x0E00 and <= 0x0E7F) return "th";
-            if (value is >= 0x0900 and <= 0x097F) return "hi";
-            if (value is >= 0x0370 and <= 0x03FF) return "el";
+            switch (rune.Value)
+            {
+                case >= 0x3040 and <= 0x30FF: kana++; break;
+                case >= 0xAC00 and <= 0xD7AF or >= 0x1100 and <= 0x11FF: hangul++; break;
+                case >= 0x4E00 and <= 0x9FFF or >= 0x3400 and <= 0x4DBF: han++; break;
+                case >= 0x0400 and <= 0x04FF: cyrillic++; break;
+                case >= 0x0600 and <= 0x06FF: arabic++; break;
+                case >= 0x0590 and <= 0x05FF: hebrew++; break;
+                case >= 0x0E00 and <= 0x0E7F: thai++; break;
+                case >= 0x0900 and <= 0x097F: devanagari++; break;
+                case >= 0x0370 and <= 0x03FF: greek++; break;
+            }
         }
 
-        return "en";
+        // Kana and hangul settle the question outright: neither occurs in Chinese, so even one of
+        // them outweighs any amount of Han.
+        if (kana > 0) return "ja";
+        if (hangul > 0) return "ko";
+
+        // Otherwise the most-used script wins, so a stray foreign character cannot flip the guess.
+        var best = "en";
+        var bestCount = 0;
+        Consider("zh-Hans", han);
+        Consider("ru", cyrillic);
+        Consider("ar", arabic);
+        Consider("he", hebrew);
+        Consider("th", thai);
+        Consider("hi", devanagari);
+        Consider("el", greek);
+        return best;
+
+        void Consider(string code, int count)
+        {
+            if (count > bestCount)
+            {
+                best = code;
+                bestCount = count;
+            }
+        }
     }
 
     private static Dictionary<string, Language> BuildReverseMap()

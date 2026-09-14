@@ -108,6 +108,28 @@ internal sealed class PluginFixture : IDisposable
             DetectedFromLanguage = detectedFrom
         };
 
+    /// <summary>
+    /// Wait until the plugin has logged <paramref name="fragment"/>. Engine start-up is far slower
+    /// than a fixed delay can safely assume, so tests that must act while a plugin is running wait
+    /// for the plugin to say it is running.
+    /// </summary>
+    public static async Task WaitForLogAsync(BobTranslationService service, string fragment, int timeoutMs = 30_000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (service.RecentLogLines.Any(line => line.Contains(fragment, StringComparison.Ordinal)))
+            {
+                return;
+            }
+
+            await Task.Delay(20).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException(
+            $"The plugin did not log '{fragment}' within {timeoutMs} ms. Log: {string.Join(" | ", service.RecentLogLines)}");
+    }
+
     public void Dispose()
     {
         foreach (var disposable in _disposables)

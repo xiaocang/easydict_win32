@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -210,13 +211,14 @@ public sealed class BobTranslationService
                     continue;
                 }
 
-                var envelope = Parse(callEvent.PayloadJson);
-                if (envelope?.Error is { } error)
+                // Read only the error: pluginValidate reports success as `{ result: true }`, which
+                // is not the object shape a translate result has, so the strict parser cannot be
+                // used here.
+                if (TryReadValidationError(callEvent.PayloadJson, out var error))
                 {
                     return new BobValidationOutcome(BobValidationStatus.Invalid, BobErrorMapper.MapToException(error, ServiceId).Message);
                 }
 
-                // Bob's pluginValidate reports success as `{ result: true }`.
                 return BobValidationOutcome.Valid;
             }
 
@@ -300,6 +302,35 @@ public sealed class BobTranslationService
         }
 
         return BobResultMapper.Map(envelope.Result, request, DisplayName);
+    }
+
+    /// <summary>
+    /// Pull the error out of a <c>pluginValidate</c> payload, ignoring whatever shape the plugin
+    /// used for <c>result</c>. Returns false when the plugin reported no error, including when the
+    /// payload is unreadable: a self-check is a courtesy, not something to fail a plugin over.
+    /// </summary>
+    private bool TryReadValidationError(string payloadJson, [NotNullWhen(true)] out BobError? error)
+    {
+        error = null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(payloadJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("error", out var errorElement)
+                || errorElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            error = errorElement.Deserialize<BobError>(BobJson.Options);
+            return error is not null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.Log("warn", $"pluginValidate returned an unreadable payload: {ex.Message}");
+            return false;
+        }
     }
 
     private BobEnvelope? Parse(string payloadJson)

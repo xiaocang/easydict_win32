@@ -307,7 +307,8 @@ public class BobTranslationServiceRuntimeTests
         var act = async () =>
         {
             var task = service.TranslateAsync(PluginFixture.Request(), cts.Token);
-            cts.CancelAfter(TimeSpan.FromMilliseconds(200));
+            await PluginFixture.WaitForLogAsync(service, "translate running");
+            cts.Cancel();
             await task;
         };
 

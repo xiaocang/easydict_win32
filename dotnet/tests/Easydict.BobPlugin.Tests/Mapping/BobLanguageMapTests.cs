@@ -71,7 +71,16 @@ public class BobLanguageMapTests
     public void GuessByScript_PicksAConcreteCode(string text, string expected)
         => BobLanguageMap.GuessByScript(text).Should().Be(expected);
 
+    [Theory]
+    // Japanese routinely opens with kanji, so only looking at the first character reads as Chinese.
+    [InlineData("日本語のテキスト", "ja")]
+    [InlineData("東京", "zh-Hans")]
+    [InlineData("漢字とかな", "ja")]
+    [InlineData("한국어 漢字", "ko")]
+    public void GuessByScript_LooksAtTheWholeString(string text, string expected)
+        => BobLanguageMap.GuessByScript(text).Should().Be(expected);
+
     [Fact]
-    public void GuessByScript_PrefersKanaOverKanjiForMixedJapanese()
-        => BobLanguageMap.GuessByScript("日本語のテキスト").Should().Be("ja");
+    public void GuessByScript_IsNotFlippedByAStrayForeignCharacter()
+        => BobLanguageMap.GuessByScript("这是一段很长的中文文本 α").Should().Be("zh-Hans");
 }

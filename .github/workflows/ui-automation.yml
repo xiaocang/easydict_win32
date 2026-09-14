@@ -369,6 +369,14 @@ jobs:
           $testExe = (Resolve-Path 'dotnet/msix/extracted/Easydict.WinUI.exe').Path
           "EASYDICT_EXE_PATH=$testExe" >> $env:GITHUB_ENV
 
+      - name: Configure isolated dictionary test launch
+        if: matrix.shard.name == 'Advanced'
+        shell: pwsh
+        run: |
+          # The dictionary fixture supplies EASYDICT_SETTINGS_DIR; Explorer activation loses it.
+          $testExe = (Resolve-Path 'dotnet/msix/extracted/Easydict.WinUI.exe').Path
+          "EASYDICT_EXE_PATH=$testExe" >> $env:GITHUB_ENV
+
       - name: Restore UI test dependencies
         working-directory: dotnet
         run: dotnet restore tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj

@@ -265,6 +265,36 @@ public class AgentCliServiceTests
     }
 
     [Fact]
+    public void ErrorFormatter_LongStdErr_PreservesLeadingErrorBeforeUsage()
+    {
+        const string error = "error: unknown option '--unsupported'";
+        var usage = string.Join('\n', Enumerable.Repeat("  --help  Display help for command", 20));
+
+        var detail = AgentCliErrorFormatter.BuildDetail(
+            ["control-line fallback"], $"{error}\nUsage: claude [options]\n{usage}");
+
+        detail.Should().StartWith($": {error} Usage:");
+        detail.Should().EndWith("…");
+        detail.Length.Should().BeLessThanOrEqualTo(303);
+        detail.Should().NotContain("control-line fallback");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" \r\n ")]
+    public void ErrorFormatter_LongControlLines_PreserveTrailingError(string stdErr)
+    {
+        var preamble = new string('x', 400);
+        const string error = "Failed to authenticate: 403 Request not allowed";
+
+        var detail = AgentCliErrorFormatter.BuildDetail([preamble, error], stdErr);
+
+        detail.Should().StartWith(": …");
+        detail.Should().EndWith(error);
+        detail.Length.Should().BeLessThanOrEqualTo(303);
+    }
+
+    [Fact]
     public void ErrorFormatter_FallsBackToControlLines_SkipsVerboseInitNoise()
     {
         // Regression for easydict_win32#205: --verbose makes the system/init line huge

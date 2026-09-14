@@ -32,7 +32,8 @@ internal static class AgentCliErrorFormatter
     /// </summary>
     public static string BuildDetail(IReadOnlyList<string> controlLines, string stdErr)
     {
-        var source = !string.IsNullOrWhiteSpace(stdErr)
+        var hasStdErr = !string.IsNullOrWhiteSpace(stdErr);
+        var source = hasStdErr
             ? stdErr
             : string.Join('\n', FilterMetadataLines(controlLines));
 
@@ -49,10 +50,11 @@ internal static class AgentCliErrorFormatter
 
         if (text.Length > MaxDetailLength)
         {
-            // Keep the tail: the most recent control line is the one most likely
-            // to carry the actual failure, and a long preamble (e.g. a verbose
-            // session-init event) should not push it out of the excerpt.
-            text = "…" + text[^MaxDetailLength..];
+            // stderr commonly starts with the error followed by usage text.
+            // Control lines instead tend to carry the actual failure at the end.
+            text = hasStdErr
+                ? text[..MaxDetailLength] + "…"
+                : "…" + text[^MaxDetailLength..];
         }
 
         return $": {text}";

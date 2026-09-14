@@ -188,6 +188,14 @@ public static class ScreenshotHelper
         return path;
     }
 
+    /// <summary>Capture a native WebView element with a consistent physical-pixel DPI context.</summary>
+    public static string CaptureElementPhysical(Window window, AutomationElement element, string name)
+    {
+        using var dpiScope = new PerMonitorDpiScope();
+        EnsureWindowReadyForCapture(window, name);
+        return CaptureElement(element, name);
+    }
+
     /// <summary>
     /// Capture a padded region around elements after the test has moved their
     /// window to the primary monitor's physical origin.

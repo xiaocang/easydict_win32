@@ -11,15 +11,22 @@ using Microsoft.UI.Xaml.Media;
 namespace Easydict.WinUI.Views;
 
 /// <summary>
-/// Settings → Services → Bob plugins: importing, configuring and removing third-party plugins.
+/// Settings → Plugins: importing, configuring and removing third-party Bob plugins.
 ///
-/// Everything a plugin owns lives in its own group with its own heading and badge, so a plugin's
+/// Everything a plugin owns lives in its own tab with its own heading and badge, so a plugin's
 /// options are never mistaken for an Easydict service's.
 /// </summary>
 public sealed partial class SettingsPage
 {
     /// <summary>Source tag on text actions this page creates for a plugin.</summary>
     private const string BobTextActionSource = "bob";
+
+    /// <summary>
+    /// Bob's own plugin catalog. The tab links out to it rather than browsing or fetching a
+    /// listing in-app: verify against https://bobtranslate.com/plugin if this ever needs to
+    /// change.
+    /// </summary>
+    private const string BobPluginStoreUrl = "https://bobtranslate.com/plugin";
 
     /// <summary>Editable option fields per plugin, read back by <see cref="SaveBobPluginOptions"/>.</summary>
     private readonly Dictionary<string, List<(BobPluginOption Option, FrameworkElement Field)>> _bobOptionFields = new(StringComparer.Ordinal);
@@ -132,6 +139,24 @@ public sealed partial class SettingsPage
         if (ImportBobPluginButton is not null)
         {
             ImportBobPluginButton.Content = loc.GetStringOrDefault("BobPluginImportButton", "Import Bob Plugin");
+        }
+
+        if (PluginsHeaderText is not null)
+        {
+            PluginsHeaderText.Text = loc.GetStringOrDefault("BobPluginsTabHeader", "Bob Plugins");
+        }
+
+        if (PluginsDescriptionText is not null)
+        {
+            PluginsDescriptionText.Text = loc.GetStringOrDefault(
+                "BobPluginsTabDescription",
+                "Install third-party Bob translate plugins. They run in an embedded JavaScript engine, separate from Easydict's built-in services.");
+        }
+
+        if (BobPluginStoreLink is not null)
+        {
+            BobPluginStoreLink.Content = loc.GetStringOrDefault("BobPluginGetMoreLink", "Get more plugins");
+            BobPluginStoreLink.NavigateUri = new Uri(BobPluginStoreUrl);
         }
     }
 

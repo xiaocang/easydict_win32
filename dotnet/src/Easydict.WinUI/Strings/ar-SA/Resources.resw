@@ -1617,4 +1617,9 @@
   <data name="BobPluginAllowPhonetics" xml:space="preserve"><value>Add phonetics from Youdao</value></data>
   <data name="BobPluginShowOnPopButton" xml:space="preserve"><value>Show on the selection button</value></data>
   <data name="BobPluginPolicyHint" xml:space="preserve"><value>Off by default: a plugin can charge, rate-limit or write things Easydict cannot see, so it only gets these once you allow them.</value></data>
+  <data name="SettingsTab_Plugins" xml:space="preserve"><value>Plugins</value></data>
+  <data name="SettingsTab_Plugins_Tooltip" xml:space="preserve"><value>Import, configure, and remove third-party Bob translate plugins.</value></data>
+  <data name="BobPluginsTabHeader" xml:space="preserve"><value>Bob Plugins</value></data>
+  <data name="BobPluginsTabDescription" xml:space="preserve"><value>Install third-party Bob translate plugins. They run in an embedded JavaScript engine, separate from Easydict's built-in services.</value></data>
+  <data name="BobPluginGetMoreLink" xml:space="preserve"><value>Get more plugins</value></data>
 </root>

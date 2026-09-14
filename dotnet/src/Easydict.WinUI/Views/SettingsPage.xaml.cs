@@ -33,6 +33,7 @@ internal enum SettingsTabId
 {
     General,
     Services,
+    Plugins,
     Views,
     Hotkeys,
     Advanced,
@@ -243,6 +244,7 @@ public sealed partial class SettingsPage : Page
     [
         new() { Id = SettingsTabId.General, IconGlyph = "\uE713", IsSelected = true },
         new() { Id = SettingsTabId.Services, IconGlyph = "\uE90F" },
+        new() { Id = SettingsTabId.Plugins, IconGlyph = "\uEA86" },
         new() { Id = SettingsTabId.Views, IconGlyph = "\uE8A7" },
         new() { Id = SettingsTabId.Hotkeys, IconGlyph = "\uE765" },
         new() { Id = SettingsTabId.Advanced, IconGlyph = "\uE771" },
@@ -1130,6 +1132,7 @@ public sealed partial class SettingsPage : Page
 
         GeneralTabContent.Visibility = tabId == SettingsTabId.General ? Visibility.Visible : Visibility.Collapsed;
         ServicesTabContent.Visibility = tabId == SettingsTabId.Services ? Visibility.Visible : Visibility.Collapsed;
+        PluginsTabContent.Visibility = tabId == SettingsTabId.Plugins ? Visibility.Visible : Visibility.Collapsed;
         if (ViewsTabContent != null)
         {
             ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;
@@ -3159,6 +3162,12 @@ public sealed partial class SettingsPage : Page
             InitializeOpenVinoPanel();
         }
 
+        if (ShouldLoadSettingsTab(SettingsTabId.Plugins, deferLazyTabData))
+        {
+            UpdateBobPluginsSummary();
+            BuildInstalledBobPluginsConfigUI();
+        }
+
         if (ShouldLoadSettingsTab(SettingsTabId.General, deferLazyTabData))
         {
             // TTS settings
@@ -3331,8 +3340,6 @@ public sealed partial class SettingsPage : Page
 
         UpdateImportedMdxSummary();
         BuildImportedMdxConfigUI();
-        UpdateBobPluginsSummary();
-        BuildInstalledBobPluginsConfigUI();
         BuildTextActionsUI();
     }
 

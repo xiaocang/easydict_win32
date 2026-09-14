@@ -1617,4 +1617,9 @@
   <data name="BobPluginAllowPhonetics" xml:space="preserve"><value>從有道補充音標</value></data>
   <data name="BobPluginShowOnPopButton" xml:space="preserve"><value>顯示在劃詞按鈕上</value></data>
   <data name="BobPluginPolicyHint" xml:space="preserve"><value>預設關閉：外掛可能產生計費、觸發限流或寫入 Easydict 看不到的內容，只有你允許後才會啟用這些行為。</value></data>
+  <data name="SettingsTab_Plugins" xml:space="preserve"><value>外掛</value></data>
+  <data name="SettingsTab_Plugins_Tooltip" xml:space="preserve"><value>匯入、設定和移除第三方 Bob 翻譯外掛。</value></data>
+  <data name="BobPluginsTabHeader" xml:space="preserve"><value>Bob 外掛</value></data>
+  <data name="BobPluginsTabDescription" xml:space="preserve"><value>安裝第三方 Bob 翻譯外掛。外掛執行在內嵌的 JavaScript 引擎中，與 Easydict 內建服務彼此獨立。</value></data>
+  <data name="BobPluginGetMoreLink" xml:space="preserve"><value>取得更多外掛</value></data>
 </root>

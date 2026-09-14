@@ -265,8 +265,10 @@ Design points that are load-bearing:
 WinUI side: `Services/BobPlugins/BobPluginInstaller.cs` (install/describe/remove under
 `%LOCALAPPDATA%\Easydict\plugins\bob`), `TranslationManagerService.RegisterBobPluginServices` /
 `TryRegisterBobPlugin` / `UnregisterBobPlugin` / `ProbeBobPluginLanguagesAsync`,
-`Views/SettingsPage.BobPlugins.cs` (its own "Bob plugins (third party)" group). Credential options
-are stored with DPAPI under `BobOption:{serviceId}:{optionId}`, never in `settings.json`.
+`Views/SettingsPage.BobPlugins.cs` (its own Settings → Plugins tab, `SettingsTabId.Plugins`, kept
+separate from the Services tab so a plugin's options are never mistaken for a built-in service's).
+Credential options are stored with DPAPI under `BobOption:{serviceId}:{optionId}`, never in
+`settings.json`.
 
 Adding a plugin also creates a `RunService` text action tagged `source: "bob"`, so it appears on
 the selection strip; removing the plugin removes that action.

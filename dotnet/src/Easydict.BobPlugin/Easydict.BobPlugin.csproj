@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Easydict.BobPlugin</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Easydict.BobPlugin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pure-managed JavaScript engine used to run Bob plugins in-process.
+         Floating within 4.x: the exact resolved version should be pinned once CI reports it. -->
+    <PackageReference Include="Jint" Version="4.*" />
+    <PackageReference Include="System.Text.Json" Version="9.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Runtime\Prelude\*.js" />
+  </ItemGroup>
+
+</Project>

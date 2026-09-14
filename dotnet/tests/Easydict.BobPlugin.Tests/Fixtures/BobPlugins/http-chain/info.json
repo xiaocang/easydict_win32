@@ -1,0 +1,7 @@
+{
+  "identifier": "test.http.chain",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "HTTP chain",
+  "summary": "Makes a second $http call after awaiting the first, to exercise call-id propagation across async continuations."
+}

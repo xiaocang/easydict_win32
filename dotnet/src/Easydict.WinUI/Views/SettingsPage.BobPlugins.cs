@@ -48,7 +48,7 @@ public sealed partial class SettingsPage
                 return;
             }
 
-            var plugin = BobPluginInstaller.Install(path);
+            var plugin = BobPluginInstaller.Install(path, _settings);
 
             if (!TranslationManagerService.Instance.TryRegisterBobPlugin(plugin, out var error))
             {

@@ -223,7 +223,11 @@ public sealed class PopButtonService : IDisposable
         {
             var actions = TextActionRegistry.GetPopButtonActions();
             var theme = MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme);
-            var signature = string.Join("|", actions.Select(a => $"{a.Action.Id}\u001f{a.Action.Title}\u001f{a.Origin.Kind}"));
+            // Include every field the click handler or button rendering actually reads, not just
+            // Id/Title, so editing an action's URL template or target service (with the id and
+            // title unchanged) is detected and rebuilds the strip instead of firing stale data.
+            var signature = string.Join("|", actions.Select(a =>
+                $"{a.Action.Id}\u001f{a.Action.Title}\u001f{a.Action.Type}\u001f{a.Action.UrlTemplate}\u001f{a.Action.ServiceId}\u001f{a.Action.IconGlyph}\u001f{a.Origin.Kind}"));
             if (signature == _appliedActionsSignature && theme == _appliedActionsTheme)
             {
                 return;

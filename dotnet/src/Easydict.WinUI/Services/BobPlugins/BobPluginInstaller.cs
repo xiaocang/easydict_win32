@@ -28,10 +28,17 @@ public static class BobPluginInstaller
     /// Extract a .bobplugin, verify it is a translate plugin, and move it into place.
     /// The returned descriptor is not yet persisted; the caller adds it to settings.
     /// </summary>
+    /// <param name="packagePath">Path to the <c>.bobplugin</c> package on disk.</param>
+    /// <param name="settings">
+    /// Used to find a previously installed instance of the same plugin (same identifier maps to the
+    /// same instance id regardless of version) so an update carries forward the user's option
+    /// values and execution-policy toggles instead of resetting them to manifest defaults.
+    /// </param>
     /// <exception cref="BobPluginException">The package is unreadable, unsafe or unsupported.</exception>
-    public static SettingsService.InstalledBobPlugin Install(string packagePath)
+    public static SettingsService.InstalledBobPlugin Install(string packagePath, SettingsService settings)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
+        ArgumentNullException.ThrowIfNull(settings);
 
         var staging = Path.Combine(StagingRoot, Guid.NewGuid().ToString("N"));
         try
@@ -46,6 +53,11 @@ public static class BobPluginInstaller
             }
 
             var manifest = staged.Manifest;
+            var instanceId = BuildInstanceId(manifest.Identifier);
+            var serviceId = BobServiceIds.Build(manifest.Identifier, instanceId);
+            var existing = settings.InstalledBobPlugins.FirstOrDefault(
+                p => string.Equals(p.ServiceId, serviceId, StringComparison.Ordinal));
+
             var installDirectory = Path.Combine(PluginsRoot, SanitizeSegment(manifest.Identifier), SanitizeSegment(manifest.Version));
 
             // Reinstalling the same version replaces the files but keeps the instance, so the
@@ -59,20 +71,22 @@ public static class BobPluginInstaller
             Directory.Move(staged.Directory, installDirectory);
 
             var installed = BobPluginPackage.LoadFromDirectory(installDirectory);
-            var instanceId = BuildInstanceId(manifest.Identifier);
 
             return new SettingsService.InstalledBobPlugin
             {
-                ServiceId = BobServiceIds.Build(manifest.Identifier, instanceId),
+                ServiceId = serviceId,
                 PluginIdentifier = manifest.Identifier,
                 InstanceId = instanceId,
                 Version = manifest.Version,
                 DisplayName = manifest.Name,
                 InstallDirectory = installDirectory,
                 IconPath = installed.IconPath,
-                SupportedLanguageCodes = [],
-                OptionValues = SeedOptionValues(manifest),
-                SecureOptionIds = manifest.SecureOptions.Select(o => o.Identifier).ToList()
+                SupportedLanguageCodes = existing?.SupportedLanguageCodes ?? [],
+                OptionValues = SeedOptionValues(manifest, existing?.OptionValues),
+                SecureOptionIds = manifest.SecureOptions.Select(o => o.Identifier).ToList(),
+                AllowResultCache = existing?.AllowResultCache ?? false,
+                AllowHostRetry = existing?.AllowHostRetry ?? false,
+                AllowPhoneticEnrichment = existing?.AllowPhoneticEnrichment ?? false
             };
         }
         finally
@@ -155,7 +169,13 @@ public static class BobPluginInstaller
         }
     }
 
-    private static Dictionary<string, string> SeedOptionValues(BobPluginManifest manifest)
+    /// <summary>
+    /// Seed option values from the manifest, preferring the value the user already had for an
+    /// option that still exists in the new manifest (an update should not reset customized
+    /// settings back to defaults).
+    /// </summary>
+    private static Dictionary<string, string> SeedOptionValues(
+        BobPluginManifest manifest, IReadOnlyDictionary<string, string>? existing)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var option in manifest.Options)
@@ -165,8 +185,9 @@ public static class BobPluginInstaller
                 continue;   // held by the credential store, never in settings.json
             }
 
-            values[option.Identifier] = option.DefaultValue
-                ?? (option.MenuValues.Count > 0 ? option.MenuValues[0].Value : string.Empty);
+            values[option.Identifier] = existing is not null && existing.TryGetValue(option.Identifier, out var previous)
+                ? previous
+                : option.DefaultValue ?? (option.MenuValues.Count > 0 ? option.MenuValues[0].Value : string.Empty);
         }
 
         return values;

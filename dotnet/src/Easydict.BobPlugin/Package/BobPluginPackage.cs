@@ -169,10 +169,13 @@ public sealed class BobPluginPackage
     {
         if (!string.IsNullOrWhiteSpace(manifest.Icon))
         {
-            var declared = Path.Combine(root, manifest.Icon);
-            if (File.Exists(declared))
+            // manifest.Icon is untrusted plugin content, not a validated zip entry name, so it gets
+            // the same root-escape check applied during extraction (an absolute path or "../"
+            // segment must not resolve outside the plugin's own directory).
+            var declared = TryResolveWithinRoot(root, manifest.Icon);
+            if (declared is not null && File.Exists(declared))
             {
-                return Path.GetFullPath(declared);
+                return declared;
             }
         }
 
@@ -186,6 +189,27 @@ public sealed class BobPluginPackage
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Resolve a manifest-declared relative path against <paramref name="root"/>, returning
+    /// <c>null</c> for an absolute path or any path that would escape <paramref name="root"/>.
+    /// </summary>
+    private static string? TryResolveWithinRoot(string root, string relativePath)
+    {
+        var normalized = relativePath.Replace('\\', '/');
+        if (Path.IsPathRooted(normalized) || normalized.Contains(':'))
+        {
+            return null;
+        }
+
+        var rootFull = Path.GetFullPath(root);
+        var rootWithSeparator = rootFull.EndsWith(Path.DirectorySeparatorChar)
+            ? rootFull
+            : rootFull + Path.DirectorySeparatorChar;
+
+        var fullPath = Path.GetFullPath(Path.Combine(rootWithSeparator, normalized));
+        return fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) ? fullPath : null;
     }
 
     /// <summary>

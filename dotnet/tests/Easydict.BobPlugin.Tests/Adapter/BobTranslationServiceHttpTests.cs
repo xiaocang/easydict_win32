@@ -85,6 +85,46 @@ public class BobTranslationServiceHttpTests
     }
 
     [Fact]
+    public async Task CancellingTheCallAlsoCancelsAFollowUpRequestMadeAfterAnAwait()
+    {
+        // A second $http call issued from inside an async translate()'s own continuation (after the
+        // first await resumes) must still carry that call's id, so the host can link and cancel it
+        // - not just the request made during the initial synchronous invocation.
+        using var fixture = PluginFixture.Create("http-chain");
+        fixture.Http.EnqueueJson("""{"translation":"first"}""");
+        var secondRequestCancelled = new TaskCompletionSource<bool>();
+        fixture.Http.EnqueueHang(secondRequestCancelled);
+
+        var service = fixture.Service();
+        using var cts = new CancellationTokenSource();
+        var query = service.TranslateAsync(PluginFixture.Request(), cts.Token);
+
+        await PluginFixture.WaitForLogAsync(service, "sending second request");
+
+        var deadline = Environment.TickCount64 + 5_000;
+        while (fixture.Http.Requests.Count < 2 && Environment.TickCount64 < deadline)
+        {
+            await Task.Delay(10);
+        }
+        fixture.Http.Requests.Should().HaveCount(2, "the plugin's second $http call must have reached the host before we cancel");
+
+        cts.Cancel();
+
+        try
+        {
+            await query;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        var completed = await Task.WhenAny(secondRequestCancelled.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        completed.Should().Be(secondRequestCancelled.Task,
+            "the second request's own cancellation token must fire too, proving it was linked to the call - " +
+            "not just the overall call's completion racing ahead independently of it");
+    }
+
+    [Fact]
     public async Task NonHttpUrlsAreRefusedWithoutReachingTheNetwork()
     {
         using var fixture = PluginFixture.Create("http-badurl");

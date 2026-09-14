@@ -223,6 +223,12 @@ internal sealed class HttpBridge
         var buffer = new byte[8192];
         var total = 0L;
 
+        // A persistent decoder carries any partial multi-byte UTF-8 sequence left at the end of one
+        // chunk over to the next read, instead of decoding each chunk in isolation (which corrupts
+        // any character split across an 8192-byte boundary).
+        var decoder = Encoding.UTF8.GetDecoder();
+        var charBuffer = new char[Encoding.UTF8.GetMaxCharCount(buffer.Length)];
+
         while (true)
         {
             var read = await stream.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false);
@@ -238,10 +244,11 @@ internal sealed class HttpBridge
             }
 
             var chunk = buffer.AsSpan(0, read).ToArray();
+            var charCount = decoder.GetChars(chunk, 0, chunk.Length, charBuffer, 0);
             var payload = JsonSerializer.Serialize(
                 new BobHttpChunkDto
                 {
-                    Text = SafeDecode(chunk),
+                    Text = new string(charBuffer, 0, charCount),
                     RawDataBase64 = Convert.ToBase64String(chunk)
                 },
                 JsonOptions);

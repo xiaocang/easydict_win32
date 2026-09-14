@@ -92,6 +92,23 @@ public class BobPluginPackageTests : IDisposable
     }
 
     [Fact]
+    public void Extract_IgnoresAManifestIconThatEscapesThePluginDirectory()
+    {
+        var destination = NewDirectory("icon-traversal-out");
+        File.WriteAllText(Path.Combine(_root, "secret.png"), "definitely not the plugin's icon");
+
+        var archive = BuildArchive("icon-traversal.bobplugin", entries: new()
+        {
+            ["info.json"] = """{"identifier":"com.example.traversal","category":"translate","icon":"../secret.png"}""",
+            ["main.js"] = "function translate() {}"
+        });
+
+        var package = BobPluginPackage.Extract(archive, destination);
+
+        package.IconPath.Should().BeNull("a manifest-declared icon path must not resolve outside the plugin's own directory");
+    }
+
+    [Fact]
     public void Extract_RefusesEntriesThatEscapeTheDestination()
     {
         var archive = BuildArchive("slip.bobplugin", entries: new()

@@ -403,7 +403,18 @@
         if (!Object.prototype.hasOwnProperty.call(pendingCalls, callId)) {
             return;   // already completed, timed out or cancelled
         }
+        var pending = pendingCalls[callId];
         delete pendingCalls[callId];
+
+        // currentCallId is left pointing at this call for its whole async lifetime (see
+        // __ed_callTranslate/__ed_callValidate below) so a follow-up $http call made from a
+        // .then()/async continuation - not just the initial synchronous invocation - still carries
+        // the right call id for cancellation/timeout. Only restore it here, once the call is
+        // actually done, and only if nothing else has already moved it on.
+        if (currentCallId === callId) {
+            currentCallId = pending.previousCallId || 0;
+        }
+
         __ed_onCompletion(callId, stringifyPayload(payload || {}));
     }
 
@@ -433,9 +444,10 @@
             onCompletion: function (payload) { finishCall(callId, payload); }
         };
 
-        pendingCalls[callId] = { query: query, cancelSignal: cancelSignal };
+        pendingCalls[callId] = { query: query, cancelSignal: cancelSignal, previousCallId: currentCallId };
 
-        var previousCallId = currentCallId;
+        // Left set for the whole async lifetime of the call (reset by finishCall above), not just
+        // this synchronous invocation - see the comment there for why.
         currentCallId = callId;
         try {
             var returned = translate(query, query.onCompletion);
@@ -447,8 +459,6 @@
             }
         } catch (e) {
             finishCall(callId, { error: { type: 'unknown', message: toText(e && e.message ? e.message : e) } });
-        } finally {
-            currentCallId = previousCallId;
         }
     };
 
@@ -460,9 +470,8 @@
             return;
         }
 
-        pendingCalls[callId] = { query: null, cancelSignal: new BobSignal() };
+        pendingCalls[callId] = { query: null, cancelSignal: new BobSignal(), previousCallId: currentCallId };
 
-        var previousCallId = currentCallId;
         currentCallId = callId;
         try {
             var returned = validate(function (payload) { finishCall(callId, payload); });
@@ -473,8 +482,6 @@
             }
         } catch (e) {
             finishCall(callId, { error: { type: 'unknown', message: toText(e && e.message ? e.message : e) } });
-        } finally {
-            currentCallId = previousCallId;
         }
     };
 
@@ -485,6 +492,13 @@
             return;
         }
         delete pendingCalls[callId];
+
+        // Same accounting as finishCall: a cancelled call otherwise leaves currentCallId pinned to
+        // a dead call id forever, since finishCall will never run for it.
+        if (currentCallId === callId) {
+            currentCallId = pending.previousCallId || 0;
+        }
+
         try {
             pending.cancelSignal.send();
         } catch (e) {

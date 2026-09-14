@@ -657,14 +657,63 @@ public sealed class TranslationManager : IDisposable
         TranslationResult? completed = null;
         if (service is IRichStreamTranslationService richService)
         {
-            await foreach (var update in richService.TranslateStreamUpdatesAsync(request, cancellationToken).ConfigureAwait(false))
+            var allowRetry = service is IServiceExecutionPolicyProvider richPolicyProvider
+                && richPolicyProvider.ExecutionPolicy.AllowHostRetry;
+
+            for (var attempt = 0; ; attempt++)
             {
-                if (update is TranslationStreamUpdate.Completed done)
+                var retry = false;
+                var enumerator = richService.TranslateStreamUpdatesAsync(request, cancellationToken)
+                    .GetAsyncEnumerator(cancellationToken);
+                try
                 {
-                    completed = done.Result;
+                    while (true)
+                    {
+                        bool moved;
+                        try
+                        {
+                            moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                        }
+                        catch (TranslationException ex) when (
+                            allowRetry && attempt < DefaultMaxRetries && !IsNonRetryable(ex.ErrorCode))
+                        {
+                            retry = true;
+                            break;
+                        }
+                        catch (Exception) when (
+                            allowRetry && attempt < DefaultMaxRetries && !cancellationToken.IsCancellationRequested)
+                        {
+                            retry = true;
+                            break;
+                        }
+
+                        if (!moved)
+                        {
+                            break;
+                        }
+
+                        var update = enumerator.Current;
+                        if (update is TranslationStreamUpdate.Completed done)
+                        {
+                            completed = done.Result;
+                        }
+
+                        yield return update;
+                    }
+                }
+                finally
+                {
+                    await enumerator.DisposeAsync().ConfigureAwait(false);
                 }
 
-                yield return update;
+                if (!retry)
+                {
+                    break;
+                }
+
+                // Reset any partially-streamed text before retrying, matching TranslateWithRetryAsync's backoff.
+                await Task.Delay(500 * (attempt + 1), cancellationToken).ConfigureAwait(false);
+                yield return new TranslationStreamUpdate.TextSnapshot(string.Empty);
             }
         }
         else if (service is IStreamTranslationService streamService)

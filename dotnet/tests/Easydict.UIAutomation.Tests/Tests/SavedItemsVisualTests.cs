@@ -465,7 +465,13 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         UITestHelper.SendHotkey(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.ALT, FlaUI.Core.WindowsAPI.VirtualKeyShort.F10);
         var mini = WaitForMiniWindow(launcher, main);
         var draft = multiline ? string.Join("\n", Enumerable.Repeat("Fluent 2 draft 中文", 6)) : "Fluent 2 draft 中文";
-        Wait(mini, "InputTextBox").AsTextBox().Text = draft;
+        // WaitForMiniWindow already settles past the Phase-3 re-activation race (see its
+        // doc comment); reuse UITestHelper.FindInputTextBox's generous, retryable lookup
+        // (with its "click collapsed source-text container" fallback) as a second line of
+        // defense, instead of the local Wait helper's fixed 12s poll with no settle cushion.
+        var draftInput = UITestHelper.FindInputTextBox(mini, TimeSpan.FromSeconds(15));
+        draftInput.Should().NotBeNull("InputTextBox must be available once the Mini window has settled");
+        draftInput!.Text = draft;
         OpenMiniSavedItemsMenu(mini, compact);
         output.WriteLine(ScreenshotHelper.CaptureWindowWithPopup(mini, $"fluent2_mini_{(compact ? "compact" : "standard")}{(multiline ? "_multiline" : "")}_menu",
             WaitForMiniMenuItem(launcher, mini, "MiniHistoryMenuItem"), WaitForMiniMenuItem(launcher, mini, "MiniFavoritesMenuItem")));
@@ -522,6 +528,18 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         throw new InvalidOperationException($"Missing {id} in mini window and application popup roots");
     }
 
+    /// <summary>
+    /// Wait for the Mini window to finish loading after Ctrl+Alt+F10.
+    /// HotkeyWindowShowCoordinator.RunAsync shows Mini in two async phases: Phase 1
+    /// (ShowWithoutActivation, synchronous) makes InputTextBox visible, which is enough
+    /// to satisfy the polling loop below; Phase 2 (a 150ms delay plus selection capture,
+    /// ~150ms-1s+) then completes and fires Phase 3 (MiniWindow.ShowAndActivate): a
+    /// second, independent SetForegroundWindow/Activate()/QueueInputFocusAndSelectAll
+    /// cycle (up to 10 attempts * 50ms = 500ms). That second activation transiently
+    /// disturbs UI Automation's exposure of this window's tree moments after Phase 1
+    /// alone would look "ready". Settle past that window here so every caller gets a
+    /// Mini window whose automation tree is stable, not merely present.
+    /// </summary>
     private Window WaitForMiniWindow(AppLauncher launcher, Window main)
     {
         // A popup or a window whose XAML root is still loading is not a ready Mini.
@@ -539,6 +557,9 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
         output.WriteLine($"Mini candidate: title={mini!.Name}, class={mini.Properties.ClassName.ValueOrDefault}, handle={mini.Properties.NativeWindowHandle.Value}; main={main.Properties.NativeWindowHandle.Value}");
         mini!.SetForeground();
         Wait(mini, "InputTextBox").Focus();
+        // Let ShowAndActivate's later re-activation (see doc comment above) finish
+        // before any caller reads or types into InputTextBox.
+        Thread.Sleep(2000);
         return mini;
     }
 

@@ -2064,14 +2064,17 @@
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
                                                             MinHeight="32"
-                                                            VerticalAlignment="Center">
+                                                            VerticalAlignment="Center"
+                                                            AutomationProperties.Name="{Binding DisplayName}">
                                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                                 <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
                                                                 <Border Visibility="{Binding OriginBadgeVisibility}"
                                                                         Background="{ThemeResource PluginBadgeBackgroundBrush}"
-                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center"
+                                                                        AutomationProperties.Name="{Binding OriginBadgeText}">
                                                                     <TextBlock Text="{Binding OriginBadgeText}" FontSize="10"
-                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"
+                                                                               AutomationProperties.AccessibilityView="Raw"/>
                                                                 </Border>
                                                             </StackPanel>
                                                         </CheckBox>
@@ -2158,14 +2161,17 @@
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
                                                             MinHeight="32"
-                                                            VerticalAlignment="Center">
+                                                            VerticalAlignment="Center"
+                                                            AutomationProperties.Name="{Binding DisplayName}">
                                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                                 <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
                                                                 <Border Visibility="{Binding OriginBadgeVisibility}"
                                                                         Background="{ThemeResource PluginBadgeBackgroundBrush}"
-                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center"
+                                                                        AutomationProperties.Name="{Binding OriginBadgeText}">
                                                                     <TextBlock Text="{Binding OriginBadgeText}" FontSize="10"
-                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"
+                                                                               AutomationProperties.AccessibilityView="Raw"/>
                                                                 </Border>
                                                             </StackPanel>
                                                         </CheckBox>
@@ -2252,14 +2258,17 @@
                                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                             IsEnabled="{Binding IsAvailable}"
                                                             MinHeight="32"
-                                                            VerticalAlignment="Center">
+                                                            VerticalAlignment="Center"
+                                                            AutomationProperties.Name="{Binding DisplayName}">
                                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                                 <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
                                                                 <Border Visibility="{Binding OriginBadgeVisibility}"
                                                                         Background="{ThemeResource PluginBadgeBackgroundBrush}"
-                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                                                                        CornerRadius="4" Padding="5,1" VerticalAlignment="Center"
+                                                                        AutomationProperties.Name="{Binding OriginBadgeText}">
                                                                     <TextBlock Text="{Binding OriginBadgeText}" FontSize="10"
-                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                                                               Foreground="{ThemeResource PluginBadgeForegroundBrush}"
+                                                                               AutomationProperties.AccessibilityView="Raw"/>
                                                                 </Border>
                                                             </StackPanel>
                                                         </CheckBox>

@@ -142,7 +142,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     public void ApplyAppearance(AppearanceSettings settings)
     {
-        RootBorder.Margin = new Thickness(0, 0, 0, _isSavedItemView ? 0 : SettingsService.Instance.CompactMode ? 8 : 16);
+        RootBorder.Margin = new Thickness(0, 0, 0, _isSavedItemView ? 0 : SettingsService.Instance.CompactMode ? 4 : 8);
         ServiceNameText.FontSize = settings.ServiceNameFontSize;
         StatusText.FontSize = settings.StatusFontSize;
         ResultText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;

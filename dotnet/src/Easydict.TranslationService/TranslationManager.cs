@@ -805,9 +805,12 @@ public sealed class TranslationManager : IDisposable
     private static string GetCacheKey(TranslationRequest request, string serviceId, ITranslationService? service)
     {
         // CustomPrompt changes LLM output; the discriminator captures service-side configuration
-        // (plugin version, options) that is not part of the request. Both must separate cache entries.
+        // (plugin version, options) that is not part of the request. OriginalText and
+        // DetectedFromLanguage are both passed straight through to a Bob plugin
+        // (BobTranslationService.BuildQueryJson) and can change its output even when Text/From/To
+        // are identical. All of it must separate cache entries.
         var discriminator = (service as ICacheKeyDiscriminatorProvider)?.CacheKeyDiscriminator;
-        var raw = $"{serviceId}|{request.FromLanguage}|{request.ToLanguage}|{request.Text}|{request.CustomPrompt}|{discriminator}";
+        var raw = $"{serviceId}|{request.FromLanguage}|{request.ToLanguage}|{request.Text}|{request.CustomPrompt}|{request.OriginalText}|{request.DetectedFromLanguage}|{discriminator}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
         return Convert.ToHexString(bytes);
     }

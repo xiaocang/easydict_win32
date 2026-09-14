@@ -46,6 +46,11 @@ public sealed class TranslationManagerService : IDisposable
     // than something a plugin's backend agreed to.
     private HttpClient? _bobHttpClient;
 
+    // Bob services (and their shared client) retired by a manager swap but not yet disposed,
+    // because the manager they were registered on may still have active handles (an in-flight
+    // call). Disposed together with that manager - see DisposeManagerAndPendingBob.
+    private readonly Dictionary<TranslationManager, (List<BobTranslationService> Services, HttpClient? HttpClient)> _pendingBobDisposal = new();
+
     private PhiSilicaTranslationService? _phiSilicaService;
     private FoundryLocalService? _foundryLocalService;
     private OpenVINOTranslationService? _openVinoService;
@@ -206,7 +211,7 @@ public sealed class TranslationManagerService : IDisposable
                     {
                         _disposalQueue.Remove(manager);
                         Debug.WriteLine("[TranslationManagerService] Disposing queued manager after last handle release");
-                        DisposeManagerSafely(manager);
+                        DisposeManagerAndPendingBob(manager);
                     }
                 }
                 else
@@ -232,6 +237,39 @@ public sealed class TranslationManagerService : IDisposable
         {
             Debug.WriteLine($"[TranslationManagerService] Error disposing manager: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Disposes a manager together with any Bob plugin services and HttpClient a proxy swap
+    /// retired alongside it (see RegisterBobPluginServices). Those are only safe to dispose once
+    /// this manager - and therefore any in-flight call still holding a handle to it - is actually
+    /// going away, which this method's two call sites (queued-handle release and the no-handles
+    /// delayed disposal) are exactly the points that know that.
+    /// </summary>
+    private void DisposeManagerAndPendingBob(TranslationManager manager)
+    {
+        DisposeManagerSafely(manager);
+
+        List<BobTranslationService>? services = null;
+        HttpClient? httpClient = null;
+        lock (_lock)
+        {
+            if (_pendingBobDisposal.Remove(manager, out var pending))
+            {
+                services = pending.Services;
+                httpClient = pending.HttpClient;
+            }
+        }
+
+        if (services is not null)
+        {
+            foreach (var service in services)
+            {
+                service.Dispose();
+            }
+        }
+
+        httpClient?.Dispose();
     }
 
     private TranslationManagerService()
@@ -623,13 +661,17 @@ public sealed class TranslationManagerService : IDisposable
     {
         if (!ReferenceEquals(_bobServicesManager, _translationManager))
         {
-            foreach (var existing in _bobServices.Values)
+            // Retire without disposing yet: the manager these instances (and this HttpClient) were
+            // registered on may still have an in-flight call holding a handle to it (see
+            // AcquireHandle/ReconfigureProxy). Disposing here would pull the rug out from under
+            // that call. Instead, stash them and dispose alongside their owning manager, once
+            // DisposeManagerAndPendingBob confirms that manager is actually going away.
+            if (_bobServicesManager is not null && (_bobServices.Count > 0 || _bobHttpClient is not null))
             {
-                existing.Dispose();
+                _pendingBobDisposal[_bobServicesManager] = (_bobServices.Values.ToList(), _bobHttpClient);
             }
 
             _bobServices.Clear();
-            _bobHttpClient?.Dispose();
             _bobHttpClient = null;
             _bobServicesManager = _translationManager;
         }
@@ -894,7 +936,7 @@ public sealed class TranslationManagerService : IDisposable
                         return;
                     }
                 }
-                DisposeManagerSafely(oldManager);
+                DisposeManagerAndPendingBob(oldManager);
             });
         }
     }
@@ -928,6 +970,21 @@ public sealed class TranslationManagerService : IDisposable
         _bobServices.Clear();
         _bobHttpClient?.Dispose();
         _bobHttpClient = null;
+
+        // A proxy swap may still be waiting on an in-flight call's handle for an older manager
+        // (see DisposeManagerAndPendingBob); app shutdown does not wait for that, so dispose
+        // whatever is left rather than leaking a plugin's engine thread or its HttpClient.
+        foreach (var (services, httpClient) in _pendingBobDisposal.Values)
+        {
+            foreach (var service in services)
+            {
+                service.Dispose();
+            }
+
+            httpClient?.Dispose();
+        }
+
+        _pendingBobDisposal.Clear();
 
         _translationManager.Dispose();
         Debug.WriteLine("[TranslationManagerService] Disposed");

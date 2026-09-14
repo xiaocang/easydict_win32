@@ -9,12 +9,17 @@ public class TranslationManagerCacheKeyTests : IDisposable
 {
     private readonly TranslationManager _manager = new();
 
-    private static TranslationRequest Request(string? customPrompt = null) => new()
+    private static TranslationRequest Request(
+        string? customPrompt = null,
+        string? originalText = null,
+        Language? detectedFromLanguage = null) => new()
     {
         Text = "cache me",
         FromLanguage = Language.English,
         ToLanguage = Language.SimplifiedChinese,
-        CustomPrompt = customPrompt
+        CustomPrompt = customPrompt,
+        OriginalText = originalText,
+        DetectedFromLanguage = detectedFromLanguage
     };
 
     [Fact]
@@ -26,6 +31,37 @@ public class TranslationManagerCacheKeyTests : IDisposable
         await _manager.TranslateAsync(Request("formal"), serviceId: "prompted");
         await _manager.TranslateAsync(Request("casual"), serviceId: "prompted");
         var repeat = await _manager.TranslateAsync(Request("formal"), serviceId: "prompted");
+
+        service.CallCount.Should().Be(2);
+        repeat.FromCache.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DifferentOriginalText_ProducesSeparateCacheEntries()
+    {
+        // OriginalText and DetectedFromLanguage are passed straight through to a Bob plugin
+        // (BobTranslationService.BuildQueryJson) and can change its output even when Text/From/To
+        // are identical, so they must be part of the cache key too.
+        var service = new PolicyTestService("original-text");
+        _manager.RegisterService(service);
+
+        await _manager.TranslateAsync(Request(originalText: "raw one"), serviceId: "original-text");
+        await _manager.TranslateAsync(Request(originalText: "raw two"), serviceId: "original-text");
+        var repeat = await _manager.TranslateAsync(Request(originalText: "raw one"), serviceId: "original-text");
+
+        service.CallCount.Should().Be(2);
+        repeat.FromCache.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DifferentDetectedFromLanguage_ProducesSeparateCacheEntries()
+    {
+        var service = new PolicyTestService("detected-from");
+        _manager.RegisterService(service);
+
+        await _manager.TranslateAsync(Request(detectedFromLanguage: Language.English), serviceId: "detected-from");
+        await _manager.TranslateAsync(Request(detectedFromLanguage: Language.French), serviceId: "detected-from");
+        var repeat = await _manager.TranslateAsync(Request(detectedFromLanguage: Language.English), serviceId: "detected-from");
 
         service.CallCount.Should().Be(2);
         repeat.FromCache.Should().BeTrue();

@@ -70,6 +70,17 @@ public static class BobPluginInstaller
             Directory.CreateDirectory(Path.GetDirectoryName(installDirectory)!);
             Directory.Move(staged.Directory, installDirectory);
 
+            // An update that changes the manifest version moves into a new version directory
+            // rather than overwriting one; the "same version" delete above only guards a
+            // same-version reinstall, so the previous version's files would otherwise be orphaned
+            // on every update, up to the package size limit each time.
+            if (existing is not null
+                && !string.IsNullOrWhiteSpace(existing.InstallDirectory)
+                && !PathsEqual(existing.InstallDirectory, installDirectory))
+            {
+                TryDelete(existing.InstallDirectory);
+            }
+
             var installed = BobPluginPackage.LoadFromDirectory(installDirectory);
 
             return new SettingsService.InstalledBobPlugin
@@ -220,6 +231,9 @@ public static class BobPluginInstaller
         var sanitized = builder.ToString().Trim('.', ' ');
         return string.IsNullOrEmpty(sanitized) ? "unknown" : sanitized;
     }
+
+    private static bool PathsEqual(string first, string second)
+        => string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase);
 
     private static void TryDelete(string directory)
     {

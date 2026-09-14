@@ -3048,9 +3048,15 @@ public sealed partial class SettingsPage : Page
         }
 
         var loc = LocalizationService.Instance;
-        await ShowSimpleDialogAsync(
-            loc.GetString(titleKey),
-            loc.GetString("DeepLQualityApiKeyRequiredMessage"));
+        var message = loc.GetString("DeepLQualityApiKeyRequiredMessage");
+        if (titleKey == "TestFailedTitle")
+        {
+            await ShowTestFailureAsync(message);
+        }
+        else
+        {
+            await ShowSimpleDialogAsync(loc.GetString(titleKey), message);
+        }
         return false;
     }
 
@@ -3775,8 +3781,7 @@ public sealed partial class SettingsPage : Page
 
             if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(regcode))
             {
-                await ShowSimpleDialogAsync(loc.GetString("TestFailedTitle"),
-                    "Please enter both email and registration code.");
+                await ShowTestFailureAsync("Please enter both email and registration code.");
                 return;
             }
 
@@ -3825,14 +3830,7 @@ public sealed partial class SettingsPage : Page
             _settings.Save();
             statusIndicator.Visibility = Visibility.Collapsed;
 
-            var errorDialog = new ContentDialog
-            {
-                Title = loc.GetString("TestFailedTitle"),
-                Content = $"Credential verification failed: {ex.Message}",
-                CloseButtonText = loc.GetString("OK"),
-                XamlRoot = this.XamlRoot
-            };
-            await ShowDialogAsync(errorDialog);
+            await ShowTestFailureAsync($"Credential verification failed: {ex.Message}");
         }
         finally
         {
@@ -5398,14 +5396,7 @@ public sealed partial class SettingsPage : Page
             // Check if configured
             if (!service.IsConfigured)
             {
-                var notConfiguredDialog = new ContentDialog
-                {
-                    Title = loc.GetString("TestFailedTitle"),
-                    Content = loc.GetString("TestNotConfigured"),
-                    CloseButtonText = loc.GetString("OK"),
-                    XamlRoot = this.XamlRoot
-                };
-                await ShowDialogAsync(notConfiguredDialog);
+                await ShowTestFailureAsync(loc.GetString("TestNotConfigured"));
                 return;
             }
 
@@ -5453,16 +5444,9 @@ public sealed partial class SettingsPage : Page
                 statusIndicator.Visibility = Visibility.Collapsed;
             }
 
-            var errorDialog = new ContentDialog
-            {
-                Title = loc.GetString("TestFailedTitle"),
-                Content = string.Format(
-                    loc.GetString("TestFailedMessage"),
-                    Controls.ServiceResultStatusTextProvider.GetErrorText(ex)),
-                CloseButtonText = loc.GetString("OK"),
-                XamlRoot = this.XamlRoot
-            };
-            await ShowDialogAsync(errorDialog);
+            await ShowTestFailureAsync(string.Format(
+                loc.GetString("TestFailedMessage"),
+                Controls.ServiceResultStatusTextProvider.GetErrorText(ex)));
         }
         catch (Exception ex)
         {
@@ -5474,14 +5458,7 @@ public sealed partial class SettingsPage : Page
                 statusIndicator.Visibility = Visibility.Collapsed;
             }
 
-            var errorDialog = new ContentDialog
-            {
-                Title = loc.GetString("TestFailedTitle"),
-                Content = string.Format(loc.GetString("TestFailedMessage"), ex.Message),
-                CloseButtonText = loc.GetString("OK"),
-                XamlRoot = this.XamlRoot
-            };
-            await ShowDialogAsync(errorDialog);
+            await ShowTestFailureAsync(string.Format(loc.GetString("TestFailedMessage"), ex.Message));
         }
         finally
         {
@@ -6166,14 +6143,7 @@ public sealed partial class SettingsPage : Page
         var errorText = GetAgentCliErrorText(
             exception,
             Controls.ServiceResultStatusTextProvider.GetErrorText);
-        var dialog = new ContentDialog
-        {
-            Title = loc.GetString("TestFailedTitle"),
-            Content = string.Format(loc.GetString("TestFailedMessage"), errorText),
-            CloseButtonText = loc.GetString("OK"),
-            XamlRoot = this.XamlRoot,
-        };
-        await ShowDialogAsync(dialog);
+        await ShowTestFailureAsync(string.Format(loc.GetString("TestFailedMessage"), errorText));
     }
 
     internal static string GetAgentCliErrorText(
@@ -6571,6 +6541,52 @@ public sealed partial class SettingsPage : Page
     }
 
     #endregion
+
+    private async Task ShowTestFailureAsync(string message)
+    {
+        var loc = LocalizationService.Instance;
+        var copyStatus = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        var content = new StackPanel { Spacing = 12 };
+        content.Children.Add(new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
+        });
+        content.Children.Add(copyStatus);
+
+        var dialog = new ContentDialog
+        {
+            Title = loc.GetString("TestFailedTitle"),
+            Content = content,
+            PrimaryButtonText = loc.GetString("Copy"),
+            CloseButtonText = loc.GetString("OK"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            args.Cancel = true;
+            try
+            {
+                ClipboardService.SetText(message);
+                dialog.PrimaryButtonText = loc.GetString("FluentCopied");
+                copyStatus.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SettingsPage] Failed to copy test error: {ex.Message}");
+                dialog.PrimaryButtonText = loc.GetString("Copy");
+                copyStatus.Text = loc.GetString("FluentCopyFailed");
+                copyStatus.Visibility = Visibility.Visible;
+            }
+        };
+        await ShowDialogAsync(dialog);
+    }
 
     /// <summary>
     /// Shows a ContentDialog, hiding any currently-open dialog first.

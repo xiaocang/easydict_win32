@@ -125,4 +125,23 @@ public class ClaudeCodeEventParserTests
         ex.Message.Should().Contain("exit code 7");
         ex.Message.Should().Contain("unknown option");
     }
+
+    [Fact]
+    public void ClassifyFailure_RequestNotAllowed_MapsToNetworkErrorNotInvalidApiKey()
+    {
+        // Captured from easydict_win32#205: a region-blocked direct request. The CLI's
+        // own assistant-message line also tags this "authentication_failed" internally,
+        // so the network-restriction classification must take priority over AuthPatterns.
+        const string ResultText = "Failed to authenticate. API Error: 403 Request not allowed";
+        var controlLines = new[]
+        {
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"Failed to authenticate. API Error: 403 Request not allowed"}]},"error":"authentication_failed","is_api_error_message":true}""",
+        };
+
+        var ex = ClaudeCodeEventParser.ClassifyFailure("claude-code", exitCode: 1, controlLines, ResultText);
+
+        ex.ErrorCode.Should().Be(TranslationErrorCode.NetworkError);
+        ex.Message.Should().Contain("proxy");
+        ex.Message.Should().NotContain("/login");
+    }
 }

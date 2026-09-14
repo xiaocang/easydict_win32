@@ -163,7 +163,13 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
             }
             catch (AgentCliProcessException ex)
             {
-                throw ClaudeCodeEventParser.ClassifyFailure(ServiceId, ex.ExitCode, controlLines, ex.StdErr);
+                // stderr is empty for a stream-json failure; the real error text
+                // (if any) already arrived as the final `result` control line before
+                // the process exited non-zero, so prefer it over the raw stderr.
+                var detailSource = !string.IsNullOrWhiteSpace(ex.StdErr)
+                    ? ex.StdErr
+                    : result?.ResultText ?? "";
+                throw ClaudeCodeEventParser.ClassifyFailure(ServiceId, ex.ExitCode, controlLines, detailSource);
             }
             catch (TimeoutException ex)
             {
@@ -235,7 +241,13 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
     /// Runs Claude in safe, non-persistent stream-JSON mode with a replacement
     /// operation-specific system prompt. Safe mode skips local CLAUDE.md and
     /// customization discovery while preserving subscription authentication.
-    /// The user prompt is written to stdin.
+    /// The user prompt is written to stdin. Settings are restricted to the user
+    /// scope (<c>~/.claude/settings.json</c>) rather than disabled entirely: the
+    /// working directory has no project/local settings to isolate from, and
+    /// dropping user settings entirely (an empty <c>--setting-sources</c>) also
+    /// discards the user's proxy/gateway <c>env</c> block and <c>apiKeyHelper</c>,
+    /// which breaks auth for users who route Claude through a corporate proxy or
+    /// an API gateway (see easydict_win32#205).
     /// </summary>
     internal static List<string> BuildArguments(string model, string? systemPrompt = null)
     {
@@ -249,7 +261,7 @@ public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslati
             "--no-session-persistence",
             "--tools", "",
             "--strict-mcp-config",
-            "--setting-sources", "",
+            "--setting-sources", "user",
             "--system-prompt", AgentCliPromptBuilder.BuildSystemPromptArgument(
                 systemPrompt ?? BaseOpenAIService.TranslationSystemPrompt),
         };

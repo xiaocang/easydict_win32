@@ -7,12 +7,15 @@ namespace Easydict.BobPlugin.Tests.Mapping;
 
 public class BobResultMapperTests
 {
-    private static readonly TranslationRequest Request = new()
+    private static TranslationRequest NewRequest(string text = "word", string? originalText = null) => new()
     {
-        Text = "word",
+        Text = text,
         FromLanguage = Language.English,
-        ToLanguage = Language.SimplifiedChinese
+        ToLanguage = Language.SimplifiedChinese,
+        OriginalText = originalText
     };
+
+    private static readonly TranslationRequest Request = NewRequest();
 
     [Fact]
     public void Map_JoinsParagraphsWithNewlines()
@@ -66,7 +69,7 @@ public class BobResultMapperTests
     [Fact]
     public void Map_KeepsOriginalTextWhenTheRequestCarriesOne()
     {
-        var request = Request with { Text = "processed", OriginalText = "  original  " };
+        var request = NewRequest("processed", originalText: "  original  ");
 
         var result = BobResultMapper.Map(new BobResult { ToParagraphs = ["x"] }, request, "Example");
 

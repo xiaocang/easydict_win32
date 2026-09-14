@@ -346,6 +346,8 @@
                         Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
       <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+      <!-- Bob plugin compatibility layer (embedded JavaScript engine). -->
+      <ProjectReference Include="..\Easydict.BobPlugin\Easydict.BobPlugin.csproj" />
       <!-- Windows AI APIs / Phi Silica provider (windows-local-ai). Compile-only;
            runtime availability is checked dynamically and the service degrades gracefully
            on non-Copilot+ devices. -->

@@ -1592,4 +1592,29 @@
   <data name="ServiceOrigin_PluginTooltip" xml:space="preserve"><value>第三方 {0} 外掛{1}。不是 Easydict 內建服務；網路請求與資料處理由外掛自行完成。</value></data>
   <data name="ServiceOrigin_MdxTooltip" xml:space="preserve"><value>您匯入的字典檔案。本機查詢，不是 Easydict 內建服務。</value></data>
   <data name="ServiceOrigin_NameSuffix" xml:space="preserve"><value>{0}（{1}）</value></data>
+  <data name="BobPluginImportButton" xml:space="preserve"><value>匯入 Bob 外掛</value></data>
+  <data name="BobPluginSummaryNone" xml:space="preserve"><value>未安裝 Bob 外掛</value></data>
+  <data name="BobPluginSummaryOne" xml:space="preserve"><value>已安裝 1 個 Bob 外掛</value></data>
+  <data name="BobPluginSummaryMany" xml:space="preserve"><value>已安裝 {0} 個 Bob 外掛</value></data>
+  <data name="BobPluginImportSuccessTitle" xml:space="preserve"><value>外掛已安裝</value></data>
+  <data name="BobPluginImportSuccessMessage" xml:space="preserve"><value>「{0}」已以手動查詢服務的方式安裝。點擊它的結果卡片即可執行；劃詞後按鈕列上也會出現它的圖示（需開啟滑鼠劃詞翻譯）。</value></data>
+  <data name="BobPluginImportFailedTitle" xml:space="preserve"><value>匯入失敗</value></data>
+  <data name="BobPluginUnsupportedCategory" xml:space="preserve"><value>Easydict 只支援翻譯類外掛，此外掛套件宣告的是其他類別。</value></data>
+  <data name="BobPluginsSectionHeader" xml:space="preserve"><value>Bob 外掛（第三方）</value></data>
+  <data name="BobPluginsSectionDescription" xml:space="preserve"><value>由第三方 JavaScript 外掛提供，不是 Easydict 內建服務；網路請求與資料處理由外掛自行完成。已安裝的外掛預設手動查詢，不快取、不重試。</value></data>
+  <data name="BobPluginOptionsHeader" xml:space="preserve"><value>外掛選項</value></data>
+  <data name="BobPluginAuthor" xml:space="preserve"><value>作者</value></data>
+  <data name="BobPluginHomepage" xml:space="preserve"><value>外掛首頁</value></data>
+  <data name="BobPluginValidate" xml:space="preserve"><value>驗證</value></data>
+  <data name="BobPluginValidating" xml:space="preserve"><value>檢查中…</value></data>
+  <data name="BobPluginValidateSuccess" xml:space="preserve"><value>外掛回報設定可用。</value></data>
+  <data name="BobPluginValidateFailed" xml:space="preserve"><value>外掛回報設定有問題。</value></data>
+  <data name="BobPluginValidateNotSupported" xml:space="preserve"><value>此外掛沒有提供自我檢查。</value></data>
+  <data name="BobPluginRemove" xml:space="preserve"><value>移除</value></data>
+  <data name="BobPluginRemoveConfirm" xml:space="preserve"><value>移除「{0}」並刪除它的檔案與已儲存的選項？</value></data>
+  <data name="BobPluginAllowCache" xml:space="preserve"><value>重複使用快取結果</value></data>
+  <data name="BobPluginAllowRetry" xml:space="preserve"><value>失敗後自動重試</value></data>
+  <data name="BobPluginAllowPhonetics" xml:space="preserve"><value>從有道補充音標</value></data>
+  <data name="BobPluginShowOnPopButton" xml:space="preserve"><value>顯示在劃詞按鈕上</value></data>
+  <data name="BobPluginPolicyHint" xml:space="preserve"><value>預設關閉：外掛可能產生計費、觸發限流或寫入 Easydict 看不到的內容，只有你允許後才會啟用這些行為。</value></data>
 </root>

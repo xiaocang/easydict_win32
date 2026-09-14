@@ -95,13 +95,17 @@ internal sealed class PluginFixture : IDisposable
         string text = "hello",
         Language from = Language.English,
         Language to = Language.SimplifiedChinese,
-        int timeoutMs = 30_000)
+        int timeoutMs = 30_000,
+        string? originalText = null,
+        Language? detectedFrom = null)
         => new()
         {
             Text = text,
             FromLanguage = from,
             ToLanguage = to,
-            TimeoutMs = timeoutMs
+            TimeoutMs = timeoutMs,
+            OriginalText = originalText,
+            DetectedFromLanguage = detectedFrom
         };
 
     public void Dispose()

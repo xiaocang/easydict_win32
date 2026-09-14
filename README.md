@@ -79,7 +79,11 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
 
-- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window
+- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window. The pop-up is a strip: next to the translate icon it shows your configured text actions
+
+- **Text Actions** - Run the selected or entered text through one specific service, or send it to Google, Bing, GitHub, Wikipedia, Baidu or your own URL template. Available from the Actions menu in every window and, optionally, on the selection pop-up (Settings → Advanced → Text Actions)
+
+- **Bob Plugin Compatibility** - Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services. Plugins run in an embedded JavaScript engine with conservative defaults (manual query, no caching, no retries) until you opt in per plugin, each installed plugin gets its own button on the selection pop-up, and plugin results always carry a "Bob plugin" badge so they are never mistaken for a built-in service
 
 - **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
 

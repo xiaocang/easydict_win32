@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using Easydict.BobPlugin;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
@@ -2278,6 +2279,9 @@ public sealed partial class SettingsPage : Page
         ImportedMdxConfigPanel.Children.Clear();
         _mdxCredentialFields.Clear();
 
+        InstalledBobPluginsConfigPanel.Children.Clear();
+        _bobOptionFields.Clear();
+
         _mainWindowServices.Clear();
         _miniWindowServices.Clear();
         _fixedWindowServices.Clear();
@@ -3327,6 +3331,8 @@ public sealed partial class SettingsPage : Page
 
         UpdateImportedMdxSummary();
         BuildImportedMdxConfigUI();
+        UpdateBobPluginsSummary();
+        BuildInstalledBobPluginsConfigUI();
         BuildTextActionsUI();
     }
 
@@ -3901,6 +3907,12 @@ public sealed partial class SettingsPage : Page
         if (serviceId.StartsWith("mdx::", StringComparison.OrdinalIgnoreCase))
         {
             return 1000 + registrationIndex;
+        }
+
+        // Third-party plugins sit after everything Easydict ships, never interleaved with it.
+        if (serviceId.StartsWith(BobServiceIds.Prefix, StringComparison.Ordinal))
+        {
+            return 1500 + registrationIndex;
         }
 
         return 2000 + registrationIndex;
@@ -4589,6 +4601,9 @@ public sealed partial class SettingsPage : Page
 
         // Save encrypted MDX dictionary credentials from dynamic UI
         SaveEncryptedMdxCredentials();
+
+        // Save Bob plugin options from dynamic UI (secure ones go to the credential store)
+        SaveBobPluginOptions();
 
         // Save HTTP Proxy settings (already validated above)
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;

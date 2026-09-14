@@ -1592,4 +1592,29 @@
   <data name="ServiceOrigin_PluginTooltip" xml:space="preserve"><value>Third-party {0} plugin{1}. Not an Easydict built-in service; network requests and data handling are done by the plugin.</value></data>
   <data name="ServiceOrigin_MdxTooltip" xml:space="preserve"><value>Dictionary file imported by you. Looked up locally; not an Easydict built-in service.</value></data>
   <data name="ServiceOrigin_NameSuffix" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="BobPluginImportButton" xml:space="preserve"><value>Import Bob Plugin</value></data>
+  <data name="BobPluginSummaryNone" xml:space="preserve"><value>No Bob plugins installed</value></data>
+  <data name="BobPluginSummaryOne" xml:space="preserve"><value>1 Bob plugin installed</value></data>
+  <data name="BobPluginSummaryMany" xml:space="preserve"><value>{0} Bob plugins installed</value></data>
+  <data name="BobPluginImportSuccessTitle" xml:space="preserve"><value>Plugin installed</value></data>
+  <data name="BobPluginImportSuccessMessage" xml:space="preserve"><value>'{0}' was installed as a manual-query service. Click its card to run it, or select text to get its button on the pop-up (requires Mouse Selection Translate).</value></data>
+  <data name="BobPluginImportFailedTitle" xml:space="preserve"><value>Import failed</value></data>
+  <data name="BobPluginUnsupportedCategory" xml:space="preserve"><value>Easydict can host translation plugins only. This package declares a different category.</value></data>
+  <data name="BobPluginsSectionHeader" xml:space="preserve"><value>Bob plugins (third party)</value></data>
+  <data name="BobPluginsSectionDescription" xml:space="preserve"><value>Provided by third-party JavaScript plugins, not built into Easydict. Network requests and data handling are done by the plugin itself. Installed plugins are manual-query by default, with no caching and no retries.</value></data>
+  <data name="BobPluginOptionsHeader" xml:space="preserve"><value>Plugin options</value></data>
+  <data name="BobPluginAuthor" xml:space="preserve"><value>Author</value></data>
+  <data name="BobPluginHomepage" xml:space="preserve"><value>Plugin homepage</value></data>
+  <data name="BobPluginValidate" xml:space="preserve"><value>Validate</value></data>
+  <data name="BobPluginValidating" xml:space="preserve"><value>Checking…</value></data>
+  <data name="BobPluginValidateSuccess" xml:space="preserve"><value>The plugin reports it is ready.</value></data>
+  <data name="BobPluginValidateFailed" xml:space="preserve"><value>The plugin reported a problem.</value></data>
+  <data name="BobPluginValidateNotSupported" xml:space="preserve"><value>This plugin has no self-check.</value></data>
+  <data name="BobPluginRemove" xml:space="preserve"><value>Remove</value></data>
+  <data name="BobPluginRemoveConfirm" xml:space="preserve"><value>Remove '{0}' and delete its files and stored options?</value></data>
+  <data name="BobPluginAllowCache" xml:space="preserve"><value>Reuse cached results</value></data>
+  <data name="BobPluginAllowRetry" xml:space="preserve"><value>Retry after a failure</value></data>
+  <data name="BobPluginAllowPhonetics" xml:space="preserve"><value>Add phonetics from Youdao</value></data>
+  <data name="BobPluginShowOnPopButton" xml:space="preserve"><value>Show on the selection button</value></data>
+  <data name="BobPluginPolicyHint" xml:space="preserve"><value>Off by default: a plugin can charge, rate-limit or write things Easydict cannot see, so it only gets these once you allow them.</value></data>
 </root>

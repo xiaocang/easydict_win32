@@ -66,11 +66,12 @@ public class BobTranslationServiceRuntimeTests
     public async Task TheQueryCarriesEveryFieldBobDefines()
     {
         using var fixture = PluginFixture.Create("query-shape");
-        var request = PluginFixture.Request("processed", Language.Auto, Language.Japanese) with
-        {
-            OriginalText = "original",
-            DetectedFromLanguage = Language.SimplifiedChinese
-        };
+        var request = PluginFixture.Request(
+            "processed",
+            Language.Auto,
+            Language.Japanese,
+            originalText: "original",
+            detectedFrom: Language.SimplifiedChinese);
 
         var result = await fixture.Service().TranslateAsync(request);
 

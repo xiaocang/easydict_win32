@@ -1592,4 +1592,29 @@
   <data name="ServiceOrigin_PluginTooltip" xml:space="preserve"><value>第三方 {0} 插件{1}。不是 Easydict 内置服务；网络请求与数据处理由插件自行完成。</value></data>
   <data name="ServiceOrigin_MdxTooltip" xml:space="preserve"><value>您导入的词典文件。本地查询，不是 Easydict 内置服务。</value></data>
   <data name="ServiceOrigin_NameSuffix" xml:space="preserve"><value>{0}（{1}）</value></data>
+  <data name="BobPluginImportButton" xml:space="preserve"><value>导入 Bob 插件</value></data>
+  <data name="BobPluginSummaryNone" xml:space="preserve"><value>未安装 Bob 插件</value></data>
+  <data name="BobPluginSummaryOne" xml:space="preserve"><value>已安装 1 个 Bob 插件</value></data>
+  <data name="BobPluginSummaryMany" xml:space="preserve"><value>已安装 {0} 个 Bob 插件</value></data>
+  <data name="BobPluginImportSuccessTitle" xml:space="preserve"><value>插件已安装</value></data>
+  <data name="BobPluginImportSuccessMessage" xml:space="preserve"><value>“{0}”已作为手动查询服务安装。点击它的结果卡片即可执行；划词后按钮条上也会出现它的图标（需开启鼠标划词翻译）。</value></data>
+  <data name="BobPluginImportFailedTitle" xml:space="preserve"><value>导入失败</value></data>
+  <data name="BobPluginUnsupportedCategory" xml:space="preserve"><value>Easydict 只支持翻译类插件，此插件包声明的是其他类别。</value></data>
+  <data name="BobPluginsSectionHeader" xml:space="preserve"><value>Bob 插件（第三方）</value></data>
+  <data name="BobPluginsSectionDescription" xml:space="preserve"><value>由第三方 JavaScript 插件提供，不是 Easydict 内置服务；网络请求与数据处理由插件自行完成。已安装的插件默认手动查询，不缓存、不重试。</value></data>
+  <data name="BobPluginOptionsHeader" xml:space="preserve"><value>插件选项</value></data>
+  <data name="BobPluginAuthor" xml:space="preserve"><value>作者</value></data>
+  <data name="BobPluginHomepage" xml:space="preserve"><value>插件主页</value></data>
+  <data name="BobPluginValidate" xml:space="preserve"><value>验证</value></data>
+  <data name="BobPluginValidating" xml:space="preserve"><value>检查中…</value></data>
+  <data name="BobPluginValidateSuccess" xml:space="preserve"><value>插件报告配置可用。</value></data>
+  <data name="BobPluginValidateFailed" xml:space="preserve"><value>插件报告配置有问题。</value></data>
+  <data name="BobPluginValidateNotSupported" xml:space="preserve"><value>此插件没有提供自检。</value></data>
+  <data name="BobPluginRemove" xml:space="preserve"><value>移除</value></data>
+  <data name="BobPluginRemoveConfirm" xml:space="preserve"><value>移除“{0}”并删除它的文件与已保存的选项？</value></data>
+  <data name="BobPluginAllowCache" xml:space="preserve"><value>复用缓存结果</value></data>
+  <data name="BobPluginAllowRetry" xml:space="preserve"><value>失败后自动重试</value></data>
+  <data name="BobPluginAllowPhonetics" xml:space="preserve"><value>从有道补充音标</value></data>
+  <data name="BobPluginShowOnPopButton" xml:space="preserve"><value>显示在划词按钮上</value></data>
+  <data name="BobPluginPolicyHint" xml:space="preserve"><value>默认关闭：插件可能产生计费、触发限流或写入 Easydict 看不到的内容，只有你允许后才会启用这些行为。</value></data>
 </root>

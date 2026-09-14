@@ -255,6 +255,18 @@
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
 
+                        <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                            <Button x:Name="ImportBobPluginButton"
+                                    Content="Import Bob Plugin"
+                                    Click="OnImportBobPluginClicked"
+                                    Padding="10,4"/>
+                            <TextBlock x:Name="InstalledBobPluginsSummaryText"
+                                       Text="No Bob plugins installed"
+                                       VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+
                         <!-- International Services Toggle -->
                         <Border Style="{StaticResource SettingsSectionStyle}"
                                 Padding="12,8">
@@ -1924,6 +1936,31 @@
                         <!-- Imported MDX Dictionaries (dynamically populated) -->
                         <StackPanel x:Name="ImportedMdxConfigPanel"
                                 Spacing="8"/>
+
+                        <!-- Bob plugins: third-party, kept visually separate from built-in services -->
+                        <StackPanel x:Name="BobPluginsSection"
+                                Spacing="8"
+                                Visibility="Collapsed">
+                            <Border Background="{ThemeResource PluginBadgeBackgroundBrush}"
+                                    CornerRadius="4"
+                                    BorderThickness="3,0,0,0"
+                                    BorderBrush="{ThemeResource PluginAccentBrush}"
+                                    Padding="10,6">
+                                <StackPanel Spacing="2">
+                                    <TextBlock x:Name="BobPluginsSectionHeader"
+                                            Text="Bob plugins (third party)"
+                                            FontWeight="SemiBold"
+                                            Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                    <TextBlock x:Name="BobPluginsSectionDescription"
+                                            Text="Provided by third-party JavaScript plugins, not built into Easydict. Network requests and data handling are done by the plugin itself. Installed plugins are manual-query by default, with no caching and no retries."
+                                            FontSize="12"
+                                            TextWrapping="Wrap"
+                                            Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            <StackPanel x:Name="InstalledBobPluginsConfigPanel"
+                                    Spacing="8"/>
+                        </StackPanel>
 
                         <!-- Google Translate (No configuration needed) -->
                         <Border Style="{StaticResource SettingsSectionStyle}">

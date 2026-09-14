@@ -13,6 +13,10 @@ public class TranslationManagerConcurrencyTests : IDisposable
     public async Task RegisterAndUnregister_WhileEnumerating_DoesNotThrow()
     {
         using var cts = new CancellationTokenSource();
+
+        // Signalled after the reader's first pass so the writer below really does run concurrently
+        // with enumeration, instead of racing thread-pool startup on a busy machine.
+        var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reader = Task.Run(() =>
         {
             var iterations = 0;
@@ -25,10 +29,13 @@ public class TranslationManagerConcurrencyTests : IDisposable
 
                 _ = _manager.IsStreamingService("google");
                 iterations++;
+                readerStarted.TrySetResult();
             }
 
             return iterations;
         });
+
+        await readerStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         for (var i = 0; i < 1000; i++)
         {

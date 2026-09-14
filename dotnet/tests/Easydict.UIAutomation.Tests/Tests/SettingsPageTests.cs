@@ -351,10 +351,17 @@ public class SettingsPageTests : IDisposable
         }
     }
 
-    [Fact]
-    public void SettingsPage_ShouldAcceptImmediateScrollAfterContentVisible()
+    [Theory]
+    [InlineData(800, "MainScrollViewer")]
+    [InlineData(1000, "SettingsDetailsScrollViewer")]
+    public void SettingsPage_ShouldAcceptImmediateScrollAfterContentVisible(int widthDips, string scrollViewerId)
     {
+        using var dpi = new PerMonitorDpiScope();
         var window = _launcher.GetMainWindow();
+        var scale = ScreenshotHelper.GetWindowDpiScale(window);
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window,
+            new Rectangle(0, 0, (int)(widthDips * scale), (int)(600 * scale)))
+            .Should().BeTrue("exercise both stacked and wide Settings layouts within the CI desktop");
         window.SetForeground();
         Thread.Sleep(2000);
 
@@ -363,13 +370,15 @@ public class SettingsPageTests : IDisposable
 
         ClickElement(settingsButton!, "ImmediateScroll.SettingsButton");
 
-        var scrollViewer = WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15));
-        scrollViewer.Should().NotBeNull("MainScrollViewer should be visible as soon as Settings content is interactive");
+        // Wide Settings scrolls the detail pane; the outer scroller is deliberately
+        // disabled. Narrow Settings scrolls the whole page instead.
+        var scrollViewer = SavedItemsVisualTests.Wait(window, scrollViewerId);
+        scrollViewer.IsOffscreen.Should().BeFalse("the layout's scrolling surface should be visible with Settings content");
         window.SetForeground();
         Thread.Sleep(250);
 
         var scrollPattern = scrollViewer!.Patterns.Scroll.PatternOrDefault;
-        scrollPattern.Should().NotBeNull("Settings MainScrollViewer should expose ScrollPattern");
+        scrollPattern.Should().NotBeNull("the active Settings scroller should expose ScrollPattern");
         scrollPattern!.VerticallyScrollable.Value.Should().BeTrue("Settings should be scrollable for immediate wheel input");
 
         scrollPattern.SetScrollPercent(-1, 0);

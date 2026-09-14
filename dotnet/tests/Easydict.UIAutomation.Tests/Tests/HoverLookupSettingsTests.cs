@@ -17,7 +17,7 @@ public sealed class HoverLookupSettingsTests
     public void TrayToggle_SynchronizesOpenSettings_AndSurvivesUnrelatedSave()
     {
         using var dpi = new PerMonitorDpiScope();
-        using var fixture = new Fixture("Light", 0);
+        using var fixture = new SettingsFixture();
         using var launcher = new AppLauncher();
         launcher.LaunchAuto(TimeSpan.FromSeconds(45));
         var window = launcher.GetMainWindow();
@@ -49,6 +49,30 @@ public sealed class HoverLookupSettingsTests
             return document.RootElement.GetProperty("HoverWordLookupEnabled").GetBoolean() == enabled
                 && document.RootElement.GetProperty("MinimizeToTray").GetBoolean() == minimize;
         }
+    }
+
+    private sealed class SettingsFixture : IDisposable
+    {
+        private readonly string? _previousDirectory = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
+
+        public SettingsFixture()
+        {
+            // This test needs settings only. Bootstrapping a saved-items database also
+            // opens History at 1280 DIP, which smaller CI desktops cannot accommodate.
+            var directory = Path.Combine(Path.GetTempPath(), "Easydict.HoverSettings.Tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "settings.json"), JsonSerializer.Serialize(new
+            {
+                UILanguage = "en-US", AppTheme = "Light",
+                EnableShowWindowHotkey = false, EnableTranslateSelectionHotkey = false,
+                EnableShowMiniWindowHotkey = false, EnableShowFixedWindowHotkey = false,
+                EnableOcrTranslateHotkey = false, EnableSilentOcrHotkey = false,
+                HoverWordLookupEnabled = false, MouseSelectionTranslate = false,
+            }));
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", directory);
+        }
+
+        public void Dispose() => Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", _previousDirectory);
     }
 
     [DllImport("user32.dll", SetLastError = true)]

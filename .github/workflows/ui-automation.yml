@@ -359,6 +359,15 @@ jobs:
           # Export for later steps
           echo "EASYDICT_PACKAGE_FAMILY_NAME=$($pkg.PackageFamilyName)" >> $env:GITHUB_ENV
 
+      - name: Configure isolated Core and Settings test launch
+        if: matrix.shard.name == 'Core & Settings'
+        shell: pwsh
+        run: |
+          # Hover fixtures require their temporary settings directory to reach the app.
+          # Explorer/MSIX activation does not inherit the test process environment.
+          $testExe = (Resolve-Path 'dotnet/msix/extracted/Easydict.WinUI.exe').Path
+          "EASYDICT_EXE_PATH=$testExe" >> $env:GITHUB_ENV
+
       - name: Configure Saved Items test desktop and isolated launch
         if: matrix.shard.name == 'Saved Items'
         shell: pwsh

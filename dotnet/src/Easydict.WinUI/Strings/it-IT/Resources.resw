@@ -1556,7 +1556,7 @@
   <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>Limite di rilevamento della lingua (429)</value></data>
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Tentativo con un servizio di rilevamento alternativo.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Il servizio alternativo ha rilevato {0}. Puoi continuare.</value></data>
-  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Impossibile rilevare la lingua di origine. Selezionala manualmente o riprova pi? tardi.</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Impossibile rilevare la lingua di origine. Selezionala manualmente o riprova più tardi.</value></data>
   <data name="TextActionsButtonTooltip" xml:space="preserve"><value>Text actions</value></data>
   <data name="TextActionsSelectTextFirst" xml:space="preserve"><value>Enter or select some text first</value></data>
   <data name="TextActionsNoActions" xml:space="preserve"><value>No actions configured (Settings → Advanced → Text Actions)</value></data>

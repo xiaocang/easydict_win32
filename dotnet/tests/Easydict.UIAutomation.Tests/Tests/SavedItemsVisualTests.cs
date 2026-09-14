@@ -745,9 +745,44 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             com.HResult == unchecked((int)0x80131505),
         _ => false
     };
+    private static readonly TimeSpan LookupDeadline = TimeSpan.FromSeconds(12);
+
+    /// <summary>
+    /// Budget for a second attempt once the UIA channel itself has started failing.
+    /// When ElementFromHandle times out, the channel stays unusable for seconds at a
+    /// time, so the normal deadline is spent entirely on back-to-back cross-process
+    /// timeouts and the element is reported missing while the app is perfectly healthy.
+    /// </summary>
+    private static readonly TimeSpan TransitionRecoveryDeadline = TimeSpan.FromSeconds(45);
+
+    /// <summary>Pause between retries while the channel is failing, so it can settle.</summary>
+    private static readonly TimeSpan TransitionBackoff = TimeSpan.FromSeconds(1);
+
     internal static AutomationElement Wait(AutomationElement parent, string id)
     {
-        Exception? lastTransitionError = null;
+        var found = FindWithinDeadline(parent, id, LookupDeadline, out var transitionError);
+        if (found is null && transitionError is not null)
+        {
+            // Still broken when the normal budget ran out: drop the cached root and
+            // give the channel a longer, backed-off window before giving up on it.
+            InvalidateCachedRoot(parent);
+            found = FindWithinDeadline(parent, id, TransitionRecoveryDeadline, out transitionError);
+        }
+        if (found is not null) return found;
+        if (transitionError is not null)
+            throw new InvalidOperationException($"Timed out waiting for {id}; UIA failed during navigation.", transitionError);
+        if (parent is Window window) ScreenshotHelper.CaptureWindow(window, $"fluent2_failed_missing_{id}");
+        var tree = string.Join("\n", parent.FindAllDescendants().Select(element => $"{element.Properties.ControlType.ValueOrDefault} {element.Properties.AutomationId.ValueOrDefault}: {element.Properties.Name.ValueOrDefault}"));
+        throw new InvalidOperationException($"Missing {id}\n{tree}");
+    }
+
+    private static AutomationElement? FindWithinDeadline(
+        AutomationElement parent,
+        string id,
+        TimeSpan deadline,
+        out Exception? transitionError)
+    {
+        Exception? observed = null;
         var found = Retry.WhileNull(() =>
         {
             try
@@ -759,17 +794,33 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                 // WinUI can invalidate an in-flight UIA traversal while Frame
                 // navigation detaches the old page and its WebView providers.
                 // Re-query within the existing deadline; persistent errors still fail.
-                lastTransitionError = ex;
+                observed = ex;
                 System.Console.WriteLine($"UIA transition while waiting for {id}: 0x{ex.HResult:X8}; retrying within deadline.");
+                Thread.Sleep(TransitionBackoff);
                 return null;
             }
-        }, TimeSpan.FromSeconds(12)).Result;
-        if (found is not null) return found;
-        if (lastTransitionError is not null)
-            throw new InvalidOperationException($"Timed out waiting for {id}; UIA failed during navigation.", lastTransitionError);
-        if (parent is Window window) ScreenshotHelper.CaptureWindow(window, $"fluent2_failed_missing_{id}");
-        var tree = string.Join("\n", parent.FindAllDescendants().Select(element => $"{element.Properties.ControlType.ValueOrDefault} {element.Properties.AutomationId.ValueOrDefault}: {element.Properties.Name.ValueOrDefault}"));
-        throw new InvalidOperationException($"Missing {id}\n{tree}");
+        }, deadline).Result;
+        transitionError = observed;
+        return found;
+    }
+
+    /// <summary>
+    /// Forces the next lookup to reacquire the window's root element. Without this a
+    /// root that went stale during navigation keeps answering queries — with errors, or
+    /// worse, with nothing found — for the rest of the test.
+    /// </summary>
+    private static void InvalidateCachedRoot(AutomationElement parent)
+    {
+        if (parent is not Window window || !WindowHandles.TryGetValue(window, out var handle)) return;
+        try
+        {
+            handle.Root = window.Automation.FromHandle(handle.Value);
+        }
+        catch (Exception ex) when (IsUiaTransitionError(ex))
+        {
+            // The channel is still down; the retry loop reacquires it on its own.
+            System.Console.WriteLine($"UIA root reacquisition failed: 0x{ex.HResult:X8}; retrying within deadline.");
+        }
     }
     internal static void Invoke(AutomationElement element)
     {

@@ -1553,10 +1553,10 @@
   <data name="FluentCopyFailed" xml:space="preserve"><value>Could not copy. Please try again.</value></data>
   <data name="FluentCopied" xml:space="preserve"><value>Copied</value></data>
   <data name="FluentDictionaryFallback" xml:space="preserve"><value>Rich dictionary content could not be displayed. A text version is shown.</value></data>
-  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>??????????????????????????? (429)</value></data>
-  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>??????????????????????????</value></data>
-  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>?????????????????????{0} ????????????????????????</value></data>
-  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>?????????????????????????????? ??????????????????????????????????????????????</value></data>
+  <data name="LanguageDetectionRateLimitedTitle" xml:space="preserve"><value>ถึงขีดจำกัดคำขอการตรวจหาภาษา (429)</value></data>
+  <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>กำลังลองใช้บริการตรวจหาภาษาสำรอง</value></data>
+  <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>บริการสำรองตรวจพบ {0} คุณสามารถดำเนินการต่อได้</value></data>
+  <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>ไม่สามารถตรวจหาภาษาต้นทางได้ โปรดเลือกภาษาด้วยตนเองหรือลองใหม่ภายหลัง</value></data>
   <data name="TextActionsButtonTooltip" xml:space="preserve"><value>Text actions</value></data>
   <data name="TextActionsSelectTextFirst" xml:space="preserve"><value>Enter or select some text first</value></data>
   <data name="TextActionsNoActions" xml:space="preserve"><value>No actions configured (Settings → Advanced → Text Actions)</value></data>

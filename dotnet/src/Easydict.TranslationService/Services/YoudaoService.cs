@@ -132,56 +132,7 @@ public sealed class YoudaoService : BaseTranslationService
     /// Check if query text looks like a single word or short phrase suitable for dictionary lookup.
     /// This is public so TranslationManager can use it for phonetic enrichment triggering.
     /// </summary>
-    public static bool IsWordQuery(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        var trimmed = text.Trim();
-
-        // Too long for a typical dictionary word
-        if (trimmed.Length > 50)
-            return false;
-
-        // Contains line breaks or sentence-ending punctuation (English and CJK)
-        if (trimmed.Contains('\n') ||
-            trimmed.Contains('.') || trimmed.Contains('!') || trimmed.Contains('?') ||
-            trimmed.Contains('。') || trimmed.Contains('！') || trimmed.Contains('？'))
-            return false;
-
-        // Count CJK characters (Chinese, Japanese, Korean)
-        var cjkCount = trimmed.Count(IsCJKCharacter);
-
-        if (cjkCount > 0)
-        {
-            // For CJK text: treat as word only if very short (1-3 characters)
-            // Longer CJK strings are likely sentences or phrases that need translation
-            return cjkCount <= 3 && cjkCount == trimmed.Length;
-        }
-
-        // For English/Latin: letters, hyphens, apostrophes, spaces
-        var wordChars = trimmed.Count(c => char.IsLetter(c) || c == '-' || c == '\'' || c == ' ');
-        return wordChars >= trimmed.Length * 0.8;
-    }
-
-    /// <summary>
-    /// Check if a character is a CJK (Chinese, Japanese, Korean) character.
-    /// </summary>
-    private static bool IsCJKCharacter(char c)
-    {
-        // CJK Unified Ideographs (Chinese characters used in Chinese, Japanese, Korean)
-        // U+4E00 to U+9FFF: CJK Unified Ideographs
-        // U+3400 to U+4DBF: CJK Unified Ideographs Extension A
-        // Also include common Japanese Hiragana and Katakana
-        // U+3040 to U+309F: Hiragana
-        // U+30A0 to U+30FF: Katakana
-        // U+AC00 to U+D7AF: Korean Hangul Syllables
-        return (c >= '\u4E00' && c <= '\u9FFF') ||  // CJK Unified Ideographs
-               (c >= '\u3400' && c <= '\u4DBF') ||  // CJK Extension A
-               (c >= '\u3040' && c <= '\u309F') ||  // Hiragana
-               (c >= '\u30A0' && c <= '\u30FF') ||  // Katakana
-               (c >= '\uAC00' && c <= '\uD7AF');    // Korean Hangul
-    }
+    public static bool IsWordQuery(string text) => WordQueryHeuristics.IsWordQuery(text);
 
     /// <summary>
     /// Translate using Youdao web dictionary API (provides phonetics and definitions).

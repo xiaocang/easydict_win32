@@ -13,6 +13,14 @@ public class TranslationManagerPolicyTests : IDisposable
 {
     private readonly TranslationManager _manager = new();
 
+    public TranslationManagerPolicyTests()
+    {
+        // Requests below are en→zh word lookups, which now reach phonetic enrichment.
+        // Stand in for the real Youdao service so these tests stay offline; the one test
+        // that cares about enrichment registers its own "youdao" over this.
+        _manager.RegisterService(new PolicyTestService("youdao"));
+    }
+
     private static TranslationRequest Request(string text = "hello") => new()
     {
         Text = text,

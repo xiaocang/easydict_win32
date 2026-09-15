@@ -11,11 +11,13 @@ namespace Easydict.UIAutomation.Tests.Tests;
 
 /// <summary>
 /// Tests for phonetic transcription badge display in translation results.
-/// Phonetic badges (US/UK pronunciation) are only displayed when the target language is English.
-/// This provides English pronunciation for words translated TO English.
+/// Phonetic badges are displayed for dictionary-style word lookups in either direction:
+/// a US/UK pronunciation whenever one side of the result is English, plus any romanization
+/// a service supplies.
 ///
-/// Note: Tests verify that phonetics are NOT shown when target is not English.
-/// Showing phonetics when target IS English depends on external API (Youdao) availability.
+/// Note: whether badges actually appear for a word depends on external API (Youdao)
+/// availability, so those tests log rather than assert. The hard assertion is the one
+/// guarantee that does not depend on the network: sentences never get phonetic badges.
 /// </summary>
 [Trait("Category", "UIAutomation")]
 [Collection("UIAutomation")]
@@ -30,9 +32,14 @@ public class PhoneticTranscriptionTests : IDisposable
     private const string ChineseInputText = "你好";
 
     /// <summary>
-    /// English input text for translation to Chinese.
+    /// English word input for translation to Chinese — the most common dictionary lookup.
     /// </summary>
-    private const string EnglishInputText = "Hello World";
+    private const string EnglishInputText = "hello";
+
+    /// <summary>
+    /// Sentence input, which must never produce phonetic badges.
+    /// </summary>
+    private const string SentenceInputText = "The quick brown fox jumps over the lazy dog.";
 
     /// <summary>
     /// Wait time for translation results to load (includes network round-trip).
@@ -121,10 +128,10 @@ public class PhoneticTranscriptionTests : IDisposable
     }
 
     [Fact]
-    public void MainWindow_EnglishToChinese_DoesNotShowPhoneticBadges()
+    public void MainWindow_EnglishToChinese_PhoneticBadgesIfAvailable()
     {
-        // When translating English → Chinese, target is Chinese
-        // Phonetic badges should NOT be displayed (phonetics only for English target)
+        // Looking an English word up for its Chinese meaning: the pronunciation belongs to
+        // the word the user typed, so badges are expected here just as in the other direction.
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
@@ -148,20 +155,28 @@ public class PhoneticTranscriptionTests : IDisposable
         var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "32_phonetic_en_to_zh");
         _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
 
-        // Assert that phonetic badges are NOT displayed for Chinese target
+        // Phonetic availability depends on the external Youdao API, so log rather than assert
         var phoneticPanels = window.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
-        var visiblePanelsWithChildren = phoneticPanels?
+        phoneticPanels.Should().NotBeNull("PhoneticPanel elements should exist in DOM");
+
+        var visiblePanelsWithChildren = phoneticPanels
             .Where(p => !p.IsOffscreen && p.FindAllChildren().Length > 0)
             .ToArray();
 
-        visiblePanelsWithChildren.Should().BeNullOrEmpty(
-            "PhoneticPanel should be empty when target language is not English");
+        _output.WriteLine($"Found {visiblePanelsWithChildren.Length} PhoneticPanel(s) with visible badges");
 
-        _output.WriteLine("Verified: No phonetic badges shown for English→Chinese translation (target not English)");
+        if (visiblePanelsWithChildren.Length > 0)
+        {
+            _output.WriteLine("SUCCESS: Phonetic badges are displayed for English→Chinese word lookup");
+        }
+        else
+        {
+            _output.WriteLine("INFO: No phonetic badges found - Youdao enrichment may not have returned data");
+        }
 
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(
-            pathAfterTranslate, "phonetic_english_to_chinese_no_badges");
+            pathAfterTranslate, "phonetic_english_to_chinese");
 
         if (comparison == null)
         {
@@ -235,6 +250,55 @@ public class PhoneticTranscriptionTests : IDisposable
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(
             pathResult, "phonetic_mini_chinese_to_english");
+
+        if (comparison == null)
+        {
+            _output.WriteLine("No baseline found — screenshot saved as baseline candidate for manual review.");
+        }
+        else
+        {
+            _output.WriteLine(comparison.ToString());
+        }
+    }
+
+    [Fact]
+    public void MainWindow_SentenceTranslation_DoesNotShowPhoneticBadges()
+    {
+        // Phonetics are a dictionary affordance. A sentence must never get badges,
+        // in either direction — the one guarantee that does not depend on the network.
+        var window = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+
+        var inputBox = UITestHelper.FindInputTextBox(window);
+
+        inputBox.Should().NotBeNull("InputTextBox must exist on main window");
+
+        inputBox!.Click();
+        Thread.Sleep(300);
+        inputBox.Text = SentenceInputText;
+        Thread.Sleep(500);
+
+        Keyboard.Type(VirtualKeyShort.ENTER);
+
+        _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results...");
+        Thread.Sleep(TranslationWaitMs);
+
+        var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "33_phonetic_sentence");
+        _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
+
+        var phoneticPanels = window.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
+        var visiblePanelsWithChildren = phoneticPanels?
+            .Where(p => !p.IsOffscreen && p.FindAllChildren().Length > 0)
+            .ToArray();
+
+        visiblePanelsWithChildren.Should().BeNullOrEmpty(
+            "PhoneticPanel should be empty when the query is a sentence rather than a word");
+
+        _output.WriteLine("Verified: No phonetic badges shown for sentence translation");
+
+        // Visual regression comparison
+        var comparison = VisualRegressionHelper.CompareWithBaseline(
+            pathAfterTranslate, "phonetic_sentence_no_badges");
 
         if (comparison == null)
         {

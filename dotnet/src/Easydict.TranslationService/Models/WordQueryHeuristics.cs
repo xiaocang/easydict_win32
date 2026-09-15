@@ -49,9 +49,12 @@ public static class WordQueryHeuristics
     /// Check whether text is a word query written in plain English letters.
     /// </summary>
     /// <remarks>
-    /// Used only as a fallback when language detection produced <see cref="Language.Auto"/>,
-    /// to decide whether an English pronunciation lookup is worth attempting. Other
-    /// Latin-script languages can pass this check; the lookup simply returns nothing for them.
+    /// This is a display-side fallback only, for services that leave
+    /// <see cref="TranslationResult.DetectedLanguage"/> unset: it decides which side of a result
+    /// an existing US/UK badge describes, so at worst it reveals a pronunciation a service
+    /// already produced. It must not be used to decide whether to fetch one — other Latin-script
+    /// languages pass this check, and an English homograph ("chat", "gift") would return a
+    /// confident but wrong pronunciation.
     /// </remarks>
     public static bool LooksLikeEnglishWord(string? text)
     {

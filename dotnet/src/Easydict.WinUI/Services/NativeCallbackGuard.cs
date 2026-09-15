@@ -36,6 +36,23 @@ internal static class NativeCallbackGuard
         }
     }
 
+    internal static void Invoke<T1, T2>(string source, Action<T1, T2>? callback, T1 first, T2 second)
+    {
+        if (callback is null)
+        {
+            return;
+        }
+
+        try
+        {
+            callback(first, second);
+        }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(source, ex, isTerminating: false, isHandled: true);
+        }
+    }
+
     internal static TResult Invoke<TResult>(string source, Func<TResult>? callback, TResult fallback)
     {
         if (callback is null)

@@ -86,7 +86,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 - **Bob Plugin Compatibility** - Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services. Plugins run in an embedded JavaScript engine with manual queries and optional caching and retries. Each installed plugin gets a selection button, configurable from the Plugins page. Ordinary translation leaves plugin services inactive and grayed out. Plugin results always carry a "Bob plugin" badge.
 
 - **Hover Word Lookup (Experimental)** - Disabled by default; enable it from the tray menu or Settings → Behavior. Hold `Ctrl` for at least 50 ms (configurable key, or no key at all) and rest the pointer on any word to see a small popup with the word, its phonetics and meaning. Reads text via UI Automation with an OCR fallback for apps that expose no text. Tries the preferred lookup service first, then falls back through enabled services if a request fails, times out or returns no meaning
-  - Expand **Advanced settings** under Hover Word Lookup to adjust the hover delay (10–600 ms, default 350 ms), lookup service, and OCR fallback. Save to apply. The delay controls pointer dwell before lookup starts; extraction and translation take additional time.
+  - Expand **Advanced settings** under Hover Word Lookup to adjust the hover delay (10–600 ms, default 350 ms), lookup service, and OCR fallback. Save to apply. The delay controls pointer dwell before lookup starts; extraction and translation take additional time. Hover lookup works independently of the excluded-app list for mouse selection translation.
 
 - **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
 

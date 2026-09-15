@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Easydict.UIAutomation.Tests.Infrastructure;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Tools;
 using FluentAssertions;
@@ -33,13 +34,28 @@ public sealed class HoverLookupSettingsTests
         // Narrow windows scroll the whole page; wide windows scroll the details pane.
         if (!scroller.Patterns.Scroll.Pattern.VerticallyScrollable.Value)
             scroller = Wait(window, "MainScrollViewer");
+        AutomationElement? FindVisibleHoverSettings()
+        {
+            var viewport = scroller.BoundingRectangle;
+            var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+            var headerTop = Math.Max(viewport.Top + 16,
+                windowBounds.Top + (int)(80 * ScreenshotHelper.GetWindowDpiScale(window)));
+            var headerBounds = Wait(window, "HoverWordLookupModifierHeader").BoundingRectangle;
+            var advanced = Wait(window, "HoverWordLookupAdvancedExpander");
+            var advancedBounds = advanced.BoundingRectangle;
+            return headerBounds.Width > 20 && headerBounds.Top >= headerTop &&
+                advancedBounds.Bottom <= Math.Min(viewport.Bottom, windowBounds.Bottom) - 16 ? advanced : null;
+        }
         var visibleExpander = ScrollHelper.ScrollToFind(scroller, 70,
-            () => Wait(window, "HoverWordLookupAdvancedExpander"));
+            FindVisibleHoverSettings);
         ScreenshotHelper.CaptureWindow(window, $"hover_delay_collapsed_{language}_{theme}");
         visibleExpander.Should().NotBeNull();
         var modifier = Wait(window, "HoverWordLookupModifierCombo");
         modifier.IsOffscreen.Should().BeFalse("the trigger key remains outside advanced settings");
         modifier.BoundingRectangle.Width.Should().BeGreaterThan(20);
+        var triggerHint = language == "zh-CN" ? "按住触发键并将鼠标停在单词上" : "hold the trigger key and point at a word";
+        Wait(window, "HoverWordLookupModifierHeader").Name.Should().Contain(triggerHint);
+        Wait(window, "HoverWordLookupToggle").Name.Should().NotContain(triggerHint);
         expander.Expand();
         var slider = Wait(window, "HoverWordLookupDelaySlider");
         var range = slider.Patterns.RangeValue.Pattern;
@@ -71,8 +87,7 @@ public sealed class HoverLookupSettingsTests
         scroller = Wait(window, "SettingsDetailsScrollViewer");
         if (!scroller.Patterns.Scroll.Pattern.VerticallyScrollable.Value)
             scroller = Wait(window, "MainScrollViewer");
-        ScrollHelper.ScrollToFind(scroller, 70, () =>
-            slider.IsOffscreen ? null : slider).Should().NotBeNull();
+        ScrollHelper.ScrollToFind(scroller, 70, FindVisibleHoverSettings).Should().NotBeNull();
         ScreenshotHelper.CaptureWindow(window, $"hover_delay_slider_{language}_{theme}");
     }
 

@@ -33,6 +33,22 @@ public class MouseHookServiceEventTests
     }
 
     [Fact]
+    public void ExcludedApps_StillRaiseHoverTriggerEvents()
+    {
+        using var hook = new MouseHookService { IsCurrentAppExcluded = () => true };
+        var moveCount = 0;
+        var events = new List<MouseHookService.KeyboardHookEvent>();
+        hook.OnMouseMove += _ => moveCount++;
+        hook.OnKeyboardEvent += events.Add;
+
+        hook.ProcessKeyboardMessage(WM_KEYDOWN, VK_CONTROL);
+        hook.ProcessMouseMessage(WM_MOUSEMOVE, new MouseHookService.POINT { x = 12, y = 34 });
+
+        moveCount.Should().Be(1, "application exclusions only apply to selection translation");
+        events.Should().ContainSingle().Which.Should().Be(new MouseHookService.KeyboardHookEvent(true, VK_CONTROL));
+    }
+
+    [Fact]
     public void ProcessKeyboardMessage_KeyDownWithVk_RaisesOnKeyDownAndKeyboardEvent()
     {
         using var hook = new MouseHookService();

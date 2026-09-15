@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Easydict.TranslationService;
@@ -59,8 +58,6 @@ public sealed partial class HoverWordLookupService : IDisposable
     /// <summary>Moving this far away from the dwell point cancels a lookup that has not shown anything yet.</summary>
     public const int PendingLeaveDistancePx = 16;
 
-    private const int ProcessNameCacheLimit = 64;
-
     [LibraryImport("user32.dll")]
     private static partial short GetAsyncKeyState(int vKey);
 
@@ -75,7 +72,6 @@ public sealed partial class HoverWordLookupService : IDisposable
     private readonly WordUnderCursorService _wordService;
     private readonly HoverDwellDetector _detector = new();
     private readonly HoverLookupKeyHold _keyHold = new();
-    private readonly ConcurrentDictionary<uint, string?> _processNames = new();
 
     private DispatcherQueueTimer? _timer;
     private HoverLookupWindow? _window;
@@ -397,12 +393,11 @@ public sealed partial class HoverWordLookupService : IDisposable
         _hasPendingLookup = true;
         _pendingLookupPoint = pt;
 
-        _ = Task.Run(() => RunLookupAsync(pt, processId, options, excludeRect, generation, cts));
+        _ = Task.Run(() => RunLookupAsync(pt, options, excludeRect, generation, cts));
     }
 
     private async Task RunLookupAsync(
         MouseHookService.POINT pt,
-        uint processId,
         HoverLookupOptions options,
         OcrRect? excludeRect,
         int generation,
@@ -412,13 +407,6 @@ public sealed partial class HoverWordLookupService : IDisposable
         WordUnderCursor? word = null;
         try
         {
-            var processName = GetProcessName(processId);
-            if (SettingsService.Instance.IsMouseSelectionExcluded(processName))
-            {
-                Debug.WriteLine($"[HoverLookup] Excluded app '{processName}', skipping");
-                return;
-            }
-
             var dpiScale = DpiHelper.DpiToScaleFactor(DpiHelper.GetDpiForPoint(pt.x, pt.y));
             word = await _wordService.GetWordAtAsync(pt.x, pt.y, options.UseOcrFallback, excludeRect, dpiScale, ct);
             if (word is null)
@@ -531,33 +519,6 @@ public sealed partial class HoverWordLookupService : IDisposable
         }
 
         return true;
-    }
-
-    private string? GetProcessName(uint processId)
-    {
-        if (_processNames.TryGetValue(processId, out var cached))
-        {
-            return cached;
-        }
-
-        string? name = null;
-        try
-        {
-            using var process = Process.GetProcessById((int)processId);
-            name = process.ProcessName;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[HoverLookup] Failed to resolve process {processId}: {ex.Message}");
-        }
-
-        if (_processNames.Count >= ProcessNameCacheLimit)
-        {
-            _processNames.Clear();
-        }
-
-        _processNames[processId] = name;
-        return name;
     }
 
     private static long DistanceSquared(MouseHookService.POINT a, MouseHookService.POINT b)

@@ -1269,7 +1269,8 @@
   <data name="ExcludedApps" xml:space="preserve"><value>排除应用</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除划词翻译的进程名称，用逗号分隔。示例："code" 代表 VS Code。</value></data>
-  <data name="HoverWordLookup" xml:space="preserve"><value>悬浮取词（实验性）（按住触发键并将鼠标停在单词上）</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>悬浮取词（实验性）</value></data>
+  <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>（按住触发键并将鼠标停在单词上）</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>取词方式</value></data>
   <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>无需按键（直接悬停）</value></data>
   <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + 鼠标取词</value></data>
@@ -1278,7 +1279,7 @@
   <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>无法读取文本时使用 OCR 取词</value></data>
   <data name="HoverWordLookupService" xml:space="preserve"><value>优先取词服务</value></data>
   <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>自动（词典服务优先，失败依次回退）</value></data>
-  <data name="HoverWordLookupDescription" xml:space="preserve"><value>在指针旁弹出小窗口显示单词、音标和释义。上方的排除应用同样生效。</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>在指针旁弹出小窗口显示单词、音标和释义。</value></data>
   <data name="TrayHoverWordLookup" xml:space="preserve"><value>悬浮取词（实验性）</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>在迷你窗口中打开</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>正在查询…</value></data>

@@ -1704,7 +1704,9 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.PlaceholderText = loc.GetString("ExcludedAppsPlaceholder");
         MouseSelectionExcludedAppsDescriptionText.Text = loc.GetString("ExcludedAppsDescription");
         HoverWordLookupToggle.Header = loc.GetString("HoverWordLookup");
-        HoverWordLookupModifierCombo.Header = loc.GetString("HoverWordLookupModifier");
+        HoverWordLookupModifierLabel.Text = loc.GetString("HoverWordLookupModifier");
+        HoverWordLookupTriggerDescriptionRun.Text = " " + loc.GetString("HoverWordLookupTriggerDescription");
+        AutomationProperties.SetName(HoverWordLookupModifierCombo, loc.GetString("HoverWordLookupModifier"));
         HoverWordLookupModifierNoneItem.Content = loc.GetString("HoverWordLookupModifierNone");
         HoverWordLookupModifierCtrlItem.Content = loc.GetString("HoverWordLookupModifierCtrl");
         HoverWordLookupModifierShiftItem.Content = loc.GetString("HoverWordLookupModifierShift");

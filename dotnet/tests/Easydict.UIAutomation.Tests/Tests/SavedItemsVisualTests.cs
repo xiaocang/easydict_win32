@@ -671,9 +671,18 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                 Wait(window, "ServiceResultItem_deepl");
                 if (cycle < 8)
                 {
-                    Wait(window, "DictWebView");
-                    Retry.WhileFalse(() => Find(window, "DictWebView")?.BoundingRectangle.Height > 20, TimeSpan.FromSeconds(15))
-                        .Result.Should().BeTrue("exercise rendered WebView content before releasing its result card");
+                    // WinUI/WebView2 can expose more than one provider with this
+                    // ID, including a zero-size host. Match the rendered instance
+                    // in this result card rather than the first match in the window.
+                    var renderedWebView = Retry.WhileNull(() =>
+                        Find(window, "ServiceResultItem_deepl")?
+                            .FindAllDescendants(cf => cf.ByAutomationId("DictWebView"))
+                            .FirstOrDefault(view => !view.IsOffscreen &&
+                                view.BoundingRectangle is { Width: > 20, Height: > 20 }),
+                        TimeSpan.FromSeconds(15)).Result;
+                    if (renderedWebView is null)
+                        output.WriteLine(ScreenshotHelper.CaptureWindow(window, $"fluent2_failed_webview_cycle_{cycle}"));
+                    renderedWebView.Should().NotBeNull("exercise rendered WebView content before releasing its result card");
                 }
                 Invoke(Wait(window, "CompareResultsButton"));
                 Invoke(Wait(window, "CompareResultsButton"));

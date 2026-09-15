@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Anmeldung abgebrochen.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Der Browser konnte nicht geöffnet werden. Verwenden Sie stattdessen den Link „API-Schlüssel abrufen“ unten.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Verbindung trennen</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Erweiterte Einstellungen</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Verzögerung der Wortabfrage</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Wartezeit nach dem Anhalten des Mauszeigers bis zur Wortabfrage. Kürzere Zeiten reagieren schneller, längere vermeiden unbeabsichtigte Abfragen.</value></data>
 </root>

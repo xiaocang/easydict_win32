@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Sign-in cancelled.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Could not open your browser. Use the "Get an API key" link below instead.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Disconnect</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Advanced settings</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Hover delay</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>How long the pointer rests before lookup starts. Lower is faster; higher reduces accidental lookups.</value></data>
 </root>

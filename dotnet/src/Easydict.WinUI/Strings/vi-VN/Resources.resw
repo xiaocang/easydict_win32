@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Đã hủy đăng nhập.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Không thể mở trình duyệt. Hãy dùng liên kết "Lấy khóa API" bên dưới.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Ngắt kết nối</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Cài đặt nâng cao</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Độ trễ tra từ</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Thời gian con trỏ dừng trước khi bắt đầu tra từ. Giá trị thấp phản hồi nhanh hơn; giá trị cao giảm việc tra từ ngoài ý muốn.</value></data>
 </root>

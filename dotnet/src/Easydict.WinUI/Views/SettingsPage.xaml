@@ -2815,23 +2815,57 @@
                                                 Content="Alt + hover"
                                                 Tag="Alt"/>
                                     </ComboBox>
-                                    <ComboBox x:Name="HoverWordLookupServiceCombo"
-                                              AutomationProperties.AutomationId="HoverWordLookupServiceCombo"
-                                              Header="Lookup service"
-                                              Width="250"
-                                              HorizontalAlignment="Left"/>
-                                    <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=HoverWordLookupOcrFallbackToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="HoverWordLookupOcrFallbackToggle"
-                                        AutomationProperties.AutomationId="HoverWordLookupOcrFallbackToggle"
-                                        Header="Use OCR when the app exposes no text">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
+                                    <Expander x:Name="HoverWordLookupAdvancedExpander"
+                                              AutomationProperties.AutomationId="HoverWordLookupAdvancedExpander"
+                                              Header="Advanced settings"
+                                              IsExpanded="False"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Stretch">
+                                        <StackPanel Spacing="12" Padding="0,8">
+                                            <Grid ColumnSpacing="8" Width="250" HorizontalAlignment="Left">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock x:Name="HoverWordLookupDelayLabel"
+                                                           Text="Hover delay" TextWrapping="Wrap"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <TextBlock x:Name="HoverWordLookupDelayValueText"
+                                                           Grid.Column="1"
+                                                           AutomationProperties.AutomationId="HoverWordLookupDelayValueText"
+                                                           Text="350 ms"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            </Grid>
+                                            <Slider x:Name="HoverWordLookupDelaySlider"
+                                                    AutomationProperties.AutomationId="HoverWordLookupDelaySlider"
+                                                    Minimum="10" Maximum="600" Value="350"
+                                                    StepFrequency="10" TickFrequency="100"
+                                                    TickPlacement="Outside"
+                                                    Width="250" HorizontalAlignment="Left"/>
+                                            <TextBlock x:Name="HoverWordLookupDelayDescriptionText"
+                                                       Text="How long the pointer rests before lookup starts. Lower is faster; higher reduces accidental lookups."
+                                                       FontSize="12" TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            <ComboBox x:Name="HoverWordLookupServiceCombo"
+                                                      AutomationProperties.AutomationId="HoverWordLookupServiceCombo"
+                                                      Header="Lookup service"
+                                                      Width="250" HorizontalAlignment="Left"/>
+                                            <controls:FluentSettingRow>
+                                                <TextBlock Text="{Binding Header, ElementName=HoverWordLookupOcrFallbackToggle}"
+                                                           TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <ToggleSwitch x:Name="HoverWordLookupOcrFallbackToggle"
+                                                              AutomationProperties.AutomationId="HoverWordLookupOcrFallbackToggle"
+                                                              Header="Use OCR when the app exposes no text">
+                                                    <ToggleSwitch.HeaderTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Height="0"/>
+                                                        </DataTemplate>
+                                                    </ToggleSwitch.HeaderTemplate>
+                                                </ToggleSwitch>
+                                            </controls:FluentSettingRow>
+                                        </StackPanel>
+                                    </Expander>
                                     <TextBlock x:Name="HoverWordLookupDescriptionText"
                                                Text="Shows a small popup with the word, its phonetics and meaning next to the pointer."
                                                FontSize="11"

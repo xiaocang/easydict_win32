@@ -3,16 +3,18 @@ namespace Easydict.WinUI.Services;
 /// <summary>
 /// Pure "pointer rest" (dwell) detector used by hover word lookup.
 /// Tracks the point where the pointer came to rest and reports, at most once per rest,
-/// when the pointer has stayed there for <see cref="DwellMs"/> while the trigger condition
+/// when the pointer has stayed there for the configured delay (default <see cref="DwellMs"/>) while the trigger condition
 /// (e.g. the configured modifier key is held) is satisfied.
 /// All timing is passed in explicitly so the class is testable without timers or Win32.
 /// </summary>
 public sealed class HoverDwellDetector
 {
     /// <summary>
-    /// Time the pointer has to rest on a spot before a lookup fires.
+    /// Default time the pointer has to rest on a spot before a lookup fires.
     /// </summary>
     public const int DwellMs = 350;
+    public const int MinDwellMs = 10;
+    public const int MaxDwellMs = 600;
 
     /// <summary>
     /// Movement (in pixels) that is treated as hand jitter and does not restart the rest clock.
@@ -60,17 +62,17 @@ public sealed class HoverDwellDetector
 
     /// <summary>
     /// Evaluate the detector. Fires (once per rest) when the pointer has rested for at least
-    /// <see cref="DwellMs"/> and <paramref name="triggerSatisfied"/> is true. The caller checks
+    /// <paramref name="dwellMs"/> and <paramref name="triggerSatisfied"/> is true. The caller checks
     /// the trigger key's minimum hold duration before passing true.
     /// </summary>
-    public DwellResult Tick(long nowTicks, bool triggerSatisfied)
+    public DwellResult Tick(long nowTicks, bool triggerSatisfied, int dwellMs = DwellMs)
     {
         if (!_hasRest || !_armed || !triggerSatisfied)
         {
             return default;
         }
 
-        if (nowTicks - _restStartTicks < DwellMs)
+        if (nowTicks - _restStartTicks < Math.Clamp(dwellMs, MinDwellMs, MaxDwellMs))
         {
             return default;
         }

@@ -13,7 +13,8 @@ namespace Easydict.WinUI.Services;
 /// <summary>
 /// Runtime options for hover word lookup (a snapshot of the related settings).
 /// </summary>
-public sealed record HoverLookupOptions(bool Enabled, HoverLookupModifier Modifier, bool UseOcrFallback, string ServiceId)
+public sealed record HoverLookupOptions(bool Enabled, HoverLookupModifier Modifier, bool UseOcrFallback, string ServiceId,
+    int DelayMs = SettingsService.DefaultHoverWordLookupDelayMs)
 {
     public static HoverLookupOptions Disabled { get; } = new(false, HoverLookupModifierExtensions.Default, true, string.Empty);
 
@@ -24,7 +25,8 @@ public sealed record HoverLookupOptions(bool Enabled, HoverLookupModifier Modifi
             settings.HoverWordLookupEnabled,
             HoverLookupModifierExtensions.Parse(settings.HoverWordLookupModifier),
             settings.HoverWordLookupUseOcrFallback,
-            settings.HoverWordLookupServiceId ?? string.Empty);
+            settings.HoverWordLookupServiceId ?? string.Empty,
+            settings.HoverWordLookupDelayMs);
     }
 }
 
@@ -345,7 +347,7 @@ public sealed partial class HoverWordLookupService : IDisposable
             }
 
             var nowTicks = Environment.TickCount64;
-            var result = _detector.Tick(nowTicks, IsTriggerSatisfied(nowTicks));
+            var result = _detector.Tick(nowTicks, IsTriggerSatisfied(nowTicks), _options.DelayMs);
             if (result.Fired)
             {
                 StartLookup(result.Point);

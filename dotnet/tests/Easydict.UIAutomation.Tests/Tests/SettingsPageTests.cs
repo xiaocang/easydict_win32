@@ -524,16 +524,19 @@ public class SettingsPageTests : IDisposable
                 .Result;
             tab.Should().NotBeNull($"{tabCase.TabAutomationId} should be visible after Settings loads");
 
-            ClickElementWithMouse(tab!, $"TabSwitchBudget.{tabCase.TabAutomationId}");
-            var selected = WaitForSelectedSettingsTab(
+            var point = MoveMouseToElement(tab!, $"TabSwitchBudget.{tabCase.TabAutomationId}");
+            var clickTimestamp = Stopwatch.GetTimestamp();
+            Mouse.Click(point);
+            var rendered = WaitForRenderedSettingsTab(
                 scrollViewer!,
                 tabCase.ExpectedSelectedTab,
-                ImmediateMouseResponseBudget,
+                clickTimestamp,
+                TimeSpan.FromSeconds(5),
                 out var elapsed);
 
-            selected
+            rendered
                 .Should()
-                .NotBeNull($"{tabCase.TabAutomationId} should become the selected Settings tab within 1s");
+                .BeTrue($"{tabCase.TabAutomationId} must report a rendered frame from an EasydictUiTestBuild app");
             elapsed
                 .Should()
                 .BeLessThanOrEqualTo(
@@ -541,7 +544,7 @@ public class SettingsPageTests : IDisposable
                     $"{tabCase.TabAutomationId} must be interactive within 1s after Settings loading completes");
 
             _output.WriteLine(
-                $"[TabSwitchBudget] {tabCase.TabAutomationId} selected in {elapsed.TotalMilliseconds:F0}ms");
+                $"[TabSwitchBudget] {tabCase.TabAutomationId} rendered in {elapsed.TotalMilliseconds:F0}ms");
         }
     }
 
@@ -808,46 +811,31 @@ public class SettingsPageTests : IDisposable
         return false;
     }
 
-    private static string? ReadSelectedSettingsTab(AutomationElement scrollViewer)
-    {
-        try
-        {
-            const string prefix = "SelectedSettingsTab:";
-            var helpText = scrollViewer.Properties.HelpText.ValueOrDefault;
-            return helpText != null && helpText.StartsWith(prefix, StringComparison.Ordinal)
-                ? helpText[prefix.Length..]
-                : null;
-        }
-        catch (COMException)
-        {
-            return null;
-        }
-    }
-
-    private static string? WaitForSelectedSettingsTab(
+    private static bool WaitForRenderedSettingsTab(
         AutomationElement scrollViewer,
         string expectedTab,
+        long clickTimestamp,
         TimeSpan timeout,
         out TimeSpan elapsed)
     {
-        var stopwatch = Stopwatch.StartNew();
-        string? selectedTab = null;
-        while (stopwatch.Elapsed <= timeout)
+        var prefix = $"RenderedSettingsTab:{expectedTab}:";
+        long renderedTimestamp = 0;
+        var observed = Retry.WhileFalse(() =>
         {
-            selectedTab = ReadSelectedSettingsTab(scrollViewer);
-            if (selectedTab == expectedTab)
+            try
             {
-                stopwatch.Stop();
-                elapsed = stopwatch.Elapsed;
-                return selectedTab;
+                var status = scrollViewer.Properties.ItemStatus.ValueOrDefault;
+                return status != null && status.StartsWith(prefix, StringComparison.Ordinal) &&
+                    long.TryParse(status[prefix.Length..], System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out renderedTimestamp) &&
+                    renderedTimestamp >= clickTimestamp;
             }
+            catch (COMException) { return false; }
+            catch (TimeoutException) { return false; }
+        }, timeout, TimeSpan.FromMilliseconds(25)).Result;
 
-            Thread.Sleep(25);
-        }
-
-        stopwatch.Stop();
-        elapsed = stopwatch.Elapsed;
-        return selectedTab == expectedTab ? selectedTab : null;
+        elapsed = observed ? Stopwatch.GetElapsedTime(clickTimestamp, renderedTimestamp) : timeout;
+        return observed;
     }
 
     private static void MoveMouseToScrollGutter(AutomationElement element)

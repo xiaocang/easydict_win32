@@ -13,6 +13,69 @@ namespace Easydict.UIAutomation.Tests.Tests;
 [Collection("UIAutomation")]
 public sealed class HoverLookupSettingsTests
 {
+    [Theory]
+    [InlineData("en-US", "Light")]
+    [InlineData("zh-CN", "Dark")]
+    public void HoverDelaySlider_UpdatesValue_AndPersists(string language, string theme)
+    {
+        using var dpi = new PerMonitorDpiScope();
+        using var fixture = new SettingsFixture(language, theme);
+        using var launcher = new AppLauncher();
+        launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var window = launcher.GetMainWindow();
+        var settingsPath = Path.Combine(Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR")!, "settings.json");
+        Invoke(Wait(window, "SettingsButton"));
+        Invoke(Wait(window, "SettingsTab_General"));
+        Wait(window, "HoverWordLookupToggle").Patterns.Toggle.Pattern.Toggle();
+        var expander = Wait(window, "HoverWordLookupAdvancedExpander").Patterns.ExpandCollapse.Pattern;
+        expander.ExpandCollapseState.Value.Should().Be(ExpandCollapseState.Collapsed);
+        var scroller = Wait(window, "SettingsDetailsScrollViewer");
+        // Narrow windows scroll the whole page; wide windows scroll the details pane.
+        if (!scroller.Patterns.Scroll.Pattern.VerticallyScrollable.Value)
+            scroller = Wait(window, "MainScrollViewer");
+        var visibleExpander = ScrollHelper.ScrollToFind(scroller, 70,
+            () => Wait(window, "HoverWordLookupAdvancedExpander"));
+        ScreenshotHelper.CaptureWindow(window, $"hover_delay_collapsed_{language}_{theme}");
+        visibleExpander.Should().NotBeNull();
+        var modifier = Wait(window, "HoverWordLookupModifierCombo");
+        modifier.IsOffscreen.Should().BeFalse("the trigger key remains outside advanced settings");
+        modifier.BoundingRectangle.Width.Should().BeGreaterThan(20);
+        expander.Expand();
+        var slider = Wait(window, "HoverWordLookupDelaySlider");
+        var range = slider.Patterns.RangeValue.Pattern;
+        range.Minimum.Value.Should().Be(10);
+        range.Maximum.Value.Should().Be(600);
+        range.Value.Value.Should().Be(350);
+
+        foreach (var delay in new[] { 10, 120, 600 })
+        {
+            range.SetValue(delay);
+            Retry.WhileFalse(() => Wait(window, "HoverWordLookupDelayValueText").Name == $"{delay} ms",
+                TimeSpan.FromSeconds(5)).Result.Should().BeTrue("the displayed latency must follow the slider");
+            Invoke(Wait(window, "SaveButton"));
+            Retry.WhileFalse(() =>
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+                return document.RootElement.GetProperty("HoverWordLookupDelayMs").GetInt32() == delay;
+            }, TimeSpan.FromSeconds(5)).Result.Should().BeTrue("the delay must be saved");
+        }
+
+        Invoke(Wait(window, "BackButton"));
+        Invoke(Wait(window, "SettingsButton"));
+        Invoke(Wait(window, "SettingsTab_General"));
+        expander = Wait(window, "HoverWordLookupAdvancedExpander").Patterns.ExpandCollapse.Pattern;
+        expander.ExpandCollapseState.Value.Should().Be(ExpandCollapseState.Collapsed);
+        expander.Expand();
+        slider = Wait(window, "HoverWordLookupDelaySlider");
+        slider.Patterns.RangeValue.Pattern.Value.Value.Should().Be(600);
+        scroller = Wait(window, "SettingsDetailsScrollViewer");
+        if (!scroller.Patterns.Scroll.Pattern.VerticallyScrollable.Value)
+            scroller = Wait(window, "MainScrollViewer");
+        ScrollHelper.ScrollToFind(scroller, 70, () =>
+            slider.IsOffscreen ? null : slider).Should().NotBeNull();
+        ScreenshotHelper.CaptureWindow(window, $"hover_delay_slider_{language}_{theme}");
+    }
+
     [Fact]
     public void TrayToggle_SynchronizesOpenSettings_AndSurvivesUnrelatedSave()
     {
@@ -55,7 +118,7 @@ public sealed class HoverLookupSettingsTests
     {
         private readonly string? _previousDirectory = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
 
-        public SettingsFixture()
+        public SettingsFixture(string language = "en-US", string theme = "Light")
         {
             // This test needs settings only. Bootstrapping a saved-items database also
             // opens History at 1280 DIP, which smaller CI desktops cannot accommodate.
@@ -63,7 +126,7 @@ public sealed class HoverLookupSettingsTests
             Directory.CreateDirectory(directory);
             File.WriteAllText(Path.Combine(directory, "settings.json"), JsonSerializer.Serialize(new
             {
-                UILanguage = "en-US", AppTheme = "Light",
+                UILanguage = language, AppTheme = theme,
                 EnableShowWindowHotkey = false, EnableTranslateSelectionHotkey = false,
                 EnableShowMiniWindowHotkey = false, EnableShowFixedWindowHotkey = false,
                 EnableOcrTranslateHotkey = false, EnableSilentOcrHotkey = false,

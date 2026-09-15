@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>साइन इन रद्द किया गया।</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>ब्राउज़र नहीं खोला जा सका। इसके बजाय नीचे दिए गए "API कुंजी प्राप्त करें" लिंक का उपयोग करें।</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>डिस्कनेक्ट करें</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>उन्नत सेटिंग्स</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>शब्द खोज में देरी</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>पॉइंटर रुकने के बाद शब्द खोज शुरू होने तक का समय। कम समय से तेज़ प्रतिक्रिया मिलती है; अधिक समय अनचाही खोजों को कम करता है।</value></data>
 </root>

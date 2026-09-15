@@ -48,6 +48,49 @@ public class HoverDwellDetectorTests
         _detector.Tick(HoverDwellDetector.DwellMs, true).Fired.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(10)]
+    [InlineData(120)]
+    [InlineData(600)]
+    public void Tick_HonorsConfiguredDelay_AndFiresOnlyOnce(int delayMs)
+    {
+        _detector.OnMouseMove(Pt(100, 100), 1000);
+        if (delayMs > 0)
+            _detector.Tick(1000 + delayMs - 1, true, delayMs).Fired.Should().BeFalse();
+
+        _detector.Tick(1000 + delayMs, true, delayMs).Fired.Should().BeTrue();
+        _detector.Tick(2000 + delayMs, true, delayMs).Fired.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(-100, 10)]
+    [InlineData(0, 10)]
+    [InlineData(1000, 600)]
+    public void Tick_ClampsInvalidDelay(int configured, int effective)
+    {
+        _detector.OnMouseMove(Pt(100, 100), 1000);
+        _detector.Tick(1000 + effective - 1, true, configured).Fired.Should().BeFalse();
+        _detector.Tick(1000 + effective, true, configured).Fired.Should().BeTrue();
+    }
+
+    [Fact]
+    public void MinimumDelay_StillRequiresTriggerAndRest()
+    {
+        _detector.Tick(1000, true, 10).Fired.Should().BeFalse();
+        _detector.OnMouseMove(Pt(100, 100), 1000);
+        _detector.Tick(1010, false, 10).Fired.Should().BeFalse();
+        _detector.Tick(1010, true, 10).Fired.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ConfiguredDelay_MovementRestartsClock()
+    {
+        _detector.OnMouseMove(Pt(100, 100), 1000);
+        _detector.OnMouseMove(Pt(110, 100), 1500);
+        _detector.Tick(1600, true, 600).Fired.Should().BeFalse();
+        _detector.Tick(2100, true, 600).Fired.Should().BeTrue();
+    }
+
     [Fact]
     public void Movement_BeyondTolerance_RestartsRestClock()
     {

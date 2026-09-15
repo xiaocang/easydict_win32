@@ -23,6 +23,8 @@ public class SettingsServiceHoverWordLookupTests
         settings.HoverWordLookupModifier.Should().Be("Ctrl");
         settings.HoverWordLookupUseOcrFallback.Should().BeTrue();
         settings.HoverWordLookupServiceId.Should().BeEmpty();
+        settings.HoverWordLookupDelayMs.Should().Be(350);
+        HoverLookupOptions.FromSettings(settings).DelayMs.Should().Be(350);
     }
 
     [Fact]
@@ -52,6 +54,7 @@ public class SettingsServiceHoverWordLookupTests
         settings.HoverWordLookupModifier = "Shift";
         settings.HoverWordLookupUseOcrFallback = false;
         settings.HoverWordLookupServiceId = "youdao";
+        settings.HoverWordLookupDelayMs = 120;
         settings.Save();
 
         var reloaded = CreateIsolatedSettingsService(directory.Path);
@@ -59,6 +62,26 @@ public class SettingsServiceHoverWordLookupTests
         reloaded.HoverWordLookupModifier.Should().Be("Shift");
         reloaded.HoverWordLookupUseOcrFallback.Should().BeFalse();
         reloaded.HoverWordLookupServiceId.Should().Be("youdao");
+        reloaded.HoverWordLookupDelayMs.Should().Be(120);
+        HoverLookupOptions.FromSettings(reloaded).DelayMs.Should().Be(120);
+    }
+
+    [Theory]
+    [InlineData(-1, 10)]
+    [InlineData(0, 10)]
+    [InlineData(10, 10)]
+    [InlineData(600, 600)]
+    [InlineData(int.MaxValue, 600)]
+    public void HoverWordLookupDelay_ClampsAssignmentsAndPersistedValues(int value, int expected)
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "settings.json"),
+            System.Text.Json.JsonSerializer.Serialize(new { HoverWordLookupDelayMs = value }));
+        var settings = CreateIsolatedSettingsService(directory.Path);
+        settings.HoverWordLookupDelayMs.Should().Be(expected);
+        settings.HoverWordLookupDelayMs = 350;
+        settings.HoverWordLookupDelayMs = value;
+        settings.HoverWordLookupDelayMs.Should().Be(expected);
     }
 
     [Fact]

@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Connexion annulée.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Impossible d'ouvrir votre navigateur. Utilisez plutôt le lien « Obtenir une clé API » ci-dessous.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Déconnecter</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Paramètres avancés</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Délai de recherche du mot</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Temps d’arrêt du pointeur avant la recherche. Un délai court accélère la réponse ; un délai long réduit les recherches involontaires.</value></data>
 </root>

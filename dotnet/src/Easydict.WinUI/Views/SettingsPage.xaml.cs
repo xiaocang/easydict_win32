@@ -1155,7 +1155,11 @@ public sealed partial class SettingsPage : Page
         // (EnsureTabContentLoaded above). Visibility-toggle switches reuse the brushes
         // already assigned on the inflated subtrees, so re-walking the visual tree here
         // costs ~ms-to-tens-of-ms on the Services tab for no observable change.
+        QueueSettingsTabRenderProbe(tabId);
     }
+
+    partial void QueueSettingsTabRenderProbe(SettingsTabId tabId);
+    partial void CancelSettingsTabRenderProbe();
 
     private void EnsureTabContentLoaded(SettingsTabId tabId)
     {
@@ -1710,6 +1714,10 @@ public sealed partial class SettingsPage : Page
             _hoverWordLookupServiceAutoItem.Content = loc.GetString("HoverWordLookupServiceAuto");
         HoverWordLookupOcrFallbackToggle.Header = loc.GetString("HoverWordLookupOcrFallback");
         HoverWordLookupDescriptionText.Text = loc.GetString("HoverWordLookupDescription");
+        HoverWordLookupDelayLabel.Text = loc.GetString("HoverWordLookupDelay");
+        HoverWordLookupAdvancedExpander.Header = loc.GetString("HoverWordLookupAdvanced");
+        AutomationProperties.SetName(HoverWordLookupDelaySlider, loc.GetString("HoverWordLookupDelay"));
+        HoverWordLookupDelayDescriptionText.Text = loc.GetString("HoverWordLookupDelayDescription");
         AlwaysOnTopToggle.Header = loc.GetString("AlwaysOnTop");
         CompactModeToggle.Header = loc.GetString("CompactMode");
         CompactModeDescriptionText.Text = loc.GetString("CompactModeDescription");
@@ -2219,6 +2227,8 @@ public sealed partial class SettingsPage : Page
         this.Unloaded -= OnPageUnloaded;
         this.ActualThemeChanged -= OnActualThemeChanged;
 
+        CancelSettingsTabRenderProbe();
+
         if (deferVisualTreeRelease)
         {
             _ = CompleteTeardownOnUnloadAsync();
@@ -2260,6 +2270,7 @@ public sealed partial class SettingsPage : Page
         _isTornDown = true;
         _isUnloaded = true;
         _isLoading = true;
+        CancelSettingsTabRenderProbe();
 #if DEBUG
         UpdateDeferredIoState("teardown");
 #endif
@@ -2355,6 +2366,7 @@ public sealed partial class SettingsPage : Page
         HoverWordLookupModifierCombo.SelectionChanged += OnSettingChanged;
         HoverWordLookupServiceCombo.SelectionChanged += OnSettingChanged;
         HoverWordLookupOcrFallbackToggle.Toggled += OnSettingChanged;
+        HoverWordLookupDelaySlider.ValueChanged += OnHoverWordLookupDelayChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         CompactModeToggle.Toggled += OnSettingChanged;
         ShowOcrButtonToggle.Toggled += OnSettingChanged;
@@ -2484,6 +2496,7 @@ public sealed partial class SettingsPage : Page
         HoverWordLookupModifierCombo.SelectionChanged -= OnSettingChanged;
         HoverWordLookupServiceCombo.SelectionChanged -= OnSettingChanged;
         HoverWordLookupOcrFallbackToggle.Toggled -= OnSettingChanged;
+        HoverWordLookupDelaySlider.ValueChanged -= OnHoverWordLookupDelayChanged;
         AlwaysOnTopToggle.Toggled -= OnSettingChanged;
         LaunchAtStartupToggle.Toggled -= OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
@@ -2933,6 +2946,7 @@ public sealed partial class SettingsPage : Page
             || HoverWordLookupToggle.IsOn != _settings.HoverWordLookupEnabled
             || !SameSetting(GetTagComboValue(HoverWordLookupModifierCombo, "Ctrl"), _settings.HoverWordLookupModifier)
             || HoverWordLookupOcrFallbackToggle.IsOn != _settings.HoverWordLookupUseOcrFallback
+            || (int)Math.Round(HoverWordLookupDelaySlider.Value) != _settings.HoverWordLookupDelayMs
             || !SameSetting(GetTagComboValue(HoverWordLookupServiceCombo, ""), _settings.HoverWordLookupServiceId ?? "")
             || AlwaysOnTopToggle.IsOn != _settings.AlwaysOnTop
             || LaunchAtStartupToggle.IsOn != _settings.LaunchAtStartup
@@ -3244,6 +3258,8 @@ public sealed partial class SettingsPage : Page
             HoverWordLookupToggle.IsOn = _settings.HoverWordLookupEnabled;
             SetTagComboValue(HoverWordLookupModifierCombo, _settings.HoverWordLookupModifier, "Ctrl");
             HoverWordLookupOcrFallbackToggle.IsOn = _settings.HoverWordLookupUseOcrFallback;
+            HoverWordLookupDelaySlider.Value = _settings.HoverWordLookupDelayMs;
+            HoverWordLookupDelayValueText.Text = $"{_settings.HoverWordLookupDelayMs} ms";
             PopulateHoverWordLookupServiceCombo();
             SetTagComboValue(HoverWordLookupServiceCombo, _settings.HoverWordLookupServiceId, "");
             HoverWordLookupPanel.Visibility = _settings.HoverWordLookupEnabled
@@ -4678,6 +4694,7 @@ public sealed partial class SettingsPage : Page
         _settings.HoverWordLookupEnabled = HoverWordLookupToggle.IsOn;
         _settings.HoverWordLookupModifier = GetTagComboValue(HoverWordLookupModifierCombo, "Ctrl");
         _settings.HoverWordLookupUseOcrFallback = HoverWordLookupOcrFallbackToggle.IsOn;
+        _settings.HoverWordLookupDelayMs = (int)Math.Round(HoverWordLookupDelaySlider.Value);
         _settings.HoverWordLookupServiceId = GetTagComboValue(HoverWordLookupServiceCombo, "");
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.ResultFontScale = ResultFontScaleSlider.Value;
@@ -4908,6 +4925,12 @@ public sealed partial class SettingsPage : Page
         finally { _isLoading = wasLoading; }
         // A tray change is already persisted; keep any other pending page edits.
         OnSettingChanged(HoverWordLookupToggle, e);
+    }
+
+    private void OnHoverWordLookupDelayChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        HoverWordLookupDelayValueText.Text = $"{(int)Math.Round(e.NewValue)} ms";
+        OnSettingChanged(sender, e);
     }
 
     private void OnHoverWordLookupToggled(object sender, RoutedEventArgs e)

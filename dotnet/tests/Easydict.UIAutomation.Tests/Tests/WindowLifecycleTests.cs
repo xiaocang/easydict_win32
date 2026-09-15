@@ -24,6 +24,7 @@ public class WindowLifecycleTests : IDisposable
     }
 
     private const uint WM_QUERYENDSESSION = 0x0011;
+    private const uint WM_CLOSE = 0x0010;
     private const uint WM_ENDSESSION = 0x0016;
     private const nint ENDSESSION_CLOSEAPP = 0x00000001;
     private const uint SMTO_ABORTIFHUNG = 0x0002;
@@ -63,12 +64,16 @@ public class WindowLifecycleTests : IDisposable
         // Capture final state before close
         ScreenshotHelper.CaptureWindow(window, "09_before_close");
 
-        window.Close();
+        // WindowPattern.Close is a synchronous cross-process UIA call. WinUI can
+        // tear down its provider while servicing it, hanging the test host. Post
+        // the normal close message and observe the HWND without calling UIA again.
+        var hwnd = new nint(window.Properties.NativeWindowHandle.Value);
+        PostMessage(hwnd, WM_CLOSE, 0, 0).Should().BeTrue();
+        Retry.WhileFalse(
+                () => _launcher.Application.HasExited || !IsWindowVisible(hwnd),
+                TimeSpan.FromSeconds(5))
+            .Result.Should().BeTrue("closing must exit the app or hide its window in the tray within 5s");
 
-        // Give the app time to close
-        Thread.Sleep(3000);
-
-        // App may minimize to tray instead of exiting - that's acceptable
         _output.WriteLine($"App has exited: {_launcher.Application.HasExited}");
     }
 
@@ -148,4 +153,8 @@ public class WindowLifecycleTests : IDisposable
         uint msg,
         nuint wParam,
         nint lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(nint hWnd);
 }

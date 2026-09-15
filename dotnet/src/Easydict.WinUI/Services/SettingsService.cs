@@ -312,6 +312,19 @@ public sealed class SettingsService
     /// </summary>
     public string HoverWordLookupModifier { get; set; } = "Ctrl";
 
+    public const int MinHoverWordLookupDelayMs = HoverDwellDetector.MinDwellMs;
+    public const int MaxHoverWordLookupDelayMs = HoverDwellDetector.MaxDwellMs;
+    public const int DefaultHoverWordLookupDelayMs = HoverDwellDetector.DwellMs;
+
+    private int _hoverWordLookupDelayMs = DefaultHoverWordLookupDelayMs;
+
+    /// <summary>Pointer dwell before a lookup starts; excludes extraction and translation time.</summary>
+    public int HoverWordLookupDelayMs
+    {
+        get => _hoverWordLookupDelayMs;
+        set => _hoverWordLookupDelayMs = Math.Clamp(value, MinHoverWordLookupDelayMs, MaxHoverWordLookupDelayMs);
+    }
+
     /// <summary>
     /// Use OCR on the pixels around the pointer when the application exposes no accessible text.
     /// </summary>
@@ -888,6 +901,7 @@ public sealed class SettingsService
             .Parse(GetValue(nameof(HoverWordLookupModifier), "Ctrl"))
             .ToString();
         HoverWordLookupUseOcrFallback = GetValue(nameof(HoverWordLookupUseOcrFallback), true);
+        HoverWordLookupDelayMs = GetValue(nameof(HoverWordLookupDelayMs), DefaultHoverWordLookupDelayMs);
         HoverWordLookupServiceId = GetValue(nameof(HoverWordLookupServiceId), "") ?? "";
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
         HistoryEnabled = GetValue(nameof(HistoryEnabled), false);
@@ -1186,6 +1200,7 @@ public sealed class SettingsService
         _settings[nameof(HoverWordLookupEnabled)] = HoverWordLookupEnabled;
         _settings[nameof(HoverWordLookupModifier)] = HoverWordLookupModifier;
         _settings[nameof(HoverWordLookupUseOcrFallback)] = HoverWordLookupUseOcrFallback;
+        _settings[nameof(HoverWordLookupDelayMs)] = HoverWordLookupDelayMs;
         _settings[nameof(HoverWordLookupServiceId)] = HoverWordLookupServiceId;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;

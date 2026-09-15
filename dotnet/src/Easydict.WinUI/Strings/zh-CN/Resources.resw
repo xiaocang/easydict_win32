@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>登录已取消。</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>无法打开浏览器。请改用下方的“获取 API 密钥”链接。</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>断开连接</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>高级设置</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>取词延迟</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>鼠标停留多久后开始取词。越短响应越快，越长越不容易误触发。</value></data>
 </root>

@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Login annulleret.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Browseren kunne ikke åbnes. Brug i stedet linket "Hent en API-nøgle" nedenfor.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Afbryd forbindelse</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Avancerede indstillinger</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Forsinkelse før ordopslag</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Hvor længe markøren skal stå stille før opslaget starter. Kortere er hurtigere; længere mindsker utilsigtede opslag.</value></data>
 </root>

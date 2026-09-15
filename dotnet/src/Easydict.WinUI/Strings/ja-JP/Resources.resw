@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>サインインをキャンセルしました。</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>ブラウザーを開けませんでした。代わりに下の「API キーを取得」リンクをご利用ください。</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>接続を解除</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>詳細設定</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>単語取得の遅延</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>ポインターが静止してから単語の検索を始めるまでの時間です。短いほど速く、長いほど誤動作を減らせます。</value></data>
 </root>

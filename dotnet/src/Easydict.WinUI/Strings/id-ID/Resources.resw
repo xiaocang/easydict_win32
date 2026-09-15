@@ -1645,4 +1645,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Proses masuk dibatalkan.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Tidak dapat membuka browser. Gunakan tautan "Dapatkan kunci API" di bawah ini.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Putuskan koneksi</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Pengaturan lanjutan</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Jeda pencarian kata</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Lama penunjuk berhenti sebelum pencarian dimulai. Nilai lebih kecil lebih cepat; nilai lebih besar mengurangi pencarian yang tidak disengaja.</value></data>
 </root>

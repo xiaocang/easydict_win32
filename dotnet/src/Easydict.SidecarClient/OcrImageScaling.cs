@@ -1,6 +1,4 @@
-using Easydict.WinUI.Models;
-
-namespace Easydict.WinUI.Services;
+namespace Easydict.SidecarClient;
 
 /// <summary>
 /// Upscaling helpers for OCR pre-processing.
@@ -8,9 +6,13 @@ namespace Easydict.WinUI.Services;
 /// screenshot taken on a laptop panel (no display scaling, small UI font) often carries
 /// text barely 12-16 px tall. Recognizing such a capture a second time at a larger size
 /// recovers text the native-resolution pass drops entirely.
-/// Pure logic with no WinRT dependency so it can be unit tested on any platform.
+/// Pure logic with no WinRT dependency so it can be unit tested on any platform, and no
+/// dependency on any host's OCR model types so it is shared by both the in-process
+/// <c>WindowsOcrService</c> (Easydict.WinUI) and the out-of-process OCR worker
+/// (Easydict.Workers.Ocr) — both engines need the same retry, or small text silently fails
+/// depending on whether OCR worker isolation is enabled (see issue #217).
 /// </summary>
-internal static class OcrImageScaling
+public static class OcrImageScaling
 {
     /// <summary>Line height, in pixels, the retry pass aims for.</summary>
     public const double TargetLineHeight = 40.0;
@@ -34,12 +36,12 @@ internal static class OcrImageScaling
     /// Returns 1.0 when the first pass already worked on large enough text, when the
     /// image cannot be enlarged within the engine limits, or when the gain would be marginal.
     /// </summary>
-    /// <param name="lines">Lines recognized by the first pass, in source-image coordinates.</param>
+    /// <param name="lineHeights">Heights, in source-image pixels, of the lines the first pass recognized.</param>
     /// <param name="width">Source image width in pixels.</param>
     /// <param name="height">Source image height in pixels.</param>
     /// <param name="maxDimension">Largest edge the OCR engine accepts (<c>OcrEngine.MaxImageDimension</c>).</param>
     public static double ComputeRetryScale(
-        IReadOnlyList<OcrLine> lines,
+        IReadOnlyList<double> lineHeights,
         int width,
         int height,
         int maxDimension)
@@ -47,7 +49,7 @@ internal static class OcrImageScaling
         if (width <= 0 || height <= 0 || maxDimension <= 0) return 1.0;
         if (width > maxDimension || height > maxDimension) return 1.0;
 
-        var desired = DesiredScale(lines);
+        var desired = DesiredScale(lineHeights);
         if (desired <= 1.0) return 1.0;
 
         desired = Math.Min(desired, MaxScale);
@@ -62,9 +64,9 @@ internal static class OcrImageScaling
         return desired < MinUsefulScale ? 1.0 : desired;
     }
 
-    private static double DesiredScale(IReadOnlyList<OcrLine> lines)
+    private static double DesiredScale(IReadOnlyList<double> lineHeights)
     {
-        var medianHeight = MedianLineHeight(lines);
+        var medianHeight = MedianLineHeight(lineHeights);
 
         // Nothing measurable came back: the text may be too small for the engine to
         // find any line at all, so enlarge blindly and try once more.
@@ -74,15 +76,14 @@ internal static class OcrImageScaling
     }
 
     /// <summary>
-    /// Median height of the recognized lines, ignoring degenerate rectangles.
-    /// Returns 0 when no line carries a usable height.
+    /// Median of the given line heights, ignoring degenerate (non-positive) entries.
+    /// Returns 0 when no entry carries a usable height.
     /// </summary>
-    public static double MedianLineHeight(IReadOnlyList<OcrLine> lines)
+    public static double MedianLineHeight(IReadOnlyList<double> lineHeights)
     {
-        if (lines is null || lines.Count == 0) return 0;
+        if (lineHeights is null || lineHeights.Count == 0) return 0;
 
-        var heights = lines
-            .Select(line => line.BoundingRect.Height)
+        var heights = lineHeights
             .Where(h => h > 0)
             .OrderBy(h => h)
             .ToArray();
@@ -100,12 +101,9 @@ internal static class OcrImageScaling
     /// Windows OCR fails on small text by dropping characters and whole lines, so the pass
     /// that recovered more non-whitespace characters is the better one.
     /// </summary>
-    public static bool ShouldPreferRetry(OcrResult original, OcrResult retry)
+    public static bool ShouldPreferRetry(string? originalText, string? retryText)
     {
-        ArgumentNullException.ThrowIfNull(original);
-        ArgumentNullException.ThrowIfNull(retry);
-
-        return CountRecognizedChars(retry.Text) > CountRecognizedChars(original.Text);
+        return CountRecognizedChars(retryText) > CountRecognizedChars(originalText);
     }
 
     private static int CountRecognizedChars(string? text)
@@ -122,29 +120,17 @@ internal static class OcrImageScaling
     }
 
     /// <summary>
-    /// Maps a result recognized on an enlarged image back onto source-image coordinates,
-    /// so callers keep working in the coordinate space of the original capture.
+    /// Maps a single bounding rectangle recognized on an enlarged image back onto
+    /// source-image coordinates, so callers keep working in the coordinate space of the
+    /// original capture.
     /// </summary>
-    public static OcrResult MapToSourceCoordinates(OcrResult result, double scaleX, double scaleY)
+    public static (double X, double Y, double Width, double Height) MapRect(
+        double x, double y, double width, double height, double scaleX, double scaleY)
     {
-        ArgumentNullException.ThrowIfNull(result);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(scaleX);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(scaleY);
 
-        if (result.Lines.Count == 0) return result;
-
-        var lines = result.Lines
-            .Select(line => line with
-            {
-                BoundingRect = new OcrRect(
-                    line.BoundingRect.X / scaleX,
-                    line.BoundingRect.Y / scaleY,
-                    line.BoundingRect.Width / scaleX,
-                    line.BoundingRect.Height / scaleY)
-            })
-            .ToList();
-
-        return result with { Lines = lines };
+        return (x / scaleX, y / scaleY, width / scaleX, height / scaleY);
     }
 
     /// <summary>

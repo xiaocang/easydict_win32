@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.SidecarClient;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services.Memory;
 using Windows.Graphics.Imaging;
@@ -66,8 +67,9 @@ public sealed class WindowsOcrService : IOcrService
         int pixelHeight,
         CancellationToken cancellationToken)
     {
+        var lineHeights = firstPass.Lines.Select(line => line.BoundingRect.Height).ToList();
         var scale = OcrImageScaling.ComputeRetryScale(
-            firstPass.Lines, pixelWidth, pixelHeight, (int)WinOcr.OcrEngine.MaxImageDimension);
+            lineHeights, pixelWidth, pixelHeight, (int)WinOcr.OcrEngine.MaxImageDimension);
         if (scale <= 1.0) return firstPass;
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -75,7 +77,7 @@ public sealed class WindowsOcrService : IOcrService
         var (scaledWidth, scaledHeight) = OcrImageScaling.ScaledSize(pixelWidth, pixelHeight, scale);
         Debug.WriteLine(
             $"[WindowsOcrService] Retrying at {scaledWidth}x{scaledHeight} (x{scale:F2}) — " +
-            $"first pass median line height {OcrImageScaling.MedianLineHeight(firstPass.Lines):F1}px");
+            $"first pass median line height {OcrImageScaling.MedianLineHeight(lineHeights):F1}px");
 
         byte[] scaledPixels;
         try
@@ -94,12 +96,12 @@ public sealed class WindowsOcrService : IOcrService
             var secondPass = await RecognizePixelsAsync(
                 engine, scaledPixels, scaledWidth, scaledHeight, cancellationToken);
 
-            if (!OcrImageScaling.ShouldPreferRetry(firstPass, secondPass))
+            if (!OcrImageScaling.ShouldPreferRetry(firstPass.Text, secondPass.Text))
             {
                 return firstPass;
             }
 
-            return OcrImageScaling.MapToSourceCoordinates(
+            return MapToSourceCoordinates(
                 secondPass,
                 (double)scaledWidth / pixelWidth,
                 (double)scaledHeight / pixelHeight);
@@ -108,6 +110,28 @@ public sealed class WindowsOcrService : IOcrService
         {
             Array.Clear(scaledPixels);
         }
+    }
+
+    /// <summary>
+    /// Maps a result recognized on an enlarged image back onto source-image coordinates,
+    /// so callers keep working in the coordinate space of the original capture.
+    /// </summary>
+    private static OcrResult MapToSourceCoordinates(OcrResult result, double scaleX, double scaleY)
+    {
+        if (result.Lines.Count == 0) return result;
+
+        var lines = result.Lines
+            .Select(line =>
+            {
+                var (x, y, w, h) = OcrImageScaling.MapRect(
+                    line.BoundingRect.X, line.BoundingRect.Y,
+                    line.BoundingRect.Width, line.BoundingRect.Height,
+                    scaleX, scaleY);
+                return line with { BoundingRect = new OcrRect(x, y, w, h) };
+            })
+            .ToList();
+
+        return result with { Lines = lines };
     }
 
     private static async Task<OcrResult> RecognizePixelsAsync(

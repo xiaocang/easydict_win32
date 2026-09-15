@@ -1565,4 +1565,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Anmeldung abgebrochen.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Der Browser konnte nicht geöffnet werden. Verwenden Sie stattdessen den Link „API-Schlüssel abrufen“ unten.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Verbindung trennen</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Erweitert</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Verzögerung des Auswahlsymbols</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Wie lange nach einer Auswahl gewartet wird, bis das Übersetzungssymbol erscheint. Kleinere Werte sind schneller; erhöhen Sie den Wert, wenn das Symbol bei einem langsamen Dreifachklick flackert.</value></data>
 </root>

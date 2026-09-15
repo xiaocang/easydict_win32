@@ -1565,4 +1565,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Proses masuk dibatalkan.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Tidak dapat membuka browser. Gunakan tautan "Dapatkan kunci API" di bawah ini.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Putuskan koneksi</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Lanjutan</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Jeda munculnya ikon seleksi</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Berapa lama menunggu setelah teks dipilih sebelum ikon terjemahan muncul. Semakin kecil semakin cepat; naikkan jika ikon berkedip saat klik tiga kali yang lambat.</value></data>
 </root>

@@ -227,11 +227,11 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 ### Mouse Selection Translate (Pop Button)
 - **MouseHookService**: `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks detect text selection gestures:
   - **Drag select**: mouse down → drag beyond 10px threshold → mouse up (fires immediately)
-  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a settle delay capped at `MaxMultiClickWaitMs` = 220ms so the icon is not held back by the full double-click time; a later third click dismisses the icon and restarts the timer)
+  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a settle delay capped at the user's pop delay, default `MaxMultiClickWaitMs` = 220ms, so the icon is not held back by the full double-click time; a later third click dismisses the icon and restarts the timer)
 - **PopButtonWindow**: 30×30 WinUI 3 window with `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` — does not steal focus from source app
 - **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms after a drag (30ms after a multi-click, which already waited out the settle window), queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
 - **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new selection
-- **Setting**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior
+- **Settings**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior; `MouseSelectionPopDelayMs` (default 220ms, range 0–600) is a slider in Settings → Behavior → Advanced (a collapsed expander that also holds the quick-action button toggles and the experimental dictionary suggestions). It is an upper bound on the whole pre-query wait: it caps both the multi-click settle wait and the per-gesture delay, so the default leaves timing exactly as it is and 0 pops the icon as soon as the selection can be read.
 - **Flow**: `MouseHookService.OnDragSelectionEnd` / `OnMultiClickSelectionEnd` → `PopButtonService.OnDragSelectionEnd` / `OnMultiClickSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
 
 ### OCR Screenshot Translate

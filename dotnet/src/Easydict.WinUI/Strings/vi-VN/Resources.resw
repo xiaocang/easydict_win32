@@ -1565,4 +1565,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Đã hủy đăng nhập.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Không thể mở trình duyệt. Hãy dùng liên kết "Lấy khóa API" bên dưới.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Ngắt kết nối</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Nâng cao</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Độ trễ hiện biểu tượng sau khi chọn</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Thời gian chờ sau khi chọn văn bản trước khi biểu tượng dịch xuất hiện. Giá trị càng nhỏ càng nhanh; hãy tăng lên nếu biểu tượng nhấp nháy khi nhấp ba lần chậm.</value></data>
 </root>

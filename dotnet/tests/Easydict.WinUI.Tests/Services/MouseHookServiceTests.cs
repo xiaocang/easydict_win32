@@ -405,6 +405,16 @@ public class MouseHookServiceTests
     }
 
     [Fact]
+    public void GetMultiClickWaitMs_WithUserCap_HonorsTheConfiguredDelay()
+    {
+        // A raised pop delay can only wait as long as the system double-click time allows.
+        MouseHookService.GetMultiClickWaitMs(500, capMs: 600).Should().Be(550);
+        MouseHookService.GetMultiClickWaitMs(500, capMs: 80).Should().Be(80);
+        MouseHookService.GetMultiClickWaitMs(500, capMs: 0).Should().Be(0);
+        MouseHookService.GetMultiClickWaitMs(500, capMs: -10).Should().Be(0);
+    }
+
+    [Fact]
     public void GetMultiClickWaitMs_WithExtremeDoubleClickTime_DoesNotOverflow()
     {
         MouseHookService.GetMultiClickWaitMs(uint.MaxValue)

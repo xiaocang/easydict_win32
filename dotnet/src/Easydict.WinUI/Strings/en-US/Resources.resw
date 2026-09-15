@@ -1565,4 +1565,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Sign-in cancelled.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Could not open your browser. Use the "Get an API key" link below instead.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Disconnect</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Advanced</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Selection pop-up delay</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>How long to wait after a selection before the translate icon appears. Lower is faster; raise it if a slow triple-click makes the icon flash.</value></data>
 </root>

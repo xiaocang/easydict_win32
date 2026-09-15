@@ -1565,4 +1565,7 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Connexion annulée.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Impossible d'ouvrir votre navigateur. Utilisez plutôt le lien « Obtenir une clé API » ci-dessous.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Déconnecter</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Avancé</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Délai d'affichage de l'icône de sélection</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Temps d'attente après une sélection avant l'apparition de l'icône de traduction. Plus la valeur est faible, plus l'icône apparaît vite ; augmentez-la si l'icône clignote lors d'un triple clic lent.</value></data>
 </root>

@@ -119,12 +119,33 @@ public sealed partial class MouseHookService : IDisposable
     /// <summary>
     /// Time to wait after a multi-click before querying the selection.
     /// Long enough for an additional click (double -> triple), capped at
-    /// <see cref="MaxMultiClickWaitMs"/>. Internal for unit testing.
+    /// <paramref name="capMs"/> (the user-configurable pop delay, default
+    /// <see cref="MaxMultiClickWaitMs"/>). Internal for unit testing.
     /// </summary>
-    internal static int GetMultiClickWaitMs(uint doubleClickTimeMs)
+    internal static int GetMultiClickWaitMs(uint doubleClickTimeMs, int capMs = MaxMultiClickWaitMs)
     {
         var settleMs = (long)doubleClickTimeMs + 50;
-        return (int)Math.Min(settleMs, MaxMultiClickWaitMs);
+        return (int)Math.Max(0, Math.Min(settleMs, capMs));
+    }
+
+    /// <summary>
+    /// Optional provider for the user-configured pop delay (Settings -> Behavior -> Advanced).
+    /// Read on every multi-click so a changed setting takes effect without re-wiring.
+    /// When unset, <see cref="MaxMultiClickWaitMs"/> applies.
+    /// </summary>
+    public Func<int>? MultiClickWaitCapProvider { get; set; }
+
+    private int ResolveMultiClickWaitCapMs()
+    {
+        var provider = MultiClickWaitCapProvider;
+        if (provider is null) return MaxMultiClickWaitMs;
+
+        try { return provider(); }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MouseHook] Pop delay provider failed, using default: {ex.Message}");
+            return MaxMultiClickWaitMs;
+        }
     }
 
     /// <summary>
@@ -422,7 +443,7 @@ public sealed partial class MouseHookService : IDisposable
                 // Wait just long enough for an additional click (double → triple),
                 // capped so the pop button is not held back by the full double-click time.
                 var dctTimer = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
-                await Task.Delay(GetMultiClickWaitMs(dctTimer), ct);
+                await Task.Delay(GetMultiClickWaitMs(dctTimer, ResolveMultiClickWaitCapMs()), ct);
 
                 if (!ct.IsCancellationRequested && !IsCurrentAppExcludedSafely())
                 {

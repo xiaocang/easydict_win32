@@ -56,6 +56,23 @@ public class WindowLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void IsolatedExeLaunches_ShouldOwnDistinctMainWindows()
+    {
+        var exePath = Environment.GetEnvironmentVariable("EASYDICT_EXE_PATH");
+        exePath.Should().NotBeNullOrWhiteSpace("isolated launch tests require the UI automation build's EXE");
+        var firstWindow = _launcher.GetMainWindow();
+        using var secondLauncher = new AppLauncher();
+        secondLauncher.LaunchFromExe(exePath!, TimeSpan.FromSeconds(15));
+        var secondWindow = secondLauncher.GetMainWindow();
+
+        secondLauncher.Application.ProcessId.Should().NotBe(_launcher.Application.ProcessId);
+        firstWindow.Properties.ProcessId.Value.Should().Be(_launcher.Application.ProcessId);
+        secondWindow.Properties.ProcessId.Value.Should().Be(secondLauncher.Application.ProcessId);
+        secondWindow.Properties.NativeWindowHandle.Value.Should().NotBe(firstWindow.Properties.NativeWindowHandle.Value);
+        _launcher.Application.HasExited.Should().BeFalse("launching another test instance must preserve the first");
+    }
+
+    [Fact]
     public void App_ShouldCloseGracefully()
     {
         var window = _launcher.GetMainWindow();

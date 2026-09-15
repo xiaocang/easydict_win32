@@ -144,7 +144,15 @@ public static class Program
         try
         {
             var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            var primary = AppInstance.FindOrRegisterForKey(SingleInstanceKey);
+            var instanceKey = SingleInstanceKey;
+#if WINUI_TEST
+            // Each EXE launch in UI automation owns its process and window.
+            // Reusing the desktop-wide key can redirect to an earlier test's
+            // instance and leave the new process waiting without a main HWND.
+            if (Guid.TryParse(Environment.GetEnvironmentVariable("EASYDICT_UIA_INSTANCE_ID"), out var testInstanceId))
+                instanceKey += $"-UIA-{testInstanceId:N}";
+#endif
+            var primary = AppInstance.FindOrRegisterForKey(instanceKey);
 
             if (primary.IsCurrent)
             {

@@ -104,6 +104,7 @@ public sealed class AppLauncher : IDisposable
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? Environment.CurrentDirectory
             };
             UiaSettingsIsolation.ApplyTo(startInfo);
+            startInfo.Environment["EASYDICT_UIA_INSTANCE_ID"] = Guid.NewGuid().ToString("N");
             return Application.Launch(startInfo);
         }, resolvedTimeout);
     }
@@ -186,13 +187,18 @@ public sealed class AppLauncher : IDisposable
             catch (TimeoutException ex)
             {
                 lastException = ex;
+                TryCloseApplication();
                 if (attempt == attempts)
                 {
                     throw;
                 }
 
-                TryCloseApplication();
                 Thread.Sleep(1000);
+            }
+            catch
+            {
+                TryCloseApplication();
+                throw;
             }
         }
 
@@ -289,7 +295,9 @@ public sealed class AppLauncher : IDisposable
 
             try
             {
-                var window = Application.GetMainWindow(Automation);
+                // FlaUI defaults to an infinite wait for a HWND. Keep startup
+                // bounded even when the app exits or starts without a visible window.
+                var window = Application.GetMainWindow(Automation, TimeSpan.FromSeconds(2));
                 if (window != null)
                     return;
             }
@@ -363,24 +371,48 @@ public sealed class AppLauncher : IDisposable
 
     private void TryCloseApplication()
     {
+        var application = _application;
+        _application = null;
+        if (application == null) return;
+
         try
         {
-            _application?.Close();
-            if (_application != null && !_application.HasExited)
+            using var process = Process.GetProcessById(application.ProcessId);
+            if (!process.HasExited)
             {
-                Thread.Sleep(2000);
-                if (!_application.HasExited)
+                // CloseMainWindow synchronously sends WM_CLOSE; a blocked UI
+                // thread can prevent FlaUI's close timeout from ever starting.
+                var hwnd = process.MainWindowHandle;
+                if (hwnd != IntPtr.Zero) PostMessage(hwnd, 0x0010, 0, 0);
+                if (!process.WaitForExit(2000))
                 {
-                    _application.Kill();
+                    process.Kill(entireProcessTree: true);
+                    if (!process.WaitForExit(5000))
+                        Console.WriteLine($"Test cleanup: process {process.Id} did not exit within 5 seconds after termination.");
                 }
             }
         }
-        catch
+        catch (ArgumentException)
         {
-            // Ignore close errors
+            // The test already exited the process.
         }
-        _application = null;
+        catch (InvalidOperationException)
+        {
+            // The process exited while cleanup was inspecting it.
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            Console.WriteLine($"Test cleanup failed: {ex.Message}");
+        }
+        finally
+        {
+            application.Dispose();
+        }
     }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr hwnd, uint message, nuint wParam, nint lParam);
 
     public void Dispose()
     {

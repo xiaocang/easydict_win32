@@ -372,8 +372,11 @@ public class SettingsPageTests : IDisposable
 
         // Wide Settings scrolls the detail pane; the outer scroller is deliberately
         // disabled. Narrow Settings scrolls the whole page instead.
-        var scrollViewer = SavedItemsVisualTests.Wait(window, scrollViewerId);
-        scrollViewer.IsOffscreen.Should().BeFalse("the layout's scrolling surface should be visible with Settings content");
+        var scrollViewer = Retry.WhileNull(
+            () => FindVisibleByAutomationId(window, scrollViewerId),
+            TimeSpan.FromSeconds(15)).Result;
+        scrollViewer.Should().NotBeNull("Settings must finish loading before testing immediate scrolling");
+        scrollViewer!.IsOffscreen.Should().BeFalse("the layout's scrolling surface should be visible with Settings content");
         window.SetForeground();
         Thread.Sleep(250);
 

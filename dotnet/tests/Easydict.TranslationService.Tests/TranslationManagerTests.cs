@@ -189,6 +189,10 @@ public class TranslationManagerTests : IDisposable
         var service = new TestTranslationService("cache-test", "Cache Test");
         _manager.RegisterService(service);
 
+        // "Hello" en→zh is a word lookup, which the manager would enrich with a real
+        // Youdao pronunciation lookup; drop that service so the test stays offline.
+        _manager.UnregisterService("youdao");
+
         var request = new TranslationRequest
         {
             Text = "Hello",

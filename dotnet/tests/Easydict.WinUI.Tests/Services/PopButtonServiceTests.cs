@@ -29,9 +29,119 @@ public class PopButtonServiceTests
     }
 
     [Fact]
+    public void MultiClickSelectionDelayMs_IsShorterThanDragDelay()
+    {
+        // The multi-click path already waited out the settle window in MouseHookService,
+        // so re-paying the drag delay only kept the pop button from appearing.
+        PopButtonService.MultiClickSelectionDelayMs.Should().BeGreaterThan(0)
+            .And.BeLessThan(PopButtonService.SelectionDelayMs);
+    }
+
+    [Fact]
     public void AutoDismissMs_Is5000()
     {
         PopButtonService.AutoDismissMs.Should().Be(5000);
+    }
+
+    // --- Configurable pop delay (issue #216) ---
+
+    [Fact]
+    public void GetSelectionDelayMs_ForADrag_KeepsTheDragDelay()
+    {
+        // Nothing has been waited out yet on this path, so the drag delay applies in full.
+        PopButtonService.GetSelectionDelayMs(
+            SettingsService.DefaultMouseSelectionPopDelayMs, isMultiClick: false)
+            .Should().Be(PopButtonService.SelectionDelayMs);
+        PopButtonService.GetSelectionDelayMs(
+            SettingsService.MaxMouseSelectionPopDelayMs, isMultiClick: false)
+            .Should().Be(PopButtonService.SelectionDelayMs, "the pop delay is a bound, not a target");
+    }
+
+    [Theory]
+    [InlineData(SettingsService.DefaultMouseSelectionPopDelayMs)]
+    [InlineData(120)]
+    [InlineData(SettingsService.MinMouseSelectionPopDelayMs)]
+    public void GetSelectionDelayMs_WhenTheSettleWaitSpentTheBudget_AddsNothing(int popDelayMs)
+    {
+        // MouseHookService caps the settle wait at the pop delay, so by the time a multi-click
+        // arrives the budget is normally gone: adding the gesture delay on top would push the
+        // total past the bound this setting documents.
+        PopButtonService.GetSelectionDelayMs(popDelayMs, isMultiClick: true, settleWaitMs: popDelayMs)
+            .Should().Be(0);
+    }
+
+    [Fact]
+    public void GetSelectionDelayMs_WithBudgetLeft_SpendsOnlyWhatRemains()
+    {
+        // A short system double-click time settles sooner than the cap, leaving budget over.
+        PopButtonService.GetSelectionDelayMs(220, isMultiClick: true, settleWaitMs: 200)
+            .Should().Be(20);
+        // Never more than the gesture's own delay, however much budget is left.
+        PopButtonService.GetSelectionDelayMs(600, isMultiClick: true, settleWaitMs: 150)
+            .Should().Be(PopButtonService.MultiClickSelectionDelayMs);
+    }
+
+    [Fact]
+    public void GetSelectionDelayMs_ForADrag_AtMinimum_StillLeavesTheSourceAppAMoment()
+    {
+        SettingsService.MinMouseSelectionPopDelayMs.Should().Be(10,
+            "reading the selection with no wait at all races the source app");
+
+        PopButtonService.GetSelectionDelayMs(
+            SettingsService.MinMouseSelectionPopDelayMs, isMultiClick: false)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+        // A settings file from an older build (or a hand-edit) cannot drive it below the floor.
+        PopButtonService.GetSelectionDelayMs(0, isMultiClick: false)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+    }
+
+    [Fact]
+    public void GetSelectionDelayMs_BelowGestureDelay_LowersTheWait()
+    {
+        PopButtonService.GetSelectionDelayMs(60, isMultiClick: false).Should().Be(60);
+    }
+
+    [Theory]
+    [InlineData(SettingsService.MinMouseSelectionPopDelayMs)]
+    [InlineData(SettingsService.DefaultMouseSelectionPopDelayMs)]
+    [InlineData(SettingsService.MaxMouseSelectionPopDelayMs)]
+    public void GetSelectionDelayMs_NeverExceedsTheConfiguredBudget(int popDelayMs)
+    {
+        // What the two paths add up to is what the setting promises: the whole pre-query wait.
+        PopButtonService.GetSelectionDelayMs(popDelayMs, isMultiClick: false)
+            .Should().BeLessThanOrEqualTo(popDelayMs);
+
+        foreach (var settleWaitMs in new[] { 0, 10, 150, popDelayMs })
+        {
+            (settleWaitMs + PopButtonService.GetSelectionDelayMs(
+                popDelayMs, isMultiClick: true, settleWaitMs))
+                .Should().BeLessThanOrEqualTo(Math.Max(popDelayMs, settleWaitMs));
+        }
+    }
+
+    [Fact]
+    public void MouseSelectionPopDelayMs_DefaultsToCurrentBehaviorAndClamps()
+    {
+        SettingsService.DefaultMouseSelectionPopDelayMs
+            .Should().Be(MouseHookService.MaxMultiClickWaitMs, "the default must not change today's timing");
+
+        var settings = SettingsService.Instance;
+        var original = settings.MouseSelectionPopDelayMs;
+        try
+        {
+            settings.MouseSelectionPopDelayMs = 0;
+            settings.MouseSelectionPopDelayMs.Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+
+            settings.MouseSelectionPopDelayMs = 99999;
+            settings.MouseSelectionPopDelayMs.Should().Be(SettingsService.MaxMouseSelectionPopDelayMs);
+
+            settings.MouseSelectionPopDelayMs = 120;
+            settings.MouseSelectionPopDelayMs.Should().Be(120);
+        }
+        finally
+        {
+            settings.MouseSelectionPopDelayMs = original;
+        }
     }
 
     [Fact]

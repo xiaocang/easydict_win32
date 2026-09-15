@@ -1630,4 +1630,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>로그인이 취소되었습니다.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>브라우저를 열 수 없습니다. 대신 아래의 "API 키 받기" 링크를 사용하세요.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>연결 해제</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>고급</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>선택 후 아이콘 표시 지연</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>텍스트를 선택한 뒤 번역 아이콘이 나타나기까지 기다리는 시간입니다. 값이 작을수록 빠르게 나타납니다. 세 번 클릭할 때 아이콘이 깜박이면 값을 늘리세요.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>선택한 텍스트를 가져오는 중…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>텍스트를 인식하는 중…</value></data>
 </root>

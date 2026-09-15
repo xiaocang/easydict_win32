@@ -352,7 +352,7 @@ public class MouseHookServiceTests
     {
         using var service = new MouseHookService();
         int fireCount = 0;
-        service.OnDragSelectionEnd += _ => fireCount++;
+        service.OnMultiClickSelectionEnd += (_, _) => fireCount++;
 
         // First click (down + up, no drag)
         service.ProcessMouseMessage(0x0201, Pt(100, 100));
@@ -365,6 +365,74 @@ public class MouseHookServiceTests
         // The timer fires asynchronously, so the event count depends on timing.
         // But the click detector should have count=2.
         service.ClickDetector.ClickCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ProcessMouseMessage_DoubleClick_FiresMultiClickEventWithItsSettleWait()
+    {
+        using var service = new MouseHookService();
+        var fired = new TaskCompletionSource<(POINT Point, int SettleWaitMs)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        service.OnMultiClickSelectionEnd += (pt, settleWaitMs) => fired.TrySetResult((pt, settleWaitMs));
+        service.OnDragSelectionEnd += _ => fired.TrySetException(
+            new InvalidOperationException("multi-click must not fire the drag event"));
+
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+
+        // Deliberately not a latency assertion: a loaded CI agent delays timer callbacks by
+        // seconds, and how short the wait is belongs to GetMultiClickWaitMs, which is pure.
+        // What matters here is that the multi-click path fires its own event and reports the
+        // wait it spent, so PopButtonService can subtract it from the user's pop delay.
+        var result = await fired.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        result.Point.x.Should().Be(100);
+        result.SettleWaitMs.Should().BePositive()
+            .And.BeLessThanOrEqualTo(MouseHookService.MaxMultiClickWaitMs);
+    }
+
+    // --- Multi-click settle wait ---
+
+    [Fact]
+    public void GetMultiClickWaitMs_WithDefaultDoubleClickTime_IsCapped()
+    {
+        // Windows default is 500ms; the old behavior waited 550ms before the pop button.
+        MouseHookService.GetMultiClickWaitMs(500)
+            .Should().Be(MouseHookService.MaxMultiClickWaitMs);
+    }
+
+    [Fact]
+    public void GetMultiClickWaitMs_WithShortDoubleClickTime_UsesSettleWindow()
+    {
+        MouseHookService.GetMultiClickWaitMs(100).Should().Be(150);
+    }
+
+    [Fact]
+    public void GetMultiClickWaitMs_WithUserCap_HonorsTheConfiguredDelay()
+    {
+        // A raised pop delay can only wait as long as the system double-click time allows.
+        MouseHookService.GetMultiClickWaitMs(500, capMs: 600).Should().Be(550);
+        MouseHookService.GetMultiClickWaitMs(500, capMs: 80).Should().Be(80);
+        // Never below the floor, whatever a stale settings file asks for.
+        MouseHookService.GetMultiClickWaitMs(500, capMs: 0)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+        MouseHookService.GetMultiClickWaitMs(500, capMs: -10)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+    }
+
+    [Fact]
+    public void GetMultiClickWaitMs_WithExtremeDoubleClickTime_DoesNotOverflow()
+    {
+        MouseHookService.GetMultiClickWaitMs(uint.MaxValue)
+            .Should().Be(MouseHookService.MaxMultiClickWaitMs);
+    }
+
+    [Fact]
+    public void MaxMultiClickWaitMs_KeepsPopButtonUnderHalfASecond()
+    {
+        (MouseHookService.MaxMultiClickWaitMs + PopButtonService.MultiClickSelectionDelayMs)
+            .Should().BeLessThan(500, "the icon should appear promptly after a double-click");
     }
 
     [Fact]

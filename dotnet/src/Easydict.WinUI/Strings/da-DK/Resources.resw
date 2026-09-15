@@ -1630,4 +1630,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Login annulleret.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Browseren kunne ikke åbnes. Brug i stedet linket "Hent en API-nøgle" nedenfor.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Afbryd forbindelse</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Avanceret</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Forsinkelse for markeringsikon</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Hvor længe der ventes efter en markering, før oversættelsesikonet vises. Lavere er hurtigere; hæv værdien, hvis ikonet blinker ved et langsomt tredobbeltklik.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>Henter markeret tekst…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>Genkender tekst…</value></data>
 </root>

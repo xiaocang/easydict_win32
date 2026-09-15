@@ -449,7 +449,11 @@ namespace Easydict.WinUI
                         var processName = PopButtonService.GetForegroundProcessName();
                         return SettingsService.Instance.IsMouseSelectionExcluded(processName);
                     };
+                    // Read live so a changed pop delay applies without re-wiring the hook.
+                    _mouseHookService.MultiClickWaitCapProvider =
+                        () => SettingsService.Instance.MouseSelectionPopDelayMs;
                     _mouseHookService.OnDragSelectionEnd += _popButtonService.OnDragSelectionEnd;
+                    _mouseHookService.OnMultiClickSelectionEnd += _popButtonService.OnMultiClickSelectionEnd;
                     _mouseHookService.OnMouseDown += () => _popButtonService.Dismiss("MouseDown");
                     _mouseHookService.OnMouseScroll += () => _popButtonService.Dismiss("MouseScroll");
                     _mouseHookService.OnRightMouseDown += () => _popButtonService.Dismiss("RightMouseDown");

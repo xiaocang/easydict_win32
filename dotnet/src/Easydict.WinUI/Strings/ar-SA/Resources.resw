@@ -1630,4 +1630,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>تم إلغاء تسجيل الدخول.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>تعذر فتح المتصفح. استخدم رابط "الحصول على مفتاح API" أدناه بدلاً من ذلك.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>قطع الاتصال</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>خيارات متقدمة</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>تأخير ظهور أيقونة التحديد</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>مدة الانتظار بعد تحديد النص قبل ظهور أيقونة الترجمة. القيم الأقل أسرع؛ ارفعها إذا كانت الأيقونة تومض عند النقر ثلاث مرات ببطء.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>جارٍ قراءة النص المحدد…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>جارٍ التعرف على النص…</value></data>
 </root>

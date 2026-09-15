@@ -1709,6 +1709,9 @@ public sealed partial class SettingsPage : Page
         HideEmptyServiceResultsToggle.Header = loc.GetString("HideEmptyServiceResults");
         EnableLocalDictionarySuggestionsLabelText.Text = loc.GetString("EnableLocalDictionarySuggestions");
         ExperimentalLabelText.Text = loc.GetString("Experimental");
+        AdvancedBehaviorHeaderText.Text = loc.GetString("AdvancedBehaviorHeader");
+        MouseSelectionPopDelayLabel.Text = loc.GetString("MouseSelectionPopDelay");
+        MouseSelectionPopDelayDescriptionText.Text = loc.GetString("MouseSelectionPopDelayDescription");
     }
 
     private void ApplyUILanguageLocalization(LocalizationService loc)
@@ -2347,6 +2350,7 @@ public sealed partial class SettingsPage : Page
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
         TtsSpeedSlider.ValueChanged += OnSettingChanged;
         ResultFontScaleSlider.ValueChanged += OnSettingChanged;
+        MouseSelectionPopDelaySlider.ValueChanged += OnSettingChanged;
         AutoPlayTranslationToggle.Toggled += OnSettingChanged;
         TtsVoiceCombo.SelectionChanged += OnTtsVoiceSelectionChanged;
 
@@ -2470,6 +2474,7 @@ public sealed partial class SettingsPage : Page
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
         TtsSpeedSlider.ValueChanged -= OnSettingChanged;
         ResultFontScaleSlider.ValueChanged -= OnSettingChanged;
+        MouseSelectionPopDelaySlider.ValueChanged -= OnSettingChanged;
         AutoPlayTranslationToggle.Toggled -= OnSettingChanged;
         TtsVoiceCombo.SelectionChanged -= OnTtsVoiceSelectionChanged;
 
@@ -2901,6 +2906,7 @@ public sealed partial class SettingsPage : Page
             || HideEmptyServiceResultsToggle.IsOn != _settings.HideEmptyServiceResults
             || EnableLocalDictionarySuggestionsToggle.IsOn != _settings.EnableLocalDictionarySuggestions
             || !SameDouble(ResultFontScaleSlider.Value, _settings.ResultFontScale)
+            || (int)Math.Round(MouseSelectionPopDelaySlider.Value) != _settings.MouseSelectionPopDelayMs
             || CompactModeToggle.IsOn != _settings.CompactMode
             || ShowOcrButtonToggle.IsOn != _settings.ShowOcrButton
             || ShowPinButtonToggle.IsOn != _settings.ShowPinButton
@@ -3202,6 +3208,7 @@ public sealed partial class SettingsPage : Page
                 ? Visibility.Visible : Visibility.Collapsed;
             AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
             ResultFontScaleSlider.Value = _settings.ResultFontScale;
+            MouseSelectionPopDelaySlider.Value = _settings.MouseSelectionPopDelayMs;
             CompactModeToggle.IsOn = _settings.CompactMode;
             ShowOcrButtonToggle.IsOn = _settings.ShowOcrButton;
             ShowPinButtonToggle.IsOn = _settings.ShowPinButton;
@@ -4629,6 +4636,7 @@ public sealed partial class SettingsPage : Page
             .ToList();
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.ResultFontScale = ResultFontScaleSlider.Value;
+        _settings.MouseSelectionPopDelayMs = (int)Math.Round(MouseSelectionPopDelaySlider.Value);
         _settings.CompactMode = CompactModeToggle.IsOn;
         _settings.ShowOcrButton = ShowOcrButtonToggle.IsOn;
         _settings.ShowPinButton = ShowPinButtonToggle.IsOn;

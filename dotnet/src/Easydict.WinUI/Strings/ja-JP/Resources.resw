@@ -1630,4 +1630,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>サインインをキャンセルしました。</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>ブラウザーを開けませんでした。代わりに下の「API キーを取得」リンクをご利用ください。</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>接続を解除</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>詳細設定</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>選択後のアイコン表示遅延</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>テキストを選択してから翻訳アイコンが表示されるまでの待ち時間です。小さいほど速く表示されます。トリプルクリックでアイコンがちらつく場合は大きくしてください。</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>選択テキストを取得しています…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>文字を認識しています…</value></data>
 </root>

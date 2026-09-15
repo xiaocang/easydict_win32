@@ -416,13 +416,11 @@ public sealed class TranslationManager : IDisposable
         if (sourceLanguage == Language.English)
             return request.Text?.Trim();
 
-        // Detection never resolved: fall back to the script of the text itself.
-        if (sourceLanguage == Language.Auto
-            && WordQueryHeuristics.LooksLikeEnglishWord(request.Text))
-        {
-            return request.Text?.Trim();
-        }
-
+        // No script-based guess here. Latin letters are not evidence of English, and the
+        // homographs are exactly the words a dictionary lookup would answer confidently and
+        // wrongly: French "chat" or German "gift" would come back with the English
+        // pronunciation and get merged into the result. An unresolved language means unknown,
+        // so no pronunciation is fetched.
         return null;
     }
 

@@ -122,14 +122,26 @@ public static class PhoneticDisplayHelper
     /// </summary>
     /// <remarks>
     /// Phonetics are a dictionary affordance, so they are shown for word lookups in either
-    /// direction and suppressed for sentences. US/UK pronunciations require an English side;
+    /// direction and suppressed for sentence translation. US/UK pronunciations require an English side;
     /// romanizations ("src"/"dest", e.g. pinyin from Google) are shown whenever a service
     /// provides them.
     /// </remarks>
     public static IReadOnlyList<Phonetic> GetDisplayPhonetics(TranslationResult? result)
     {
-        if (result is null || !WordQueryHeuristics.IsWordQuery(result.OriginalText))
+        if (result is null)
             return [];
+
+        // A result is a dictionary lookup when either side is word-sized: the query in en→zh,
+        // the translation in zh→en. Checking only the query would discard pronunciations for
+        // CJK words longer than the CJK heuristic allows (コンピューター, 안녕하세요, a four-character
+        // idiom) whose English translation is an ordinary word. Checking only the translation
+        // would discard them for dictionary services whose translation is a gloss rather than a
+        // word ("int. 喂；你好" from Youdao).
+        if (!WordQueryHeuristics.IsWordQuery(result.OriginalText)
+            && !WordQueryHeuristics.IsWordQuery(result.TranslatedText))
+        {
+            return [];
+        }
 
         var phonetics = result.WordResult?.Phonetics;
         if (phonetics == null || phonetics.Count == 0)

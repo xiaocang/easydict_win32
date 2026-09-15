@@ -98,27 +98,31 @@ public class PhoneticEnrichmentDirectionTests : IDisposable
         enriched.WordResult!.Phonetics.Should().HaveCount(2);
     }
 
-    [Fact]
-    public async Task EnrichPhonetics_AutoSourceUndetectedEnglishWord_UsesQueryText()
+    [Theory]
+    [InlineData("serendipity", "机缘巧合")]
+    [InlineData("chat", "猫")]      // French: an English homograph, pronounced /ʃa/
+    [InlineData("gift", "毒药")]     // German: an English homograph, means poison
+    public async Task EnrichPhonetics_UnresolvedLatinSource_Skips(string text, string translated)
     {
-        // Several services hardcode DetectedLanguage to Auto. Falling back to the script of
-        // the text keeps those services from silently losing their pronunciation.
+        // Latin letters are not evidence of English. Guessing from the script would send an
+        // English homograph to the dictionary, which answers confidently and wrongly, and the
+        // unrelated pronunciation would then be merged into the result.
         var request = new TranslationRequest
         {
-            Text = "serendipity",
+            Text = text,
             FromLanguage = Language.Auto,
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var enriched = await _manager.EnrichPhoneticsIfMissingAsync(
-            Result("serendipity", "机缘巧合", Language.SimplifiedChinese), request);
+        var original = Result(text, translated, Language.SimplifiedChinese);
+        var enriched = await _manager.EnrichPhoneticsIfMissingAsync(original, request);
 
-        _lookups.Should().Equal("serendipity");
-        enriched.WordResult!.Phonetics.Should().HaveCount(2);
+        _lookups.Should().BeEmpty("an unresolved source language means unknown, not English");
+        enriched.Should().BeSameAs(original);
     }
 
     [Fact]
-    public async Task EnrichPhonetics_AutoSourceUndetectedNonLatinWord_Skips()
+    public async Task EnrichPhonetics_UnresolvedNonLatinSource_Skips()
     {
         var request = new TranslationRequest
         {

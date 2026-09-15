@@ -394,6 +394,34 @@ public class PhoneticDisplayHelperTests
             "a US pronunciation is meaningless when no side of the result is English");
     }
 
+    [Theory]
+    [InlineData("コンピューター", "computer")]   // Japanese katakana, 7 characters
+    [InlineData("안녕하세요", "hello")]           // Korean hangul, 5 characters
+    [InlineData("一石二鸟", "kill two birds")]   // four-character Chinese idiom
+    public void GetDisplayPhonetics_LongerCjkWord_ShowsPronunciation(string original, string translated)
+    {
+        // The CJK word heuristic only accepts 1-3 characters, so gating display on the query
+        // alone would discard the pronunciation of a perfectly ordinary CJK dictionary word
+        // whose English translation the host had already looked up.
+        var result = Lookup(original, translated, Language.English, Language.Auto,
+            new Phonetic { Text = "kəmˈpjuːtər", Accent = "US" });
+
+        PhoneticDisplayHelper.GetDisplayPhonetics(result).Should().ContainSingle(
+            p => p.Accent == "US",
+            "the English side is a word even though the query is a longer CJK string");
+    }
+
+    [Fact]
+    public void GetDisplayPhonetics_GlossTranslation_ShowsPronunciation()
+    {
+        // Youdao's dictionary translation is a gloss ("int. 喂；你好"), never a bare word, so
+        // gating display on the translation alone would hide every Youdao pronunciation.
+        var result = Lookup("hello", "int. 喂；你好", Language.SimplifiedChinese, Language.English,
+            new Phonetic { Text = "həˈloʊ", Accent = "US" });
+
+        PhoneticDisplayHelper.GetDisplayPhonetics(result).Should().ContainSingle(p => p.Accent == "US");
+    }
+
     [Fact]
     public void GetDisplayPhonetics_Sentence_ReturnsEmpty()
     {

@@ -46,6 +46,17 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         }
     }
 
+    /// <summary>
+    /// Accepted to satisfy <see cref="IServiceResultView"/> and deliberately ignored.
+    /// </summary>
+    /// <remarks>
+    /// The minimal theme renders no phonetic badges, by design and permanently: it trades
+    /// dictionary chrome for a bare result. This is a product decision, not an oversight or
+    /// a gap waiting to be filled — do not add phonetics here. The deduplication pass in
+    /// <see cref="ServiceResultViewHost.UpdatePhoneticDeduplication"/> still walks this
+    /// control, so the property exists and <see cref="GetDisplayedPhoneticKeys"/> reports
+    /// nothing, which correctly leaves every phonetic available to the other renderer.
+    /// </remarks>
     public HashSet<string>? AlreadyShownPhonetics { get; set; }
 
     public event EventHandler<ServiceQueryResult>? CollapseToggled;
@@ -94,6 +105,10 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         ResultText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
     }
 
+    /// <summary>
+    /// Always empty: the minimal theme shows no phonetic badges by design.
+    /// See <see cref="AlreadyShownPhonetics"/>.
+    /// </summary>
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();
 
     public (bool IsVisible, bool IsFavorited) FavoriteState => (_favoriteVisible, _isFavorited);

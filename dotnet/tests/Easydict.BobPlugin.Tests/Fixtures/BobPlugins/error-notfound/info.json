@@ -1,0 +1,7 @@
+{
+  "identifier": "test.error.notfound",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Not found",
+  "summary": "Always reports notFound."
+}

@@ -141,6 +141,18 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Show the mini window with text and query only one specific service (for example a plugin
+    /// triggered from the selection pop-up) is queried, even if it is configured as manual-query.
+    /// </summary>
+    public void ShowWithTextForService(string text, string serviceId, QuerySourceKind sourceKind)
+    {
+        ShowRequests.Invalidate();
+        EnsureWindowCreated();
+        _miniWindow?.SetTextAndQueryService(text, serviceId, sourceKind);
+        _miniWindow?.ShowAndActivate();
+    }
+
+    /// <summary>
     /// Refresh service results when settings change.
     /// </summary>
     public void RefreshServiceResults()

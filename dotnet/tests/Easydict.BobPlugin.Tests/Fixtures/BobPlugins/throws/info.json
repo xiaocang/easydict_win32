@@ -1,0 +1,7 @@
+{
+  "identifier": "test.throws",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Throwing plugin",
+  "summary": "Throws synchronously from translate."
+}

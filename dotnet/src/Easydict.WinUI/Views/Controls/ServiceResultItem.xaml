@@ -25,6 +25,20 @@
                 <RowDefinition Height="Auto"/>
 </Grid.RowDefinitions>
 
+            <!-- Origin accent stripe: shown only for third-party (plugin) services -->
+            <Rectangle
+                x:Name="OriginAccentStripe"
+                Grid.Row="0"
+                Width="3"
+                Margin="0,6"
+                RadiusX="1.5"
+                RadiusY="1.5"
+                HorizontalAlignment="Left"
+                Fill="{ThemeResource PluginAccentBrush}"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Canvas.ZIndex="11"/>
+
             <!-- Header Bar (30 DIPs, matches macOS EZResultViewMiniHeight) -->
             <Border
                 x:Name="HeaderBar"
@@ -58,15 +72,50 @@
                         Margin="0,0,6,0"
                         VerticalAlignment="Center"/>
 
-                    <!-- Service Name -->
-                    <TextBlock
-                        x:Name="ServiceNameText"
-                        TextTrimming="CharacterEllipsis"
-                        Grid.Column="1"
-                        FontSize="12"
-                        FontWeight="SemiBold"
-                        VerticalAlignment="Center"
-                        Foreground="{ThemeResource ServiceResultHeaderForegroundBrush}"/>
+                    <!-- Plugin corner mark over the icon (third-party services only) -->
+                    <FontIcon
+                        x:Name="OriginCornerIcon"
+                        Grid.Column="0"
+                        Glyph="&#xEA86;"
+                        FontSize="7"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,3,6"
+                        Foreground="{ThemeResource PluginAccentBrush}"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False"/>
+
+                    <!-- Service Name + origin badge -->
+                    <Grid Grid.Column="1" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="ServiceNameText"
+                            TextTrimming="CharacterEllipsis"
+                            Grid.Column="0"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource ServiceResultHeaderForegroundBrush}"/>
+                        <Border
+                            x:Name="OriginBadge"
+                            Grid.Column="1"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Margin="6,0,0,0"
+                            Padding="5,1"
+                            CornerRadius="4"
+                            Background="{ThemeResource PluginBadgeBackgroundBrush}"
+                            Visibility="Collapsed">
+                            <TextBlock
+                                x:Name="OriginBadgeText"
+                                FontSize="10"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource PluginBadgeForegroundBrush}"/>
+                        </Border>
+                    </Grid>
 
                     <!-- Status Text (timing/error) -->
                     <TextBlock

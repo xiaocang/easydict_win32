@@ -11,8 +11,11 @@ namespace Easydict.WinUI.Services;
 /// Local MDict (*.mdx) backed dictionary service.
 /// Supports both plain and type-2 encrypted (Salsa20/8) dictionaries.
 /// </summary>
-public sealed class MdxDictionaryTranslationService : ITranslationService
+public sealed class MdxDictionaryTranslationService : ITranslationService, IServiceOriginProvider
 {
+    /// <summary>Imported dictionaries are marked distinctly from built-in services in the UI.</summary>
+    public ServiceOrigin Origin { get; } = new(ServiceOriginKind.ImportedDictionary, "MDX");
+
     private static readonly Regex ScriptStyleRegex = new("<(script|style)[^>]*>[\\s\\S]*?</\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     private static readonly Regex TagRegex = new("<[^>]+>", RegexOptions.Compiled);
     private static readonly Regex LinkRedirectRegex = new(@"^@@@LINK=(.+)", RegexOptions.Compiled);

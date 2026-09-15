@@ -39,9 +39,16 @@ public sealed class TranslationManager : IDisposable
     private const long TranslationCacheLimitKb = 8 * 1024;
     private const long PhoneticCacheLimitKb = 512;
 
-    private readonly Dictionary<string, ITranslationService> _services = new();
+    private const int DefaultMaxRetries = 2;
+
+    // Copy-on-write registry: readers take the current snapshot without locking; writers replace
+    // the whole dictionary under _servicesLock. Insertion order is preserved because a fresh copy
+    // never contains holes, which the settings UI relies on for default display ordering.
+    private volatile Dictionary<string, ITranslationService> _services = new();
+    private readonly object _servicesLock = new();
     private readonly IMemoryCache _cache;
     private readonly IMemoryCache _phoneticCache;
+    private readonly HttpClientHandler _httpHandler;
     private readonly HttpClient _httpClient;
     private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<Phonetic>?>>> _phoneticFlightTracker = new();
 
@@ -74,7 +81,8 @@ public sealed class TranslationManager : IDisposable
             }
         }
 
-        _httpClient = new HttpClient(handler)
+        _httpHandler = handler;
+        _httpClient = new HttpClient(handler, disposeHandler: false)
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
@@ -137,6 +145,20 @@ public sealed class TranslationManager : IDisposable
     public HttpClient SharedHttpClient => _httpClient;
 
     /// <summary>
+    /// Create an additional <see cref="HttpClient"/> that shares this manager's proxy-configured
+    /// handler but has its own timeout. Intended for adapters (plugins, long-running streams)
+    /// that must not inherit the 30 s timeout of <see cref="SharedHttpClient"/>. The caller owns
+    /// the returned client; disposing it does not dispose the shared handler.
+    /// </summary>
+    public HttpClient CreateSharedHandlerClient(TimeSpan timeout)
+    {
+        return new HttpClient(_httpHandler, disposeHandler: false)
+        {
+            Timeout = timeout
+        };
+    }
+
+    /// <summary>
     /// The default service ID to use for translation.
     /// </summary>
     public string DefaultServiceId
@@ -155,13 +177,52 @@ public sealed class TranslationManager : IDisposable
     /// </summary>
     public void RegisterService(ITranslationService service)
     {
-        _services[service.ServiceId] = service;
+        ArgumentNullException.ThrowIfNull(service);
+
+        lock (_servicesLock)
+        {
+            var snapshot = new Dictionary<string, ITranslationService>(_services)
+            {
+                [service.ServiceId] = service
+            };
+            _services = snapshot;
+        }
     }
 
     /// <summary>
     /// Unregister a translation service by its ID.
     /// </summary>
-    public bool UnregisterService(string serviceId) => _services.Remove(serviceId);
+    public bool UnregisterService(string serviceId)
+    {
+        lock (_servicesLock)
+        {
+            if (!_services.ContainsKey(serviceId))
+            {
+                return false;
+            }
+
+            var snapshot = new Dictionary<string, ITranslationService>(_services);
+            snapshot.Remove(serviceId);
+            _services = snapshot;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// The execution policy the host honors for a service. Services that do not implement
+    /// <see cref="IServiceExecutionPolicyProvider"/> (and unknown ids) get <see cref="ServiceExecutionPolicy.Default"/>.
+    /// </summary>
+    public ServiceExecutionPolicy GetExecutionPolicy(string serviceId)
+    {
+        return _services.TryGetValue(serviceId, out var service)
+            ? GetExecutionPolicy(service)
+            : ServiceExecutionPolicy.Default;
+    }
+
+    private static ServiceExecutionPolicy GetExecutionPolicy(ITranslationService service)
+    {
+        return (service as IServiceExecutionPolicyProvider)?.ExecutionPolicy ?? ServiceExecutionPolicy.Default;
+    }
 
     /// <summary>
     /// Configure a service (e.g., set API key).
@@ -211,26 +272,32 @@ public sealed class TranslationManager : IDisposable
             };
         }
 
-        // Check cache first
-        if (!request.BypassCache)
+        var policy = GetExecutionPolicy(service);
+
+        // Check cache first (only when both the request and the service's policy allow it)
+        var cacheKey = !request.BypassCache && policy.AllowResultCache
+            ? GetCacheKey(request, serviceId, service)
+            : null;
+        if (cacheKey is not null
+            && _cache.TryGetValue(cacheKey, out TranslationResult? cached) && cached != null)
         {
-            var cacheKey = GetCacheKey(request, serviceId);
-            if (_cache.TryGetValue(cacheKey, out TranslationResult? cached) && cached != null)
-            {
-                return cached with { FromCache = true };
-            }
+            return cached with { FromCache = true };
         }
 
-        // Perform translation with retry
-        var result = await TranslateWithRetryAsync(service, request, cancellationToken);
+        // Perform translation with retry (a conservative policy gets exactly one attempt)
+        var result = await TranslateWithRetryAsync(
+            service, request, cancellationToken,
+            maxRetries: policy.AllowHostRetry ? DefaultMaxRetries : 0);
 
         // Enrich phonetics if missing (only for word queries targeting English)
-        result = await EnrichPhoneticsIfMissingAsync(result, request, cancellationToken);
+        if (policy.AllowPhoneticEnrichment)
+        {
+            result = await EnrichPhoneticsIfMissingAsync(result, request, cancellationToken);
+        }
 
         // Cache the result
-        if (!request.BypassCache)
+        if (cacheKey is not null)
         {
-            var cacheKey = GetCacheKey(request, serviceId);
             _cache.Set(cacheKey, result, CreateTranslationCacheOptions(cacheKey, request, result));
         }
 
@@ -245,12 +312,22 @@ public sealed class TranslationManager : IDisposable
     /// <param name="result">The translation result to potentially enrich.</param>
     /// <param name="request">The original translation request.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="serviceId">
+    /// Optional id of the service that produced <paramref name="result"/>. When given, the service's
+    /// <see cref="ServiceExecutionPolicy.AllowPhoneticEnrichment"/> is honored and the result is
+    /// returned unchanged if enrichment is not allowed.
+    /// </param>
     /// <returns>The original result with phonetics added, or unchanged if enrichment not needed/failed.</returns>
     public async Task<TranslationResult> EnrichPhoneticsIfMissingAsync(
         TranslationResult result,
         TranslationRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? serviceId = null)
     {
+        // Respect the producing service's policy (plugins may opt out of host-initiated network calls)
+        if (serviceId is not null && !GetExecutionPolicy(serviceId).AllowPhoneticEnrichment)
+            return result;
+
         // Only enrich when target language is English
         // US/UK phonetics are only meaningful for English words
         if (request.ToLanguage != Language.English)
@@ -345,14 +422,9 @@ public sealed class TranslationManager : IDisposable
         var existingPhonetics = result.WordResult?.Phonetics?.ToList() ?? [];
         var mergedPhonetics = existingPhonetics.Concat(phoneticsToAdd).ToList();
 
-        var newWordResult = new WordResult
-        {
-            Phonetics = mergedPhonetics,
-            Definitions = result.WordResult?.Definitions,
-            Examples = result.WordResult?.Examples
-        };
-
-        return result with { WordResult = newWordResult };
+        // WithPhonetics preserves every other dictionary field (definitions, examples, word forms,
+        // synonyms) so host post-processing never discards data a service returned.
+        return result with { WordResult = result.WordResult.WithPhonetics(mergedPhonetics) };
     }
 
     private static string GetPhoneticCacheKey(string englishWord)
@@ -544,11 +616,133 @@ public sealed class TranslationManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stream translation updates using the specified or default service.
+    /// Rich services (<see cref="IRichStreamTranslationService"/>) are passed through, so their
+    /// structured final result arrives in the same execution; legacy streaming services are wrapped
+    /// as <see cref="TranslationStreamUpdate.TextDelta"/>; non-streaming services yield a single
+    /// <see cref="TranslationStreamUpdate.Completed"/>.
+    /// Caching on this path is opt-in: only services that declare an explicit
+    /// <see cref="ServiceExecutionPolicy"/> allowing it get cache reads and writes here; legacy
+    /// streaming services keep the historical "streaming bypasses cache" behavior.
+    /// </summary>
+    public async IAsyncEnumerable<TranslationStreamUpdate> TranslateStreamUpdatesAsync(
+        TranslationRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default,
+        string? serviceId = null)
+    {
+        serviceId ??= _defaultServiceId;
+
+        if (!_services.TryGetValue(serviceId, out var service))
+        {
+            throw new TranslationException($"Unknown service: {serviceId}")
+            {
+                ErrorCode = TranslationErrorCode.Unknown,
+                ServiceId = serviceId
+            };
+        }
+
+        var cacheKey = !request.BypassCache
+            && service is IServiceExecutionPolicyProvider provider
+            && provider.ExecutionPolicy.AllowResultCache
+            ? GetCacheKey(request, serviceId, service)
+            : null;
+        if (cacheKey is not null
+            && _cache.TryGetValue(cacheKey, out TranslationResult? cached) && cached != null)
+        {
+            yield return new TranslationStreamUpdate.Completed(cached with { FromCache = true });
+            yield break;
+        }
+
+        TranslationResult? completed = null;
+        if (service is IRichStreamTranslationService richService)
+        {
+            var allowRetry = service is IServiceExecutionPolicyProvider richPolicyProvider
+                && richPolicyProvider.ExecutionPolicy.AllowHostRetry;
+
+            for (var attempt = 0; ; attempt++)
+            {
+                var retry = false;
+                var enumerator = richService.TranslateStreamUpdatesAsync(request, cancellationToken)
+                    .GetAsyncEnumerator(cancellationToken);
+                try
+                {
+                    while (true)
+                    {
+                        bool moved;
+                        try
+                        {
+                            moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                        }
+                        catch (TranslationException ex) when (
+                            allowRetry && attempt < DefaultMaxRetries && !IsNonRetryable(ex.ErrorCode))
+                        {
+                            retry = true;
+                            break;
+                        }
+                        catch (Exception) when (
+                            allowRetry && attempt < DefaultMaxRetries && !cancellationToken.IsCancellationRequested)
+                        {
+                            retry = true;
+                            break;
+                        }
+
+                        if (!moved)
+                        {
+                            break;
+                        }
+
+                        var update = enumerator.Current;
+                        if (update is TranslationStreamUpdate.Completed done)
+                        {
+                            completed = done.Result;
+                        }
+
+                        yield return update;
+                    }
+                }
+                finally
+                {
+                    await enumerator.DisposeAsync().ConfigureAwait(false);
+                }
+
+                if (!retry)
+                {
+                    break;
+                }
+
+                // Reset any partially-streamed text before retrying, matching TranslateWithRetryAsync's backoff.
+                await Task.Delay(500 * (attempt + 1), cancellationToken).ConfigureAwait(false);
+                yield return new TranslationStreamUpdate.TextSnapshot(string.Empty);
+            }
+        }
+        else if (service is IStreamTranslationService streamService)
+        {
+            await foreach (var chunk in streamService.TranslateStreamAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                yield return new TranslationStreamUpdate.TextDelta(chunk);
+            }
+        }
+        else
+        {
+            // TranslateAsync already applies policy, retry and caching for non-streaming services.
+            var result = await TranslateAsync(request, cancellationToken, serviceId).ConfigureAwait(false);
+            cacheKey = null;
+            yield return new TranslationStreamUpdate.Completed(result);
+        }
+
+        if (cacheKey is not null
+            && completed is { ResultKind: TranslationResultKind.Success, FromCache: false })
+        {
+            _cache.Set(cacheKey, completed, CreateTranslationCacheOptions(cacheKey, request, completed));
+        }
+    }
+
     private static async Task<TranslationResult> TranslateWithRetryAsync(
         ITranslationService service,
         TranslationRequest request,
         CancellationToken cancellationToken,
-        int maxRetries = 2)
+        int maxRetries = DefaultMaxRetries)
     {
         Exception? lastException = null;
 
@@ -561,9 +755,9 @@ public sealed class TranslationManager : IDisposable
 
                 return await service.TranslateAsync(request, cts.Token);
             }
-            catch (TranslationException ex) when (ex.ErrorCode == TranslationErrorCode.RateLimited)
+            catch (TranslationException ex) when (IsNonRetryable(ex.ErrorCode))
             {
-                // Don't retry rate limit errors
+                // Rate limits and configuration errors do not get better by retrying
                 throw;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -594,9 +788,29 @@ public sealed class TranslationManager : IDisposable
         throw lastException ?? new TranslationException("Translation failed after retries");
     }
 
-    private static string GetCacheKey(TranslationRequest request, string serviceId)
+    /// <summary>
+    /// Error codes that describe a stable condition (bad key, unsupported pair, oversized text,
+    /// missing model) rather than a transient failure. Retrying them only delays the error.
+    /// </summary>
+    private static bool IsNonRetryable(TranslationErrorCode code)
     {
-        var raw = $"{serviceId}|{request.FromLanguage}|{request.ToLanguage}|{request.Text}";
+        return code is TranslationErrorCode.RateLimited
+            or TranslationErrorCode.InvalidApiKey
+            or TranslationErrorCode.UnsupportedLanguage
+            or TranslationErrorCode.TextTooLong
+            or TranslationErrorCode.InvalidModel
+            or TranslationErrorCode.LocalModelNeedsPreparation;
+    }
+
+    private static string GetCacheKey(TranslationRequest request, string serviceId, ITranslationService? service)
+    {
+        // CustomPrompt changes LLM output; the discriminator captures service-side configuration
+        // (plugin version, options) that is not part of the request. OriginalText and
+        // DetectedFromLanguage are both passed straight through to a Bob plugin
+        // (BobTranslationService.BuildQueryJson) and can change its output even when Text/From/To
+        // are identical. All of it must separate cache entries.
+        var discriminator = (service as ICacheKeyDiscriminatorProvider)?.CacheKeyDiscriminator;
+        var raw = $"{serviceId}|{request.FromLanguage}|{request.ToLanguage}|{request.Text}|{request.CustomPrompt}|{request.OriginalText}|{request.DetectedFromLanguage}|{discriminator}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
         return Convert.ToHexString(bytes);
     }
@@ -607,6 +821,7 @@ public sealed class TranslationManager : IDisposable
         _cache.Dispose();
         _phoneticCache.Dispose();
         _httpClient.Dispose();
+        _httpHandler.Dispose();
     }
 }
 

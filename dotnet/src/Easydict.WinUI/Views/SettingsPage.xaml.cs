@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using Easydict.BobPlugin;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
@@ -34,6 +35,7 @@ internal enum SettingsTabId
     Services,
     Views,
     Hotkeys,
+    Plugins,
     Advanced,
     Language,
     About
@@ -244,6 +246,7 @@ public sealed partial class SettingsPage : Page
         new() { Id = SettingsTabId.Services, IconGlyph = "\uE90F" },
         new() { Id = SettingsTabId.Views, IconGlyph = "\uE8A7" },
         new() { Id = SettingsTabId.Hotkeys, IconGlyph = "\uE765" },
+        new() { Id = SettingsTabId.Plugins, IconGlyph = "\uEA86" },
         new() { Id = SettingsTabId.Advanced, IconGlyph = "\uE771" },
         new() { Id = SettingsTabId.Language, IconGlyph = "\uE774" },
         new() { Id = SettingsTabId.About, IconGlyph = "\uE946" }
@@ -1134,6 +1137,7 @@ public sealed partial class SettingsPage : Page
             ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;
         }
         HotkeysTabContent.Visibility = tabId == SettingsTabId.Hotkeys ? Visibility.Visible : Visibility.Collapsed;
+        PluginsTabContent.Visibility = tabId == SettingsTabId.Plugins ? Visibility.Visible : Visibility.Collapsed;
         AdvancedTabContent.Visibility = tabId == SettingsTabId.Advanced ? Visibility.Visible : Visibility.Collapsed;
         LanguageTabContent.Visibility = tabId == SettingsTabId.Language ? Visibility.Visible : Visibility.Collapsed;
         AboutTabContent.Visibility = tabId == SettingsTabId.About ? Visibility.Visible : Visibility.Collapsed;
@@ -2280,6 +2284,9 @@ public sealed partial class SettingsPage : Page
         ImportedMdxConfigPanel.Children.Clear();
         _mdxCredentialFields.Clear();
 
+        InstalledBobPluginsConfigPanel.Children.Clear();
+        _bobOptionFields.Clear();
+
         _mainWindowServices.Clear();
         _miniWindowServices.Clear();
         _fixedWindowServices.Clear();
@@ -3164,6 +3171,13 @@ public sealed partial class SettingsPage : Page
             InitializeOpenVinoPanel();
         }
 
+        if (ShouldLoadSettingsTab(SettingsTabId.Plugins, deferLazyTabData))
+        {
+            UpdateBobPluginsSummary();
+            BuildInstalledBobPluginsConfigUI();
+            BuildTextActionsUI();
+        }
+
         if (ShouldLoadSettingsTab(SettingsTabId.General, deferLazyTabData))
         {
             // TTS settings
@@ -3878,7 +3892,8 @@ public sealed partial class SettingsPage : Page
                     IsChecked = isAvailable && enabledServices.Contains(serviceId),
                     EnabledQuery = enabledQuery,
                     IsAvailable = isAvailable,
-                    IsUnconfigured = service.RequiresApiKey && !service.IsConfigured
+                    IsUnconfigured = service.RequiresApiKey && !service.IsConfigured,
+                    OriginBadgeText = ServiceOriginHelper.BadgeText(ServiceOriginHelper.Resolve(service, serviceId))
                 };
 
                 collection.Add(item);
@@ -3900,6 +3915,12 @@ public sealed partial class SettingsPage : Page
         if (serviceId.StartsWith("mdx::", StringComparison.OrdinalIgnoreCase))
         {
             return 1000 + registrationIndex;
+        }
+
+        // Third-party plugins sit after everything Easydict ships, never interleaved with it.
+        if (serviceId.StartsWith(BobServiceIds.Prefix, StringComparison.Ordinal))
+        {
+            return 1500 + registrationIndex;
         }
 
         return 2000 + registrationIndex;
@@ -4588,6 +4609,9 @@ public sealed partial class SettingsPage : Page
 
         // Save encrypted MDX dictionary credentials from dynamic UI
         SaveEncryptedMdxCredentials();
+
+        // Save Bob plugin options from dynamic UI (secure ones go to the credential store)
+        SaveBobPluginOptions();
 
         // Save HTTP Proxy settings (already validated above)
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;

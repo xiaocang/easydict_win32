@@ -1557,6 +1557,71 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>正在嘗試備用辨識服務。</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>備用服務已辨識為 {0}，可以繼續操作。</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>無法辨識來源語言。請手動選擇語言，或稍後再試。</value></data>
+  <data name="TextActionsButtonTooltip" xml:space="preserve"><value>文字動作</value></data>
+  <data name="TextActionsSelectTextFirst" xml:space="preserve"><value>請先輸入或選取文字</value></data>
+  <data name="TextActionsNoActions" xml:space="preserve"><value>尚未設定動作（設定 → 進階 → 文字動作）</value></data>
+  <data name="TextActionsGroupSearch" xml:space="preserve"><value>搜尋</value></data>
+  <data name="TextActionsGroupServices" xml:space="preserve"><value>服務</value></data>
+  <data name="TextActionsGroupPlugins" xml:space="preserve"><value>Bob 外掛</value></data>
+  <data name="TextActionsHeader" xml:space="preserve"><value>文字動作</value></data>
+  <data name="TextActionsDescription" xml:space="preserve"><value>對選取或輸入的文字執行動作：開啟搜尋網站，或只執行某個服務（例如 Bob 外掛）。動作會出現在每個視窗的「動作」選單中，也可以顯示在劃詞按鈕上。</value></data>
+  <data name="TextActionsPopButtonHint" xml:space="preserve"><value>勾選「顯示在劃詞按鈕」的動作會在劃詞後出現在翻譯圖示旁（需要開啟滑鼠劃詞翻譯）。</value></data>
+  <data name="TextActionAdd" xml:space="preserve"><value>新增動作</value></data>
+  <data name="TextActionResetDefaults" xml:space="preserve"><value>恢復預設</value></data>
+  <data name="TextActionEnabled" xml:space="preserve"><value>啟用</value></data>
+  <data name="TextActionShowOnPopButton" xml:space="preserve"><value>顯示在劃詞按鈕</value></data>
+  <data name="TextActionMoveUp" xml:space="preserve"><value>上移</value></data>
+  <data name="TextActionMoveDown" xml:space="preserve"><value>下移</value></data>
+  <data name="TextActionEdit" xml:space="preserve"><value>編輯</value></data>
+  <data name="TextActionDelete" xml:space="preserve"><value>刪除</value></data>
+  <data name="TextActionServiceSubtitle" xml:space="preserve"><value>執行服務：{0}</value></data>
+  <data name="TextActionTypeUrl" xml:space="preserve"><value>開啟網址</value></data>
+  <data name="TextActionTypeService" xml:space="preserve"><value>執行服務</value></data>
+  <data name="TextActionTitle" xml:space="preserve"><value>標題</value></data>
+  <data name="TextActionUrlTemplate" xml:space="preserve"><value>網址範本</value></data>
+  <data name="TextActionUrlHint" xml:space="preserve"><value>佔位符：{encodedText}、{encodedTranslation}、{from}、{to}。僅支援 http/https 網址。</value></data>
+  <data name="TextActionServiceLabel" xml:space="preserve"><value>服務</value></data>
+  <data name="TextActionDialogAddTitle" xml:space="preserve"><value>新增文字動作</value></data>
+  <data name="TextActionDialogEditTitle" xml:space="preserve"><value>編輯文字動作</value></data>
+  <data name="TextActionDuplicate" xml:space="preserve"><value>該服務的動作已存在。</value></data>
+  <data name="TextActionInvalidUrl" xml:space="preserve"><value>請輸入包含 {encodedText} 的有效 http(s) 網址範本。</value></data>
+  <data name="Save" xml:space="preserve"><value>儲存</value></data>
+  <data name="ServiceOrigin_BobBadge" xml:space="preserve"><value>Bob 外掛</value></data>
+  <data name="ServiceOrigin_PluginBadge" xml:space="preserve"><value>外掛</value></data>
+  <data name="ServiceOrigin_MdxBadge" xml:space="preserve"><value>MDX 字典</value></data>
+  <data name="ServiceOrigin_PluginTooltip" xml:space="preserve"><value>第三方 {0} 外掛{1}。不是 Easydict 內建服務；網路請求與資料處理由外掛自行完成。</value></data>
+  <data name="ServiceOrigin_MdxTooltip" xml:space="preserve"><value>您匯入的字典檔案。本機查詢，不是 Easydict 內建服務。</value></data>
+  <data name="ServiceOrigin_NameSuffix" xml:space="preserve"><value>{0}（{1}）</value></data>
+  <data name="BobPluginImportButton" xml:space="preserve"><value>匯入 Bob 外掛</value></data>
+  <data name="BobPluginSummaryNone" xml:space="preserve"><value>未安裝 Bob 外掛</value></data>
+  <data name="BobPluginSummaryOne" xml:space="preserve"><value>已安裝 1 個 Bob 外掛</value></data>
+  <data name="BobPluginSummaryMany" xml:space="preserve"><value>已安裝 {0} 個 Bob 外掛</value></data>
+  <data name="BobPluginImportSuccessTitle" xml:space="preserve"><value>外掛已安裝</value></data>
+  <data name="BobPluginImportSuccessMessage" xml:space="preserve"><value>「{0}」已以手動查詢服務的方式安裝。點擊它的結果卡片即可執行；劃詞後按鈕列上也會出現它的圖示（需開啟滑鼠劃詞翻譯）。</value></data>
+  <data name="BobPluginImportFailedTitle" xml:space="preserve"><value>匯入失敗</value></data>
+  <data name="BobPluginUnsupportedCategory" xml:space="preserve"><value>Easydict 只支援翻譯類外掛，此外掛套件宣告的是其他類別。</value></data>
+  <data name="BobPluginsSectionHeader" xml:space="preserve"><value>Bob 外掛（第三方）</value></data>
+  <data name="BobPluginsSectionDescription" xml:space="preserve"><value>由第三方 JavaScript 外掛提供，不是 Easydict 內建服務；網路請求與資料處理由外掛自行完成。已安裝的外掛預設手動查詢，不快取、不重試。</value></data>
+  <data name="BobPluginOptionsHeader" xml:space="preserve"><value>外掛選項</value></data>
+  <data name="BobPluginAuthor" xml:space="preserve"><value>作者</value></data>
+  <data name="BobPluginHomepage" xml:space="preserve"><value>外掛首頁</value></data>
+  <data name="BobPluginValidate" xml:space="preserve"><value>驗證</value></data>
+  <data name="BobPluginValidating" xml:space="preserve"><value>檢查中…</value></data>
+  <data name="BobPluginValidateSuccess" xml:space="preserve"><value>外掛回報設定可用。</value></data>
+  <data name="BobPluginValidateFailed" xml:space="preserve"><value>外掛回報設定有問題。</value></data>
+  <data name="BobPluginValidateNotSupported" xml:space="preserve"><value>此外掛沒有提供自我檢查。</value></data>
+  <data name="BobPluginRemove" xml:space="preserve"><value>移除</value></data>
+  <data name="BobPluginRemoveConfirm" xml:space="preserve"><value>移除「{0}」並刪除它的檔案與已儲存的選項？</value></data>
+  <data name="BobPluginAllowCache" xml:space="preserve"><value>重複使用快取結果</value></data>
+  <data name="BobPluginAllowRetry" xml:space="preserve"><value>失敗後自動重試</value></data>
+  <data name="BobPluginAllowPhonetics" xml:space="preserve"><value>從有道補充音標</value></data>
+  <data name="BobPluginShowOnPopButton" xml:space="preserve"><value>顯示在劃詞按鈕上</value></data>
+  <data name="BobPluginPolicyHint" xml:space="preserve"><value>預設關閉：外掛可能產生計費、觸發限流或寫入 Easydict 看不到的內容，只有你允許後才會啟用這些行為。</value></data>
+  <data name="SettingsTab_Plugins" xml:space="preserve"><value>外掛</value></data>
+  <data name="SettingsTab_Plugins_Tooltip" xml:space="preserve"><value>匯入、設定和移除第三方 Bob 翻譯外掛。</value></data>
+  <data name="BobPluginsTabHeader" xml:space="preserve"><value>Bob 外掛</value></data>
+  <data name="BobPluginsTabDescription" xml:space="preserve"><value>安裝第三方 Bob 翻譯外掛。外掛執行在內嵌的 JavaScript 引擎中，與 Easydict 內建服務彼此獨立。</value></data>
+  <data name="BobPluginGetMoreLink" xml:space="preserve"><value>取得更多外掛</value></data>
   <data name="SignInWithOrcaRouter" xml:space="preserve"><value>使用 OrcaRouter 登入</value></data>
   <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>正在等待您在瀏覽器中完成登入…</value></data>
   <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>登入成功。OrcaRouter API 金鑰已儲存。</value></data>

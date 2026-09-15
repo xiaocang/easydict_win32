@@ -41,6 +41,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <ToggleButton
@@ -87,8 +88,26 @@
             </Button>
 
             <Button
-                x:Name="SavedItemsMoreButton"
+                x:Name="TextActionsButton"
+                AutomationProperties.AutomationId="TextActionsButton"
+                AutomationProperties.Name="Text actions"
                 Grid.Column="3"
+                Style="{StaticResource EasydictIconButtonStyle}"
+                ToolTipService.ToolTip="Text actions"
+                Width="32"
+                Height="32"
+                Padding="0">
+                <Button.Flyout>
+                    <MenuFlyout x:Name="TextActionsFlyout" Opening="OnTextActionsFlyoutOpening"/>
+                </Button.Flyout>
+                <FontIcon Glyph="&#xE721;"
+                        FontSize="14"
+                        Foreground="{ThemeResource ButtonForeground}"/>
+            </Button>
+
+            <Button
+                x:Name="SavedItemsMoreButton"
+                Grid.Column="4"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="History and favorites"
                 AutomationProperties.Name="History and favorites"
@@ -104,7 +123,7 @@
                 x:Name="CloseButton"
                 AutomationProperties.AutomationId="MiniWindowCloseButton"
                 AutomationProperties.Name="Close"
-                Grid.Column="4"
+                Grid.Column="5"
                 Click="OnCloseClicked"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Close"

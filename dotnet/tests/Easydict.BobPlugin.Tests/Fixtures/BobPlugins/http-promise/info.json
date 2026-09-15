@@ -1,0 +1,7 @@
+{
+  "identifier": "test.http.promise",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "HTTP promise",
+  "summary": "Uses the promise form of $http from an async translate."
+}

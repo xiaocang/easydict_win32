@@ -2,8 +2,10 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Models;
+using Easydict.WinUI.Services.TextActions;
 using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
 
@@ -35,6 +37,8 @@ public sealed class PopButtonService : IDisposable
     private readonly MouseHookService? _mouseHookService;
     private PopButtonWindow? _popWindow;
     private string? _pendingText;
+    private string? _appliedActionsSignature;
+    private ElementTheme _appliedActionsTheme;
     private CancellationTokenSource? _selectionCts;
     private CancellationTokenSource? _autoDismissCts;
     private bool _isDisposed;
@@ -119,6 +123,7 @@ public sealed class PopButtonService : IDisposable
                 if (_isDisposed || ct.IsCancellationRequested) return;
 
                 EnsureWindowCreated();
+                ApplyConfiguredActions();
                 _popWindow!.ShowAt(mouseScreenPoint.x, mouseScreenPoint.y);
 
                 // Start auto-dismiss timer
@@ -181,6 +186,63 @@ public sealed class PopButtonService : IDisposable
         });
     }
 
+    /// <summary>
+    /// Called when the user clicks one of the configured action buttons on the strip.
+    /// Hides the strip and runs the action on the selected text.
+    /// </summary>
+    private void OnPopActionClicked(TextAction action)
+    {
+        var text = _pendingText;
+        Dismiss("ActionClicked");
+
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        Debug.WriteLine($"[PopButtonService] Running action '{action.Id}' with text: '{text[..Math.Min(50, text.Length)]}...'");
+
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            if (action.Type == TextActionType.RunService)
+            {
+                // Same as the translate button: remember the source window so "replace" can write back.
+                TextInsertionService.CaptureSourceWindow();
+            }
+
+            _ = TextActionExecutor.ExecuteAsync(action, TextActionExecutor.CreateSelectionContext(text));
+        });
+    }
+
+    /// <summary>
+    /// Sync the strip with the configured pop-button actions. Buttons are only rebuilt when the
+    /// action list or theme changed since the last show (UI thread).
+    /// </summary>
+    private void ApplyConfiguredActions()
+    {
+        if (_popWindow is null) return;
+
+        try
+        {
+            var actions = TextActionRegistry.GetPopButtonActions();
+            var theme = MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme);
+            // Include every field the click handler or button rendering actually reads, not just
+            // Id/Title, so editing an action's URL template or target service (with the id and
+            // title unchanged) is detected and rebuilds the strip instead of firing stale data.
+            var signature = string.Join("|", actions.Select(a =>
+                $"{a.Action.Id}\u001f{a.Action.Title}\u001f{a.Action.Type}\u001f{a.Action.UrlTemplate}\u001f{a.Action.ServiceId}\u001f{a.Action.IconGlyph}\u001f{a.Origin.Kind}"));
+            if (signature == _appliedActionsSignature && theme == _appliedActionsTheme)
+            {
+                return;
+            }
+
+            _popWindow.SetActions(actions, theme);
+            _appliedActionsSignature = signature;
+            _appliedActionsTheme = theme;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PopButtonService] Failed to apply actions: {ex.Message}");
+        }
+    }
+
     private void OnMiniWindowModeChanged(QueryMode mode)
     {
         _dispatcherQueue.TryEnqueue(() =>
@@ -195,6 +257,7 @@ public sealed class PopButtonService : IDisposable
 
         _popWindow = new PopButtonWindow();
         _popWindow.OnClicked += OnPopButtonClicked;
+        _popWindow.OnActionClicked += OnPopActionClicked;
 
         // Register window handle with mouse hook service to prevent self-dismissal
         if (_mouseHookService != null)
@@ -251,6 +314,8 @@ public sealed class PopButtonService : IDisposable
     public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
         _popWindow?.ApplyTheme(theme, forceResourceRefresh);
+        // Icons are theme-dependent; rebuild the strip on next show.
+        _appliedActionsSignature = null;
     }
 
     internal static string? GetForegroundProcessName()
@@ -287,6 +352,7 @@ public sealed class PopButtonService : IDisposable
             if (_popWindow != null)
             {
                 _popWindow.OnClicked -= OnPopButtonClicked;
+                _popWindow.OnActionClicked -= OnPopActionClicked;
                 _popWindow.Close();
             }
         }

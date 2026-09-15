@@ -452,6 +452,7 @@ namespace Easydict.WinUI
                         return SettingsService.Instance.IsMouseSelectionExcluded(processName);
                     };
                     _mouseHookService.OnDragSelectionEnd += _popButtonService.OnDragSelectionEnd;
+                    _mouseHookService.OnMultiClickSelectionEnd += _popButtonService.OnMultiClickSelectionEnd;
                     _mouseHookService.OnMouseDown += () => _popButtonService.Dismiss("MouseDown");
                     _mouseHookService.OnMouseScroll += () => _popButtonService.Dismiss("MouseScroll");
                     _mouseHookService.OnRightMouseDown += () => _popButtonService.Dismiss("RightMouseDown");

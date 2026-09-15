@@ -35,7 +35,7 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
 
     /// <summary>
     /// Total time budget for the PopButton to appear after a selection gesture.
-    /// Accounts for: SelectionDelayMs (150) + TextSelectionService (~500ms) + margin.
+    /// Accounts for: SelectionDelayMs (150, drag path) + TextSelectionService (~500ms) + margin.
     /// </summary>
     private static readonly TimeSpan PopButtonTimeout = TimeSpan.FromSeconds(4);
 
@@ -162,12 +162,17 @@ public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
         _output.WriteLine($"Simulating double-click at ({clickX},{clickY})");
 
         // Act: Double-click to select a word
-        // Multi-click has additional delay: GetDoubleClickTime() + 50ms before firing
+        // Multi-click waits out the settle window first, capped at
+        // MouseHookService.MaxMultiClickWaitMs, then PopButtonService adds
+        // MultiClickSelectionDelayMs before querying the selection.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         Mouse.DoubleClick(clickPoint);
 
         // Assert: PopButton should appear (longer timeout for multi-click detection)
         var popHwnd = PopButtonFinder.WaitForPopButton(
             _fixture.EasydictProcessId, TimeSpan.FromSeconds(5));
+        stopwatch.Stop();
+        _output.WriteLine($"PopButton latency after double-click: {stopwatch.ElapsedMilliseconds}ms");
 
         var screenshotPath = ScreenshotHelper.CaptureScreen("e2e_double_click_result");
         _output.WriteLine($"Screenshot: {screenshotPath}");

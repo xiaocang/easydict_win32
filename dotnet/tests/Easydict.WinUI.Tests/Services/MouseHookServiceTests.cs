@@ -352,7 +352,7 @@ public class MouseHookServiceTests
     {
         using var service = new MouseHookService();
         int fireCount = 0;
-        service.OnMultiClickSelectionEnd += _ => fireCount++;
+        service.OnMultiClickSelectionEnd += (_, _) => fireCount++;
 
         // First click (down + up, no drag)
         service.ProcessMouseMessage(0x0201, Pt(100, 100));
@@ -371,8 +371,9 @@ public class MouseHookServiceTests
     public async Task ProcessMouseMessage_DoubleClick_FiresMultiClickEventPromptly()
     {
         using var service = new MouseHookService();
-        var fired = new TaskCompletionSource<POINT>(TaskCreationOptions.RunContinuationsAsynchronously);
-        service.OnMultiClickSelectionEnd += pt => fired.TrySetResult(pt);
+        var fired = new TaskCompletionSource<(POINT Point, int SettleWaitMs)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        service.OnMultiClickSelectionEnd += (pt, settleWaitMs) => fired.TrySetResult((pt, settleWaitMs));
         service.OnDragSelectionEnd += _ => fired.TrySetException(
             new InvalidOperationException("multi-click must not fire the drag event"));
 
@@ -385,7 +386,11 @@ public class MouseHookServiceTests
         // out the full system double-click time before the pop button can appear.
         var completed = await Task.WhenAny(fired.Task, Task.Delay(2000));
         completed.Should().BeSameAs(fired.Task, "the multi-click wait is capped");
-        (await fired.Task).x.Should().Be(100);
+        var result = await fired.Task;
+        result.Point.x.Should().Be(100);
+        // The listener needs the spent wait to keep the pop delay a whole-wait budget.
+        result.SettleWaitMs.Should().BePositive()
+            .And.BeLessThanOrEqualTo(MouseHookService.MaxMultiClickWaitMs);
     }
 
     // --- Multi-click settle wait ---

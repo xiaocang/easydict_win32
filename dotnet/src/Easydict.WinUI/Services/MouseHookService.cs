@@ -181,12 +181,13 @@ public sealed partial class MouseHookService : IDisposable
     public event Action<POINT>? OnDragSelectionEnd;
 
     /// <summary>
-    /// Fired when a double/triple-click selection settles.
-    /// Parameter is the screen coordinate of the last click.
+    /// Fired when a double/triple-click selection settles. Parameters are the screen
+    /// coordinate of the last click and how long the settle wait actually took.
     /// Separate from <see cref="OnDragSelectionEnd"/> because this path already waited
-    /// out the multi-click settle window, so listeners can query the selection sooner.
+    /// out the multi-click settle window: listeners can query the selection sooner, and
+    /// the elapsed wait lets them keep the user's pop delay as a whole-wait budget.
     /// </summary>
-    public event Action<POINT>? OnMultiClickSelectionEnd;
+    public event Action<POINT, int>? OnMultiClickSelectionEnd;
 
     /// <summary>
     /// Fired on any left mouse button down (used to dismiss the pop button).
@@ -444,7 +445,8 @@ public sealed partial class MouseHookService : IDisposable
                 // Wait just long enough for an additional click (double → triple),
                 // capped so the pop button is not held back by the full double-click time.
                 var dctTimer = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
-                await Task.Delay(GetMultiClickWaitMs(dctTimer, ResolveMultiClickWaitCapMs()), ct);
+                var settleWaitMs = GetMultiClickWaitMs(dctTimer, ResolveMultiClickWaitCapMs());
+                await Task.Delay(settleWaitMs, ct);
 
                 if (!ct.IsCancellationRequested && !IsCurrentAppExcludedSafely())
                 {
@@ -452,7 +454,8 @@ public sealed partial class MouseHookService : IDisposable
                     NativeCallbackGuard.Invoke(
                         "MouseHookService.OnMultiClickSelectionEnd",
                         OnMultiClickSelectionEnd,
-                        pt);
+                        pt,
+                        settleWaitMs);
                 }
             }
             catch (OperationCanceledException)

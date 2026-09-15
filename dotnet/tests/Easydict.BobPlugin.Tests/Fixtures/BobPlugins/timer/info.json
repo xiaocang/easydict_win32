@@ -1,0 +1,7 @@
+{
+  "identifier": "test.timer",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Timer",
+  "summary": "Completes from a $timer callback."
+}

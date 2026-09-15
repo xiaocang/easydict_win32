@@ -35,5 +35,19 @@ public sealed class TranslationRequest
     /// Has no effect on non-LLM services (Google, DeepL, etc.).
     /// </summary>
     public string? CustomPrompt { get; init; }
+
+    /// <summary>
+    /// The text exactly as captured from the user (before any host preprocessing such as
+    /// whitespace normalization). <c>null</c> when identical to <see cref="Text"/>.
+    /// Adapters that need the raw selection (for example Bob plugins' <c>originalText</c>)
+    /// should read this first and fall back to <see cref="Text"/>.
+    /// </summary>
+    public string? OriginalText { get; init; }
+
+    /// <summary>
+    /// The source language detected by the host, when it is known independently of
+    /// <see cref="FromLanguage"/>. <c>null</c> when no detection was performed.
+    /// </summary>
+    public Language? DetectedFromLanguage { get; init; }
 }
 

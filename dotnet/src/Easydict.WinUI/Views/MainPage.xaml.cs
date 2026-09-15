@@ -6,9 +6,11 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.TextActions;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.TextActions;
 using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
@@ -1252,6 +1254,8 @@ namespace Easydict.WinUI.Views
             // Tooltips
             ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
             ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
+            ToolTipService.SetToolTip(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
@@ -1674,6 +1678,7 @@ namespace Easydict.WinUI.Views
                     IsExpanded = descriptor.EnabledQuery, // Manual-query services start collapsed
                     CurrentMode = _currentQuickQueryMode,
                     IsGrammarCapable = isGrammarCapable,
+                    Origin = ServiceOriginHelper.Resolve(service, descriptor.ServiceId),
                 };
 
                 _serviceResults.Add(result);
@@ -1738,7 +1743,8 @@ namespace Easydict.WinUI.Views
                 }
 
                 // Get EnabledQuery setting (default true if not found)
-                var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
+                var enabledQuery = ServiceQuerySelection.IsEnabled(
+                    serviceId, ServiceOriginHelper.Resolve(service, serviceId), enabledQuerySettings);
                 descriptors.Add(new ServiceResultDescriptor(serviceId, displayName, enabledQuery));
             }
 
@@ -2732,9 +2738,11 @@ namespace Easydict.WinUI.Views
                         if (manager.IsStreamingService(serviceResult.ServiceId))
                         {
                             // Streaming path for LLM services
-                            await ExecuteStreamingTranslationForServiceAsync(
+                            var streamedResult = await ExecuteStreamingTranslationForServiceAsync(
                                 manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
-                            outcome = QueryExecutionOutcome.Success;
+                            outcome = streamedResult.ResultKind == TranslationResultKind.Success
+                                ? QueryExecutionOutcome.Success
+                                : QueryExecutionOutcome.Neutral;
                         }
                         else
                         {
@@ -3231,7 +3239,7 @@ namespace Easydict.WinUI.Views
         /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
         /// Manager is passed from caller who already acquired a handle to ensure consistent instance.
         /// </summary>
-        private async Task ExecuteStreamingTranslationForServiceAsync(
+        private async Task<TranslationResult> ExecuteStreamingTranslationForServiceAsync(
             TranslationManager manager,
             ServiceQueryResult serviceResult,
             TranslationRequest request,
@@ -3260,10 +3268,24 @@ namespace Easydict.WinUI.Views
             // would otherwise see N × 1/throttleMs callbacks per second, each
             // invalidating a wrapped-TextBlock measure pass. The coalescer collapses
             // all N services into ≤1 UI callback per frame (~16ms).
-            await foreach (var chunk in manager.TranslateStreamAsync(
+            TranslationResult? completed = null;
+            await foreach (var update in manager.TranslateStreamUpdatesAsync(
                 request, ct, serviceResult.ServiceId).ConfigureAwait(false))
             {
-                sb.Append(chunk);
+                switch (update)
+                {
+                    case TranslationStreamUpdate.TextDelta delta:
+                        sb.Append(delta.Text);
+                        break;
+                    case TranslationStreamUpdate.TextSnapshot snapshot:
+                        sb.Clear().Append(snapshot.Text);
+                        break;
+                    case TranslationStreamUpdate.Completed done:
+                        // Authoritative structured result delivered in-band (e.g. a plugin returning
+                        // dictionary data). It supersedes the accumulated text; no second request needed.
+                        completed = done.Result;
+                        continue;
+                }
 
                 // Per-stream snapshot rate caps sb.ToString() allocations on the
                 // background thread; scaling with text length stays from the original
@@ -3285,33 +3307,49 @@ namespace Easydict.WinUI.Views
 
             stopwatch.Stop();
 
-            // Final update with complete result (apply same cleanup as non-streaming path)
-            var finalText = CleanupStreamingResult(sb.ToString());
-            if (string.IsNullOrWhiteSpace(finalText))
+            TranslationResult result;
+            if (completed is not null)
             {
-                throw new TranslationException("Streaming service returned an empty response")
+                // Rich-streaming services deliver the final result themselves. An empty text is
+                // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
+                result = completed with
                 {
-                    ErrorCode = TranslationErrorCode.InvalidResponse,
-                    ServiceId = serviceResult.ServiceId
+                    ServiceName = string.IsNullOrEmpty(completed.ServiceName)
+                        ? serviceResult.ServiceDisplayName
+                        : completed.ServiceName,
+                    TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
+                };
+            }
+            else
+            {
+                // Final update with complete result (apply same cleanup as non-streaming path)
+                var finalText = CleanupStreamingResult(sb.ToString());
+                if (string.IsNullOrWhiteSpace(finalText))
+                {
+                    throw new TranslationException("Streaming service returned an empty response")
+                    {
+                        ErrorCode = TranslationErrorCode.InvalidResponse,
+                        ServiceId = serviceResult.ServiceId
+                    };
+                }
+
+                // Create initial result
+                result = new TranslationResult
+                {
+                    TranslatedText = finalText,
+                    OriginalText = request.Text,
+                    DetectedLanguage = detectedLanguage,
+                    TargetLanguage = targetLanguage,
+                    ServiceName = serviceResult.ServiceDisplayName,
+                    TimingMs = stopwatch.ElapsedMilliseconds
                 };
             }
 
-            // Create initial result
-            var result = new TranslationResult
-            {
-                TranslatedText = finalText,
-                OriginalText = request.Text,
-                DetectedLanguage = detectedLanguage,
-                TargetLanguage = targetLanguage,
-                ServiceName = serviceResult.ServiceDisplayName,
-                TimingMs = stopwatch.ElapsedMilliseconds
-            };
-
-            // Enrich with phonetics from Youdao if missing (for word queries)
-            // Run on thread pool to avoid blocking UI thread
+            // Enrich with phonetics from Youdao if missing (for word queries).
+            // Run on thread pool to avoid blocking UI thread; honors the service's execution policy.
             try
             {
-                result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct));
+                result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct, serviceResult.ServiceId));
             }
             catch
             {
@@ -3348,6 +3386,8 @@ namespace Easydict.WinUI.Views
                     }
                 }
             });
+
+            return result;
         }
 
         /// <summary>
@@ -3366,6 +3406,26 @@ namespace Easydict.WinUI.Views
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Rebuild the Actions menu with the current text each time it opens.
+        /// </summary>
+        private void OnTextActionsFlyoutOpening(object? sender, object e)
+        {
+            TextActionFlyoutBuilder.Populate(TextActionsFlyout, BuildTextActionContext);
+        }
+
+        private TextActionContext? BuildTextActionContext()
+        {
+            var text = InputTextBox.Text?.Trim();
+            if (string.IsNullOrEmpty(text))
+            {
+                return null;
+            }
+
+            var translation = _serviceResults.FirstOrDefault(r => r.HasSuccessfulResult)?.Result?.TranslatedText;
+            return new TextActionContext(text, translation, GetSourceLanguage(), GetTargetLanguage());
         }
 
         private TranslationLanguage GetSourceLanguage()

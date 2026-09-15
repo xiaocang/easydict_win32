@@ -1,0 +1,26 @@
+{
+  "identifier": "test.options",
+  "category": "translate",
+  "version": "3.4.5",
+  "name": "Options",
+  "summary": "Echoes its configured options and $info.",
+  "options": [
+    {
+      "identifier": "apiKey",
+      "type": "text",
+      "title": "API key",
+      "desc": "Stored with the platform credential store.",
+      "textConfig": { "type": "secure", "placeholderText": "sk-..." }
+    },
+    {
+      "identifier": "model",
+      "type": "menu",
+      "title": "Model",
+      "defaultValue": "fast",
+      "menuValues": [
+        { "title": "Fast", "value": "fast" },
+        { "title": "Accurate", "value": "accurate" }
+      ]
+    }
+  ]
+}

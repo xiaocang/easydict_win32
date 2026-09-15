@@ -4,9 +4,11 @@ using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.TextActions;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.TextActions;
 using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
@@ -169,7 +171,7 @@ public sealed partial class FixedWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { PinButton, OcrButton, CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, TextActionsButton, CloseButton },
                 "FixedWindow");
             _titleBarHelper.Initialize();
         }
@@ -211,6 +213,8 @@ public sealed partial class FixedWindow : Window
         // Tooltips
         ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
         ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
+        ToolTipService.SetToolTip(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("HideWindow"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
@@ -430,7 +434,8 @@ public sealed partial class FixedWindow : Window
                 && GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage);
 
             // Get EnabledQuery setting (default true if not found)
-            var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
+            var enabledQuery = ServiceQuerySelection.IsEnabled(
+                serviceId, ServiceOriginHelper.Resolve(service, serviceId), enabledQuerySettings);
 
             var result = new ServiceQueryResult
             {
@@ -440,6 +445,7 @@ public sealed partial class FixedWindow : Window
                 IsExpanded = enabledQuery, // Manual-query services start collapsed
                 CurrentMode = _currentMode,
                 IsGrammarCapable = isGrammarCapable,
+                Origin = ServiceOriginHelper.Resolve(service, serviceId),
             };
 
             _serviceResults.Add(result);
@@ -1554,7 +1560,7 @@ public sealed partial class FixedWindow : Window
     /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
     /// Manager is passed from caller who already acquired a handle to ensure consistent instance.
     /// </summary>
-    private async Task ExecuteStreamingTranslationForServiceAsync(
+    private async Task<TranslationResult> ExecuteStreamingTranslationForServiceAsync(
         TranslationManager manager,
         ServiceQueryResult serviceResult,
         TranslationRequest request,
@@ -1584,10 +1590,24 @@ public sealed partial class FixedWindow : Window
         // process them. The original double-TryEnqueue + RequestResize per chunk
         // was the worst offender — full content.Measure() per snapshot. Window
         // resize now happens once in the final-state lambda below.
-        await foreach (var chunk in manager.TranslateStreamAsync(
+        TranslationResult? completed = null;
+        await foreach (var update in manager.TranslateStreamUpdatesAsync(
             request, ct, serviceResult.ServiceId).ConfigureAwait(false))
         {
-            sb.Append(chunk);
+            switch (update)
+            {
+                case TranslationStreamUpdate.TextDelta delta:
+                    sb.Append(delta.Text);
+                    break;
+                case TranslationStreamUpdate.TextSnapshot snapshot:
+                    sb.Clear().Append(snapshot.Text);
+                    break;
+                case TranslationStreamUpdate.Completed done:
+                    // Authoritative structured result delivered in-band (e.g. a plugin returning
+                    // dictionary data). It supersedes the accumulated text; no second request needed.
+                    completed = done.Result;
+                    continue;
+            }
 
             var now = DateTime.UtcNow;
             if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
@@ -1599,33 +1619,49 @@ public sealed partial class FixedWindow : Window
 
         stopwatch.Stop();
 
-        // Final update with complete result
-        var finalText = sb.ToString().Trim();
-        if (string.IsNullOrWhiteSpace(finalText))
+        TranslationResult result;
+        if (completed is not null)
         {
-            throw new TranslationException("Streaming service returned an empty response")
+            // Rich-streaming services deliver the final result themselves. An empty text is
+            // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
+            result = completed with
             {
-                ErrorCode = TranslationErrorCode.InvalidResponse,
-                ServiceId = serviceResult.ServiceId
+                ServiceName = string.IsNullOrEmpty(completed.ServiceName)
+                    ? serviceResult.ServiceDisplayName
+                    : completed.ServiceName,
+                TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
+            };
+        }
+        else
+        {
+            // Final update with complete result
+            var finalText = sb.ToString().Trim();
+            if (string.IsNullOrWhiteSpace(finalText))
+            {
+                throw new TranslationException("Streaming service returned an empty response")
+                {
+                    ErrorCode = TranslationErrorCode.InvalidResponse,
+                    ServiceId = serviceResult.ServiceId
+                };
+            }
+
+            // Create initial result
+            result = new TranslationResult
+            {
+                TranslatedText = finalText,
+                OriginalText = request.Text,
+                DetectedLanguage = detectedLanguage,
+                TargetLanguage = targetLanguage,
+                ServiceName = serviceResult.ServiceDisplayName,
+                TimingMs = stopwatch.ElapsedMilliseconds
             };
         }
 
-        // Create initial result
-        var result = new TranslationResult
-        {
-            TranslatedText = finalText,
-            OriginalText = request.Text,
-            DetectedLanguage = detectedLanguage,
-            TargetLanguage = targetLanguage,
-            ServiceName = serviceResult.ServiceDisplayName,
-            TimingMs = stopwatch.ElapsedMilliseconds
-        };
-
-        // Enrich with phonetics from Youdao if missing (for word queries)
-        // Run on thread pool to avoid blocking UI thread
+        // Enrich with phonetics from Youdao if missing (for word queries).
+        // Run on thread pool to avoid blocking UI thread; honors the service's execution policy.
         try
         {
-            result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct));
+            result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct, serviceResult.ServiceId));
         }
         catch
         {
@@ -1652,6 +1688,28 @@ public sealed partial class FixedWindow : Window
             // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
             DispatcherQueue.TryEnqueue(() => RequestResize());
         });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Rebuild the Actions menu with the current text each time it opens.
+    /// </summary>
+    private void OnTextActionsFlyoutOpening(object? sender, object e)
+    {
+        TextActionFlyoutBuilder.Populate(TextActionsFlyout, BuildTextActionContext);
+    }
+
+    private TextActionContext? BuildTextActionContext()
+    {
+        var text = InputTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        var translation = _serviceResults.FirstOrDefault(r => r.HasSuccessfulResult)?.Result?.TranslatedText;
+        return new TextActionContext(text, translation, GetSourceLanguage(), GetTargetLanguage());
     }
 
     private TranslationLanguage GetSourceLanguage()

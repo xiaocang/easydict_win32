@@ -1,0 +1,7 @@
+{
+  "identifier": "test.file",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "File sandbox",
+  "summary": "Writes to its sandbox, reads a packaged data file, and is refused an escape."
+}

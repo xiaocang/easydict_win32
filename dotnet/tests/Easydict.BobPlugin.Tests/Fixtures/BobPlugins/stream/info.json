@@ -1,0 +1,7 @@
+{
+  "identifier": "test.stream",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Streaming",
+  "summary": "Reports accumulated snapshots through onStream before completing."
+}

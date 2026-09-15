@@ -1,0 +1,7 @@
+{
+  "identifier": "test.cancel",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Cancel",
+  "summary": "Never completes; records that the cancel signal fired."
+}

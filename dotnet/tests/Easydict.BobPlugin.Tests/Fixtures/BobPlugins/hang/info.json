@@ -1,0 +1,7 @@
+{
+  "identifier": "test.hang",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Hang",
+  "summary": "Spins synchronously so the engine's slice timeout has to cut it off."
+}

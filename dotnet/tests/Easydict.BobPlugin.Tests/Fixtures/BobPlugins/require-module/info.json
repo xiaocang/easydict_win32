@@ -1,0 +1,7 @@
+{
+  "identifier": "test.require",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Require",
+  "summary": "Loads a sibling module through require()."
+}

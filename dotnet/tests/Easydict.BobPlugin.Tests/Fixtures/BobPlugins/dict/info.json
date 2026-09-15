@@ -1,0 +1,7 @@
+{
+  "identifier": "test.dict",
+  "category": "translate",
+  "version": "2.1.0",
+  "name": "Dictionary",
+  "summary": "Returns a full toDict payload."
+}

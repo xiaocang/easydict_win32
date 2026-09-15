@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Easydict.TranslationService;
+using Easydict.TranslationService.TextActions;
+using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.TranslationService.Services.AgentCli;
 using Easydict.SidecarClient.Protocol;
@@ -49,6 +51,36 @@ public sealed class SettingsService
         /// Paths to companion MDD resource files (CSS, images, audio, JS).
         /// </summary>
         public List<string> MddFilePaths { get; set; } = [];
+    }
+
+    /// <summary>
+    /// One installed Bob plugin instance. Secure option values live in the credential store under
+    /// <see cref="BobSecureOptionKey"/>, never in this record.
+    /// </summary>
+    public sealed class InstalledBobPlugin
+    {
+        public string ServiceId { get; set; } = string.Empty;
+        public string PluginIdentifier { get; set; } = string.Empty;
+        public string InstanceId { get; set; } = string.Empty;
+        public string Version { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string InstallDirectory { get; set; } = string.Empty;
+        public string? IconPath { get; set; }
+
+        /// <summary>Bob language codes probed when the plugin was installed. Empty means "no restriction".</summary>
+        public List<string> SupportedLanguageCodes { get; set; } = [];
+
+        /// <summary>Non-secure option values, as the plugin's own option identifiers.</summary>
+        public Dictionary<string, string> OptionValues { get; set; } = new();
+
+        /// <summary>Identifiers of options whose values are held by the credential store.</summary>
+        public List<string> SecureOptionIds { get; set; } = [];
+
+        // Automatic host behavior a plugin only receives once the user opts in, because a plugin
+        // can have side effects (billing, rate limits, writes) the host cannot see.
+        public bool AllowResultCache { get; set; }
+        public bool AllowHostRetry { get; set; }
+        public bool AllowPhoneticEnrichment { get; set; }
     }
 
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
@@ -554,6 +586,17 @@ public sealed class SettingsService
     /// </summary>
     public List<ImportedMdxDictionary> ImportedMdxDictionaries { get; set; } = [];
 
+    /// <summary>
+    /// Installed Bob plugins. Each entry is exposed as a manual-query translation service.
+    /// </summary>
+    public List<InstalledBobPlugin> InstalledBobPlugins { get; set; } = [];
+
+    /// <summary>
+    /// User-configurable text actions (selection pop-up buttons and each window's Actions menu).
+    /// Loaded as saved (user removals are respected); defaults are seeded on first run.
+    /// </summary>
+    public List<TextAction> TextActions { get; set; } = TextActionCatalog.Normalize(null);
+
     // Fixed window settings
     public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
     public double FixedWindowXDips { get; set; } = 0;
@@ -924,6 +967,8 @@ public sealed class SettingsService
         MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), defaultEnabledServices);
         MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), defaultEnabledServices);
         ImportedMdxDictionaries = GetImportedMdxDictionaries();
+        InstalledBobPlugins = GetInstalledBobPlugins();
+        TextActions = GetTextActions();
 
         // Fixed window settings
         ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
@@ -1192,6 +1237,8 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowEnabledServices)] = MiniWindowEnabledServices;
         _settings[nameof(MainWindowEnabledServices)] = MainWindowEnabledServices;
         _settings[nameof(ImportedMdxDictionaries)] = ImportedMdxDictionaries;
+        _settings[nameof(InstalledBobPlugins)] = InstalledBobPlugins;
+        _settings[nameof(TextActions)] = TextActions;
 
         // Fixed window settings
         _settings[nameof(ShowFixedWindowHotkey)] = ShowFixedWindowHotkey;
@@ -1860,6 +1907,57 @@ public sealed class SettingsService
         return new Dictionary<string, bool>();
     }
 
+    private List<TextAction> GetTextActions()
+    {
+        if (_settings.TryGetValue(nameof(TextActions), out var value) && value != null)
+        {
+            try
+            {
+                if (value is JsonElement element && element.ValueKind == JsonValueKind.Array)
+                {
+                    return TextActionCatalog.Normalize(JsonSerializer.Deserialize<List<TextAction>>(element.GetRawText()));
+                }
+
+                if (value is List<TextAction> typed)
+                {
+                    return TextActionCatalog.Normalize(typed);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SettingsService] Failed to deserialize text actions: {ex.Message}");
+            }
+        }
+
+        return TextActionCatalog.Normalize(null);
+    }
+
+    /// <summary>Insert or replace a text action by id (does not save).</summary>
+    public void AddOrReplaceTextAction(TextAction action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        var index = TextActions.FindIndex(a => string.Equals(a.Id, action.Id, StringComparison.Ordinal));
+        if (index >= 0)
+        {
+            TextActions[index] = action;
+        }
+        else
+        {
+            TextActions.Add(action);
+        }
+    }
+
+    /// <summary>
+    /// Remove actions generated by a subsystem (for example every action a removed plugin created).
+    /// Returns the number of removed actions (does not save).
+    /// </summary>
+    public int RemoveTextActionsBySource(string source, string? serviceId = null)
+    {
+        return TextActions.RemoveAll(a =>
+            string.Equals(a.Source, source, StringComparison.Ordinal)
+            && (serviceId is null || string.Equals(a.ServiceId, serviceId, StringComparison.Ordinal)));
+    }
+
     private List<ImportedMdxDictionary> GetImportedMdxDictionaries()
     {
         if (_settings.TryGetValue(nameof(ImportedMdxDictionaries), out var value) && value != null)
@@ -1927,6 +2025,66 @@ public sealed class SettingsService
         }
 
         return [];
+    }
+
+    private List<InstalledBobPlugin> GetInstalledBobPlugins()
+    {
+        if (_settings.TryGetValue(nameof(InstalledBobPlugins), out var value) && value != null)
+        {
+            try
+            {
+                if (value is JsonElement element && element.ValueKind == JsonValueKind.Array)
+                {
+                    var list = JsonSerializer.Deserialize<List<InstalledBobPlugin>>(element.GetRawText()) ?? [];
+                    return list
+                        .Where(p => !string.IsNullOrWhiteSpace(p.ServiceId) && !string.IsNullOrWhiteSpace(p.InstallDirectory))
+                        .ToList();
+                }
+
+                if (value is List<InstalledBobPlugin> typed)
+                {
+                    return typed;
+                }
+            }
+            catch (Exception ex) { Debug.WriteLine($"[SettingsService] Failed to deserialize Bob plugins: {ex.Message}"); }
+        }
+
+        return [];
+    }
+
+    /// <summary>Settings key holding one plugin option's protected value.</summary>
+    internal static string BobSecureOptionKey(string serviceId, string optionId) => $"BobOption:{serviceId}:{optionId}";
+
+    /// <summary>Read a plugin option that is held by the credential store.</summary>
+    public string? GetBobPluginSecureOption(string serviceId, string optionId)
+        => GetSensitiveSetting(BobSecureOptionKey(serviceId, optionId));
+
+    /// <summary>
+    /// Store a plugin option in the credential store. An empty value removes it. Does not save.
+    /// </summary>
+    public void SetBobPluginSecureOption(string serviceId, string optionId, string? value)
+    {
+        var key = BobSecureOptionKey(serviceId, optionId);
+        if (string.IsNullOrEmpty(value))
+        {
+            _settings.Remove(key);
+            _sensitiveSettingsPendingMigration.Remove(key);
+            return;
+        }
+
+        _settings[key] = ProtectSensitiveSetting(value);
+        _sensitiveSettingsPendingMigration.Remove(key);
+    }
+
+    /// <summary>Forget every stored option of a plugin instance (does not save).</summary>
+    public void RemoveBobPluginSecureOptions(string serviceId)
+    {
+        var prefix = $"BobOption:{serviceId}:";
+        foreach (var key in _settings.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+        {
+            _settings.Remove(key);
+            _sensitiveSettingsPendingMigration.Remove(key);
+        }
     }
 
     /// <summary>

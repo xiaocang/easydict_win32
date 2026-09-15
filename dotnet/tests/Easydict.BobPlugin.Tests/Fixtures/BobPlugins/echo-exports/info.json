@@ -1,0 +1,7 @@
+{
+  "identifier": "test.echo.exports",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Echo (exports)",
+  "summary": "Echoes the query text back through exports.translate."
+}

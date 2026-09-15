@@ -162,6 +162,22 @@
                               Foreground="{ThemeResource ButtonForeground}"/>
                 </Button>
                 <Button
+                    x:Name="TextActionsButton"
+                    AutomationProperties.AutomationId="TextActionsButton"
+                    AutomationProperties.Name="Text actions"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="Text actions"
+                    Width="32"
+                    Height="32"
+                    VerticalAlignment="Center">
+                    <Button.Flyout>
+                        <MenuFlyout x:Name="TextActionsFlyout" Opening="OnTextActionsFlyoutOpening"/>
+                    </Button.Flyout>
+                    <FontIcon Glyph="&#xE721;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+                <Button
                     x:Name="HistoryButton"
                     AutomationProperties.AutomationId="HistoryButton"
                     AutomationProperties.Name="History"

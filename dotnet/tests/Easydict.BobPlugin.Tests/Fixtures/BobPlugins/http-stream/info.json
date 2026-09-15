@@ -1,0 +1,7 @@
+{
+  "identifier": "test.http.stream",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "HTTP stream",
+  "summary": "Accumulates streamed chunks and reports them through onStream."
+}

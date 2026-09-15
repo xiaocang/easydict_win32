@@ -40,6 +40,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <ToggleButton
@@ -86,9 +87,27 @@
             </Button>
 
             <Button
+                x:Name="TextActionsButton"
+                AutomationProperties.AutomationId="TextActionsButton"
+                AutomationProperties.Name="Text actions"
+                Grid.Column="3"
+                Style="{StaticResource EasydictIconButtonStyle}"
+                ToolTipService.ToolTip="Text actions"
+                Width="32"
+                Height="32"
+                Padding="0">
+                <Button.Flyout>
+                    <MenuFlyout x:Name="TextActionsFlyout" Opening="OnTextActionsFlyoutOpening"/>
+                </Button.Flyout>
+                <FontIcon Glyph="&#xE721;"
+                        FontSize="14"
+                        Foreground="{ThemeResource ButtonForeground}"/>
+            </Button>
+
+            <Button
                 x:Name="CloseButton"
                 AutomationProperties.Name="Hide window"
-                Grid.Column="3"
+                Grid.Column="4"
                 Click="OnCloseClicked"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Hide (Ctrl+Alt+F to show again)"

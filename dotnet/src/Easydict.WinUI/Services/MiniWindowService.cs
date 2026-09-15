@@ -141,6 +141,18 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Show the mini window with text and query only one specific service (for example a plugin
+    /// triggered from the selection pop-up) is queried, even if it is configured as manual-query.
+    /// </summary>
+    public void ShowWithTextForService(string text, string serviceId, QuerySourceKind sourceKind)
+    {
+        ShowRequests.Invalidate();
+        EnsureWindowCreated();
+        _miniWindow?.SetTextAndQueryService(text, serviceId, sourceKind);
+        _miniWindow?.ShowAndActivate();
+    }
+
+    /// <summary>
     /// Show the window with a busy status for a step that runs before the query — today,
     /// OCR recognition, which used to run with nothing on screen at all (issue #216).
     /// The status is replaced as soon as <see cref="ShowWithText"/> starts the query.

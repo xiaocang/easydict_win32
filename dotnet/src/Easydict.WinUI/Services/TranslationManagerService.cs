@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Easydict.BobPlugin;
+using Easydict.BobPlugin.Adapter;
 using Easydict.OpenVINO.Inference;
 using Easydict.OpenVINO.Services;
 using Easydict.TranslationService;
@@ -31,6 +33,24 @@ public sealed class TranslationManagerService : IDisposable
     // probe repeatedly, and OpenVINO lazy-loads ONNX sessions. Reuse instances
     // across ConfigureServices/ReconfigureProxy so a warmed model isn't
     // discarded when the user toggles unrelated settings.
+    // Bob plugin instances, keyed by service id. Each owns a JavaScript engine that is only
+    // built on first use, so registering them at startup costs nothing.
+    private readonly Dictionary<string, BobTranslationService> _bobServices = new(StringComparer.Ordinal);
+
+    // The manager the instances above are registered with. A proxy change replaces the manager,
+    // and the plugins have to be rebuilt against its handler rather than silently disappearing.
+    private TranslationManager? _bobServicesManager;
+
+    // One client for every plugin of a given manager: it shares the manager's proxy-configured
+    // handler but drops its 30 s timeout, which is the host's policy for built-in services rather
+    // than something a plugin's backend agreed to.
+    private HttpClient? _bobHttpClient;
+
+    // Bob services (and their shared client) retired by a manager swap but not yet disposed,
+    // because the manager they were registered on may still have active handles (an in-flight
+    // call). Disposed together with that manager - see DisposeManagerAndPendingBob.
+    private readonly Dictionary<TranslationManager, (List<BobTranslationService> Services, HttpClient? HttpClient)> _pendingBobDisposal = new();
+
     private PhiSilicaTranslationService? _phiSilicaService;
     private FoundryLocalService? _foundryLocalService;
     private OpenVINOTranslationService? _openVinoService;
@@ -191,7 +211,7 @@ public sealed class TranslationManagerService : IDisposable
                     {
                         _disposalQueue.Remove(manager);
                         Debug.WriteLine("[TranslationManagerService] Disposing queued manager after last handle release");
-                        DisposeManagerSafely(manager);
+                        DisposeManagerAndPendingBob(manager);
                     }
                 }
                 else
@@ -217,6 +237,39 @@ public sealed class TranslationManagerService : IDisposable
         {
             Debug.WriteLine($"[TranslationManagerService] Error disposing manager: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Disposes a manager together with any Bob plugin services and HttpClient a proxy swap
+    /// retired alongside it (see RegisterBobPluginServices). Those are only safe to dispose once
+    /// this manager - and therefore any in-flight call still holding a handle to it - is actually
+    /// going away, which this method's two call sites (queued-handle release and the no-handles
+    /// delayed disposal) are exactly the points that know that.
+    /// </summary>
+    private void DisposeManagerAndPendingBob(TranslationManager manager)
+    {
+        DisposeManagerSafely(manager);
+
+        List<BobTranslationService>? services = null;
+        HttpClient? httpClient = null;
+        lock (_lock)
+        {
+            if (_pendingBobDisposal.Remove(manager, out var pending))
+            {
+                services = pending.Services;
+                httpClient = pending.HttpClient;
+            }
+        }
+
+        if (services is not null)
+        {
+            foreach (var service in services)
+            {
+                service.Dispose();
+            }
+        }
+
+        httpClient?.Dispose();
     }
 
     private TranslationManagerService()
@@ -503,6 +556,7 @@ public sealed class TranslationManagerService : IDisposable
         });
 
         RegisterImportedMdxServices();
+        RegisterBobPluginServices();
 
         Debug.WriteLine("[TranslationManagerService] Services configured");
     }
@@ -597,6 +651,152 @@ public sealed class TranslationManagerService : IDisposable
         }
 
         LocalDictionaryIndexService.Instance.RemoveDictionary(serviceId);
+    }
+
+    /// <summary>
+    /// Register every installed Bob plugin. Failures are per plugin: a broken one is skipped and
+    /// logged rather than taking the rest of the service list with it.
+    /// </summary>
+    private void RegisterBobPluginServices()
+    {
+        if (!ReferenceEquals(_bobServicesManager, _translationManager))
+        {
+            // Retire without disposing yet: the manager these instances (and this HttpClient) were
+            // registered on may still have an in-flight call holding a handle to it (see
+            // AcquireHandle/ReconfigureProxy). Disposing here would pull the rug out from under
+            // that call. Instead, stash them and dispose alongside their owning manager, once
+            // DisposeManagerAndPendingBob confirms that manager is actually going away.
+            if (_bobServicesManager is not null && (_bobServices.Count > 0 || _bobHttpClient is not null))
+            {
+                _pendingBobDisposal[_bobServicesManager] = (_bobServices.Values.ToList(), _bobHttpClient);
+            }
+
+            _bobServices.Clear();
+            _bobHttpClient = null;
+            _bobServicesManager = _translationManager;
+        }
+
+        foreach (var plugin in _settings.InstalledBobPlugins)
+        {
+            if (string.IsNullOrWhiteSpace(plugin.ServiceId) || string.IsNullOrWhiteSpace(plugin.InstallDirectory))
+            {
+                continue;
+            }
+
+            if (_bobServices.ContainsKey(plugin.ServiceId))
+            {
+                continue;
+            }
+
+            if (!TryCreateBobService(plugin, out var service, out var error))
+            {
+                Debug.WriteLine($"[TranslationManagerService] Skipping Bob plugin '{plugin.ServiceId}': {error}");
+                continue;
+            }
+
+            _bobServices[plugin.ServiceId] = service!;
+            _translationManager.RegisterService(service!);
+            ServiceIconAssetResolver.RegisterFileIcon(plugin.ServiceId, plugin.IconPath);
+        }
+    }
+
+    /// <summary>
+    /// Register a single Bob plugin, replacing any instance already registered under its id
+    /// (which is what a reinstall or an options change amounts to).
+    /// </summary>
+    public bool TryRegisterBobPlugin(SettingsService.InstalledBobPlugin plugin, out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+
+        if (!TryCreateBobService(plugin, out var service, out error))
+        {
+            return false;
+        }
+
+        lock (_lock)
+        {
+            if (_bobServices.Remove(plugin.ServiceId, out var previous))
+            {
+                _translationManager.UnregisterService(plugin.ServiceId);
+                previous.Dispose();
+            }
+
+            _bobServices[plugin.ServiceId] = service!;
+            _translationManager.RegisterService(service!);
+        }
+
+        ServiceIconAssetResolver.RegisterFileIcon(plugin.ServiceId, plugin.IconPath);
+        return true;
+    }
+
+    /// <summary>Unregister a Bob plugin and shut its engine down.</summary>
+    public void UnregisterBobPlugin(string serviceId)
+    {
+        BobTranslationService? service;
+        lock (_lock)
+        {
+            _bobServices.Remove(serviceId, out service);
+            _translationManager.UnregisterService(serviceId);
+        }
+
+        service?.Dispose();
+        ServiceIconAssetResolver.UnregisterFileIcon(serviceId);
+    }
+
+    /// <summary>The registered instance of a Bob plugin, or <c>null</c> when it failed to load.</summary>
+    public BobTranslationService? GetBobPlugin(string serviceId)
+    {
+        lock (_lock)
+        {
+            return _bobServices.GetValueOrDefault(serviceId);
+        }
+    }
+
+    /// <summary>
+    /// Ask a plugin which languages it supports. Done once at install time so startup never has
+    /// to spin up a JavaScript engine; an empty list means "no restriction".
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ProbeBobPluginLanguagesAsync(
+        string serviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var service = GetBobPlugin(serviceId);
+        if (service is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await service.GetSupportedLanguageCodesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[TranslationManagerService] Could not probe languages of '{serviceId}': {ex.Message}");
+            return [];
+        }
+    }
+
+    private bool TryCreateBobService(
+        SettingsService.InstalledBobPlugin plugin,
+        out BobTranslationService? service,
+        out string? error)
+    {
+        service = null;
+        error = null;
+
+        try
+        {
+            var descriptor = BobPlugins.BobPluginInstaller.ToDescriptor(plugin, _settings);
+            _bobHttpClient ??= _translationManager.CreateSharedHandlerClient(Timeout.InfiniteTimeSpan);
+            service = new BobTranslationService(descriptor, _bobHttpClient);
+            return true;
+        }
+        catch (Exception ex) when (ex is BobPluginException or IOException or UnauthorizedAccessException)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     /// <summary>
@@ -736,7 +936,7 @@ public sealed class TranslationManagerService : IDisposable
                         return;
                     }
                 }
-                DisposeManagerSafely(oldManager);
+                DisposeManagerAndPendingBob(oldManager);
             });
         }
     }
@@ -760,6 +960,31 @@ public sealed class TranslationManagerService : IDisposable
         // manager (and its HttpClient) are disposed.
         _foundryLocalService = null;
         _phiSilicaService = null;
+
+        // Each plugin owns a JavaScript engine and the thread it runs on.
+        foreach (var service in _bobServices.Values)
+        {
+            service.Dispose();
+        }
+
+        _bobServices.Clear();
+        _bobHttpClient?.Dispose();
+        _bobHttpClient = null;
+
+        // A proxy swap may still be waiting on an in-flight call's handle for an older manager
+        // (see DisposeManagerAndPendingBob); app shutdown does not wait for that, so dispose
+        // whatever is left rather than leaking a plugin's engine thread or its HttpClient.
+        foreach (var (services, httpClient) in _pendingBobDisposal.Values)
+        {
+            foreach (var service in services)
+            {
+                service.Dispose();
+            }
+
+            httpClient?.Dispose();
+        }
+
+        _pendingBobDisposal.Clear();
 
         _translationManager.Dispose();
         Debug.WriteLine("[TranslationManagerService] Disposed");

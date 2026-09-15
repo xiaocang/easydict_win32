@@ -1,0 +1,7 @@
+{
+  "identifier": "test.validate.ok",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Validate OK",
+  "summary": "Reports a healthy configuration."
+}

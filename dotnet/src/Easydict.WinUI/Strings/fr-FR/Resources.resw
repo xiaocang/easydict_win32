@@ -1557,6 +1557,71 @@
   <data name="LanguageDetectionRateLimitedPending" xml:space="preserve"><value>Essai d’un service de détection de secours.</value></data>
   <data name="LanguageDetectionRateLimitedRecovered" xml:space="preserve"><value>Le service de secours a identifié la langue : {0}. Vous pouvez continuer.</value></data>
   <data name="LanguageDetectionRateLimitedFailed" xml:space="preserve"><value>Impossible de détecter la langue source. Sélectionnez-la manuellement ou réessayez plus tard.</value></data>
+  <data name="TextActionsButtonTooltip" xml:space="preserve"><value>Text actions</value></data>
+  <data name="TextActionsSelectTextFirst" xml:space="preserve"><value>Enter or select some text first</value></data>
+  <data name="TextActionsNoActions" xml:space="preserve"><value>No actions configured (Settings → Advanced → Text Actions)</value></data>
+  <data name="TextActionsGroupSearch" xml:space="preserve"><value>Search</value></data>
+  <data name="TextActionsGroupServices" xml:space="preserve"><value>Services</value></data>
+  <data name="TextActionsGroupPlugins" xml:space="preserve"><value>Bob plugins</value></data>
+  <data name="TextActionsHeader" xml:space="preserve"><value>Text Actions</value></data>
+  <data name="TextActionsDescription" xml:space="preserve"><value>Actions run on the selected or entered text: open a search site, or run one specific service (for example a Bob plugin). They appear in the Actions menu of every window and, optionally, on the selection pop-up.</value></data>
+  <data name="TextActionsPopButtonHint" xml:space="preserve"><value>Actions marked 'Show on selection button' appear next to the translate icon after you select text (requires Mouse Selection Translate).</value></data>
+  <data name="TextActionAdd" xml:space="preserve"><value>Add action</value></data>
+  <data name="TextActionResetDefaults" xml:space="preserve"><value>Reset to defaults</value></data>
+  <data name="TextActionEnabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="TextActionShowOnPopButton" xml:space="preserve"><value>Show on selection button</value></data>
+  <data name="TextActionMoveUp" xml:space="preserve"><value>Move up</value></data>
+  <data name="TextActionMoveDown" xml:space="preserve"><value>Move down</value></data>
+  <data name="TextActionEdit" xml:space="preserve"><value>Edit</value></data>
+  <data name="TextActionDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="TextActionServiceSubtitle" xml:space="preserve"><value>Run service: {0}</value></data>
+  <data name="TextActionTypeUrl" xml:space="preserve"><value>Open a URL</value></data>
+  <data name="TextActionTypeService" xml:space="preserve"><value>Run a service</value></data>
+  <data name="TextActionTitle" xml:space="preserve"><value>Title</value></data>
+  <data name="TextActionUrlTemplate" xml:space="preserve"><value>URL template</value></data>
+  <data name="TextActionUrlHint" xml:space="preserve"><value>Placeholders: {encodedText}, {encodedTranslation}, {from}, {to}. Only http/https URLs.</value></data>
+  <data name="TextActionServiceLabel" xml:space="preserve"><value>Service</value></data>
+  <data name="TextActionDialogAddTitle" xml:space="preserve"><value>Add text action</value></data>
+  <data name="TextActionDialogEditTitle" xml:space="preserve"><value>Edit text action</value></data>
+  <data name="TextActionDuplicate" xml:space="preserve"><value>An action for this service already exists.</value></data>
+  <data name="TextActionInvalidUrl" xml:space="preserve"><value>Enter a valid http(s) URL template containing {encodedText}.</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
+  <data name="ServiceOrigin_BobBadge" xml:space="preserve"><value>Bob plugin</value></data>
+  <data name="ServiceOrigin_PluginBadge" xml:space="preserve"><value>Plugin</value></data>
+  <data name="ServiceOrigin_MdxBadge" xml:space="preserve"><value>MDX dictionary</value></data>
+  <data name="ServiceOrigin_PluginTooltip" xml:space="preserve"><value>Third-party {0} plugin{1}. Not an Easydict built-in service; network requests and data handling are done by the plugin.</value></data>
+  <data name="ServiceOrigin_MdxTooltip" xml:space="preserve"><value>Dictionary file imported by you. Looked up locally; not an Easydict built-in service.</value></data>
+  <data name="ServiceOrigin_NameSuffix" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="BobPluginImportButton" xml:space="preserve"><value>Import Bob Plugin</value></data>
+  <data name="BobPluginSummaryNone" xml:space="preserve"><value>No Bob plugins installed</value></data>
+  <data name="BobPluginSummaryOne" xml:space="preserve"><value>1 Bob plugin installed</value></data>
+  <data name="BobPluginSummaryMany" xml:space="preserve"><value>{0} Bob plugins installed</value></data>
+  <data name="BobPluginImportSuccessTitle" xml:space="preserve"><value>Plugin installed</value></data>
+  <data name="BobPluginImportSuccessMessage" xml:space="preserve"><value>'{0}' was installed as a manual-query service. Click its card to run it, or select text to get its button on the pop-up (requires Mouse Selection Translate).</value></data>
+  <data name="BobPluginImportFailedTitle" xml:space="preserve"><value>Import failed</value></data>
+  <data name="BobPluginUnsupportedCategory" xml:space="preserve"><value>Easydict can host translation plugins only. This package declares a different category.</value></data>
+  <data name="BobPluginsSectionHeader" xml:space="preserve"><value>Bob plugins (third party)</value></data>
+  <data name="BobPluginsSectionDescription" xml:space="preserve"><value>Provided by third-party JavaScript plugins, not built into Easydict. Network requests and data handling are done by the plugin itself. Installed plugins are manual-query by default, with no caching and no retries.</value></data>
+  <data name="BobPluginOptionsHeader" xml:space="preserve"><value>Plugin options</value></data>
+  <data name="BobPluginAuthor" xml:space="preserve"><value>Author</value></data>
+  <data name="BobPluginHomepage" xml:space="preserve"><value>Plugin homepage</value></data>
+  <data name="BobPluginValidate" xml:space="preserve"><value>Validate</value></data>
+  <data name="BobPluginValidating" xml:space="preserve"><value>Checking…</value></data>
+  <data name="BobPluginValidateSuccess" xml:space="preserve"><value>The plugin reports it is ready.</value></data>
+  <data name="BobPluginValidateFailed" xml:space="preserve"><value>The plugin reported a problem.</value></data>
+  <data name="BobPluginValidateNotSupported" xml:space="preserve"><value>This plugin has no self-check.</value></data>
+  <data name="BobPluginRemove" xml:space="preserve"><value>Remove</value></data>
+  <data name="BobPluginRemoveConfirm" xml:space="preserve"><value>Remove '{0}' and delete its files and stored options?</value></data>
+  <data name="BobPluginAllowCache" xml:space="preserve"><value>Reuse cached results</value></data>
+  <data name="BobPluginAllowRetry" xml:space="preserve"><value>Retry after a failure</value></data>
+  <data name="BobPluginAllowPhonetics" xml:space="preserve"><value>Add phonetics from Youdao</value></data>
+  <data name="BobPluginShowOnPopButton" xml:space="preserve"><value>Show on the selection button</value></data>
+  <data name="BobPluginPolicyHint" xml:space="preserve"><value>Off by default: a plugin can charge, rate-limit or write things Easydict cannot see, so it only gets these once you allow them.</value></data>
+  <data name="SettingsTab_Plugins" xml:space="preserve"><value>Plugins</value></data>
+  <data name="SettingsTab_Plugins_Tooltip" xml:space="preserve"><value>Import, configure, and remove third-party Bob translate plugins.</value></data>
+  <data name="BobPluginsTabHeader" xml:space="preserve"><value>Bob Plugins</value></data>
+  <data name="BobPluginsTabDescription" xml:space="preserve"><value>Install third-party Bob translate plugins. They run in an embedded JavaScript engine, separate from Easydict's built-in services.</value></data>
+  <data name="BobPluginGetMoreLink" xml:space="preserve"><value>Get more plugins</value></data>
   <data name="SignInWithOrcaRouter" xml:space="preserve"><value>Se connecter avec OrcaRouter</value></data>
   <data name="OrcaRouterSignInWaiting" xml:space="preserve"><value>En attente de la fin de la connexion dans votre navigateur…</value></data>
   <data name="OrcaRouterSignInSucceeded" xml:space="preserve"><value>Connecté. Votre clé API OrcaRouter a été enregistrée.</value></data>

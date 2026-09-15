@@ -36,6 +36,12 @@ easydict_win32/
 │   │   │   │   └── FormulaProtection/   # Formula detection & restoration
 │   │   │   ├── Security/                # Encryption/security utilities
 │   │   │   └── Resources/               # Service resources
+│   │   ├── Easydict.BobPlugin/          # Bob plugin compatibility layer (Jint)
+│   │   │   ├── Adapter/                 # BobTranslationService (ITranslationService)
+│   │   │   ├── Manifest/                # info.json parsing
+│   │   │   ├── Package/                 # .bobplugin extraction (bounded, zip-slip safe)
+│   │   │   ├── Mapping/                 # Bob result / error / language mapping
+│   │   │   └── Runtime/                 # JS engine, event loop, host bridges, prelude
 │   │   ├── Easydict.NativeBridge/       # Browser extension native messaging host
 │   │   └── Easydict.SidecarClient/      # IPC client library
 │   │       └── Protocol/                # IPC protocol definitions
@@ -46,6 +52,8 @@ easydict_win32/
 │   │   │   ├── Models/                  # Model tests
 │   │   │   ├── LongDocument/            # Long doc tests
 │   │   │   └── Mocks/                   # Mock implementations
+│   │   ├── Easydict.BobPlugin.Tests/
+│   │   │   └── Fixtures/BobPlugins/     # Real fixture plugins driven through the JS engine
 │   │   └── Easydict.WinUI.Tests/
 │   │       └── Services/                # WinUI service tests
 │   ├── tools/
@@ -146,7 +154,9 @@ make run
   - `Ctrl+Alt+F` - Show/hide fixed window (shows with selection; hides when foreground)
   - `Ctrl+Alt+Shift+M` - Toggle mini window
   - `Ctrl+Alt+Shift+F` - Toggle fixed window
-- **Mouse Selection Translate**: Select text in any app (drag, double-click, triple-click) → floating icon appears → click to translate in Mini Window (uses `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks)
+- **Mouse Selection Translate**: Select text in any app (drag, double-click, triple-click) → floating action strip appears → click the translate icon, or one of the configured text actions (uses `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks)
+- **Text Actions**: Declarative actions over the selected/entered text — `OpenUrl` (URL template) and `RunService` (query one specific service). Shown in each window's Actions menu and, optionally, on the selection strip
+- **Bob Plugin Compatibility**: Install `.bobplugin` translate plugins; each runs in an embedded JavaScript engine as its own `bob:<identifier>:<instance>` service, conservative by default
 - **System Tray**: Minimize to tray, background operation, OCR translate in context menu
 - **Clipboard Monitoring**: Auto-translate copied text
 - **Shell Context Menu**: Right-click any file or desktop background → "OCR Translate"
@@ -218,6 +228,81 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 - Service configurations are encrypted using DPAPI (Data Protection API)
 - Language codes are mapped via overrideable `GetLanguageCode(Language)` per service
 - All services are registered in `TranslationManager` and accessed via `TranslationManagerService.Instance`
+
+### Bob Plugin Compatibility
+
+A `.bobplugin` package whose manifest declares `category: "translate"` becomes an ordinary
+translation service, without giving up the host's control over scheduling, retries, caching or
+rendering. Everything lives in `Easydict.BobPlugin` (net8.0, [Jint](https://github.com/sebastienros/jint)).
+
+```
+BobPluginPackage      # bounded extraction, zip-slip safe, single wrapping folder tolerated
+BobPluginManifest     # info.json; unknown fields ignored; marks credential options
+BobServiceIds         # bob:<pluginIdentifier>:<instanceId>
+BobScriptHost         # one Jint engine + the one thread it lives on (internal)
+  └── Runtime/Prelude/bob-prelude.js       # $http, $log, $data, $file, $timer, $signal, require
+  └── Runtime/Prelude/crypto-js-shim.js    # MD5/SHA/HMAC/AES-CBC over host bridges
+BobTranslationService # ITranslationService + IRichStreamTranslationService + policy/origin
+```
+
+Design points that are load-bearing:
+- **Identity**: plugins get their own id namespace, so a plugin can never collide with or silently
+  replace a built-in service, and the UI still recognises one by id after it is uninstalled.
+- **One call per query**: the service is always a rich streaming service, so the structured `toDict`
+  result arrives in the same execution as the streamed text. The host never calls `translate()` a
+  second time to get dictionary data.
+- **No free HTML**: a plugin's plain string is never promoted to `RawHtml`.
+- **`notFound` is an outcome**: it maps to `TranslationResultKind.NoResult` with the plugin's own
+  message, not to a red error. Other Bob error types map onto the host's error codes.
+- **Conservative by default**: `ServiceExecutionPolicy.Conservative` (no host retry, no result
+  cache, no phonetic enrichment) until the user opts in per plugin, enforced by `TranslationManager`
+  rather than by the UI. The cache discriminator covers the plugin version and its option values.
+- **Sandbox**: `$file` writes only inside the instance's sandbox directory (reads may also come from
+  the plugin's own package); `$http` is http(s) only with a bounded body; a runaway synchronous
+  script is cut off by the engine's execution constraint and the engine rebuilt.
+- **Threading**: the engine and every `JsValue` are touched only on that plugin's `JsEventLoop`
+  thread. Host bridges are delegates taking primitives; they never block.
+
+WinUI side: `Services/BobPlugins/BobPluginInstaller.cs` (install/describe/remove under
+`%LOCALAPPDATA%\Easydict\plugins\bob`), `TranslationManagerService.RegisterBobPluginServices` /
+`TryRegisterBobPlugin` / `UnregisterBobPlugin` / `ProbeBobPluginLanguagesAsync`,
+`Views/SettingsPage.BobPlugins.cs` (its own Settings → Plugins tab, `SettingsTabId.Plugins`, kept
+separate from the Services tab so a plugin's options are never mistaken for a built-in service's).
+Credential options are stored with DPAPI under `BobOption:{serviceId}:{optionId}`, never in
+`settings.json`.
+
+Adding a plugin also creates a `RunService` text action tagged `source: "bob"`, so it appears on
+the selection strip; removing the plugin removes that action.
+
+Tests: `tests/Easydict.BobPlugin.Tests` drives real fixture plugins (`Fixtures/BobPlugins/<name>`)
+through the actual engine rather than mocking the bridges apart.
+
+### Text Actions
+
+`TextAction` (in `Easydict.TranslationService/Models`) is a declarative action over the selected or
+entered text, independent of Bob:
+
+- `OpenUrl` — a URL template with `{encodedText}`, `{encodedTranslation}`, `{from}`, `{to}`;
+  http/https only, values escaped with `Uri.EscapeDataString` (`TextActions/TextActionUrlBuilder`).
+- `RunService` — query one specific service, even one configured as manual-query
+  (`MiniWindow.SetTextAndQueryService` adds a transient row when the service is not in that
+  window's list, and reverts the promotion when the query finishes).
+
+`Services/TextActions/TextActionExecutor` is the single dispatch point; a new action type is a new
+enum value plus a branch there. Actions appear in each window's Actions menu (grouped Search /
+Services / Bob plugins) and, when `ShowOnPopButton` is set, on the selection strip (max 4).
+Editable in Settings → Advanced → Text Actions.
+
+### Service Origin (telling plugins apart from built-ins)
+
+`ServiceOrigin { BuiltIn, ImportedDictionary, Plugin }` + `IServiceOriginProvider` are core-library
+metadata; `Services/ServiceOriginHelper` resolves them in the UI, falling back to id prefixes
+(`bob:`, `mdx::`) so saved and history cards stay marked after a plugin is removed. A non-native
+service is rendered with one shared visual language everywhere: an accent stripe and corner mark on
+its result card, a badge next to its name (result cards, minimal renderer, settings service lists,
+selection strip), and an explanatory header tooltip. Three theme tokens carry it —
+`PluginAccentBrush`, `PluginBadgeBackgroundBrush`, `PluginBadgeForegroundBrush` — defined in
+`Themes/Colors.xaml` (light, dark, high contrast) and `Themes/MinimalResources.xaml`.
 
 ### Window Management
 - Four window types: Main (full), Mini (floating), Fixed (persistent), PopButton (selection icon)

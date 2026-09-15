@@ -1,0 +1,7 @@
+{
+  "identifier": "test.timeout.interval",
+  "category": "translate",
+  "version": "1.0.0",
+  "name": "Declared timeout",
+  "summary": "Declares its own timeout and never completes."
+}

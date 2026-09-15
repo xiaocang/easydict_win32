@@ -204,8 +204,11 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
             _serviceResult.IsExpanded = true;
         }
 
-        RootBorder.Opacity = demoted ? 0.5 : 1.0;
-        ServiceNameText.Text = _serviceResult.ServiceDisplayName;
+        RootBorder.Opacity = demoted || _serviceResult.ShowPendingQueryHint ? 0.5 : 1.0;
+        // Minimal theme has no color tokens: mark non-native services with a plain text tag.
+        ServiceNameText.Text = !_serviceResult.Origin.IsNative && ServiceOriginHelper.BadgeText(_serviceResult.Origin) is { } originBadge
+            ? $"{_serviceResult.ServiceDisplayName} [{originBadge}]"
+            : _serviceResult.ServiceDisplayName;
 
         StatusText.Text = GetStatusText(_serviceResult);
         var showStatus = !string.IsNullOrWhiteSpace(StatusText.Text);

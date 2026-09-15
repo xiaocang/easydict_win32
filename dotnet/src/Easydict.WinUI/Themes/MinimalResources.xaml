@@ -131,6 +131,9 @@
             <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource MinimalTextColor}" />
             <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
             <SolidColorBrush x:Key="PosTagTextBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="PluginAccentBrush" Color="{StaticResource MinimalStrongLineColor}" />
+            <SolidColorBrush x:Key="PluginBadgeBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
+            <SolidColorBrush x:Key="PluginBadgeForegroundBrush" Color="{StaticResource MinimalTextColor}" />
             <SolidColorBrush x:Key="ExampleTextBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
             <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="{StaticResource MinimalSurfaceColor}" />
             <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="{StaticResource MinimalLineColor}" />

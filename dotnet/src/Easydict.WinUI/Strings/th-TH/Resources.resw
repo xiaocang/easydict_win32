@@ -1654,4 +1654,7 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>ระยะเวลาที่ตัวชี้หยุดนิ่งก่อนเริ่มค้นหาคำ ค่าต่ำตอบสนองเร็วขึ้น ค่าสูงช่วยลดการค้นหาโดยไม่ตั้งใจ</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>ห้องทดลอง</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>ลองใช้ฟีเจอร์ใหม่ที่นี่ก่อนย้ายไปยังแท็บการตั้งค่าหลัก</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>ขั้นสูง</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>ความหน่วงของไอคอนหลังการเลือก</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>ระยะเวลารอหลังจากเลือกข้อความก่อนที่ไอคอนแปลจะปรากฏ ค่าน้อยกว่าจะเร็วกว่า เพิ่มค่านี้หากไอคอนกะพริบเมื่อคลิกสามครั้งช้า ๆ</value></data>
 </root>

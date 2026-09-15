@@ -40,6 +40,18 @@ public sealed class PopButtonService : IDisposable
     /// </summary>
     public const int AutoDismissMs = 5000;
 
+    /// <summary>
+    /// Effective wait before querying the selection, given the user's configured pop delay
+    /// (Settings -> Behavior -> Advanced). The pop delay is an upper bound on the whole
+    /// pre-query wait, so lowering it speeds up both gestures while the default leaves each
+    /// path at its own delay. Internal for unit testing.
+    /// </summary>
+    internal static int GetSelectionDelayMs(int popDelayMs, bool isMultiClick)
+    {
+        var gestureDelayMs = isMultiClick ? MultiClickSelectionDelayMs : SelectionDelayMs;
+        return Math.Clamp(popDelayMs, 0, gestureDelayMs);
+    }
+
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly MouseHookService? _mouseHookService;
     private PopButtonWindow? _popWindow;
@@ -85,16 +97,16 @@ public sealed class PopButtonService : IDisposable
     /// Waits briefly, then checks for selected text and shows the pop button.
     /// </summary>
     public void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
-        => BeginSelectionCapture(mouseScreenPoint, SelectionDelayMs);
+        => BeginSelectionCapture(mouseScreenPoint, isMultiClick: false);
 
     /// <summary>
     /// Called when a double/triple-click selection settles.
     /// Uses a shorter delay than the drag path, which has not waited on anything yet.
     /// </summary>
     public void OnMultiClickSelectionEnd(MouseHookService.POINT mouseScreenPoint)
-        => BeginSelectionCapture(mouseScreenPoint, MultiClickSelectionDelayMs);
+        => BeginSelectionCapture(mouseScreenPoint, isMultiClick: true);
 
-    private async void BeginSelectionCapture(MouseHookService.POINT mouseScreenPoint, int selectionDelayMs)
+    private async void BeginSelectionCapture(MouseHookService.POINT mouseScreenPoint, bool isMultiClick)
     {
         if (!_isEnabled || _isDisposed || ScreenCaptureService.IsCaptureInProgress) return;
 
@@ -120,7 +132,12 @@ public sealed class PopButtonService : IDisposable
         try
         {
             // Wait for the source app to finalize the selection
-            await Task.Delay(selectionDelayMs, ct);
+            var selectionDelayMs = GetSelectionDelayMs(
+                SettingsService.Instance.MouseSelectionPopDelayMs, isMultiClick);
+            if (selectionDelayMs > 0)
+            {
+                await Task.Delay(selectionDelayMs, ct);
+            }
 
             // Get the selected text using the existing TextSelectionService
             var text = await TextSelectionService.GetSelectedTextAsync(ct);

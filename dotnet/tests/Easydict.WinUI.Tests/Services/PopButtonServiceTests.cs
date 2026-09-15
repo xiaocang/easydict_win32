@@ -43,6 +43,71 @@ public class PopButtonServiceTests
         PopButtonService.AutoDismissMs.Should().Be(5000);
     }
 
+    // --- Configurable pop delay (issue #216) ---
+
+    [Fact]
+    public void GetSelectionDelayMs_AtDefaultPopDelay_KeepsEachGesturesOwnDelay()
+    {
+        var defaultDelay = SettingsService.DefaultMouseSelectionPopDelayMs;
+
+        PopButtonService.GetSelectionDelayMs(defaultDelay, isMultiClick: false)
+            .Should().Be(PopButtonService.SelectionDelayMs);
+        PopButtonService.GetSelectionDelayMs(defaultDelay, isMultiClick: true)
+            .Should().Be(PopButtonService.MultiClickSelectionDelayMs);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GetSelectionDelayMs_AtZero_SkipsTheWaitEntirely(bool isMultiClick)
+    {
+        PopButtonService.GetSelectionDelayMs(0, isMultiClick).Should().Be(0);
+    }
+
+    [Fact]
+    public void GetSelectionDelayMs_BelowGestureDelay_LowersTheWait()
+    {
+        PopButtonService.GetSelectionDelayMs(60, isMultiClick: false).Should().Be(60);
+        // Already shorter than the multi-click delay, so that path is unaffected.
+        PopButtonService.GetSelectionDelayMs(60, isMultiClick: true)
+            .Should().Be(PopButtonService.MultiClickSelectionDelayMs);
+    }
+
+    [Fact]
+    public void GetSelectionDelayMs_AboveGestureDelay_DoesNotStretchIt()
+    {
+        // The pop delay is an upper bound: raising it lengthens the multi-click settle
+        // wait (MouseHookService), not the per-gesture delay paid afterwards.
+        PopButtonService.GetSelectionDelayMs(
+            SettingsService.MaxMouseSelectionPopDelayMs, isMultiClick: false)
+            .Should().Be(PopButtonService.SelectionDelayMs);
+    }
+
+    [Fact]
+    public void MouseSelectionPopDelayMs_DefaultsToCurrentBehaviorAndClamps()
+    {
+        SettingsService.DefaultMouseSelectionPopDelayMs
+            .Should().Be(MouseHookService.MaxMultiClickWaitMs, "the default must not change today's timing");
+
+        var settings = SettingsService.Instance;
+        var original = settings.MouseSelectionPopDelayMs;
+        try
+        {
+            settings.MouseSelectionPopDelayMs = -50;
+            settings.MouseSelectionPopDelayMs.Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+
+            settings.MouseSelectionPopDelayMs = 99999;
+            settings.MouseSelectionPopDelayMs.Should().Be(SettingsService.MaxMouseSelectionPopDelayMs);
+
+            settings.MouseSelectionPopDelayMs = 120;
+            settings.MouseSelectionPopDelayMs.Should().Be(120);
+        }
+        finally
+        {
+            settings.MouseSelectionPopDelayMs = original;
+        }
+    }
+
     [Fact]
     public void MouseHookService_MinDragDistance_Is10()
     {

@@ -2988,55 +2988,95 @@
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     TextWrapping="Wrap"/>
 
-                                <!-- Quick-action buttons (issue #172) -->
-                                <TextBlock
-                                    x:Name="QuickActionsHeaderText"
-                                    Text="Quick action buttons"
-                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=ShowOcrButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="ShowOcrButtonToggle"
-                                        Header="Show OCR button">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
-                                <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=ShowPinButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="ShowPinButtonToggle"
-                                        Header="Show pin button">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
-                                <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=ShowSourcePlayButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="ShowSourcePlayButtonToggle"
-                                        Header="Show play button">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
-                                <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=ShowSwapButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="ShowSwapButtonToggle"
-                                        Header="Show swap button">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
+                                <!-- Rarely used knobs stay folded away (issue #216) -->
+                                <Expander x:Name="AdvancedBehaviorExpander"
+                                          AutomationProperties.AutomationId="AdvancedBehaviorExpander"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch"
+                                          IsExpanded="False">
+                                    <Expander.Header>
+                                        <TextBlock x:Name="AdvancedBehaviorHeaderText"
+                                                   Text="Advanced"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                    </Expander.Header>
+                                    <StackPanel Spacing="12"
+                                                Padding="0,8">
+                                        <!-- Selection pop-up delay (issue #216) -->
+                                        <TextBlock
+                                            x:Name="MouseSelectionPopDelayLabel"
+                                            Text="Selection pop-up delay"
+                                            FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        <Slider
+                                            x:Name="MouseSelectionPopDelaySlider"
+                                            AutomationProperties.AutomationId="MouseSelectionPopDelaySlider"
+                                            Minimum="0"
+                                            Maximum="600"
+                                            StepFrequency="20"
+                                            TickFrequency="100"
+                                            TickPlacement="Outside"
+                                            Width="250"
+                                            HorizontalAlignment="Left"/>
+                                        <TextBlock
+                                            x:Name="MouseSelectionPopDelayDescriptionText"
+                                            Text="How long to wait after a selection before the translate icon appears. Lower is faster; raise it if a slow triple-click makes the icon flash."
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            TextWrapping="Wrap"/>
+
+                                        <!-- Quick-action buttons (issue #172) -->
+                                        <TextBlock
+                                            x:Name="QuickActionsHeaderText"
+                                            Text="Quick action buttons"
+                                            FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        <controls:FluentSettingRow>
+        <TextBlock Text="{Binding Header, ElementName=ShowOcrButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+        <ToggleSwitch x:Name="ShowOcrButtonToggle"
+                                                Header="Show OCR button">
+        <ToggleSwitch.HeaderTemplate>
+        <DataTemplate>
+        <Grid Height="0"/>
+        </DataTemplate>
+        </ToggleSwitch.HeaderTemplate>
+        </ToggleSwitch>
+        </controls:FluentSettingRow>
+                                        <controls:FluentSettingRow>
+        <TextBlock Text="{Binding Header, ElementName=ShowPinButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+        <ToggleSwitch x:Name="ShowPinButtonToggle"
+                                                Header="Show pin button">
+        <ToggleSwitch.HeaderTemplate>
+        <DataTemplate>
+        <Grid Height="0"/>
+        </DataTemplate>
+        </ToggleSwitch.HeaderTemplate>
+        </ToggleSwitch>
+        </controls:FluentSettingRow>
+                                        <controls:FluentSettingRow>
+        <TextBlock Text="{Binding Header, ElementName=ShowSourcePlayButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+        <ToggleSwitch x:Name="ShowSourcePlayButtonToggle"
+                                                Header="Show play button">
+        <ToggleSwitch.HeaderTemplate>
+        <DataTemplate>
+        <Grid Height="0"/>
+        </DataTemplate>
+        </ToggleSwitch.HeaderTemplate>
+        </ToggleSwitch>
+        </controls:FluentSettingRow>
+                                        <controls:FluentSettingRow>
+        <TextBlock Text="{Binding Header, ElementName=ShowSwapButtonToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+        <ToggleSwitch x:Name="ShowSwapButtonToggle"
+                                                Header="Show swap button">
+        <ToggleSwitch.HeaderTemplate>
+        <DataTemplate>
+        <Grid Height="0"/>
+        </DataTemplate>
+        </ToggleSwitch.HeaderTemplate>
+        </ToggleSwitch>
+        </controls:FluentSettingRow>
+
+
+                                    </StackPanel>
+                                </Expander>
                             </StackPanel>
                         </Border>
                     </StackPanel>

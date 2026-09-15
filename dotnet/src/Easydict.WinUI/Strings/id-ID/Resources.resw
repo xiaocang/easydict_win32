@@ -1654,4 +1654,7 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Lama penunjuk berhenti sebelum pencarian dimulai. Nilai lebih kecil lebih cepat; nilai lebih besar mengurangi pencarian yang tidak disengaja.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>Laboratorium</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Coba fitur baru di sini sebelum dipindahkan ke tab pengaturan utama.</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Lanjutan</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Jeda munculnya ikon seleksi</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Berapa lama menunggu setelah teks dipilih sebelum ikon terjemahan muncul. Semakin kecil semakin cepat; naikkan jika ikon berkedip saat klik tiga kali yang lambat.</value></data>
 </root>

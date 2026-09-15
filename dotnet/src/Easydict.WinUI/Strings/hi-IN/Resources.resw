@@ -1654,4 +1654,7 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>पॉइंटर रुकने के बाद शब्द खोज शुरू होने तक का समय। कम समय से तेज़ प्रतिक्रिया मिलती है; अधिक समय अनचाही खोजों को कम करता है।</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>प्रयोगशाला</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>नई सुविधाओं को मुख्य सेटिंग टैब में ले जाने से पहले यहाँ आज़माएँ।</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>उन्नत</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>चयन के बाद आइकन दिखने में देरी</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>पाठ चुनने के बाद अनुवाद आइकन दिखने तक की प्रतीक्षा अवधि। कम मान तेज़ है; यदि धीमे ट्रिपल-क्लिक पर आइकन झिलमिलाए तो इसे बढ़ाएँ।</value></data>
 </root>

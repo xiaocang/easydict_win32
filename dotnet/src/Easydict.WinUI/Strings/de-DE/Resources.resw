@@ -1654,4 +1654,7 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Wartezeit nach dem Anhalten des Mauszeigers bis zur Wortabfrage. Kürzere Zeiten reagieren schneller, längere vermeiden unbeabsichtigte Abfragen.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>Labor</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Hier können Sie neue Funktionen testen, bevor sie in die regulären Einstellungsregister wechseln.</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Erweitert</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Verzögerung des Auswahlsymbols</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Wie lange nach einer Auswahl gewartet wird, bis das Übersetzungssymbol erscheint. Kleinere Werte sind schneller; erhöhen Sie den Wert, wenn das Symbol bei einem langsamen Dreifachklick flackert.</value></data>
 </root>

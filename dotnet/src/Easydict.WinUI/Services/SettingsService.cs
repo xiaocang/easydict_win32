@@ -288,6 +288,30 @@ public sealed class SettingsService
     /// </summary>
     public List<string> MouseSelectionExcludedApps { get; set; } = ["code"];
 
+    /// <summary>Lower bound for <see cref="MouseSelectionPopDelayMs"/>: show the icon as soon as possible.</summary>
+    public const int MinMouseSelectionPopDelayMs = 0;
+
+    /// <summary>Upper bound for <see cref="MouseSelectionPopDelayMs"/>.</summary>
+    public const int MaxMouseSelectionPopDelayMs = 600;
+
+    /// <summary>Default pop delay: the built-in multi-click settle cap.</summary>
+    public const int DefaultMouseSelectionPopDelayMs = MouseHookService.MaxMultiClickWaitMs;
+
+    private int _mouseSelectionPopDelayMs = DefaultMouseSelectionPopDelayMs;
+
+    /// <summary>
+    /// Upper bound, in milliseconds, on how long the pop button waits after a selection gesture
+    /// before reading the selected text. Lower values show the translate icon sooner; raising it
+    /// leaves more room for a slow triple-click to be recognized before the icon appears.
+    /// Clamped to [<see cref="MinMouseSelectionPopDelayMs"/>, <see cref="MaxMouseSelectionPopDelayMs"/>].
+    /// </summary>
+    public int MouseSelectionPopDelayMs
+    {
+        get => _mouseSelectionPopDelayMs;
+        set => _mouseSelectionPopDelayMs = Math.Clamp(
+            value, MinMouseSelectionPopDelayMs, MaxMouseSelectionPopDelayMs);
+    }
+
     /// <summary>
     /// Enable hover word lookup (悬浮取词): hold the trigger key and rest the pointer on a word
     /// to see a small popup with its meaning. Shares <see cref="MouseSelectionExcludedApps"/>.
@@ -903,6 +927,7 @@ public sealed class SettingsService
         HoverWordLookupUseOcrFallback = GetValue(nameof(HoverWordLookupUseOcrFallback), true);
         HoverWordLookupDelayMs = GetValue(nameof(HoverWordLookupDelayMs), DefaultHoverWordLookupDelayMs);
         HoverWordLookupServiceId = GetValue(nameof(HoverWordLookupServiceId), "") ?? "";
+        MouseSelectionPopDelayMs = GetValue(nameof(MouseSelectionPopDelayMs), DefaultMouseSelectionPopDelayMs);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
         HistoryEnabled = GetValue(nameof(HistoryEnabled), false);
         HistoryRetentionDays = Math.Clamp(GetValue(nameof(HistoryRetentionDays), 30), 1, 3650);
@@ -1202,6 +1227,7 @@ public sealed class SettingsService
         _settings[nameof(HoverWordLookupUseOcrFallback)] = HoverWordLookupUseOcrFallback;
         _settings[nameof(HoverWordLookupDelayMs)] = HoverWordLookupDelayMs;
         _settings[nameof(HoverWordLookupServiceId)] = HoverWordLookupServiceId;
+        _settings[nameof(MouseSelectionPopDelayMs)] = MouseSelectionPopDelayMs;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;

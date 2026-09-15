@@ -1654,4 +1654,7 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Hvor længe markøren skal stå stille før opslaget starter. Kortere er hurtigere; længere mindsker utilsigtede opslag.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>Laboratorium</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Prøv nye funktioner her, før de flyttes til de almindelige indstillingsfaner.</value></data>
+  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Avanceret</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Forsinkelse for markeringsikon</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Hvor længe der ventes efter en markering, før oversættelsesikonet vises. Lavere er hurtigere; hæv værdien, hvis ikonet blinker ved et langsomt tredobbeltklik.</value></data>
 </root>

@@ -363,8 +363,11 @@ public class LanguageDetectionServiceTests : IDisposable
             providers,
             CancellationToken.None,
             onRateLimited: null,
-            attemptTimeout: TimeSpan.FromSeconds(5),
-            totalTimeout: TimeSpan.FromMilliseconds(100));
+            // The gap between the two deadlines is what this asserts, and it has to survive a
+            // loaded CI agent delaying timer callbacks by seconds: with 5s here, a starved
+            // thread pool let the attempt deadline land first, freeing the chain to try bing.
+            attemptTimeout: TimeSpan.FromMinutes(1),
+            totalTimeout: TimeSpan.FromMilliseconds(200));
 
         detected.Should().Be(Language.Auto, "an unreachable network must not hold the query open");
         fallbackCalled.Should().BeFalse("the chain budget was already spent on the first provider");
@@ -385,8 +388,10 @@ public class LanguageDetectionServiceTests : IDisposable
             providers,
             CancellationToken.None,
             onRateLimited: null,
+            // Same reasoning inverted: the budget must not be able to overtake the per-attempt
+            // deadline when the agent is slow, or the fallback never gets its turn.
             attemptTimeout: TimeSpan.FromMilliseconds(50),
-            totalTimeout: TimeSpan.FromSeconds(5));
+            totalTimeout: TimeSpan.FromMinutes(1));
 
         detected.Should().Be(Language.Japanese);
     }

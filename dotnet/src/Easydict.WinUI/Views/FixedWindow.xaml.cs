@@ -79,7 +79,30 @@ public sealed partial class FixedWindow : Window
     internal event Action? SelectionCaptureInterrupted;
 
     internal void SetSelectionCapturePending(bool pending)
-        => _isSelectionCapturePending = pending;
+    {
+        _isSelectionCapturePending = pending;
+        SetBusyStatus(pending
+            ? LocalizationService.Instance.GetString("StatusCapturingSelection")
+            : null);
+    }
+
+    /// <summary>
+    /// Show a busy indicator while the selection is being captured — that step used to run
+    /// silently, leaving the window blank as if nothing were happening (issue #216).
+    /// Pass null to clear, or showSpinner: false to leave a message without the spinner.
+    /// </summary>
+    internal void SetBusyStatus(string? statusText, bool showSpinner = true)
+    {
+        if (_isClosing) return;
+
+        StatusText.Text = statusText ?? string.Empty;
+
+        var spinning = showSpinner && !string.IsNullOrEmpty(statusText);
+        LoadingRing.IsActive = spinning;
+        LoadingRing.Visibility = spinning ? Visibility.Visible : Visibility.Collapsed;
+        TranslateIcon.Visibility = spinning ? Visibility.Collapsed : Visibility.Visible;
+        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing);
+    }
 
     private void InterruptSelectionCapture([System.Runtime.CompilerServices.CallerMemberName] string reason = "")
     {
@@ -935,6 +958,7 @@ public sealed partial class FixedWindow : Window
         // Hide progress ring (cancel icon replaces it)
         LoadingRing.IsActive = false;
         LoadingRing.Visibility = Visibility.Collapsed;
+        TranslateIcon.Visibility = Visibility.Visible;
     }
 
     private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)

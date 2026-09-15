@@ -1657,4 +1657,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>उन्नत</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>चयन के बाद आइकन दिखने में देरी</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>पाठ चुनने के बाद अनुवाद आइकन दिखने तक की प्रतीक्षा अवधि। कम मान तेज़ है; यदि धीमे ट्रिपल-क्लिक पर आइकन झिलमिलाए तो इसे बढ़ाएँ।</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>चयनित पाठ लिया जा रहा है…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>पाठ पहचाना जा रहा है…</value></data>
 </root>

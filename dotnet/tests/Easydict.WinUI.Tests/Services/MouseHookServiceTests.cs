@@ -410,8 +410,11 @@ public class MouseHookServiceTests
         // A raised pop delay can only wait as long as the system double-click time allows.
         MouseHookService.GetMultiClickWaitMs(500, capMs: 600).Should().Be(550);
         MouseHookService.GetMultiClickWaitMs(500, capMs: 80).Should().Be(80);
-        MouseHookService.GetMultiClickWaitMs(500, capMs: 0).Should().Be(0);
-        MouseHookService.GetMultiClickWaitMs(500, capMs: -10).Should().Be(0);
+        // Never below the floor, whatever a stale settings file asks for.
+        MouseHookService.GetMultiClickWaitMs(500, capMs: 0)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+        MouseHookService.GetMultiClickWaitMs(500, capMs: -10)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
     }
 
     [Fact]

@@ -1657,4 +1657,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>進階</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>選取後圖示彈出延遲</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>選取文字後等待多久才顯示翻譯圖示。數值越小彈出越快；若三擊選取時圖示閃爍，可適當調大。</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>正在取得選取文字…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>正在辨識文字…</value></data>
 </root>

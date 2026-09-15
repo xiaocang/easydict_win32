@@ -1657,4 +1657,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Advanced</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Selection pop-up delay</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>How long to wait after a selection before the translate icon appears. Lower is faster; raise it if a slow triple-click makes the icon flash.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>Getting selected text…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>Recognizing text…</value></data>
 </root>

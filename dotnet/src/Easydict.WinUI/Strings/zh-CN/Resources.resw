@@ -1657,4 +1657,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>高级</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>选中后图标弹出延迟</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>选中文本后等待多久才显示翻译图标。数值越小弹出越快；如果三击选择时图标闪烁，可适当调大。</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>正在获取选中文本…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>正在识别文字…</value></data>
 </root>

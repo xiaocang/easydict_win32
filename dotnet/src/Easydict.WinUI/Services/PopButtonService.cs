@@ -49,7 +49,7 @@ public sealed class PopButtonService : IDisposable
     internal static int GetSelectionDelayMs(int popDelayMs, bool isMultiClick)
     {
         var gestureDelayMs = isMultiClick ? MultiClickSelectionDelayMs : SelectionDelayMs;
-        return Math.Clamp(popDelayMs, 0, gestureDelayMs);
+        return Math.Clamp(popDelayMs, SettingsService.MinMouseSelectionPopDelayMs, gestureDelayMs);
     }
 
     private readonly DispatcherQueue _dispatcherQueue;
@@ -132,12 +132,9 @@ public sealed class PopButtonService : IDisposable
         try
         {
             // Wait for the source app to finalize the selection
-            var selectionDelayMs = GetSelectionDelayMs(
-                SettingsService.Instance.MouseSelectionPopDelayMs, isMultiClick);
-            if (selectionDelayMs > 0)
-            {
-                await Task.Delay(selectionDelayMs, ct);
-            }
+            await Task.Delay(
+                GetSelectionDelayMs(SettingsService.Instance.MouseSelectionPopDelayMs, isMultiClick),
+                ct);
 
             // Get the selected text using the existing TextSelectionService
             var text = await TextSelectionService.GetSelectedTextAsync(ct);

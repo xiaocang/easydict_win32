@@ -352,7 +352,7 @@ public class MouseHookServiceTests
     {
         using var service = new MouseHookService();
         int fireCount = 0;
-        service.OnDragSelectionEnd += _ => fireCount++;
+        service.OnMultiClickSelectionEnd += _ => fireCount++;
 
         // First click (down + up, no drag)
         service.ProcessMouseMessage(0x0201, Pt(100, 100));
@@ -365,6 +365,57 @@ public class MouseHookServiceTests
         // The timer fires asynchronously, so the event count depends on timing.
         // But the click detector should have count=2.
         service.ClickDetector.ClickCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ProcessMouseMessage_DoubleClick_FiresMultiClickEventPromptly()
+    {
+        using var service = new MouseHookService();
+        var fired = new TaskCompletionSource<POINT>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.OnMultiClickSelectionEnd += pt => fired.TrySetResult(pt);
+        service.OnDragSelectionEnd += _ => fired.TrySetException(
+            new InvalidOperationException("multi-click must not fire the drag event"));
+
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+
+        // Generous ceiling for CI scheduling noise; the point is that it no longer waits
+        // out the full system double-click time before the pop button can appear.
+        var completed = await Task.WhenAny(fired.Task, Task.Delay(2000));
+        completed.Should().BeSameAs(fired.Task, "the multi-click wait is capped");
+        (await fired.Task).x.Should().Be(100);
+    }
+
+    // --- Multi-click settle wait ---
+
+    [Fact]
+    public void GetMultiClickWaitMs_WithDefaultDoubleClickTime_IsCapped()
+    {
+        // Windows default is 500ms; the old behavior waited 550ms before the pop button.
+        MouseHookService.GetMultiClickWaitMs(500)
+            .Should().Be(MouseHookService.MaxMultiClickWaitMs);
+    }
+
+    [Fact]
+    public void GetMultiClickWaitMs_WithShortDoubleClickTime_UsesSettleWindow()
+    {
+        MouseHookService.GetMultiClickWaitMs(100).Should().Be(150);
+    }
+
+    [Fact]
+    public void GetMultiClickWaitMs_WithExtremeDoubleClickTime_DoesNotOverflow()
+    {
+        MouseHookService.GetMultiClickWaitMs(uint.MaxValue)
+            .Should().Be(MouseHookService.MaxMultiClickWaitMs);
+    }
+
+    [Fact]
+    public void MaxMultiClickWaitMs_KeepsPopButtonUnderHalfASecond()
+    {
+        (MouseHookService.MaxMultiClickWaitMs + PopButtonService.MultiClickSelectionDelayMs)
+            .Should().BeLessThan(500, "the icon should appear promptly after a double-click");
     }
 
     [Fact]

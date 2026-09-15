@@ -27,6 +27,13 @@ public sealed class PopButtonService : IDisposable
     public const int SelectionDelayMs = 150;
 
     /// <summary>
+    /// Delay before querying selected text after a double/triple click.
+    /// Shorter than <see cref="SelectionDelayMs"/> because MouseHookService already waited
+    /// out the multi-click settle window, during which the source app finalized its selection.
+    /// </summary>
+    public const int MultiClickSelectionDelayMs = 30;
+
+    /// <summary>
     /// Auto-dismiss timeout for the pop button if the user doesn't interact.
     /// </summary>
     public const int AutoDismissMs = 5000;
@@ -73,7 +80,17 @@ public sealed class PopButtonService : IDisposable
     /// Called when a drag-select gesture ends.
     /// Waits briefly, then checks for selected text and shows the pop button.
     /// </summary>
-    public async void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
+    public void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
+        => BeginSelectionCapture(mouseScreenPoint, SelectionDelayMs);
+
+    /// <summary>
+    /// Called when a double/triple-click selection settles.
+    /// Uses a shorter delay than the drag path, which has not waited on anything yet.
+    /// </summary>
+    public void OnMultiClickSelectionEnd(MouseHookService.POINT mouseScreenPoint)
+        => BeginSelectionCapture(mouseScreenPoint, MultiClickSelectionDelayMs);
+
+    private async void BeginSelectionCapture(MouseHookService.POINT mouseScreenPoint, int selectionDelayMs)
     {
         if (!_isEnabled || _isDisposed || ScreenCaptureService.IsCaptureInProgress) return;
 
@@ -99,7 +116,7 @@ public sealed class PopButtonService : IDisposable
         try
         {
             // Wait for the source app to finalize the selection
-            await Task.Delay(SelectionDelayMs, ct);
+            await Task.Delay(selectionDelayMs, ct);
 
             // Get the selected text using the existing TextSelectionService
             var text = await TextSelectionService.GetSelectedTextAsync(ct);

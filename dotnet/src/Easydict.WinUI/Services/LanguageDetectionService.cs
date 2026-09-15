@@ -16,7 +16,18 @@ public sealed class LanguageDetectionService : IDisposable
     private readonly SettingsService _settings;
     private readonly Func<string, CancellationToken, Action?, Task<Language>> _detectLanguage;
     private static readonly string[] DetectionServiceIds = ["google", "bing"];
-    private static readonly TimeSpan DetectionAttemptTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// Per-provider deadline. Detection is a small request; when it does not answer quickly
+    /// the network or proxy is unhealthy, and waiting longer only delays the translation
+    /// that follows (detection failure degrades to Language.Auto, not to an error).
+    /// </summary>
+    private static readonly TimeSpan DetectionAttemptTimeout = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Deadline for the whole fallback chain, so an unreachable network cannot cost the
+    /// sum of every provider's timeout before the query starts translating.
+    /// </summary>
+    private static readonly TimeSpan DetectionTotalTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Memory cache for detection results.
@@ -157,22 +168,41 @@ public sealed class LanguageDetectionService : IDisposable
         return await DetectWithFallbackAsync(text, handle.Manager.Services, cancellationToken, onRateLimited);
     }
 
+    /// <summary>
+    /// Try each detection provider in order until one returns a language.
+    /// <paramref name="attemptTimeout"/> and <paramref name="totalTimeout"/> default to
+    /// <see cref="DetectionAttemptTimeout"/> and <see cref="DetectionTotalTimeout"/>;
+    /// they are overridable so tests do not have to wait out the real deadlines.
+    /// </summary>
     internal static async Task<Language> DetectWithFallbackAsync(
         string text,
         IReadOnlyDictionary<string, ITranslationService> services,
         CancellationToken cancellationToken,
-        Action? onRateLimited = null)
+        Action? onRateLimited = null,
+        TimeSpan? attemptTimeout = null,
+        TimeSpan? totalTimeout = null)
     {
+        // Bound the whole chain, not just each attempt: with every provider unreachable the
+        // per-attempt timeouts otherwise add up in front of the translation.
+        using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budgetCts.CancelAfter(totalTimeout ?? DetectionTotalTimeout);
+
         foreach (var serviceId in DetectionServiceIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (budgetCts.IsCancellationRequested)
+            {
+                CrashDiagnostics.Log("[Detection] Budget exhausted; continuing without a detected language.");
+                break;
+            }
+
             if (!services.TryGetValue(serviceId, out var service) || !service.IsConfigured)
                 continue;
 
             // Bound each attempt so an unreachable primary can reach the fallback.
             // A window's shorter deadline or user cancellation still takes precedence.
-            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            attemptCts.CancelAfter(DetectionAttemptTimeout);
+            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(budgetCts.Token);
+            attemptCts.CancelAfter(attemptTimeout ?? DetectionAttemptTimeout);
             try
             {
                 var detected = await service.DetectLanguageAsync(text, attemptCts.Token);

@@ -343,6 +343,54 @@ public class LanguageDetectionServiceTests : IDisposable
             "hello world", providers, CancellationToken.None)).Should().Be(Language.Auto);
     }
 
+    [Fact]
+    public async Task DetectWithFallback_WhenTotalBudgetExpires_StopsBeforeNextProvider()
+    {
+        var fallbackCalled = false;
+        var providers = new Dictionary<string, ITranslationService>
+        {
+            ["google"] = new StubDetector(ct => Task.Delay(Timeout.Infinite, ct).ContinueWith(
+                _ => Language.Auto, TaskContinuationOptions.ExecuteSynchronously)),
+            ["bing"] = new StubDetector(_ =>
+            {
+                fallbackCalled = true;
+                return Task.FromResult(Language.English);
+            })
+        };
+
+        var detected = await LanguageDetectionService.DetectWithFallbackAsync(
+            "hello world",
+            providers,
+            CancellationToken.None,
+            onRateLimited: null,
+            attemptTimeout: TimeSpan.FromSeconds(5),
+            totalTimeout: TimeSpan.FromMilliseconds(100));
+
+        detected.Should().Be(Language.Auto, "an unreachable network must not hold the query open");
+        fallbackCalled.Should().BeFalse("the chain budget was already spent on the first provider");
+    }
+
+    [Fact]
+    public async Task DetectWithFallback_WhenPrimaryHangs_FallbackStillRunsWithinBudget()
+    {
+        var providers = new Dictionary<string, ITranslationService>
+        {
+            ["google"] = new StubDetector(ct => Task.Delay(Timeout.Infinite, ct).ContinueWith(
+                _ => Language.Auto, TaskContinuationOptions.ExecuteSynchronously)),
+            ["bing"] = new StubDetector(_ => Task.FromResult(Language.Japanese))
+        };
+
+        var detected = await LanguageDetectionService.DetectWithFallbackAsync(
+            "こんにちは世界",
+            providers,
+            CancellationToken.None,
+            onRateLimited: null,
+            attemptTimeout: TimeSpan.FromMilliseconds(50),
+            totalTimeout: TimeSpan.FromSeconds(5));
+
+        detected.Should().Be(Language.Japanese);
+    }
+
     private sealed class RateLimitedHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

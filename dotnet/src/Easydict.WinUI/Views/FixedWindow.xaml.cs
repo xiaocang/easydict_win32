@@ -975,6 +975,13 @@ public sealed partial class FixedWindow : Window
 
         try
         {
+            // Enter the querying state before language detection. Detection is a network
+            // round-trip that can take seconds on a slow or unreachable connection (or a
+            // misconfigured proxy), and until it returned the window showed nothing at all,
+            // which read as "frozen" or "auto-translate is broken".
+            SetLoading(true);
+            PrepareServiceResultsForQueryStart();
+
             var sourceLanguage = GetSourceLanguage();
             TranslationLanguage detectedLanguage;
             if (sourceLanguage == TranslationLanguage.Auto)
@@ -1013,6 +1020,7 @@ public sealed partial class FixedWindow : Window
                 targetLanguage == TranslationLanguage.Auto)
             {
                 StatusText.Text = LocalizationService.Instance.GetString("NoAvailableTargetLanguage");
+                ResetAllServiceResultsLoadingState();
                 return;
             }
 
@@ -1048,11 +1056,13 @@ public sealed partial class FixedWindow : Window
                     StatusText.Text = LocalizationService.Instance.GetStringOrDefault(
                         "NoAvailableTargetLanguage",
                         "No available target language for translation.");
+                    ResetAllServiceResultsLoadingState();
                     return;
                 }
 
                 if (!_serviceResults.Any(result => result.EnabledQuery))
                 {
+                    ResetAllServiceResultsLoadingState();
                     return;
                 }
             }
@@ -1245,6 +1255,22 @@ public sealed partial class FixedWindow : Window
         }
 
         return trackedTask;
+    }
+
+    /// <summary>
+    /// Put every auto-query service result into the loading state right away so the user
+    /// sees "translating" while the query is still resolving its languages.
+    /// </summary>
+    private void PrepareServiceResultsForQueryStart()
+    {
+        foreach (var serviceResult in _serviceResults)
+        {
+            serviceResult.Reset();
+            if (serviceResult.EnabledQuery)
+            {
+                serviceResult.IsLoading = true;
+            }
+        }
     }
 
     /// <summary>

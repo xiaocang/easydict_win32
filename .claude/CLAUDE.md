@@ -227,12 +227,12 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 ### Mouse Selection Translate (Pop Button)
 - **MouseHookService**: `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks detect text selection gestures:
   - **Drag select**: mouse down → drag beyond 10px threshold → mouse up (fires immediately)
-  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a brief delay to allow triple-click)
+  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a settle delay capped at `MaxMultiClickWaitMs` = 220ms so the icon is not held back by the full double-click time; a later third click dismisses the icon and restarts the timer)
 - **PopButtonWindow**: 30×30 WinUI 3 window with `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` — does not steal focus from source app
-- **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms, queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
+- **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms after a drag (30ms after a multi-click, which already waited out the settle window), queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
 - **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new selection
 - **Setting**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior
-- **Flow**: `MouseHookService.OnDragSelectionEnd` → `PopButtonService.OnDragSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
+- **Flow**: `MouseHookService.OnDragSelectionEnd` / `OnMultiClickSelectionEnd` → `PopButtonService.OnDragSelectionEnd` / `OnMultiClickSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
 
 ### OCR Screenshot Translate
 

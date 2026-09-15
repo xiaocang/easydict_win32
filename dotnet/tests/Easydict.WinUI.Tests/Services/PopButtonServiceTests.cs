@@ -29,6 +29,15 @@ public class PopButtonServiceTests
     }
 
     [Fact]
+    public void MultiClickSelectionDelayMs_IsShorterThanDragDelay()
+    {
+        // The multi-click path already waited out the settle window in MouseHookService,
+        // so re-paying the drag delay only kept the pop button from appearing.
+        PopButtonService.MultiClickSelectionDelayMs.Should().BeGreaterThan(0)
+            .And.BeLessThan(PopButtonService.SelectionDelayMs);
+    }
+
+    [Fact]
     public void AutoDismissMs_Is5000()
     {
         PopButtonService.AutoDismissMs.Should().Be(5000);

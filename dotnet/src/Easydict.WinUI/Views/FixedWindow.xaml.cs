@@ -1231,27 +1231,37 @@ public sealed partial class FixedWindow : Window
 
             await Task.WhenAll(tasks);
 
-            // Update status with completed count
-            var loc = LocalizationService.Instance;
-            var successCount = _serviceResults.Count(r => r.Result != null);
-            var errorCount = _serviceResults.Count(r => r.HasError);
-            StatusText.Text = successCount > 0
-                ? string.Format(loc.GetString("ServiceResultsComplete"), successCount)
-                : errorCount > 0 ? loc.GetString("TranslationFailed") : "";
+            // Update status with completed count — but not over a query that replaced this one
+            // (cancelled service tasks complete normally, so this line is still reached).
+            if (OwnsCurrentQuery(currentCts))
+            {
+                var loc = LocalizationService.Instance;
+                var successCount = _serviceResults.Count(r => r.Result != null);
+                var errorCount = _serviceResults.Count(r => r.HasError);
+                StatusText.Text = successCount > 0
+                    ? string.Format(loc.GetString("ServiceResultsComplete"), successCount)
+                    : errorCount > 0 ? loc.GetString("TranslationFailed") : "";
+            }
         }
         catch (OperationCanceledException)
         {
-            // Query was cancelled - reset all service results that may be stuck in loading state
-            ResetAllServiceResultsLoadingState();
+            // Query was cancelled - reset all service results that may be stuck in loading state,
+            // unless a newer query has already taken the UI over.
+            if (OwnsCurrentQuery(currentCts)) ResetAllServiceResultsLoadingState();
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"{LocalizationService.Instance.GetString("StatusError")}: {ex.Message}";
-            ResetAllServiceResultsLoadingState();
+            if (OwnsCurrentQuery(currentCts))
+            {
+                StatusText.Text = $"{LocalizationService.Instance.GetString("StatusError")}: {ex.Message}";
+                ResetAllServiceResultsLoadingState();
+            }
         }
         finally
         {
-            if (!_isClosing) SetLoading(false);
+            // Check ownership before releasing it below: a superseded query must leave the
+            // replacement's loading state alone.
+            if (!_isClosing && OwnsCurrentQuery(currentCts)) SetLoading(false);
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
             if (snapshotDraft is not null)
             {
@@ -1302,6 +1312,14 @@ public sealed partial class FixedWindow : Window
             }
         }
     }
+
+    /// <summary>
+    /// True while <paramref name="queryCts"/> is still the window's current query. A superseded
+    /// query keeps running until its awaits observe cancellation, and its replacement has already
+    /// put the UI into the querying state by then, so the loser must not reset what the winner set.
+    /// </summary>
+    private bool OwnsCurrentQuery(CancellationTokenSource queryCts)
+        => ReferenceEquals(Volatile.Read(ref _currentQueryCts), queryCts);
 
     /// <summary>
     /// Reset all service results to clear loading/streaming state.

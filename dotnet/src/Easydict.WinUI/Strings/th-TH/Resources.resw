@@ -1568,4 +1568,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>ขั้นสูง</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>ความหน่วงของไอคอนหลังการเลือก</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>ระยะเวลารอหลังจากเลือกข้อความก่อนที่ไอคอนแปลจะปรากฏ ค่าน้อยกว่าจะเร็วกว่า เพิ่มค่านี้หากไอคอนกะพริบเมื่อคลิกสามครั้งช้า ๆ</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>กำลังอ่านข้อความที่เลือก…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>กำลังรู้จำข้อความ…</value></data>
 </root>

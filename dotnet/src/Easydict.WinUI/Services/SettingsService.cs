@@ -256,8 +256,11 @@ public sealed class SettingsService
     /// </summary>
     public List<string> MouseSelectionExcludedApps { get; set; } = ["code"];
 
-    /// <summary>Lower bound for <see cref="MouseSelectionPopDelayMs"/>: show the icon as soon as possible.</summary>
-    public const int MinMouseSelectionPopDelayMs = 0;
+    /// <summary>
+    /// Lower bound for <see cref="MouseSelectionPopDelayMs"/>: as close to instant as is useful.
+    /// Not zero — the source app needs a moment to publish the finished selection before it can be read.
+    /// </summary>
+    public const int MinMouseSelectionPopDelayMs = 10;
 
     /// <summary>Upper bound for <see cref="MouseSelectionPopDelayMs"/>.</summary>
     public const int MaxMouseSelectionPopDelayMs = 600;

@@ -1568,4 +1568,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Lanjutan</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Lengah ikon selepas pemilihan</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Berapa lama menunggu selepas teks dipilih sebelum ikon terjemahan muncul. Nilai lebih kecil lebih pantas; tingkatkan jika ikon berkelip semasa klik tiga kali yang perlahan.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>Mendapatkan teks yang dipilih…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>Mengecam teks…</value></data>
 </root>

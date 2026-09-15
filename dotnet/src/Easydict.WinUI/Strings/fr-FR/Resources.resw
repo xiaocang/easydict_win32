@@ -1568,4 +1568,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Avancé</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Délai d'affichage de l'icône de sélection</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Temps d'attente après une sélection avant l'apparition de l'icône de traduction. Plus la valeur est faible, plus l'icône apparaît vite ; augmentez-la si l'icône clignote lors d'un triple clic lent.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>Récupération du texte sélectionné…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>Reconnaissance du texte…</value></data>
 </root>

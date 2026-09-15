@@ -55,8 +55,14 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
     {
         Debug.WriteLine("[OcrTranslate] Starting OCR translate flow...");
 
-        var text = await RunOcrPipelineAsync("OcrTranslate").ConfigureAwait(false);
+        // Recognition can take seconds (a cloud engine, a cold local model). Put the window
+        // on screen as soon as the region is captured so the flow is never silent (issue #216).
+        var text = await RunOcrPipelineAsync("OcrTranslate", ShowRecognizingStatus)
+            .ConfigureAwait(false);
         if (text is null) return;
+
+        // The query takes the status line from here: it shows "translating" on its own.
+        _busyStatusShown = false;
 
         if (!_dispatcherQueue.TryEnqueue(() =>
         {
@@ -97,11 +103,12 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
         }
     }
 
-    private async Task<string?> RunOcrPipelineAsync(string label)
+    private async Task<string?> RunOcrPipelineAsync(string label, Action? onRegionCaptured = null)
     {
         using var cts = new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentCts, cts);
         var pipelineLockAcquired = false;
+        string? recognizedText = null;
         try
         {
             CancelPreviousOperation(previousCts);
@@ -109,6 +116,7 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
             if (capture is null) return null;
 
             cts.Token.ThrowIfCancellationRequested();
+            onRegionCaptured?.Invoke();
             await _ocrPipelineLock.WaitAsync(cts.Token).ConfigureAwait(false);
             pipelineLockAcquired = true;
 
@@ -142,7 +150,8 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
                     }
 
                     Debug.WriteLine($"[OcrTranslate] {label}: {ocrResult.Text.Length} chars recognized");
-                    return ocrResult.Text;
+                    recognizedText = ocrResult.Text;
+                    return recognizedText;
                 }
                 finally
                 {
@@ -184,12 +193,52 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
         }
         finally
         {
+            // Covers the paths that end without a failure report (cancelled mid-recognition).
+            // On success the caller owns the status, so leave the spinner up until the query starts.
+            if (recognizedText is null)
+            {
+                ClearBusyStatus(messageKey: null);
+            }
             if (pipelineLockAcquired)
             {
                 _ocrPipelineLock.Release();
             }
             Interlocked.CompareExchange(ref _currentCts, null, cts);
         }
+    }
+
+    /// <summary>
+    /// True between the screenshot and the result, while the mini window shows the OCR
+    /// status. Only one pipeline runs at a time, so a plain flag is enough.
+    /// </summary>
+    private volatile bool _busyStatusShown;
+
+    private void ShowRecognizingStatus()
+    {
+        _busyStatusShown = true;
+        if (!_dispatcherQueue.TryEnqueue(() =>
+        {
+            MiniWindowService.Instance.ShowBusy(
+                LocalizationService.Instance.GetString("StatusRecognizingText"));
+        }))
+        {
+            _busyStatusShown = false;
+            Debug.WriteLine("[OcrTranslate] Failed to enqueue OCR status — dispatcher shut down?");
+        }
+    }
+
+    /// <summary>
+    /// End the OCR status phase when no translation will follow. No-op unless the status
+    /// is actually showing, so the failure message set here is not wiped by the caller.
+    /// The message is resolved on the UI thread, where the localization resources live.
+    /// </summary>
+    private void ClearBusyStatus(string? messageKey)
+    {
+        if (!_busyStatusShown) return;
+        _busyStatusShown = false;
+
+        _dispatcherQueue.TryEnqueue(() => MiniWindowService.Instance.ClearBusy(
+            messageKey is null ? null : LocalizationService.Instance.GetString(messageKey)));
     }
 
     private async Task<(IOcrService Engine, bool OwnedByCaller)> GetOcrEngineAsync(OcrServiceOptions options)
@@ -354,6 +403,14 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
 
     private void ReportFailure(OcrFailureReason reason)
     {
+        // Say what went wrong where the user is already looking, not only in the dialog.
+        ClearBusyStatus(reason switch
+        {
+            OcrFailureReason.NoTextRecognized => "OcrNoTextRecognized",
+            OcrFailureReason.EngineUnavailable => "OcrEngineUnavailable",
+            _ => "OcrFailed"
+        });
+
         if (_failureReporter is null)
         {
             return;

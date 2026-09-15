@@ -2744,10 +2744,10 @@
                                         <Slider
                                             x:Name="MouseSelectionPopDelaySlider"
                                             AutomationProperties.AutomationId="MouseSelectionPopDelaySlider"
-                                            Minimum="0"
+                                            Minimum="10"
                                             Maximum="600"
-                                            StepFrequency="20"
-                                            TickFrequency="100"
+                                            StepFrequency="10"
+                                            TickFrequency="50"
                                             TickPlacement="Outside"
                                             Width="250"
                                             HorizontalAlignment="Left"/>

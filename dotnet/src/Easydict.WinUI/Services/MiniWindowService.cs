@@ -141,6 +141,28 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Show the window with a busy status for a step that runs before the query — today,
+    /// OCR recognition, which used to run with nothing on screen at all (issue #216).
+    /// The status is replaced as soon as <see cref="ShowWithText"/> starts the query.
+    /// </summary>
+    public void ShowBusy(string statusText)
+    {
+        ShowRequests.Invalidate();
+        EnsureWindowCreated();
+        _miniWindow?.SetBusyStatus(statusText);
+        _miniWindow?.ShowAndActivate();
+    }
+
+    /// <summary>
+    /// End a <see cref="ShowBusy"/> phase that will not produce a query, leaving
+    /// <paramref name="message"/> in the status line (null clears it).
+    /// </summary>
+    public void ClearBusy(string? message = null)
+    {
+        _miniWindow?.SetBusyStatus(message, showSpinner: false);
+    }
+
+    /// <summary>
     /// Refresh service results when settings change.
     /// </summary>
     public void RefreshServiceResults()

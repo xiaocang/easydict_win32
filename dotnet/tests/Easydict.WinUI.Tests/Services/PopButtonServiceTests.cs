@@ -59,9 +59,16 @@ public class PopButtonServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GetSelectionDelayMs_AtZero_SkipsTheWaitEntirely(bool isMultiClick)
+    public void GetSelectionDelayMs_AtMinimum_StillLeavesTheSourceAppAMoment(bool isMultiClick)
     {
-        PopButtonService.GetSelectionDelayMs(0, isMultiClick).Should().Be(0);
+        SettingsService.MinMouseSelectionPopDelayMs.Should().Be(10,
+            "reading the selection with no wait at all races the source app");
+
+        PopButtonService.GetSelectionDelayMs(SettingsService.MinMouseSelectionPopDelayMs, isMultiClick)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
+        // A settings file from an older build (or a hand-edit) cannot drive it below the floor.
+        PopButtonService.GetSelectionDelayMs(0, isMultiClick)
+            .Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
     }
 
     [Fact]
@@ -93,7 +100,7 @@ public class PopButtonServiceTests
         var original = settings.MouseSelectionPopDelayMs;
         try
         {
-            settings.MouseSelectionPopDelayMs = -50;
+            settings.MouseSelectionPopDelayMs = 0;
             settings.MouseSelectionPopDelayMs.Should().Be(SettingsService.MinMouseSelectionPopDelayMs);
 
             settings.MouseSelectionPopDelayMs = 99999;

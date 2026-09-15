@@ -125,7 +125,8 @@ public sealed partial class MouseHookService : IDisposable
     internal static int GetMultiClickWaitMs(uint doubleClickTimeMs, int capMs = MaxMultiClickWaitMs)
     {
         var settleMs = (long)doubleClickTimeMs + 50;
-        return (int)Math.Max(0, Math.Min(settleMs, capMs));
+        return (int)Math.Max(
+            SettingsService.MinMouseSelectionPopDelayMs, Math.Min(settleMs, capMs));
     }
 
     /// <summary>

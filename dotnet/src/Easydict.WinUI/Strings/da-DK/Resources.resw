@@ -1568,4 +1568,6 @@
   <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Avanceret</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Forsinkelse for markeringsikon</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Hvor længe der ventes efter en markering, før oversættelsesikonet vises. Lavere er hurtigere; hæv værdien, hvis ikonet blinker ved et langsomt tredobbeltklik.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>Henter markeret tekst…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>Genkender tekst…</value></data>
 </root>

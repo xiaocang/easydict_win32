@@ -368,7 +368,7 @@ public class MouseHookServiceTests
     }
 
     [Fact]
-    public async Task ProcessMouseMessage_DoubleClick_FiresMultiClickEventPromptly()
+    public async Task ProcessMouseMessage_DoubleClick_FiresMultiClickEventWithItsSettleWait()
     {
         using var service = new MouseHookService();
         var fired = new TaskCompletionSource<(POINT Point, int SettleWaitMs)>(
@@ -382,13 +382,12 @@ public class MouseHookServiceTests
         service.ProcessMouseMessage(0x0201, Pt(100, 100));
         service.ProcessMouseMessage(0x0202, Pt(100, 100));
 
-        // Generous ceiling for CI scheduling noise; the point is that it no longer waits
-        // out the full system double-click time before the pop button can appear.
-        var completed = await Task.WhenAny(fired.Task, Task.Delay(2000));
-        completed.Should().BeSameAs(fired.Task, "the multi-click wait is capped");
-        var result = await fired.Task;
+        // Deliberately not a latency assertion: a loaded CI agent delays timer callbacks by
+        // seconds, and how short the wait is belongs to GetMultiClickWaitMs, which is pure.
+        // What matters here is that the multi-click path fires its own event and reports the
+        // wait it spent, so PopButtonService can subtract it from the user's pop delay.
+        var result = await fired.Task.WaitAsync(TimeSpan.FromSeconds(30));
         result.Point.x.Should().Be(100);
-        // The listener needs the spent wait to keep the pop delay a whole-wait budget.
         result.SettleWaitMs.Should().BePositive()
             .And.BeLessThanOrEqualTo(MouseHookService.MaxMultiClickWaitMs);
     }

@@ -127,7 +127,10 @@ public sealed class WindowsOcrService : IOcrService
 
     /// <summary>
     /// Maps a result recognized on an enlarged image back onto source-image coordinates,
-    /// so callers keep working in the coordinate space of the original capture.
+    /// so callers keep working in the coordinate space of the original capture. Maps each
+    /// word's rect too, not just the line's — hover word lookup hit-tests against
+    /// <see cref="OcrLine.Words"/>, so leaving those in the enlarged image's coordinate
+    /// space would misalign every hit test after a retry pass is preferred.
     /// </summary>
     private static OcrResult MapToSourceCoordinates(OcrResult result, double scaleX, double scaleY)
     {
@@ -140,7 +143,21 @@ public sealed class WindowsOcrService : IOcrService
                     line.BoundingRect.X, line.BoundingRect.Y,
                     line.BoundingRect.Width, line.BoundingRect.Height,
                     scaleX, scaleY);
-                return line with { BoundingRect = new OcrRect(x, y, w, h) };
+
+                var words = line.Words.Count == 0
+                    ? line.Words
+                    : line.Words
+                        .Select(word =>
+                        {
+                            var (wx, wy, ww, wh) = OcrImageScaling.MapRect(
+                                word.BoundingRect.X, word.BoundingRect.Y,
+                                word.BoundingRect.Width, word.BoundingRect.Height,
+                                scaleX, scaleY);
+                            return word with { BoundingRect = new OcrRect(wx, wy, ww, wh) };
+                        })
+                        .ToList();
+
+                return line with { BoundingRect = new OcrRect(x, y, w, h), Words = words };
             })
             .ToList();
 

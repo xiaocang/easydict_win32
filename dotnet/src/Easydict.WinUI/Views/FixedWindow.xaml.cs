@@ -79,7 +79,30 @@ public sealed partial class FixedWindow : Window
     internal event Action? SelectionCaptureInterrupted;
 
     internal void SetSelectionCapturePending(bool pending)
-        => _isSelectionCapturePending = pending;
+    {
+        _isSelectionCapturePending = pending;
+        SetBusyStatus(pending
+            ? LocalizationService.Instance.GetString("StatusCapturingSelection")
+            : null);
+    }
+
+    /// <summary>
+    /// Show a busy indicator while the selection is being captured — that step used to run
+    /// silently, leaving the window blank as if nothing were happening (issue #216).
+    /// Pass null to clear, or showSpinner: false to leave a message without the spinner.
+    /// </summary>
+    internal void SetBusyStatus(string? statusText, bool showSpinner = true)
+    {
+        if (_isClosing) return;
+
+        StatusText.Text = statusText ?? string.Empty;
+
+        var spinning = showSpinner && !string.IsNullOrEmpty(statusText);
+        LoadingRing.IsActive = spinning;
+        LoadingRing.Visibility = spinning ? Visibility.Visible : Visibility.Collapsed;
+        TranslateIcon.Visibility = spinning ? Visibility.Collapsed : Visibility.Visible;
+        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing);
+    }
 
     private void InterruptSelectionCapture([System.Runtime.CompilerServices.CallerMemberName] string reason = "")
     {
@@ -935,6 +958,7 @@ public sealed partial class FixedWindow : Window
         // Hide progress ring (cancel icon replaces it)
         LoadingRing.IsActive = false;
         LoadingRing.Visibility = Visibility.Collapsed;
+        TranslateIcon.Visibility = Visibility.Visible;
     }
 
     private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual)
@@ -981,6 +1005,13 @@ public sealed partial class FixedWindow : Window
 
         try
         {
+            // Enter the querying state before language detection. Detection is a network
+            // round-trip that can take seconds on a slow or unreachable connection (or a
+            // misconfigured proxy), and until it returned the window showed nothing at all,
+            // which read as "frozen" or "auto-translate is broken".
+            SetLoading(true);
+            PrepareServiceResultsForQueryStart();
+
             var sourceLanguage = GetSourceLanguage();
             TranslationLanguage detectedLanguage;
             if (sourceLanguage == TranslationLanguage.Auto)
@@ -1019,6 +1050,7 @@ public sealed partial class FixedWindow : Window
                 targetLanguage == TranslationLanguage.Auto)
             {
                 StatusText.Text = LocalizationService.Instance.GetString("NoAvailableTargetLanguage");
+                ResetAllServiceResultsLoadingState();
                 return;
             }
 
@@ -1054,11 +1086,13 @@ public sealed partial class FixedWindow : Window
                     StatusText.Text = LocalizationService.Instance.GetStringOrDefault(
                         "NoAvailableTargetLanguage",
                         "No available target language for translation.");
+                    ResetAllServiceResultsLoadingState();
                     return;
                 }
 
                 if (!_serviceResults.Any(result => result.EnabledQuery))
                 {
+                    ResetAllServiceResultsLoadingState();
                     return;
                 }
             }
@@ -1197,27 +1231,37 @@ public sealed partial class FixedWindow : Window
 
             await Task.WhenAll(tasks);
 
-            // Update status with completed count
-            var loc = LocalizationService.Instance;
-            var successCount = _serviceResults.Count(r => r.Result != null);
-            var errorCount = _serviceResults.Count(r => r.HasError);
-            StatusText.Text = successCount > 0
-                ? string.Format(loc.GetString("ServiceResultsComplete"), successCount)
-                : errorCount > 0 ? loc.GetString("TranslationFailed") : "";
+            // Update status with completed count — but not over a query that replaced this one
+            // (cancelled service tasks complete normally, so this line is still reached).
+            if (OwnsCurrentQuery(currentCts))
+            {
+                var loc = LocalizationService.Instance;
+                var successCount = _serviceResults.Count(r => r.Result != null);
+                var errorCount = _serviceResults.Count(r => r.HasError);
+                StatusText.Text = successCount > 0
+                    ? string.Format(loc.GetString("ServiceResultsComplete"), successCount)
+                    : errorCount > 0 ? loc.GetString("TranslationFailed") : "";
+            }
         }
         catch (OperationCanceledException)
         {
-            // Query was cancelled - reset all service results that may be stuck in loading state
-            ResetAllServiceResultsLoadingState();
+            // Query was cancelled - reset all service results that may be stuck in loading state,
+            // unless a newer query has already taken the UI over.
+            if (OwnsCurrentQuery(currentCts)) ResetAllServiceResultsLoadingState();
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"{LocalizationService.Instance.GetString("StatusError")}: {ex.Message}";
-            ResetAllServiceResultsLoadingState();
+            if (OwnsCurrentQuery(currentCts))
+            {
+                StatusText.Text = $"{LocalizationService.Instance.GetString("StatusError")}: {ex.Message}";
+                ResetAllServiceResultsLoadingState();
+            }
         }
         finally
         {
-            if (!_isClosing) SetLoading(false);
+            // Check ownership before releasing it below: a superseded query must leave the
+            // replacement's loading state alone.
+            if (!_isClosing && OwnsCurrentQuery(currentCts)) SetLoading(false);
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
             if (snapshotDraft is not null)
             {
@@ -1252,6 +1296,30 @@ public sealed partial class FixedWindow : Window
 
         return trackedTask;
     }
+
+    /// <summary>
+    /// Put every auto-query service result into the loading state right away so the user
+    /// sees "translating" while the query is still resolving its languages.
+    /// </summary>
+    private void PrepareServiceResultsForQueryStart()
+    {
+        foreach (var serviceResult in _serviceResults)
+        {
+            serviceResult.Reset();
+            if (serviceResult.EnabledQuery)
+            {
+                serviceResult.IsLoading = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True while <paramref name="queryCts"/> is still the window's current query. A superseded
+    /// query keeps running until its awaits observe cancellation, and its replacement has already
+    /// put the UI into the querying state by then, so the loser must not reset what the winner set.
+    /// </summary>
+    private bool OwnsCurrentQuery(CancellationTokenSource queryCts)
+        => ReferenceEquals(Volatile.Read(ref _currentQueryCts), queryCts);
 
     /// <summary>
     /// Reset all service results to clear loading/streaming state.

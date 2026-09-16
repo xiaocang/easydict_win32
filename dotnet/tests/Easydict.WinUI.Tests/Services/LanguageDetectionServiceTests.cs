@@ -343,6 +343,59 @@ public class LanguageDetectionServiceTests : IDisposable
             "hello world", providers, CancellationToken.None)).Should().Be(Language.Auto);
     }
 
+    [Fact]
+    public async Task DetectWithFallback_WhenTotalBudgetExpires_StopsBeforeNextProvider()
+    {
+        var fallbackCalled = false;
+        var providers = new Dictionary<string, ITranslationService>
+        {
+            ["google"] = new StubDetector(ct => Task.Delay(Timeout.Infinite, ct).ContinueWith(
+                _ => Language.Auto, TaskContinuationOptions.ExecuteSynchronously)),
+            ["bing"] = new StubDetector(_ =>
+            {
+                fallbackCalled = true;
+                return Task.FromResult(Language.English);
+            })
+        };
+
+        var detected = await LanguageDetectionService.DetectWithFallbackAsync(
+            "hello world",
+            providers,
+            CancellationToken.None,
+            onRateLimited: null,
+            // The gap between the two deadlines is what this asserts, and it has to survive a
+            // loaded CI agent delaying timer callbacks by seconds: with 5s here, a starved
+            // thread pool let the attempt deadline land first, freeing the chain to try bing.
+            attemptTimeout: TimeSpan.FromMinutes(1),
+            totalTimeout: TimeSpan.FromMilliseconds(200));
+
+        detected.Should().Be(Language.Auto, "an unreachable network must not hold the query open");
+        fallbackCalled.Should().BeFalse("the chain budget was already spent on the first provider");
+    }
+
+    [Fact]
+    public async Task DetectWithFallback_WhenPrimaryHangs_FallbackStillRunsWithinBudget()
+    {
+        var providers = new Dictionary<string, ITranslationService>
+        {
+            ["google"] = new StubDetector(ct => Task.Delay(Timeout.Infinite, ct).ContinueWith(
+                _ => Language.Auto, TaskContinuationOptions.ExecuteSynchronously)),
+            ["bing"] = new StubDetector(_ => Task.FromResult(Language.Japanese))
+        };
+
+        var detected = await LanguageDetectionService.DetectWithFallbackAsync(
+            "こんにちは世界",
+            providers,
+            CancellationToken.None,
+            onRateLimited: null,
+            // Same reasoning inverted: the budget must not be able to overtake the per-attempt
+            // deadline when the agent is slow, or the fallback never gets its turn.
+            attemptTimeout: TimeSpan.FromMilliseconds(50),
+            totalTimeout: TimeSpan.FromMinutes(1));
+
+        detected.Should().Be(Language.Japanese);
+    }
+
     private sealed class RateLimitedHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

@@ -1654,4 +1654,8 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>ポインターが静止してから単語の検索を始めるまでの時間です。短いほど速く、長いほど誤動作を減らせます。</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>ラボ</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>新機能をここで試せます。安定後、通常の設定タブに移動します。</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>選択後のアイコン表示遅延</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>テキストを選択してから翻訳アイコンが表示されるまでの待ち時間です。小さいほど速く表示されます。トリプルクリックでアイコンがちらつく場合は大きくしてください。</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>選択テキストを取得しています…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>文字を認識しています…</value></data>
 </root>

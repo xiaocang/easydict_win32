@@ -1654,4 +1654,8 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>How long the pointer rests before lookup starts. Lower is faster; higher reduces accidental lookups.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>Labs</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Try new features here before they move to the main settings tabs.</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Selection pop-up delay</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>How long to wait after a selection before the translate icon appears. Lower is faster; raise it if a slow triple-click makes the icon flash.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>Getting selected text…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>Recognizing text…</value></data>
 </root>

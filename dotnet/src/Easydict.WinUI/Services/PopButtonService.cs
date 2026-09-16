@@ -29,9 +29,34 @@ public sealed class PopButtonService : IDisposable
     public const int SelectionDelayMs = 150;
 
     /// <summary>
+    /// Delay before querying selected text after a double/triple click.
+    /// Shorter than <see cref="SelectionDelayMs"/> because MouseHookService already waited
+    /// out the multi-click settle window, during which the source app finalized its selection.
+    /// </summary>
+    public const int MultiClickSelectionDelayMs = 30;
+
+    /// <summary>
     /// Auto-dismiss timeout for the pop button if the user doesn't interact.
     /// </summary>
     public const int AutoDismissMs = 5000;
+
+    /// <summary>
+    /// Effective wait before querying the selection, given the user's configured pop delay
+    /// (Settings -> Behavior -> Advanced) and how much of it a gesture already spent.
+    /// The pop delay is an upper bound on the *whole* pre-query wait, so a multi-click, whose
+    /// settle wait in MouseHookService already consumed part (usually all) of the budget, only
+    /// pays what is left of it. Internal for unit testing.
+    /// </summary>
+    internal static int GetSelectionDelayMs(int popDelayMs, bool isMultiClick, int settleWaitMs = 0)
+    {
+        var budgetMs = Math.Clamp(
+            popDelayMs,
+            SettingsService.MinMouseSelectionPopDelayMs,
+            SettingsService.MaxMouseSelectionPopDelayMs);
+        var remainingMs = Math.Max(0, budgetMs - Math.Max(0, settleWaitMs));
+        var gestureDelayMs = isMultiClick ? MultiClickSelectionDelayMs : SelectionDelayMs;
+        return Math.Min(gestureDelayMs, remainingMs);
+    }
 
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly MouseHookService? _mouseHookService;
@@ -77,7 +102,19 @@ public sealed class PopButtonService : IDisposable
     /// Called when a drag-select gesture ends.
     /// Waits briefly, then checks for selected text and shows the pop button.
     /// </summary>
-    public async void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
+    public void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
+        => BeginSelectionCapture(mouseScreenPoint, isMultiClick: false, settleWaitMs: 0);
+
+    /// <summary>
+    /// Called when a double/triple-click selection settles, with the settle wait the hook
+    /// already spent. Anything left of the user's pop delay is all this path waits further,
+    /// so the setting stays an upper bound on the whole wait rather than only part of it.
+    /// </summary>
+    public void OnMultiClickSelectionEnd(MouseHookService.POINT mouseScreenPoint, int settleWaitMs)
+        => BeginSelectionCapture(mouseScreenPoint, isMultiClick: true, settleWaitMs);
+
+    private async void BeginSelectionCapture(
+        MouseHookService.POINT mouseScreenPoint, bool isMultiClick, int settleWaitMs)
     {
         if (!_isEnabled || _isDisposed || ScreenCaptureService.IsCaptureInProgress) return;
 
@@ -102,8 +139,14 @@ public sealed class PopButtonService : IDisposable
 
         try
         {
-            // Wait for the source app to finalize the selection
-            await Task.Delay(SelectionDelayMs, ct);
+            // Wait for the source app to finalize the selection, minus what the gesture
+            // already waited out (a multi-click's settle wait usually spends the whole budget).
+            var selectionDelayMs = GetSelectionDelayMs(
+                SettingsService.Instance.MouseSelectionPopDelayMs, isMultiClick, settleWaitMs);
+            if (selectionDelayMs > 0)
+            {
+                await Task.Delay(selectionDelayMs, ct);
+            }
 
             // Get the selected text using the existing TextSelectionService
             var text = await TextSelectionService.GetSelectedTextAsync(ct);

@@ -313,12 +313,13 @@ selection strip), and an explanatory header tooltip. Three theme tokens carry it
 ### Mouse Selection Translate (Pop Button)
 - **MouseHookService**: `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks detect text selection gestures:
   - **Drag select**: mouse down → drag beyond 10px threshold → mouse up (fires immediately)
-  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a brief delay to allow triple-click)
+  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a settle delay capped at the user's pop delay, default `MaxMultiClickWaitMs` = 220ms, so the icon is not held back by the full double-click time; a later third click dismisses the icon and restarts the timer)
 - **PopButtonWindow**: 30×30 WinUI 3 window with `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` — does not steal focus from source app
-- **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms, queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
+- **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms after a drag (after a multi-click, only whatever is left of the pop delay once the hook's settle wait is subtracted, capped at 30ms — usually nothing, since the settle wait already spends the budget), queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
 - **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new selection
-- **Setting**: `MouseSelectionTranslate` in SettingsService (default: on), toggle in Settings → Behavior
-- **Flow**: `MouseHookService.OnDragSelectionEnd` → `PopButtonService.OnDragSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
+- **Busy status**: `MiniWindow`/`FixedWindow.SetBusyStatus()` drives the footer status plus the translate-button spinner. It is raised for the steps that run before a query — selection capture (hotkey path, via `SetSelectionCapturePending`) and OCR recognition — and released when the query starts showing "translating" on its own.
+- **Settings**: `MouseSelectionTranslate` in SettingsService (default: on), toggle in Settings → Behavior; `MouseSelectionPopDelayMs` (default 220ms, range 10–600) is a slider in a collapsed-by-default Selection pop-up delay expander directly below Mouse selection translate in Settings → General → Behavior, shown together with excluded apps when the feature is enabled. Quick-action button visibility has its own collapsed expander. It is an upper bound on the whole pre-query wait, not on each step: `MouseHookService` caps the multi-click settle wait with it and reports the wait it actually spent, so `PopButtonService.GetSelectionDelayMs` only pays out what is left of the budget. The 10ms floor pops the icon as soon as the source app can be read (never 0 — reading a selection with no wait races the source app).
+- **Flow**: `MouseHookService.OnDragSelectionEnd` / `OnMultiClickSelectionEnd` (point + settle wait) → `PopButtonService.OnDragSelectionEnd` / `OnMultiClickSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
 - **Hook lifetime**: the hooks are installed when mouse selection translate OR hover word lookup is enabled (`App.UpdateMouseHookInstallation`), and uninstalled only when both are off
 
 ### Hover Word Lookup (悬浮取词)
@@ -382,8 +383,9 @@ OcrTextMerger                            # CJK-aware text line merging (pure log
 1. Trigger: hotkey / tray menu / shell context menu / browser extension / protocol activation
 2. `OcrTranslateService.OcrTranslateAsync()` → `ScreenCaptureService.CaptureRegionAsync()` (dedicated STA thread)
 3. `ScreenCaptureWindow` shows fullscreen overlay → user selects region → returns `ScreenCaptureResult`
-4. `WindowsOcrService.RecognizeAsync()` → `OcrTextMerger` post-processes → `OcrResult`
-5. Result sent to `MiniWindowService.ShowWithText()` for translation (or copied to clipboard for silent mode)
+4. As soon as the region is captured, `MiniWindowService.ShowBusy()` puts the mini window on screen with a "Recognizing text…" spinner, so recognition never runs with nothing on screen; a failure replaces it with the reason via `ClearBusy()` (silent OCR stays silent — no window). Each pipeline invocation owns its status through a token, so a request cancelled by a newer one cannot clear the newer one's spinner as it unwinds
+5. `WindowsOcrService.RecognizeAsync()` → `OcrTextMerger` post-processes → `OcrResult`
+6. Result sent to `MiniWindowService.ShowWithText()` for translation (or copied to clipboard for silent mode)
 
 ### Long Document Translation
 

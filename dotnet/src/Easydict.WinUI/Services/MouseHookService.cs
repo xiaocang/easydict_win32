@@ -115,6 +115,49 @@ public sealed partial class MouseHookService : IDisposable
     private uint _cachedDoubleClickTime;
 
     /// <summary>
+    /// Upper bound for the multi-click settle wait, in milliseconds.
+    /// The system double-click time (500ms by default) is how long Windows allows between
+    /// clicks, but real double/triple clicks land far closer together. Waiting the full
+    /// interval delayed the pop button by roughly a second; capping the wait keeps
+    /// triple-click detection working while the icon appears promptly. A later third click
+    /// simply dismisses the icon and restarts the timer with the wider selection.
+    /// </summary>
+    public const int MaxMultiClickWaitMs = 220;
+
+    /// <summary>
+    /// Time to wait after a multi-click before querying the selection.
+    /// Long enough for an additional click (double -> triple), capped at
+    /// <paramref name="capMs"/> (the user-configurable pop delay, default
+    /// <see cref="MaxMultiClickWaitMs"/>). Internal for unit testing.
+    /// </summary>
+    internal static int GetMultiClickWaitMs(uint doubleClickTimeMs, int capMs = MaxMultiClickWaitMs)
+    {
+        var settleMs = (long)doubleClickTimeMs + 50;
+        return (int)Math.Max(
+            SettingsService.MinMouseSelectionPopDelayMs, Math.Min(settleMs, capMs));
+    }
+
+    /// <summary>
+    /// Optional provider for the user-configured pop delay (Settings -> General -> Behavior -> Mouse selection translate).
+    /// Read on every multi-click so a changed setting takes effect without re-wiring.
+    /// When unset, <see cref="MaxMultiClickWaitMs"/> applies.
+    /// </summary>
+    public Func<int>? MultiClickWaitCapProvider { get; set; }
+
+    private int ResolveMultiClickWaitCapMs()
+    {
+        var provider = MultiClickWaitCapProvider;
+        if (provider is null) return MaxMultiClickWaitMs;
+
+        try { return provider(); }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MouseHook] Pop delay provider failed, using default: {ex.Message}");
+            return MaxMultiClickWaitMs;
+        }
+    }
+
+    /// <summary>
     /// Drag detection state machine. Public for unit testing.
     /// </summary>
     public DragDetector Detector { get; } = new();
@@ -162,6 +205,15 @@ public sealed partial class MouseHookService : IDisposable
     /// Parameter is the screen coordinate of the mouse release point.
     /// </summary>
     public event Action<POINT>? OnDragSelectionEnd;
+
+    /// <summary>
+    /// Fired when a double/triple-click selection settles. Parameters are the screen
+    /// coordinate of the last click and how long the settle wait actually took.
+    /// Separate from <see cref="OnDragSelectionEnd"/> because this path already waited
+    /// out the multi-click settle window: listeners can query the selection sooner, and
+    /// the elapsed wait lets them keep the user's pop delay as a whole-wait budget.
+    /// </summary>
+    public event Action<POINT, int>? OnMultiClickSelectionEnd;
 
     /// <summary>
     /// Fired on any left mouse button down (used to dismiss the pop button).
@@ -451,19 +503,20 @@ public sealed partial class MouseHookService : IDisposable
         {
             try
             {
-                // Wait slightly longer than the system double-click time
-                // to allow additional clicks (double → triple)
+                // Wait just long enough for an additional click (double → triple),
+                // capped so the pop button is not held back by the full double-click time.
                 var dctTimer = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
-                var delay = (int)dctTimer + 50;
-                await Task.Delay(delay, ct);
+                var settleWaitMs = GetMultiClickWaitMs(dctTimer, ResolveMultiClickWaitCapMs());
+                await Task.Delay(settleWaitMs, ct);
 
                 if (!ct.IsCancellationRequested && !IsCurrentAppExcludedSafely())
                 {
                     Debug.WriteLine($"[MouseHook] Multi-click selection detected (clicks={clickCount}) at ({pt.x}, {pt.y})");
                     NativeCallbackGuard.Invoke(
-                        "MouseHookService.OnDragSelectionEnd",
-                        OnDragSelectionEnd,
-                        pt);
+                        "MouseHookService.OnMultiClickSelectionEnd",
+                        OnMultiClickSelectionEnd,
+                        pt,
+                        settleWaitMs);
                 }
             }
             catch (OperationCanceledException)

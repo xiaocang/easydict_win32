@@ -1654,4 +1654,8 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Tempoh penuding berhenti sebelum carian bermula. Nilai lebih rendah lebih pantas; nilai lebih tinggi mengurangkan carian tidak sengaja.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>Makmal</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Cuba ciri baharu di sini sebelum dipindahkan ke tab tetapan utama.</value></data>
+  <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Lengah ikon selepas pemilihan</value></data>
+  <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Berapa lama menunggu selepas teks dipilih sebelum ikon terjemahan muncul. Nilai lebih kecil lebih pantas; tingkatkan jika ikon berkelip semasa klik tiga kali yang perlahan.</value></data>
+  <data name="StatusCapturingSelection" xml:space="preserve"><value>Mendapatkan teks yang dipilih…</value></data>
+  <data name="StatusRecognizingText" xml:space="preserve"><value>Mengecam teks…</value></data>
 </root>

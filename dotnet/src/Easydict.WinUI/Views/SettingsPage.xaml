@@ -2886,29 +2886,38 @@
                                         Spacing="4"
                                         Margin="44,0,0,0"
                                             Visibility="Collapsed">
-                                    <StackPanel Spacing="4" Margin="0,0,0,8">
-                                        <!-- Selection pop-up delay (issue #216) -->
-                                        <TextBlock
-                                            x:Name="MouseSelectionPopDelayLabel"
-                                            Text="Selection pop-up delay"
-                                            FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                        <Slider
-                                            x:Name="MouseSelectionPopDelaySlider"
-                                            AutomationProperties.AutomationId="MouseSelectionPopDelaySlider"
-                                            Minimum="10"
-                                            Maximum="600"
-                                            StepFrequency="10"
-                                            TickFrequency="50"
-                                            TickPlacement="Outside"
-                                            Width="250"
-                                            HorizontalAlignment="Left"/>
-                                        <TextBlock
-                                            x:Name="MouseSelectionPopDelayDescriptionText"
-                                            Text="How long to wait after a selection before the translate icon appears. Lower is faster; raise it if a slow triple-click makes the icon flash."
-                                            FontSize="12"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                    <!-- Selection pop-up delay (issue #216) -->
+                                    <Expander x:Name="MouseSelectionPopDelayExpander"
+                                              AutomationProperties.AutomationId="MouseSelectionPopDelayExpander"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Stretch"
+                                              Margin="0,0,0,8"
+                                              IsExpanded="False">
+                                        <Expander.Header>
+                                            <TextBlock
+                                                x:Name="MouseSelectionPopDelayLabel"
+                                                Text="Selection pop-up delay"
+                                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        </Expander.Header>
+                                        <StackPanel Spacing="4" Padding="0,8">
+                                            <Slider
+                                                x:Name="MouseSelectionPopDelaySlider"
+                                                AutomationProperties.AutomationId="MouseSelectionPopDelaySlider"
+                                                Minimum="10"
+                                                Maximum="600"
+                                                StepFrequency="10"
+                                                TickFrequency="50"
+                                                TickPlacement="Outside"
+                                                Width="250"
+                                                HorizontalAlignment="Left"/>
+                                            <TextBlock
+                                                x:Name="MouseSelectionPopDelayDescriptionText"
+                                                Text="How long to wait after a selection before the translate icon appears. Lower is faster; raise it if a slow triple-click makes the icon flash."
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Expander>
                                     <TextBox x:Name="MouseSelectionExcludedAppsBox"
                                              Header="Excluded apps"
                                              PlaceholderText="code, slack, discord"

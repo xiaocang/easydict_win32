@@ -122,12 +122,13 @@ public class PhoneticCacheStampedeTests : IDisposable
     }
 
     [Fact]
-    public async Task EnrichPhonetics_NonEnglishTarget_SkipsEnrichment()
+    public async Task EnrichPhonetics_EnglishSource_EnrichesFromTheQueriedWord()
     {
         var trackingYoudao = new TrackingYoudaoService();
         _manager.RegisterService(trackingYoudao);
 
-        // Arrange: target is Chinese, not English
+        // Arrange: en→zh, the direction a dictionary lookup of an English word actually takes.
+        // The English side is the query, not the translation.
         var request = new TranslationRequest
         {
             Text = "hello",
@@ -135,14 +136,89 @@ public class PhoneticCacheStampedeTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = MakeResultWithoutPhonetics("你好");
+        var result = new TranslationResult
+        {
+            TranslatedText = "你好",
+            OriginalText = "hello",
+            ServiceName = "test-service",
+            TargetLanguage = Language.SimplifiedChinese,
+            DetectedLanguage = Language.English
+        };
 
         // Act
         var enriched = await _manager.EnrichPhoneticsIfMissingAsync(result, request);
 
-        // Assert: no Youdao call for non-English targets
+        // Assert: Youdao is consulted for the English word the user typed
+        trackingYoudao.CallCount.Should().Be(1);
+        trackingYoudao.LastRequestedText.Should().Be("hello");
+        enriched.WordResult!.Phonetics.Should().Contain(p => p.Accent == "US");
+    }
+
+    [Fact]
+    public async Task EnrichPhonetics_NeitherSideEnglish_SkipsEnrichment()
+    {
+        var trackingYoudao = new TrackingYoudaoService();
+        _manager.RegisterService(trackingYoudao);
+
+        // Arrange: zh→ja has no English side, so a US/UK pronunciation is meaningless
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.Japanese
+        };
+
+        var result = new TranslationResult
+        {
+            TranslatedText = "こんにちは",
+            OriginalText = "你好",
+            ServiceName = "test-service",
+            TargetLanguage = Language.Japanese,
+            DetectedLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var enriched = await _manager.EnrichPhoneticsIfMissingAsync(result, request);
+
+        // Assert: no Youdao call when neither side is English
         trackingYoudao.CallCount.Should().Be(0);
         enriched.Should().BeSameAs(result);
+    }
+
+    [Fact]
+    public async Task EnrichPhonetics_RomanizationOnly_StillFetchesPronunciation()
+    {
+        var trackingYoudao = new TrackingYoudaoService();
+        _manager.RegisterService(trackingYoudao);
+
+        // Arrange: Google supplies a "dest" romanization (pinyin), which is not a
+        // pronunciation guide for the English word and must not suppress enrichment.
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        var result = new TranslationResult
+        {
+            TranslatedText = "hello",
+            OriginalText = "你好",
+            ServiceName = "test-service",
+            TargetLanguage = Language.English,
+            WordResult = new WordResult
+            {
+                Phonetics = new[] { new Phonetic { Text = "nǐ hǎo", Accent = "dest" } }
+            }
+        };
+
+        // Act
+        var enriched = await _manager.EnrichPhoneticsIfMissingAsync(result, request);
+
+        // Assert
+        trackingYoudao.CallCount.Should().Be(1);
+        enriched.WordResult!.Phonetics.Should().Contain(p => p.Accent == "dest");
+        enriched.WordResult.Phonetics.Should().Contain(p => p.Accent == "US");
     }
 
     [Fact]
@@ -284,6 +360,9 @@ public class PhoneticCacheStampedeTests : IDisposable
         private int _callCount;
         public int CallCount => _callCount;
 
+        /// <summary>Text of the most recent lookup, so tests can assert which side was used.</summary>
+        public string? LastRequestedText { get; private set; }
+
         public string ServiceId => "youdao";
         public string DisplayName => "Youdao (Tracking Mock)";
         public bool RequiresApiKey => false;
@@ -298,6 +377,7 @@ public class PhoneticCacheStampedeTests : IDisposable
             TranslationRequest request, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _callCount);
+            LastRequestedText = request.Text;
 
             return Task.FromResult(new TranslationResult
             {

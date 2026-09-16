@@ -32,6 +32,9 @@ public class BobPluginThroughTranslationManagerTests
     {
         using var fixture = PluginFixture.Create("echo-global", policy: ServiceExecutionPolicy.Default);
         using var manager = new TranslationManager();
+        // These plugins opt into the default policy, which also permits host-side phonetic
+        // enrichment; drop the real Youdao service so the test stays offline.
+        manager.UnregisterService("youdao");
         var service = fixture.Service();
         manager.RegisterService(service);
 
@@ -112,6 +115,9 @@ public class BobPluginThroughTranslationManagerTests
     {
         using var fixture = PluginFixture.Create("fails-once", policy: ServiceExecutionPolicy.Default);
         using var manager = new TranslationManager();
+        // These plugins opt into the default policy, which also permits host-side phonetic
+        // enrichment; drop the real Youdao service so the test stays offline.
+        manager.UnregisterService("youdao");
         var service = fixture.Service();
         manager.RegisterService(service);
 

@@ -10,9 +10,9 @@ namespace Easydict.TranslationService.Tests;
 /// Integration tests for phonetic enrichment from Youdao.
 /// Tests the TranslationManager.EnrichPhoneticsIfMissingAsync method
 /// which automatically fetches phonetics from Youdao when:
-/// 1. Target language is English
-/// 2. Translated text is a word/phrase (not a sentence)
-/// 3. Result lacks target phonetics (US/UK)
+/// 1. One side of the translation is English (the translation in zh→en, the query in en→zh)
+/// 2. That English text is a word/phrase (not a sentence)
+/// 3. Result lacks an English pronunciation (US/UK)
 /// </summary>
 [Trait("Category", "Integration")]
 [Trait("Service", "phonetic")]
@@ -133,9 +133,10 @@ public class PhoneticEnrichmentIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task EnrichPhoneticsIfMissingAsync_TargetNotEnglish_ReturnsUnchanged()
+    public async Task EnrichPhoneticsIfMissingAsync_EnglishToChinese_AddsYoudaoPhonetics()
     {
-        // Arrange - Enrichment only runs when target is English
+        // Arrange - looking an English word up for its Chinese meaning: the English side
+        // is the query, so the pronunciation belongs to it just as much as in zh→en.
         var request = new TranslationRequest
         {
             Text = "hello",
@@ -156,9 +157,39 @@ public class PhoneticEnrichmentIntegrationTests : IDisposable
         var enrichedResult = await _manager.EnrichPhoneticsIfMissingAsync(
             resultWithoutPhonetics, request);
 
-        // Assert - Should not add phonetics when target is not English
+        // Assert
+        enrichedResult.WordResult.Should().NotBeNull("phonetics should be added from Youdao");
+        PhoneticDisplayHelper.GetEnglishPhonetics(enrichedResult)
+            .Should().NotBeEmpty("Youdao should provide US/UK phonetics for the queried English word");
+    }
+
+    [Fact]
+    public async Task EnrichPhoneticsIfMissingAsync_NeitherSideEnglish_ReturnsUnchanged()
+    {
+        // Arrange - zh→ja has no English side, so a US/UK pronunciation is meaningless
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.Japanese
+        };
+
+        var resultWithoutPhonetics = new TranslationResult
+        {
+            TranslatedText = "こんにちは",
+            OriginalText = "你好",
+            ServiceName = "TestService",
+            TargetLanguage = Language.Japanese,
+            DetectedLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var enrichedResult = await _manager.EnrichPhoneticsIfMissingAsync(
+            resultWithoutPhonetics, request);
+
+        // Assert
         enrichedResult.WordResult.Should().BeNull(
-            "phonetic enrichment should be skipped when target language is not English");
+            "phonetic enrichment should be skipped when neither side is English");
     }
 
     [Fact]

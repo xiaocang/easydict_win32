@@ -254,7 +254,7 @@ public sealed class TranslationManager : IDisposable
 
     /// <summary>
     /// Translate text using the specified or default service.
-    /// Automatically enriches phonetics from Youdao if the result lacks target phonetics for word queries.
+    /// Automatically enriches phonetics from Youdao if the result lacks an English pronunciation for word queries.
     /// </summary>
     public async Task<TranslationResult> TranslateAsync(
         TranslationRequest request,
@@ -289,7 +289,7 @@ public sealed class TranslationManager : IDisposable
             service, request, cancellationToken,
             maxRetries: policy.AllowHostRetry ? DefaultMaxRetries : 0);
 
-        // Enrich phonetics if missing (only for word queries targeting English)
+        // Enrich phonetics if missing (word queries with an English side, either direction)
         if (policy.AllowPhoneticEnrichment)
         {
             result = await EnrichPhoneticsIfMissingAsync(result, request, cancellationToken);
@@ -305,9 +305,10 @@ public sealed class TranslationManager : IDisposable
     }
 
     /// <summary>
-    /// Enrich a translation result with phonetics from Youdao if the result lacks target phonetics.
+    /// Enrich a translation result with an English pronunciation from Youdao when it has none.
     /// This is useful for streaming services that don't return phonetics, or for any service result
-    /// that needs phonetic data. Only triggers when target language is English and result is a word/phrase.
+    /// that needs phonetic data. Triggers for word queries in either direction: the English side is
+    /// the translation when translating into English and the original text when translating out of it.
     /// </summary>
     /// <param name="result">The translation result to potentially enrich.</param>
     /// <param name="request">The original translation request.</param>
@@ -328,23 +329,24 @@ public sealed class TranslationManager : IDisposable
         if (serviceId is not null && !GetExecutionPolicy(serviceId).AllowPhoneticEnrichment)
             return result;
 
-        // Only enrich when target language is English
-        // US/UK phonetics are only meaningful for English words
-        if (request.ToLanguage != Language.English)
+        // Resolve which text the US/UK phonetics would describe. A pronunciation belongs to
+        // the English word being looked up, whether the user typed it (en→zh) or it came back
+        // as the translation (zh→en), so enrichment runs in both directions.
+        var englishWord = ResolveEnglishWordForEnrichment(result, request);
+        if (string.IsNullOrEmpty(englishWord))
             return result;
 
-        // Only enrich if the translated text looks like a word/phrase (not a sentence)
-        var translatedText = result.TranslatedText?.Trim();
-        if (string.IsNullOrEmpty(translatedText) || !YoudaoService.IsWordQuery(translatedText))
+        // Only enrich if that text looks like a word/phrase (not a sentence)
+        if (!WordQueryHeuristics.IsWordQuery(englishWord))
             return result;
 
-        // Only enrich if there are no target phonetics (US/UK/dest)
-        var targetPhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
-        if (targetPhonetics.Count > 0)
+        // Only enrich if there is no English pronunciation yet. A romanization such as
+        // Google's pinyin ("src"/"dest") is not a pronunciation guide and must not suppress this.
+        if (PhoneticDisplayHelper.GetEnglishPhonetics(result).Count > 0)
             return result;
 
         // Check phonetic cache first
-        var phoneticCacheKey = GetPhoneticCacheKey(translatedText);
+        var phoneticCacheKey = GetPhoneticCacheKey(englishWord);
         if (_phoneticCache.TryGetValue(phoneticCacheKey, out IReadOnlyList<Phonetic>? cachedPhonetics)
             && cachedPhonetics != null && cachedPhonetics.Count > 0)
         {
@@ -360,7 +362,7 @@ public sealed class TranslationManager : IDisposable
         var lazyTask = _phoneticFlightTracker.GetOrAdd(
             phoneticCacheKey,
             _ => new Lazy<Task<IReadOnlyList<Phonetic>?>>(
-                () => FetchPhoneticsAsync(translatedText, CancellationToken.None)));
+                () => FetchPhoneticsAsync(englishWord, CancellationToken.None)));
 
         try
         {
@@ -393,6 +395,33 @@ public sealed class TranslationManager : IDisposable
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Picks the English text whose pronunciation should be looked up for this result,
+    /// or null when neither side of the translation is English.
+    /// </summary>
+    private static string? ResolveEnglishWordForEnrichment(
+        TranslationResult result, TranslationRequest request)
+    {
+        // Translating into English: the English word is the translation.
+        if (request.ToLanguage == Language.English)
+            return result.TranslatedText?.Trim();
+
+        // Translating out of English: the English word is what the user asked about.
+        var sourceLanguage = request.FromLanguage == Language.Auto
+            ? result.DetectedLanguage
+            : request.FromLanguage;
+
+        if (sourceLanguage == Language.English)
+            return request.Text?.Trim();
+
+        // No script-based guess here. Latin letters are not evidence of English, and the
+        // homographs are exactly the words a dictionary lookup would answer confidently and
+        // wrongly: French "chat" or German "gift" would come back with the English
+        // pronunciation and get merged into the result. An unresolved language means unknown,
+        // so no pronunciation is fetched.
+        return null;
     }
 
     /// <summary>

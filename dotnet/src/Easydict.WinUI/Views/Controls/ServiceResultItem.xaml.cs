@@ -282,14 +282,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     {
         if (_serviceResult?.Result == null) return Array.Empty<string>();
 
-        var result = _serviceResult.Result;
-        if (result.TargetLanguage != TranslationLanguage.English) return Array.Empty<string>();
-
-        var phonetics = PhoneticDisplayHelper.GetTargetPhonetics(result)
-            .Where(p => p.Accent == "US" || p.Accent == "UK")
-            .Where(p => !string.IsNullOrEmpty(p.Text));
-
-        return phonetics.Select(p => $"{p.Accent}:{p.Text}");
+        return PhoneticDisplayHelper.GetDisplayPhonetics(_serviceResult.Result)
+            .Select(p => $"{p.Accent}:{p.Text}");
     }
 
     /// <summary>
@@ -1088,7 +1082,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// <summary>
     /// Populates the phonetic badges panel from WordResult phonetics data.
     /// Each badge shows: [accent label] [phonetic text] [speaker icon].
-    /// Only displays phonetics when the target language is English.
+    /// Displays phonetics for word lookups in either translation direction.
     /// Filters out phonetics that have already been shown by a previous service.
     /// </summary>
     private void UpdatePhonetics(TranslationResult result)
@@ -1113,30 +1107,13 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         _phoneticsRenderedDeduplicationKey = deduplicationKey;
         _phoneticsRenderedTheme = theme;
 
-        // Only show phonetics when target language is English
-        // US/UK phonetics are English pronunciation, only meaningful for English translations
-        if (result.TargetLanguage != TranslationLanguage.English)
-        {
-            PhoneticPanel.Children.Clear();
-            PhoneticPanel.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var phonetics = result.WordResult?.Phonetics;
-        if (phonetics == null || phonetics.Count == 0)
-        {
-            PhoneticPanel.Children.Clear();
-            PhoneticPanel.Visibility = Visibility.Collapsed;
-            return;
-        }
-
         PhoneticPanel.Children.Clear();
 
-        // Get target-related phonetics (dest/US/UK) and then display only US/UK accents
-        // Filter out phonetics that have already been shown by a previous service
-        var displayablePhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result)
-            .Where(p => p.Accent == "US" || p.Accent == "UK")
-            .Where(p => !string.IsNullOrEmpty(p.Text))
+        // Phonetics belong to the word being looked up, not to a direction, so they show for
+        // word queries either way: US/UK pronunciation whenever one side is English, plus any
+        // romanization ("原"/"译", e.g. Google's pinyin).
+        // Filter out phonetics that have already been shown by a previous service.
+        var displayablePhonetics = PhoneticDisplayHelper.GetDisplayPhonetics(result)
             .Where(p => _alreadyShownPhonetics == null || !_alreadyShownPhonetics.Contains($"{p.Accent}:{p.Text}"))
             .ToList();
 
@@ -1529,9 +1506,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
         else if (phonetic.Accent == "US" || phonetic.Accent == "UK")
         {
-            // English accents ("US"/"UK"): use English translation
+            // English accents ("US"/"UK") describe the English side of the result, which is the
+            // translation when translating into English and the original text when out of it.
             ttsLanguage = TranslationLanguage.English;
-            ttsText = result.TranslatedText;
+            ttsText = PhoneticDisplayHelper.GetEnglishPhoneticSubject(result) ?? result.TranslatedText;
         }
         else
         {

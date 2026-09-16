@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -83,8 +84,24 @@ public sealed partial class HoverLookupWindow : Window
     private OcrRect _currentBounds;
     private HoverLookupFocusSession? _focusSession;
     private bool _hideAfterFailure;
+    private DispatcherQueueTimer? _failureFeedbackTimer;
     private string? _focusFailureMessage;
     private readonly Windows.UI.ViewManagement.UISettings _uiSettings = new();
+
+    private bool AnimationsEnabled
+    {
+        get
+        {
+#if WINUI_TEST
+            if (AnimationsEnabledForTest is { } enabled) return enabled;
+#endif
+            return _uiSettings.AnimationsEnabled;
+        }
+    }
+
+#if WINUI_TEST
+    internal bool? AnimationsEnabledForTest { get; set; }
+#endif
 
     /// <summary>
     /// Fired when the user clicks the "open in Mini window" button.
@@ -192,7 +209,7 @@ public sealed partial class HoverLookupWindow : Window
         FocusReticle.Visibility = Visibility.Visible;
         LoadingText.Text = LocalizationService.Instance.GetString("HoverLookupFocusing");
         FitAndPlace();
-        if (_uiSettings.AnimationsEnabled) FocusStoryboard.Begin();
+        if (AnimationsEnabled) FocusStoryboard.Begin();
     }
 
     /// <summary>Recognize success, finish the focus cycle and lock animation, then allow querying.</summary>
@@ -201,7 +218,7 @@ public sealed partial class HoverLookupWindow : Window
         if (_focusSession is { } session)
         {
             session.Resolve(true);
-            if (!_uiSettings.AnimationsEnabled) OnFocusCycleCompleted(this, EventArgs.Empty);
+            if (!AnimationsEnabled) OnFocusCycleCompleted(this, EventArgs.Empty);
             if (!await session.QueryReady || !ReferenceEquals(_focusSession, session))
                 throw new OperationCanceledException();
         }
@@ -248,7 +265,7 @@ public sealed partial class HoverLookupWindow : Window
         SetOptionalText(BodyText, content.Body);
         SetOptionalText(ServiceText, content.ServiceName);
         FitAndPlace();
-        if (wasLoading && _uiSettings.AnimationsEnabled) ResultStoryboard.Begin();
+        if (wasLoading && AnimationsEnabled) ResultStoryboard.Begin();
     }
 
     /// <summary>
@@ -276,7 +293,7 @@ public sealed partial class HoverLookupWindow : Window
         if (_focusSession?.State != HoverLookupFocusState.Focusing) return;
         _focusFailureMessage = message;
         _focusSession.Resolve(false);
-        if (!_uiSettings.AnimationsEnabled) OnFocusCycleCompleted(this, EventArgs.Empty);
+        if (!AnimationsEnabled) OnFocusCycleCompleted(this, EventArgs.Empty);
     }
 
     private void OnFocusCycleCompleted(object? sender, object e)
@@ -285,7 +302,7 @@ public sealed partial class HoverLookupWindow : Window
         switch (_focusSession.CompleteCycle())
         {
             case HoverLookupFocusState.Focusing:
-                if (_uiSettings.AnimationsEnabled) FocusStoryboard.Begin();
+                if (AnimationsEnabled) FocusStoryboard.Begin();
                 break;
             case HoverLookupFocusState.Succeeded:
                 FocusStoryboard.Stop();
@@ -295,7 +312,7 @@ public sealed partial class HoverLookupWindow : Window
                 StatusGlyph.Visibility = Visibility.Visible;
                 LoadingText.Text = LocalizationService.Instance.GetString("HoverLookupFocusSucceeded");
                 FitAndPlace();
-                if (_uiSettings.AnimationsEnabled) SuccessStoryboard.Begin();
+                if (AnimationsEnabled) SuccessStoryboard.Begin();
                 else OnFocusSuccessCompleted(this, EventArgs.Empty);
                 break;
             case HoverLookupFocusState.Failed:
@@ -310,6 +327,7 @@ public sealed partial class HoverLookupWindow : Window
 
     private void PlayFailure(string message, bool hideAfterAnimation)
     {
+        StopFailureFeedbackTimer();
         _hideAfterFailure = hideAfterAnimation;
         FocusReticle.Visibility = Visibility.Collapsed;
         QueryProgress.IsActive = false;
@@ -319,19 +337,36 @@ public sealed partial class HoverLookupWindow : Window
         StatusGlyph.Visibility = Visibility.Visible;
         LoadingText.Text = message;
         FitAndPlace();
-        if (_uiSettings.AnimationsEnabled) FailureStoryboard.Begin();
-        // With reduced motion, keep the static failure readable until normal dismissal.
-        else _focusSession?.CompleteFailure();
+        if (AnimationsEnabled) FailureStoryboard.Begin();
+
+        // Keep feedback readable for the same duration with or without motion.
+        // Dismissal must not depend on a storyboard being enabled or completing.
+        _failureFeedbackTimer = DispatcherQueue.CreateTimer();
+        _failureFeedbackTimer.Interval = FailureStoryboard.Duration.TimeSpan;
+        _failureFeedbackTimer.IsRepeating = false;
+        _failureFeedbackTimer.Tick += OnFailureFeedbackElapsed;
+        _failureFeedbackTimer.Start();
     }
 
-    private void OnFailureCompleted(object? sender, object e)
+    private void OnFailureFeedbackElapsed(DispatcherQueueTimer sender, object args)
     {
+        if (!ReferenceEquals(sender, _failureFeedbackTimer)) return;
+        StopFailureFeedbackTimer();
         _focusSession?.CompleteFailure();
         if (_hideAfterFailure) HidePopup();
     }
 
+    private void StopFailureFeedbackTimer()
+    {
+        if (_failureFeedbackTimer is not { } timer) return;
+        _failureFeedbackTimer = null;
+        timer.Stop();
+        timer.Tick -= OnFailureFeedbackElapsed;
+    }
+
     private void ResetPresentation()
     {
+        StopFailureFeedbackTimer();
         FocusStoryboard.Stop();
         SuccessStoryboard.Stop();
         FailureStoryboard.Stop();

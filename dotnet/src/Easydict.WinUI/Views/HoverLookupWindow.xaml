@@ -41,7 +41,7 @@
                 <DoubleAnimation Storyboard.TargetName="StatusGlyph" Storyboard.TargetProperty="Opacity"
                                  From="0.4" To="1" Duration="0:0:0.24"/>
             </Storyboard>
-            <Storyboard x:Name="FailureStoryboard" Duration="0:0:0.9" Completed="OnFailureCompleted">
+            <Storyboard x:Name="FailureStoryboard" Duration="0:0:0.9">
                 <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StatusScale" Storyboard.TargetProperty="TranslateX">
                     <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0"/>
                     <LinearDoubleKeyFrame KeyTime="0:0:0.06" Value="-3"/>

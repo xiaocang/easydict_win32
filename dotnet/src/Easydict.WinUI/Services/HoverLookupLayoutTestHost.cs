@@ -10,6 +10,12 @@ internal static class HoverLookupLayoutTestHost
 {
     internal static nint Show(HoverLookupWindow window, int scenario)
     {
+        if (scenario is 9 or 10)
+        {
+            window.AnimationsEnabledForTest = scenario == 10;
+            return window.WindowHandle;
+        }
+
         var area = DisplayArea.Primary.WorkArea;
         var anchor = new OcrRect(area.X + area.Width / 2, area.Y + area.Height / 4, 40, 20);
         if (scenario == 0)

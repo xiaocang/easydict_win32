@@ -149,15 +149,36 @@ public sealed class HoverLookupLayoutTests : IDisposable
         AssertContained(popup, "HoverLookupBody");
     }
 
-    [Fact]
-    public void FocusWorkflow_FailureShowsFeedbackBeforeClosing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FocusWorkflow_FailureShowsFeedbackBeforeClosing(bool animationsEnabled)
     {
+        Send(203, animationsEnabled ? 10 : 9);
         var popup = BeginFocus();
         Send(203, 8);
         Retry.WhileFalse(() => popup.FindFirstDescendant(cf => cf.ByAutomationId("HoverLookupStatus"))?.Name == "No word found",
             TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(30)).Result.Should().BeTrue();
         IsWindowVisible(_popupHandle).Should().BeTrue("failure feedback must be visible before dismissal");
         Retry.WhileFalse(() => !IsWindowVisible(_popupHandle), TimeSpan.FromSeconds(3)).Result.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FocusWorkflow_FailureDismissalDoesNotHideNewContent(bool animationsEnabled)
+    {
+        Send(203, animationsEnabled ? 10 : 9);
+        var popup = BeginFocus();
+        Send(203, 8);
+        Retry.WhileFalse(() => popup.FindFirstDescendant(cf => cf.ByAutomationId("HoverLookupStatus"))?.Name == "No word found",
+            TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(30)).Result.Should().BeTrue();
+
+        Send(203, 0);
+        popup = Show(1);
+        Thread.Sleep(1200); // Let the dismissed failure's feedback interval expire.
+        IsWindowVisible(_popupHandle).Should().BeTrue("old failure callbacks must not dismiss a new result");
+        Find(popup, "HoverLookupBody").Name.Should().Be("猫");
     }
 
     [Fact]

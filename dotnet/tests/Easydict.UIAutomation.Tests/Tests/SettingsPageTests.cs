@@ -132,6 +132,16 @@ public class SettingsPageTests : IDisposable
                     return null;
                 }
 
+                // A row straddling the bottom edge of the visible client area still
+                // passes the check above: the ComboBox reports its full layout rect
+                // while the Button's rect is clipped to the sliver actually on screen.
+                // Comparing row centres against a clipped rect measures the clip, not
+                // the layout, so keep scanning until the whole row is visible.
+                if (refreshBounds.Height < comboBounds.Height * 3 / 4)
+                {
+                    return null;
+                }
+
                 refreshButton = refresh;
                 return combo;
             },
@@ -144,6 +154,11 @@ public class SettingsPageTests : IDisposable
         var refreshButtonBounds = refreshButton!.BoundingRectangle;
         _output.WriteLine(
             $"TTS row bounds: combo={voiceComboBounds}, refresh={refreshButtonBounds}");
+        refreshButtonBounds.Height
+            .Should()
+            .BeGreaterThan(
+                voiceComboBounds.Height * 3 / 4,
+                "the refresh button must be fully on screen before its row centre means anything");
         var voiceComboCenterY = voiceComboBounds.Top + voiceComboBounds.Height / 2;
         var refreshButtonCenterY = refreshButtonBounds.Top + refreshButtonBounds.Height / 2;
         Math.Abs(voiceComboCenterY - refreshButtonCenterY)

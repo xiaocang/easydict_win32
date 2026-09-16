@@ -16,6 +16,47 @@
           BorderThickness="1"
           Padding="12,8,12,10"
           MaxWidth="320">
+        <Grid.Resources>
+            <Storyboard x:Name="FocusStoryboard" AutoReverse="True" Completed="OnFocusCycleCompleted">
+                <DoubleAnimation Storyboard.TargetName="FocusScale" Storyboard.TargetProperty="ScaleX"
+                                 From="1.15" To="0.85" Duration="0:0:0.45">
+                    <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="FocusScale" Storyboard.TargetProperty="ScaleY"
+                                 From="1.15" To="0.85" Duration="0:0:0.45">
+                    <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="FocusReticle" Storyboard.TargetProperty="Opacity"
+                                 From="0.45" To="1" Duration="0:0:0.45"/>
+            </Storyboard>
+            <Storyboard x:Name="SuccessStoryboard" Completed="OnFocusSuccessCompleted">
+                <DoubleAnimation Storyboard.TargetName="StatusScale" Storyboard.TargetProperty="ScaleX"
+                                 From="0.7" To="1" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.3"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="StatusScale" Storyboard.TargetProperty="ScaleY"
+                                 From="0.7" To="1" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.3"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="StatusGlyph" Storyboard.TargetProperty="Opacity"
+                                 From="0.4" To="1" Duration="0:0:0.24"/>
+            </Storyboard>
+            <Storyboard x:Name="FailureStoryboard" Duration="0:0:0.9" Completed="OnFailureCompleted">
+                <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StatusScale" Storyboard.TargetProperty="TranslateX">
+                    <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0"/>
+                    <LinearDoubleKeyFrame KeyTime="0:0:0.06" Value="-3"/>
+                    <LinearDoubleKeyFrame KeyTime="0:0:0.12" Value="3"/>
+                    <LinearDoubleKeyFrame KeyTime="0:0:0.18" Value="-2"/>
+                    <LinearDoubleKeyFrame KeyTime="0:0:0.24" Value="0"/>
+                </DoubleAnimationUsingKeyFrames>
+                <DoubleAnimation Storyboard.TargetName="StatusGlyph" Storyboard.TargetProperty="Opacity"
+                                 From="0.35" To="1" Duration="0:0:0.24"/>
+            </Storyboard>
+            <Storyboard x:Name="ResultStoryboard">
+                <DoubleAnimation Storyboard.TargetName="ContentPanel" Storyboard.TargetProperty="Opacity"
+                                 From="0" To="1" Duration="0:0:0.14"/>
+            </Storyboard>
+        </Grid.Resources>
         <Grid x:Name="ContentViewport" SizeChanged="OnContentViewportSizeChanged">
             <StackPanel x:Name="ContentPanel" Spacing="4" VerticalAlignment="Top">
                 <!-- Header: word + "open in Mini window" -->
@@ -60,13 +101,32 @@
                             Orientation="Horizontal"
                             Spacing="8"
                             Visibility="Collapsed">
-                    <ProgressRing IsActive="True"
-                                  Width="14"
-                                  Height="14"
-                                  MinWidth="14"
-                                  MinHeight="14"/>
+                    <!-- Four corners contract like a camera acquiring focus. -->
+                    <Grid Width="28" Height="28" VerticalAlignment="Center">
+                        <Path x:Name="FocusReticle"
+                              Width="20" Height="20"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              RenderTransformOrigin="0.5,0.5"
+                              Data="M 6,1 L 1,1 L 1,6 M 14,1 L 19,1 L 19,6 M 19,14 L 19,19 L 14,19 M 6,19 L 1,19 L 1,14"
+                              Stroke="{ThemeResource TextFillColorSecondaryBrush}"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                            <Path.RenderTransform>
+                                <ScaleTransform x:Name="FocusScale"/>
+                            </Path.RenderTransform>
+                        </Path>
+                        <FontIcon x:Name="StatusGlyph" FontSize="18" Visibility="Collapsed"
+                                  RenderTransformOrigin="0.5,0.5">
+                            <FontIcon.RenderTransform>
+                                <CompositeTransform x:Name="StatusScale"/>
+                            </FontIcon.RenderTransform>
+                        </FontIcon>
+                        <ProgressRing x:Name="QueryProgress" Width="18" Height="18"
+                                      MinWidth="18" MinHeight="18" IsActive="False" Visibility="Collapsed"/>
+                    </Grid>
                     <TextBlock x:Name="LoadingText"
+                               AutomationProperties.AutomationId="HoverLookupStatus"
                                FontSize="12"
+                               TextWrapping="Wrap" MaxWidth="260"
                                VerticalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>

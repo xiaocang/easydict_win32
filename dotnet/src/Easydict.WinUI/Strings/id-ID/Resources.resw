@@ -1282,6 +1282,9 @@
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>Menampilkan popup kecil di samping kursor berisi kata, pelafalan, dan artinya.</value></data>
   <data name="TrayHoverWordLookup" xml:space="preserve"><value>Cari kata saat mengarahkan kursor</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Buka di jendela mini</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>Mengenali kata…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>Kata ditemukan</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>Kata tidak ditemukan</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>Mencari…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>Tidak ada hasil</value></data>
   <data name="HoverLookupError" xml:space="preserve"><value>Pencarian gagal</value></data>

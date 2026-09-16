@@ -1282,6 +1282,9 @@
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>포인터 옆에 단어, 발음 기호, 뜻을 보여 주는 작은 팝업을 표시합니다.</value></data>
   <data name="TrayHoverWordLookup" xml:space="preserve"><value>마우스 오버 단어 조회</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>미니 창에서 열기</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>단어 인식 중…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>단어를 찾았습니다</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>단어를 찾지 못했습니다</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>조회 중…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>결과 없음</value></data>
   <data name="HoverLookupError" xml:space="preserve"><value>조회 실패</value></data>

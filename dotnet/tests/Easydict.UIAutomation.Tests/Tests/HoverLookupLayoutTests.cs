@@ -134,6 +134,51 @@ public sealed class HoverLookupLayoutTests : IDisposable
         }
     }
 
+    [Fact]
+    public void FocusWorkflow_RepeatsUntilSuccess_ThenShowsQueryResult()
+    {
+        var popup = BeginFocus();
+        Thread.Sleep(2100); // More than two full cycles without a recognition outcome.
+        IsWindowVisible(_popupHandle).Should().BeTrue();
+        Find(popup, "HoverLookupStatus").Name.Should().Be("Finding word…");
+
+        Send(203, 7);
+        Retry.WhileFalse(() => popup.FindFirstDescendant(cf => cf.ByAutomationId("HoverLookupBody"))?.Name == "猫",
+            TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(50)).Result.Should().BeTrue(
+                "recognition success must finish its animation and enter querying");
+        AssertContained(popup, "HoverLookupBody");
+    }
+
+    [Fact]
+    public void FocusWorkflow_FailureShowsFeedbackBeforeClosing()
+    {
+        var popup = BeginFocus();
+        Send(203, 8);
+        Retry.WhileFalse(() => popup.FindFirstDescendant(cf => cf.ByAutomationId("HoverLookupStatus"))?.Name == "No word found",
+            TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(30)).Result.Should().BeTrue();
+        IsWindowVisible(_popupHandle).Should().BeTrue("failure feedback must be visible before dismissal");
+        Retry.WhileFalse(() => !IsWindowVisible(_popupHandle), TimeSpan.FromSeconds(3)).Result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FocusWorkflow_DismissedSuccessDoesNotReopenPopup()
+    {
+        BeginFocus();
+        Send(203, 7);
+        Send(203, 0);
+        Thread.Sleep(1500); // Allow any old focus/success callbacks to finish.
+        IsWindowVisible(_popupHandle).Should().BeFalse();
+    }
+
+    private AutomationElement BeginFocus()
+    {
+        Retry.WhileFalse(() => (_popupHandle = (nint)Send(203, 6)) != 0,
+            TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(100)).Result.Should().BeTrue();
+        var popup = _launcher.Automation.FromHandle(_popupHandle);
+        Find(popup, "HoverLookupStatus").Name.Should().Be("Finding word…");
+        return popup;
+    }
+
     private AutomationElement Show(int scenario)
     {
         Retry.WhileFalse(() => (_popupHandle = (nint)Send(203, scenario)) != 0,

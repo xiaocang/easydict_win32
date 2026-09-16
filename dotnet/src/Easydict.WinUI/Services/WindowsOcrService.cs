@@ -23,12 +23,22 @@ public sealed class WindowsOcrService : IOcrService
         WinOcr.OcrEngine.TryCreateFromUserProfileLanguages() is not null;
 
     /// <inheritdoc />
-    public async Task<OcrResult> RecognizeAsync(
+    public Task<OcrResult> RecognizeAsync(
         ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
         string? preferredLanguageTag = null,
         CancellationToken cancellationToken = default)
+        => RecognizeAsync(pixelData, pixelWidth, pixelHeight, preferredLanguageTag, cancellationToken, null);
+
+    /// <inheritdoc />
+    public async Task<OcrResult> RecognizeAsync(
+        ReadOnlyMemory<byte> pixelData,
+        int pixelWidth,
+        int pixelHeight,
+        string? preferredLanguageTag,
+        CancellationToken cancellationToken,
+        Action? onRetry)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
@@ -50,7 +60,7 @@ public sealed class WindowsOcrService : IOcrService
             engine, pixelData, pixelWidth, pixelHeight, cancellationToken);
 
         return await RefineWithUpscaledPassAsync(
-            engine, result, pixelData, pixelWidth, pixelHeight, cancellationToken);
+            engine, result, pixelData, pixelWidth, pixelHeight, cancellationToken, onRetry);
     }
 
     /// <summary>
@@ -64,7 +74,8 @@ public sealed class WindowsOcrService : IOcrService
         ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? onRetry)
     {
         var scale = OcrImageScaling.ComputeRetryScale(
             firstPass.Lines, pixelWidth, pixelHeight, (int)WinOcr.OcrEngine.MaxImageDimension);
@@ -76,6 +87,8 @@ public sealed class WindowsOcrService : IOcrService
         Debug.WriteLine(
             $"[WindowsOcrService] Retrying at {scaledWidth}x{scaledHeight} (x{scale:F2}) — " +
             $"first pass median line height {OcrImageScaling.MedianLineHeight(firstPass.Lines):F1}px");
+
+        onRetry?.Invoke();
 
         byte[] scaledPixels;
         try

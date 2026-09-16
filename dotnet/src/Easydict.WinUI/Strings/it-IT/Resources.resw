@@ -1282,6 +1282,9 @@
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>Mostra accanto al puntatore un piccolo popup con la parola, la trascrizione fonetica e il significato.</value></data>
   <data name="TrayHoverWordLookup" xml:space="preserve"><value>Ricerca parola al passaggio del mouse</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Apri nella mini finestra</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>Riconoscimento della parola…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>Parola riconosciuta</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>Nessuna parola trovata</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>Ricerca in corso…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>Nessun risultato</value></data>
   <data name="HoverLookupError" xml:space="preserve"><value>Ricerca non riuscita</value></data>

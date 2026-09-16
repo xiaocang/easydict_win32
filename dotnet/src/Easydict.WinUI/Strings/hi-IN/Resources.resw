@@ -1282,6 +1282,9 @@
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>पॉइंटर के पास शब्द, उसका उच्चारण और अर्थ दिखाने वाला एक छोटा पॉपअप दिखाता है।</value></data>
   <data name="TrayHoverWordLookup" xml:space="preserve"><value>होवर शब्द खोज</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>मिनी विंडो में खोलें</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>शब्द पहचाना जा रहा है…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>शब्द मिल गया</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>कोई शब्द नहीं मिला</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>खोजा जा रहा है…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>कोई परिणाम नहीं</value></data>
   <data name="HoverLookupError" xml:space="preserve"><value>खोज विफल</value></data>

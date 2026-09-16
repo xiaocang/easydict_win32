@@ -156,10 +156,10 @@ public sealed partial class HoverWordLookupService : IDisposable
                 Dismiss("PointerLeft");
             }
         }
-        else if (_hasPendingLookup &&
+        else if ((_hasPendingLookup || IsPopupVisible) &&
                  DistanceSquared(pt, _pendingLookupPoint) > (long)PendingLeaveDistancePx * PendingLeaveDistancePx)
         {
-            // Nothing shown yet and the pointer already moved on: drop the in-flight lookup.
+            // Also dismiss an empty lookup's finishing focus cue if the pointer moves on.
             Dismiss("PointerLeftPending");
         }
 
@@ -390,6 +390,12 @@ public sealed partial class HoverWordLookupService : IDisposable
         var generation = Interlocked.Increment(ref _generation);
         var options = _options;
         var excludeRect = _window?.IsPopupVisible == true ? _window.CurrentBounds : (OcrRect?)null;
+        // A previous focus animation may still have a result queued for presentation.
+        _window?.HidePopup();
+        _hasActiveWord = false;
+        _currentWord = null;
+        _currentWordRect = default;
+        _safeZone = default;
         _hasPendingLookup = true;
         _pendingLookupPoint = pt;
 
@@ -405,13 +411,21 @@ public sealed partial class HoverWordLookupService : IDisposable
     {
         var ct = cts.Token;
         WordUnderCursor? word = null;
+        var failureMessageKey = "HoverLookupNoWord";
         try
         {
             var dpiScale = DpiHelper.DpiToScaleFactor(DpiHelper.GetDpiForPoint(pt.x, pt.y));
-            word = await _wordService.GetWordAtAsync(pt.x, pt.y, options.UseOcrFallback, excludeRect, dpiScale, ct);
+            word = await _wordService.GetWordAtAsync(
+                pt.x, pt.y, options.UseOcrFallback, excludeRect, dpiScale, ct,
+                () => _dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!ct.IsCancellationRequested)
+                    {
+                        ShowOcrLoadingOnUiThread(pt, generation);
+                    }
+                }));
             if (word is null)
             {
-                _dispatcherQueue.TryEnqueue(() => RecordMissOnUiThread(pt, generation));
                 return;
             }
 
@@ -420,7 +434,10 @@ public sealed partial class HoverWordLookupService : IDisposable
             Debug.WriteLine($"[HoverLookup] Word '{word.Text}' via {word.Source} at {word.ScreenRect}");
 
             var foundWord = word;
-            _dispatcherQueue.TryEnqueue(() => ShowLoadingOnUiThread(foundWord, generation));
+            // Focus completion is part of the workflow: do not start a dictionary request
+            // until the recognized word has passed the success animation.
+            await ShowQueryingOnUiThreadAsync(foundWord, generation, ct);
+            ct.ThrowIfCancellationRequested();
 
             using var handle = TranslationManagerService.Instance.AcquireHandle();
             var manager = handle.Manager;
@@ -469,10 +486,16 @@ public sealed partial class HoverWordLookupService : IDisposable
         }
         catch (OperationCanceledException)
         {
-            // Superseded, dismissed or timed out.
+            // A timeout is a failure; superseded/dismissed generations are ignored by the UI.
+            failureMessageKey = "HoverLookupError";
+            if (word is { } cancelledWord)
+            {
+                _dispatcherQueue.TryEnqueue(() => ShowMessageOnUiThread(cancelledWord, "HoverLookupError", generation));
+            }
         }
         catch (Exception ex)
         {
+            failureMessageKey = "HoverLookupError";
             Debug.WriteLine($"[HoverLookup] Lookup failed: {ex.Message}");
             if (word is { } failedWord)
             {
@@ -481,6 +504,13 @@ public sealed partial class HoverWordLookupService : IDisposable
         }
         finally
         {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                if (_hasPendingLookup)
+                {
+                    RecordMissOnUiThread(pt, generation, failureMessageKey);
+                }
+            });
             Interlocked.CompareExchange(ref _lookupCts, null, cts);
             cts.Dispose();
         }
@@ -534,26 +564,66 @@ public sealed partial class HoverWordLookupService : IDisposable
 
     private bool IsCurrent(int generation) => !_isDisposed && _options.Enabled && generation == _generation;
 
-    private void RecordMissOnUiThread(MouseHookService.POINT pt, int generation)
+    private void RecordMissOnUiThread(MouseHookService.POINT pt, int generation, string messageKey)
     {
         if (!IsCurrent(generation)) return;
+        _window?.FailFocus(LocalizationService.Instance.GetString(messageKey));
+        _hasActiveWord = false;
+        _currentWord = null;
+        _currentWordRect = default;
+        _safeZone = default;
         _hasPendingLookup = false;
         _hasLastMiss = true;
         _lastMissPoint = pt;
     }
 
-    private void ShowLoadingOnUiThread(WordUnderCursor word, int generation)
+    private void ShowOcrLoadingOnUiThread(MouseHookService.POINT pt, int generation)
     {
-        if (!IsCurrent(generation)) return;
+        if (!IsCurrent(generation) || !_hasPendingLookup) return;
 
         EnsureWindowCreated();
-        _currentWord = word.Text;
-        _currentWordRect = word.ScreenRect;
-        _hasActiveWord = true;
-        _hasPendingLookup = false;
-        _hasLastMiss = false;
-        _window!.ShowLoading(word.Text, word.ScreenRect);
-        UpdateSafeZone();
+        _hasActiveWord = false;
+        _currentWord = null;
+        _currentWordRect = default;
+        _safeZone = default;
+        // No reliable word yet. Keep pending-lookup movement cancellation until OCR finishes.
+        _window!.ShowFocusing(new OcrRect(pt.x, pt.y, 1, 1));
+    }
+
+    private Task ShowQueryingOnUiThreadAsync(WordUnderCursor word, int generation, CancellationToken ct)
+    {
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_dispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                if (!IsCurrent(generation) || ct.IsCancellationRequested)
+                {
+                    ready.TrySetCanceled();
+                    return;
+                }
+                EnsureWindowCreated();
+                await _window!.ShowQueryingAsync(word.Text, word.ScreenRect);
+                if (!IsCurrent(generation) || ct.IsCancellationRequested)
+                {
+                    ready.TrySetCanceled();
+                    return;
+                }
+                _currentWord = word.Text;
+                _currentWordRect = word.ScreenRect;
+                _hasActiveWord = true;
+                _hasPendingLookup = false;
+                _hasLastMiss = false;
+                UpdateSafeZone();
+                ready.TrySetResult();
+            }
+            catch (OperationCanceledException) { ready.TrySetCanceled(); }
+            catch (Exception ex) { ready.TrySetException(ex); }
+        }))
+        {
+            ready.TrySetCanceled();
+        }
+        return ready.Task.WaitAsync(ct);
     }
 
     private void ShowContentOnUiThread(WordUnderCursor word, HoverLookupContent content, int generation)
@@ -564,6 +634,7 @@ public sealed partial class HoverWordLookupService : IDisposable
         _currentWord = word.Text;
         _currentWordRect = word.ScreenRect;
         _hasActiveWord = true;
+        _hasPendingLookup = false;
         _window!.ShowContent(content, word.ScreenRect);
         UpdateSafeZone();
     }
@@ -576,6 +647,7 @@ public sealed partial class HoverWordLookupService : IDisposable
         _currentWord = word.Text;
         _currentWordRect = word.ScreenRect;
         _hasActiveWord = true;
+        _hasPendingLookup = false;
         _window!.ShowMessage(word.Text, LocalizationService.Instance.GetString(messageKey), word.ScreenRect);
         UpdateSafeZone();
     }

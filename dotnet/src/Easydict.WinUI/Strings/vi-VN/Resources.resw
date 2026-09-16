@@ -1282,6 +1282,9 @@
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>Hiển thị cửa sổ nhỏ cạnh con trỏ với từ, phiên âm và nghĩa.</value></data>
   <data name="TrayHoverWordLookup" xml:space="preserve"><value>Tra từ khi di chuột</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Mở trong cửa sổ mini</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>Đang nhận dạng từ…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>Đã nhận dạng từ</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>Không tìm thấy từ</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>Đang tra cứu…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>Không có kết quả</value></data>
   <data name="HoverLookupError" xml:space="preserve"><value>Tra cứu thất bại</value></data>

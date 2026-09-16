@@ -81,6 +81,10 @@ public sealed partial class HoverLookupWindow : Window
     private bool _refitQueued;
     private OcrRect _anchorRect;
     private OcrRect _currentBounds;
+    private HoverLookupFocusSession? _focusSession;
+    private bool _hideAfterFailure;
+    private string? _focusFailureMessage;
+    private readonly Windows.UI.ViewManagement.UISettings _uiSettings = new();
 
     /// <summary>
     /// Fired when the user clicks the "open in Mini window" button.
@@ -120,7 +124,11 @@ public sealed partial class HoverLookupWindow : Window
 
         RootGrid.Loaded += OnRootGridLoaded;
         ContentPanel.SizeChanged += OnContentPanelSizeChanged;
-        Closed += (_, _) => _isVisible = false;
+        Closed += (_, _) =>
+        {
+            ResetPresentation();
+            _isVisible = false;
+        };
     }
 
     /// <summary>
@@ -173,12 +181,49 @@ public sealed partial class HoverLookupWindow : Window
     }
 
     /// <summary>
-    /// Show the popup for <paramref name="word"/> in its loading state, anchored to the word's screen rectangle.
+    /// Show the popup during word recognition. Each animation cycle checks the recognition outcome.
     /// </summary>
+    public void ShowFocusing(OcrRect anchorRect)
+    {
+        if (_focusSession?.State == HoverLookupFocusState.Focusing) return;
+        ResetPresentation();
+        _focusSession = new HoverLookupFocusSession();
+        PrepareLoading(string.Empty, anchorRect);
+        FocusReticle.Visibility = Visibility.Visible;
+        LoadingText.Text = LocalizationService.Instance.GetString("HoverLookupFocusing");
+        FitAndPlace();
+        if (_uiSettings.AnimationsEnabled) FocusStoryboard.Begin();
+    }
+
+    /// <summary>Recognize success, finish the focus cycle and lock animation, then allow querying.</summary>
+    public async Task ShowQueryingAsync(string word, OcrRect anchorRect)
+    {
+        if (_focusSession is { } session)
+        {
+            session.Resolve(true);
+            if (!_uiSettings.AnimationsEnabled) OnFocusCycleCompleted(this, EventArgs.Empty);
+            if (!await session.QueryReady || !ReferenceEquals(_focusSession, session))
+                throw new OperationCanceledException();
+        }
+        ShowLoading(word, anchorRect);
+    }
+
+    /// <summary>Query loading is distinct from recognizing/focusing.</summary>
     public void ShowLoading(string word, OcrRect anchorRect)
+    {
+        ResetPresentation();
+        PrepareLoading(word, anchorRect);
+        QueryProgress.Visibility = Visibility.Visible;
+        QueryProgress.IsActive = true;
+        LoadingText.Text = LocalizationService.Instance.GetString("HoverLookupLoading");
+        FitAndPlace();
+    }
+
+    private void PrepareLoading(string word, OcrRect anchorRect)
     {
         _anchorRect = anchorRect;
         WordText.Text = word;
+        HeaderGrid.Visibility = string.IsNullOrWhiteSpace(word) ? Visibility.Collapsed : Visibility.Visible;
         PhoneticText.Text = string.Empty;
         PhoneticText.Visibility = Visibility.Collapsed;
         BodyText.Text = string.Empty;
@@ -186,7 +231,6 @@ public sealed partial class HoverLookupWindow : Window
         ServiceText.Text = string.Empty;
         ServiceText.Visibility = Visibility.Collapsed;
         LoadingPanel.Visibility = Visibility.Visible;
-        FitAndPlace();
     }
 
     /// <summary>
@@ -194,13 +238,17 @@ public sealed partial class HoverLookupWindow : Window
     /// </summary>
     public void ShowContent(HoverLookupContent content, OcrRect anchorRect)
     {
+        var wasLoading = LoadingPanel.Visibility == Visibility.Visible;
+        ResetPresentation();
         _anchorRect = anchorRect;
         WordText.Text = content.Word;
+        HeaderGrid.Visibility = Visibility.Visible;
         SetOptionalText(PhoneticText, content.Phonetics);
         LoadingPanel.Visibility = Visibility.Collapsed;
         SetOptionalText(BodyText, content.Body);
         SetOptionalText(ServiceText, content.ServiceName);
         FitAndPlace();
+        if (wasLoading && _uiSettings.AnimationsEnabled) ResultStoryboard.Begin();
     }
 
     /// <summary>
@@ -208,15 +256,94 @@ public sealed partial class HoverLookupWindow : Window
     /// </summary>
     public void ShowMessage(string word, string message, OcrRect anchorRect)
     {
+        ResetPresentation();
         _anchorRect = anchorRect;
         WordText.Text = word;
+        HeaderGrid.Visibility = Visibility.Visible;
         PhoneticText.Text = string.Empty;
         PhoneticText.Visibility = Visibility.Collapsed;
-        LoadingPanel.Visibility = Visibility.Collapsed;
-        SetOptionalText(BodyText, message);
+        LoadingPanel.Visibility = Visibility.Visible;
+        BodyText.Text = string.Empty;
+        BodyText.Visibility = Visibility.Collapsed;
         ServiceText.Text = string.Empty;
         ServiceText.Visibility = Visibility.Collapsed;
+        PlayFailure(message, hideAfterAnimation: false);
+    }
+
+    /// <summary>Recognition failed. Finish the current cycle, then show failure before dismissing.</summary>
+    public void FailFocus(string message)
+    {
+        if (_focusSession?.State != HoverLookupFocusState.Focusing) return;
+        _focusFailureMessage = message;
+        _focusSession.Resolve(false);
+        if (!_uiSettings.AnimationsEnabled) OnFocusCycleCompleted(this, EventArgs.Empty);
+    }
+
+    private void OnFocusCycleCompleted(object? sender, object e)
+    {
+        if (!_isVisible || _focusSession is null) return;
+        switch (_focusSession.CompleteCycle())
+        {
+            case HoverLookupFocusState.Focusing:
+                if (_uiSettings.AnimationsEnabled) FocusStoryboard.Begin();
+                break;
+            case HoverLookupFocusState.Succeeded:
+                FocusStoryboard.Stop();
+                FocusReticle.Visibility = Visibility.Collapsed;
+                StatusGlyph.Glyph = "\uE73E";
+                StatusGlyph.Foreground = ThemeResourceService.GetBrush("SystemFillColorSuccessBrush", RootGrid);
+                StatusGlyph.Visibility = Visibility.Visible;
+                LoadingText.Text = LocalizationService.Instance.GetString("HoverLookupFocusSucceeded");
+                FitAndPlace();
+                if (_uiSettings.AnimationsEnabled) SuccessStoryboard.Begin();
+                else OnFocusSuccessCompleted(this, EventArgs.Empty);
+                break;
+            case HoverLookupFocusState.Failed:
+                FocusStoryboard.Stop();
+                PlayFailure(_focusFailureMessage ?? LocalizationService.Instance.GetString("HoverLookupNoWord"),
+                    hideAfterAnimation: true);
+                break;
+        }
+    }
+
+    private void OnFocusSuccessCompleted(object? sender, object e) => _focusSession?.CompleteSuccess();
+
+    private void PlayFailure(string message, bool hideAfterAnimation)
+    {
+        _hideAfterFailure = hideAfterAnimation;
+        FocusReticle.Visibility = Visibility.Collapsed;
+        QueryProgress.IsActive = false;
+        QueryProgress.Visibility = Visibility.Collapsed;
+        StatusGlyph.Glyph = "\uE711";
+        StatusGlyph.Foreground = ThemeResourceService.GetBrush("SystemFillColorCriticalBrush", RootGrid);
+        StatusGlyph.Visibility = Visibility.Visible;
+        LoadingText.Text = message;
         FitAndPlace();
+        if (_uiSettings.AnimationsEnabled) FailureStoryboard.Begin();
+        // With reduced motion, keep the static failure readable until normal dismissal.
+        else _focusSession?.CompleteFailure();
+    }
+
+    private void OnFailureCompleted(object? sender, object e)
+    {
+        _focusSession?.CompleteFailure();
+        if (_hideAfterFailure) HidePopup();
+    }
+
+    private void ResetPresentation()
+    {
+        FocusStoryboard.Stop();
+        SuccessStoryboard.Stop();
+        FailureStoryboard.Stop();
+        ResultStoryboard.Stop();
+        _focusSession?.Cancel();
+        _focusSession = null;
+        _focusFailureMessage = null;
+        _hideAfterFailure = false;
+        FocusReticle.Visibility = Visibility.Collapsed;
+        StatusGlyph.Visibility = Visibility.Collapsed;
+        QueryProgress.IsActive = false;
+        QueryProgress.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>
@@ -224,6 +351,7 @@ public sealed partial class HoverLookupWindow : Window
     /// </summary>
     public void HidePopup()
     {
+        ResetPresentation();
         if (!_isVisible) return;
 
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,

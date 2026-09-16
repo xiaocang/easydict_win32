@@ -77,13 +77,15 @@ public sealed class WordUnderCursorService
     /// <param name="excludeFromCapture">Screen rectangle (e.g. our own visible popup) to keep out of the OCR capture.</param>
     /// <param name="dpiScale">DPI scale of the monitor under the pointer (1.0 = 96 DPI).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="onOcrRetry">Called on the recognition thread when OCR starts an additional pass.</param>
     public async Task<WordUnderCursor?> GetWordAtAsync(
         int screenX,
         int screenY,
         bool useOcrFallback,
         OcrRect? excludeFromCapture,
         double dpiScale,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? onOcrRetry = null)
     {
         var uiaWord = await TryGetWordViaUiaGuardedAsync(screenX, screenY, cancellationToken);
         if (uiaWord is not null)
@@ -97,7 +99,7 @@ public sealed class WordUnderCursorService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return await TryGetWordViaOcrAsync(screenX, screenY, excludeFromCapture, dpiScale, cancellationToken);
+        return await TryGetWordViaOcrAsync(screenX, screenY, excludeFromCapture, dpiScale, cancellationToken, onOcrRetry);
     }
 
     // ---------------------------------------------------------------------
@@ -309,7 +311,8 @@ public sealed class WordUnderCursorService
         int y,
         OcrRect? excludeFromCapture,
         double dpiScale,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? onOcrRetry)
     {
         try
         {
@@ -331,7 +334,7 @@ public sealed class WordUnderCursorService
             using var capture = ScreenRegionCapture.Capture(captureRect, upscale);
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = await _ocrService.RecognizeAsync(capture, _preferredOcrLanguage(), cancellationToken);
+            var result = await _ocrService.RecognizeAsync(capture, _preferredOcrLanguage(), cancellationToken, onOcrRetry);
             if (result.Lines.Count == 0)
             {
                 return null;

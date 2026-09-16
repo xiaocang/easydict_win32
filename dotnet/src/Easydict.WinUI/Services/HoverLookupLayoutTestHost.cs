@@ -24,6 +24,22 @@ internal static class HoverLookupLayoutTestHost
             return window.WindowHandle;
         }
 
+        if (scenario == 6)
+        {
+            window.ShowFocusing(anchor);
+            return window.WindowHandle;
+        }
+        if (scenario == 7)
+        {
+            _ = CompleteFocusAsync(window, anchor);
+            return window.WindowHandle;
+        }
+        if (scenario == 8)
+        {
+            window.FailFocus("No word found");
+            return window.WindowHandle;
+        }
+
         var word = scenario == 2 ? "pneumonoultramicroscopicsilicovolcanoconiosis" : "cat";
         var body = scenario switch
         {
@@ -33,6 +49,19 @@ internal static class HoverLookupLayoutTestHost
         };
         window.ShowContent(new HoverLookupContent(word, null, body, "Test dictionary"), anchor);
         return window.WindowHandle;
+    }
+
+    private static async Task CompleteFocusAsync(HoverLookupWindow window, OcrRect anchor)
+    {
+        try
+        {
+            await window.ShowQueryingAsync("cat", anchor);
+            window.ShowContent(new HoverLookupContent("cat", null, "猫", "Test dictionary"), anchor);
+        }
+        catch (OperationCanceledException)
+        {
+            // The fixture can be dismissed while the focus cycle is finishing.
+        }
     }
 }
 #endif

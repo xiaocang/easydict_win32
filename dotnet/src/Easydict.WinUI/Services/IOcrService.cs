@@ -45,6 +45,19 @@ public interface IOcrService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Recognizes text and invokes a request-scoped callback before an additional OCR pass.
+    /// The callback runs on the recognition thread. Engines without retries can ignore it.
+    /// </summary>
+    Task<OcrResult> RecognizeAsync(
+        ReadOnlyMemory<byte> pixelData,
+        int pixelWidth,
+        int pixelHeight,
+        string? preferredLanguageTag,
+        CancellationToken cancellationToken,
+        Action? onRetry) => RecognizeAsync(
+            pixelData, pixelWidth, pixelHeight, preferredLanguageTag, cancellationToken);
+
+    /// <summary>
     /// Gets the list of languages supported by this OCR engine on the current system.
     /// </summary>
     IReadOnlyList<OcrLanguage> GetAvailableLanguages();
@@ -63,13 +76,15 @@ public static class OcrServiceExtensions
         this IOcrService service,
         ScreenCaptureResult capture,
         string? preferredLanguageTag = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action? onRetry = null)
     {
         return service.RecognizeAsync(
             capture.PixelMemory,
             capture.PixelWidth,
             capture.PixelHeight,
             preferredLanguageTag,
-            cancellationToken);
+            cancellationToken,
+            onRetry);
     }
 }

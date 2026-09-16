@@ -1269,6 +1269,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Aplikasi dikecualikan</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Nama proses yang dikecualikan dari terjemahan pilihan mouse, dipisahkan dengan koma. Contoh: "code" untuk VS Code.</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>Cari kata saat mengarahkan kursor</value></data>
+  <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(tahan tombol pemicu lalu arahkan ke sebuah kata)</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>Tombol pemicu</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>Tanpa tombol (hanya mengarahkan kursor)</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + arahkan kursor</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Shift + arahkan kursor</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + arahkan kursor</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>Gunakan OCR jika aplikasi tidak menyediakan teks</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>Layanan pencarian utama</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>Otomatis (kamus diutamakan, layanan berikutnya jika gagal)</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>Menampilkan popup kecil di samping kursor berisi kata, pelafalan, dan artinya.</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Cari kata saat mengarahkan kursor</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Buka di jendela mini</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>Mengenali kata…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>Kata ditemukan</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>Kata tidak ditemukan</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>Mencari…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>Tidak ada hasil</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>Pencarian gagal</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
@@ -1630,4 +1649,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Proses masuk dibatalkan.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Tidak dapat membuka browser. Gunakan tautan "Dapatkan kunci API" di bawah ini.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Putuskan koneksi</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Pengaturan lanjutan</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Jeda pencarian kata</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Lama penunjuk berhenti sebelum pencarian dimulai. Nilai lebih kecil lebih cepat; nilai lebih besar mengurangi pencarian yang tidak disengaja.</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>Laboratorium</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Coba fitur baru di sini sebelum dipindahkan ke tab pengaturan utama.</value></data>
 </root>

@@ -23,12 +23,22 @@ public sealed class WindowsOcrService : IOcrService
         WinOcr.OcrEngine.TryCreateFromUserProfileLanguages() is not null;
 
     /// <inheritdoc />
-    public async Task<OcrResult> RecognizeAsync(
+    public Task<OcrResult> RecognizeAsync(
         ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
         string? preferredLanguageTag = null,
         CancellationToken cancellationToken = default)
+        => RecognizeAsync(pixelData, pixelWidth, pixelHeight, preferredLanguageTag, cancellationToken, null);
+
+    /// <inheritdoc />
+    public async Task<OcrResult> RecognizeAsync(
+        ReadOnlyMemory<byte> pixelData,
+        int pixelWidth,
+        int pixelHeight,
+        string? preferredLanguageTag,
+        CancellationToken cancellationToken,
+        Action? onRetry)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
@@ -50,7 +60,7 @@ public sealed class WindowsOcrService : IOcrService
             engine, pixelData, pixelWidth, pixelHeight, cancellationToken);
 
         return await RefineWithUpscaledPassAsync(
-            engine, result, pixelData, pixelWidth, pixelHeight, cancellationToken);
+            engine, result, pixelData, pixelWidth, pixelHeight, cancellationToken, onRetry);
     }
 
     /// <summary>
@@ -64,7 +74,8 @@ public sealed class WindowsOcrService : IOcrService
         ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? onRetry)
     {
         var scale = OcrImageScaling.ComputeRetryScale(
             firstPass.Lines, pixelWidth, pixelHeight, (int)WinOcr.OcrEngine.MaxImageDimension);
@@ -76,6 +87,8 @@ public sealed class WindowsOcrService : IOcrService
         Debug.WriteLine(
             $"[WindowsOcrService] Retrying at {scaledWidth}x{scaledHeight} (x{scale:F2}) — " +
             $"first pass median line height {OcrImageScaling.MedianLineHeight(firstPass.Lines):F1}px");
+
+        onRetry?.Invoke();
 
         byte[] scaledPixels;
         try
@@ -208,26 +221,40 @@ public sealed class WindowsOcrService : IOcrService
 
     private static OcrLine ConvertLine(WinOcr.OcrLine winLine)
     {
-        var words = winLine.Words.Select(w => w.Text).ToList();
-        var text = OcrTextMerger.MergeWords(words);
+        var wordTexts = new List<string>(winLine.Words.Count);
+        var words = new List<OcrWord>(winLine.Words.Count);
 
-        // Calculate bounding rect as union of all word rects
+        // Calculate bounding rect as union of all word rects, and keep the
+        // per-word rects (used by hover word lookup to hit-test the pointer).
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
 
         foreach (var word in winLine.Words)
         {
             var r = word.BoundingRect;
+            wordTexts.Add(word.Text);
+            words.Add(new OcrWord
+            {
+                Text = word.Text,
+                BoundingRect = new OcrRect(r.X, r.Y, r.Width, r.Height)
+            });
+
             if (r.X < minX) minX = r.X;
             if (r.Y < minY) minY = r.Y;
             if (r.X + r.Width > maxX) maxX = r.X + r.Width;
             if (r.Y + r.Height > maxY) maxY = r.Y + r.Height;
         }
 
+        var text = OcrTextMerger.MergeWords(wordTexts);
+        var lineRect = words.Count == 0
+            ? default
+            : new OcrRect(minX, minY, maxX - minX, maxY - minY);
+
         return new OcrLine
         {
             Text = text,
-            BoundingRect = new OcrRect(minX, minY, maxX - minX, maxY - minY)
+            BoundingRect = lineRect,
+            Words = words
         };
     }
 

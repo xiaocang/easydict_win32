@@ -17,7 +17,8 @@ public enum QuerySourceKind
     Clipboard,
     Selection,
     Ocr,
-    HistoryRerun
+    HistoryRerun,
+    Hover
 }
 
 public enum SavedResultContentType

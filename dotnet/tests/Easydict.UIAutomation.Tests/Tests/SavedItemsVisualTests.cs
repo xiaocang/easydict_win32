@@ -671,9 +671,18 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                 Wait(window, "ServiceResultItem_deepl");
                 if (cycle < 8)
                 {
-                    Wait(window, "DictWebView");
-                    Retry.WhileFalse(() => Find(window, "DictWebView")?.BoundingRectangle.Height > 20, TimeSpan.FromSeconds(15))
-                        .Result.Should().BeTrue("exercise rendered WebView content before releasing its result card");
+                    // WinUI/WebView2 can expose more than one provider with this
+                    // ID, including a zero-size host. Match the rendered instance
+                    // in this result card rather than the first match in the window.
+                    var renderedWebView = Retry.WhileNull(() =>
+                        Find(window, "ServiceResultItem_deepl")?
+                            .FindAllDescendants(cf => cf.ByAutomationId("DictWebView"))
+                            .FirstOrDefault(view => !view.IsOffscreen &&
+                                view.BoundingRectangle is { Width: > 20, Height: > 20 }),
+                        TimeSpan.FromSeconds(15)).Result;
+                    if (renderedWebView is null)
+                        output.WriteLine(ScreenshotHelper.CaptureWindow(window, $"fluent2_failed_webview_cycle_{cycle}"));
+                    renderedWebView.Should().NotBeNull("exercise rendered WebView content before releasing its result card");
                 }
                 Invoke(Wait(window, "CompareResultsButton"));
                 Invoke(Wait(window, "CompareResultsButton"));
@@ -722,12 +731,19 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             var handle = WindowHandles.GetValue(window, current => new WindowHandle(current));
             try
             {
+                var found = FindDescendant(handle.Root, id);
+                if (found is not null) return found;
+
+                // A detached WinUI provider can return no match without throwing.
+                // Refresh on a miss as well as on COM invalidation: CI reported a
+                // missing result card that was present in the window's fresh tree.
+                handle.Root = window.Automation.FromHandle(handle.Value);
                 return FindDescendant(handle.Root, id);
             }
             catch (Exception ex) when (IsUiaTransitionError(ex))
             {
                 // ElementFromHandle itself sends a cross-process request. Only
-                // reacquire after invalidation, rather than on every lookup.
+                // reacquire after a miss/invalidation, rather than on every lookup.
                 handle.Root = window.Automation.FromHandle(handle.Value);
                 return FindDescendant(handle.Root, id);
             }

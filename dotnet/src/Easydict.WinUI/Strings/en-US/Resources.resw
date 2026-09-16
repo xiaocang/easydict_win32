@@ -1269,6 +1269,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Excluded apps</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Process names to exclude from mouse selection translate, separated by commas. Example: "code" for VS Code.</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>Hover word lookup</value></data>
+  <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(hold the trigger key and point at a word)</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>Trigger key</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>No key (hover only)</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + hover</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Shift + hover</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + hover</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>Use OCR when the app exposes no text</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>Preferred lookup service</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>Auto (dictionary services first, with fallback)</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>Shows a small popup with the word, its phonetics and meaning next to the pointer.</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Hover word lookup</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Open in Mini window</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>Finding word…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>Word found</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>No word found</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>Looking up…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>No result</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>Lookup failed</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
@@ -1630,4 +1649,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Sign-in cancelled.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Could not open your browser. Use the "Get an API key" link below instead.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Disconnect</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Advanced settings</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Hover delay</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>How long the pointer rests before lookup starts. Lower is faster; higher reduces accidental lookups.</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>Labs</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Try new features here before they move to the main settings tabs.</value></data>
 </root>

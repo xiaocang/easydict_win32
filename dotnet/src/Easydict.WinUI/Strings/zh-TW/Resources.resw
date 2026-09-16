@@ -1269,6 +1269,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>排除應用</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除劃詞翻譯的程序名稱，用逗號分隔。範例："code" 代表 VS Code。</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>懸浮取詞</value></data>
+  <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>（按住觸發鍵並將滑鼠停在單字上）</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>取詞方式</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>無需按鍵（直接懸停）</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + 滑鼠取詞</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Shift + 滑鼠取詞</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + 滑鼠取詞</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>無法讀取文字時使用 OCR 取詞</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>優先取詞服務</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>自動（詞典服務優先，失敗依序遞補）</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>在指標旁彈出小視窗顯示單字、音標和釋義。</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>懸浮取詞</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>在迷你視窗中開啟</value></data>
+  <data name="HoverLookupFocusing" xml:space="preserve"><value>正在取詞…</value></data>
+  <data name="HoverLookupFocusSucceeded" xml:space="preserve"><value>已鎖定單字</value></data>
+  <data name="HoverLookupNoWord" xml:space="preserve"><value>未取到詞</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>查詢中…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>無結果</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>查詢失敗</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
@@ -1630,4 +1649,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>登入已取消。</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>無法開啟瀏覽器。請改用下方的「取得 API 金鑰」連結。</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>中斷連線</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>進階設定</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>取詞延遲</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>滑鼠停留多久後開始取詞。越短反應越快，越長越不容易誤觸發。</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>實驗室</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>新功能先在這裡試用，穩定後移入正式設定分頁。</value></data>
 </root>

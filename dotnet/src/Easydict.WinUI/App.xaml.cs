@@ -58,6 +58,7 @@ namespace Easydict.WinUI
         private ClipboardService? _clipboardService;
         private MouseHookService? _mouseHookService;
         private PopButtonService? _popButtonService;
+        private HoverWordLookupService? _hoverWordLookupService;
         private OcrTranslateService? _ocrTranslateService;
         private AppWindow? _appWindow;
 
@@ -312,6 +313,7 @@ namespace Easydict.WinUI
                 _trayIconService.OnOcrTranslate += OnTrayOcrTranslate;
                 _trayIconService.OnOpenSettings += OnTrayOpenSettings;
                 _trayIconService.OnBrowserSupportAction += OnBrowserSupportAction;
+                _trayIconService.OnHoverWordLookupToggled += OnTrayHoverWordLookupToggled;
                 _trayIconService.Initialize();
             }
             catch (Exception ex)
@@ -455,15 +457,22 @@ namespace Easydict.WinUI
                     _mouseHookService.OnRightMouseDown += () => _popButtonService.Dismiss("RightMouseDown");
                     _mouseHookService.OnKeyDown += () => _popButtonService.Dismiss("KeyDown");
 
-                    if (settings.MouseSelectionTranslate)
-                    {
-                        if (!_mouseHookService.Install())
-                        {
-                            System.Diagnostics.Trace.WriteLine("[App] Mouse hook installation failed at startup");
-                        }
-                    }
+                    // Hover word lookup shares the same global hooks.
+                    _hoverWordLookupService = new HoverWordLookupService(
+                        _window.DispatcherQueue,
+                        _mouseHookService,
+                        new WordUnderCursorService(new WindowsOcrService(), OcrTranslateService.GetPreferredOcrLanguage));
+                    _mouseHookService.OnMouseMove += _hoverWordLookupService.OnMouseMove;
+                    _mouseHookService.OnKeyboardEvent += _hoverWordLookupService.OnKeyboardEvent;
+                    _mouseHookService.OnMouseDown += () => _hoverWordLookupService?.DismissForInput("MouseDown");
+                    _mouseHookService.OnMouseScroll += () => _hoverWordLookupService?.DismissForInput("MouseScroll");
+                    _mouseHookService.OnRightMouseDown += () => _hoverWordLookupService?.DismissForInput("RightMouseDown");
 
                     _popButtonService.IsEnabled = settings.MouseSelectionTranslate;
+                    _hoverWordLookupService.ApplyOptions(HoverLookupOptions.FromSettings(settings));
+
+                    // Install the hooks when either feature needs them.
+                    UpdateMouseHookInstallation();
                 }
                 catch (Exception ex)
                 {
@@ -1402,6 +1411,7 @@ namespace Easydict.WinUI
 
             _mouseHookService?.Dispose();
             _popButtonService?.Dispose();
+            _hoverWordLookupService?.Dispose();
             _clipboardService?.Dispose();
             _hotkeyService?.Dispose();
             _trayIconService?.Dispose();
@@ -1465,6 +1475,8 @@ namespace Easydict.WinUI
                     app._popButtonService.IsEnabled = false;
                 }
 
+                app._hoverWordLookupService?.ApplyOptions(HoverLookupOptions.Disabled);
+
                 if (app._mouseHookService != null)
                 {
                     app._mouseHookService.Uninstall();
@@ -1478,19 +1490,61 @@ namespace Easydict.WinUI
                 app._popButtonService.IsEnabled = enabled;
             }
 
-            if (app._mouseHookService != null)
+            app.UpdateMouseHookInstallation();
+        }
+
+        /// <summary>
+        /// Apply the hover word lookup settings (enabled, trigger key, OCR fallback, service)
+        /// and install or uninstall the global hooks accordingly.
+        /// </summary>
+        public static void ApplyHoverWordLookup()
+        {
+            var app = Instance;
+            var settings = SettingsService.Instance;
+            app._trayIconService?.SetHoverWordLookupChecked(settings.HoverWordLookupEnabled);
+
+            if (IsMouseSelectionTranslateDisabledForDebug())
             {
-                if (enabled)
+                app._hoverWordLookupService?.ApplyOptions(HoverLookupOptions.Disabled);
+                return;
+            }
+
+            app._hoverWordLookupService?.ApplyOptions(HoverLookupOptions.FromSettings(settings));
+            app.UpdateMouseHookInstallation();
+        }
+
+        /// <summary>
+        /// Tray menu "Hover word lookup" toggle: persist the setting and apply it.
+        /// </summary>
+        private void OnTrayHoverWordLookupToggled(bool enabled)
+        {
+            var settings = SettingsService.Instance;
+            settings.HoverWordLookupEnabled = enabled;
+            settings.Save();
+            ApplyHoverWordLookup();
+        }
+
+        /// <summary>
+        /// Install the global mouse/keyboard hooks when mouse selection translate or hover word
+        /// lookup is enabled; uninstall them when neither needs them.
+        /// </summary>
+        private void UpdateMouseHookInstallation()
+        {
+            if (_mouseHookService == null) return;
+
+            var wanted = (_popButtonService?.IsEnabled ?? false)
+                || (_hoverWordLookupService?.IsEnabled ?? false);
+
+            if (wanted)
+            {
+                if (!_mouseHookService.Install())
                 {
-                    if (!app._mouseHookService.Install())
-                    {
-                        System.Diagnostics.Trace.WriteLine("[App] Mouse hook installation failed on toggle");
-                    }
+                    System.Diagnostics.Trace.WriteLine("[App] Mouse hook installation failed");
                 }
-                else
-                {
-                    app._mouseHookService.Uninstall();
-                }
+            }
+            else
+            {
+                _mouseHookService.Uninstall();
             }
         }
 
@@ -1554,6 +1608,7 @@ namespace Easydict.WinUI
             MiniWindowService.Instance.ApplyTheme(elementTheme, forceThemeResourceRefresh);
             FixedWindowService.Instance.ApplyTheme(elementTheme, forceThemeResourceRefresh);
             Instance._popButtonService?.ApplyTheme(elementTheme, forceThemeResourceRefresh);
+            Instance._hoverWordLookupService?.ApplyTheme(elementTheme, forceThemeResourceRefresh);
 
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
         }
@@ -1639,6 +1694,14 @@ namespace Easydict.WinUI
                 switch (uMsg)
                 {
 #if WINUI_TEST
+                    case 0x8000 + 205 when wParam is 0 or 1:
+                        OnTrayHoverWordLookupToggled(wParam == 1);
+                        return 1;
+                    case 0x8000 + 203 when wParam >= 0 && wParam <= 10 && _hoverWordLookupService is not null:
+                        return HoverLookupLayoutTestHost.Show(_hoverWordLookupService.GetWindowForLayoutTest(), (int)wParam);
+                    case 0x8000 + 204 when _hoverWordLookupService is not null:
+                        _hoverWordLookupService.DismissForInput("MouseScroll");
+                        return 1;
                     // Test-only control works with both EXE and MSIX activation.
                     case 0x8000 + 202 when wParam >= 0 && wParam <= 10000:
                         TextSelectionService.TestCaptureDelayMs = (int)wParam;

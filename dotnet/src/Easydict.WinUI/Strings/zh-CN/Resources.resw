@@ -1654,7 +1654,6 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>鼠标停留多久后开始取词。越短响应越快，越长越不容易误触发。</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>实验室</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>新功能先在这里试用，稳定后移入正式设置标签页。</value></data>
-  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>高级</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>选中后图标弹出延迟</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>选中文本后等待多久才显示翻译图标。数值越小弹出越快；如果三击选择时图标闪烁，可适当调大。</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>正在获取选中文本…</value></data>

@@ -1654,7 +1654,6 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>滑鼠停留多久後開始取詞。越短反應越快，越長越不容易誤觸發。</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>實驗室</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>新功能先在這裡試用，穩定後移入正式設定分頁。</value></data>
-  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>進階</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>選取後圖示彈出延遲</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>選取文字後等待多久才顯示翻譯圖示。數值越小彈出越快；若三擊選取時圖示閃爍，可適當調大。</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>正在取得選取文字…</value></data>

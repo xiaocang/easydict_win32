@@ -1654,7 +1654,6 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Thời gian con trỏ dừng trước khi bắt đầu tra từ. Giá trị thấp phản hồi nhanh hơn; giá trị cao giảm việc tra từ ngoài ý muốn.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>Phòng thử nghiệm</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Dùng thử tính năng mới tại đây trước khi chuyển sang các thẻ cài đặt chính.</value></data>
-  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Nâng cao</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Độ trễ hiện biểu tượng sau khi chọn</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Thời gian chờ sau khi chọn văn bản trước khi biểu tượng dịch xuất hiện. Giá trị càng nhỏ càng nhanh; hãy tăng lên nếu biểu tượng nhấp nháy khi nhấp ba lần chậm.</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>Đang lấy văn bản đã chọn…</value></data>

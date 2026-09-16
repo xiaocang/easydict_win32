@@ -1654,7 +1654,6 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Temps d’arrêt du pointeur avant la recherche. Un délai court accélère la réponse ; un délai long réduit les recherches involontaires.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>Laboratoire</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Essayez ici les nouvelles fonctionnalités avant leur intégration aux onglets de paramètres habituels.</value></data>
-  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>Avancé</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>Délai d'affichage de l'icône de sélection</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>Temps d'attente après une sélection avant l'apparition de l'icône de traduction. Plus la valeur est faible, plus l'icône apparaît vite ; augmentez-la si l'icône clignote lors d'un triple clic lent.</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>Récupération du texte sélectionné…</value></data>

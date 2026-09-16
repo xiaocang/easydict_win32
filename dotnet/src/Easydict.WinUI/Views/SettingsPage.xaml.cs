@@ -1739,7 +1739,6 @@ public sealed partial class SettingsPage : Page
         AutomationProperties.SetName(EnableLocalDictionarySuggestionsToggle, loc.GetString("EnableLocalDictionarySuggestions"));
         LabsHeaderText.Text = loc.GetString("SettingsTab_Labs");
         LabsDescriptionText.Text = loc.GetString("SettingsTab_Labs_Tooltip");
-        AdvancedBehaviorHeaderText.Text = loc.GetString("AdvancedBehaviorHeader");
         MouseSelectionPopDelayLabel.Text = loc.GetString("MouseSelectionPopDelay");
         MouseSelectionPopDelayDescriptionText.Text = loc.GetString("MouseSelectionPopDelayDescription");
     }
@@ -3271,7 +3270,7 @@ public sealed partial class SettingsPage : Page
             HistoryRetentionDaysBox.Value = _settings.HistoryRetentionDays;
             HistoryRetentionDaysBox.IsEnabled = _settings.HistoryEnabled;
             MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
-            MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
+            MouseSelectionOptionsPanel.Visibility = _settings.MouseSelectionTranslate
                 ? Visibility.Visible : Visibility.Collapsed;
             AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
             ResultFontScaleSlider.Value = _settings.ResultFontScale;
@@ -4930,7 +4929,7 @@ public sealed partial class SettingsPage : Page
 
     private void OnMouseSelectionTranslateToggled(object sender, RoutedEventArgs e)
     {
-        MouseSelectionExcludedAppsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
+        MouseSelectionOptionsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
             ? Visibility.Visible : Visibility.Collapsed;
     }
 

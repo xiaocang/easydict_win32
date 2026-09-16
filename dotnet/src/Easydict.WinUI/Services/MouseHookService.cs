@@ -138,7 +138,7 @@ public sealed partial class MouseHookService : IDisposable
     }
 
     /// <summary>
-    /// Optional provider for the user-configured pop delay (Settings -> Behavior -> Advanced).
+    /// Optional provider for the user-configured pop delay (Settings -> General -> Behavior -> Mouse selection translate).
     /// Read on every multi-click so a changed setting takes effect without re-wiring.
     /// When unset, <see cref="MaxMultiClickWaitMs"/> applies.
     /// </summary>

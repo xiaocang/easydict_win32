@@ -1654,7 +1654,6 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>مدة توقف المؤشر قبل بدء البحث. القيمة الأقل أسرع، والقيمة الأعلى تقلل عمليات البحث غير المقصودة.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>المختبر</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>جرّب الميزات الجديدة هنا قبل نقلها إلى علامات تبويب الإعدادات الرئيسية.</value></data>
-  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>خيارات متقدمة</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>تأخير ظهور أيقونة التحديد</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>مدة الانتظار بعد تحديد النص قبل ظهور أيقونة الترجمة. القيم الأقل أسرع؛ ارفعها إذا كانت الأيقونة تومض عند النقر ثلاث مرات ببطء.</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>جارٍ قراءة النص المحدد…</value></data>

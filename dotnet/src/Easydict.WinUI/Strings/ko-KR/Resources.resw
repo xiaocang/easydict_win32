@@ -1654,7 +1654,6 @@
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>포인터가 멈춘 후 단어 조회를 시작하기까지의 시간입니다. 짧으면 빠르게 반응하고, 길면 실수로 실행되는 것을 줄입니다.</value></data>
   <data name="SettingsTab_Labs" xml:space="preserve"><value>실험실</value></data>
   <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>새 기능을 여기서 먼저 사용해 보세요. 안정화되면 일반 설정 탭으로 이동합니다.</value></data>
-  <data name="AdvancedBehaviorHeader" xml:space="preserve"><value>고급</value></data>
   <data name="MouseSelectionPopDelay" xml:space="preserve"><value>선택 후 아이콘 표시 지연</value></data>
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>텍스트를 선택한 뒤 번역 아이콘이 나타나기까지 기다리는 시간입니다. 값이 작을수록 빠르게 나타납니다. 세 번 클릭할 때 아이콘이 깜박이면 값을 늘리세요.</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>선택한 텍스트를 가져오는 중…</value></data>

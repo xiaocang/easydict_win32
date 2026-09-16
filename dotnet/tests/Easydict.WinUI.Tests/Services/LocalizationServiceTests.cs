@@ -243,8 +243,10 @@ public class LocalizationServiceTests
     [InlineData("en-US", "StatusReady", "Ready")]
     [InlineData("zh-CN", "StatusReady", "就绪")]
     [InlineData("ja-JP", "StatusReady", "準備完了")]
-    [InlineData("en-US", "TrayHoverWordLookup", "Hover word lookup (experimental)")]
-    [InlineData("zh-CN", "TrayHoverWordLookup", "悬浮取词（实验性）")]
+    [InlineData("en-US", "TrayHoverWordLookup", "Hover word lookup")]
+    [InlineData("zh-CN", "TrayHoverWordLookup", "悬浮取词")]
+    [InlineData("en-US", "SettingsTab_Labs", "Labs")]
+    [InlineData("zh-CN", "SettingsTab_Labs", "实验室")]
     public void ResourceFile_ContainsKey(string language, string key, string expectedValue)
     {
         var reswPath = Path.Combine(StringsPath, language, "Resources.resw");

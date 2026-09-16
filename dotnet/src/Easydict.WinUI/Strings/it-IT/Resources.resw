@@ -1269,7 +1269,7 @@
   <data name="ExcludedApps" xml:space="preserve"><value>App escluse</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Nomi dei processi da escludere dalla traduzione con selezione mouse, separati da virgole. Esempio: "code" per VS Code.</value></data>
-  <data name="HoverWordLookup" xml:space="preserve"><value>Ricerca parola al passaggio del mouse (sperimentale)</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>Ricerca parola al passaggio del mouse</value></data>
   <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(tieni premuto il tasto di attivazione e punta una parola)</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>Tasto di attivazione</value></data>
   <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>Nessun tasto (solo passaggio del mouse)</value></data>
@@ -1280,7 +1280,7 @@
   <data name="HoverWordLookupService" xml:space="preserve"><value>Servizio di ricerca preferito</value></data>
   <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>Auto (prima i dizionari, poi altri servizi in caso di errore)</value></data>
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>Mostra accanto al puntatore un piccolo popup con la parola, la trascrizione fonetica e il significato.</value></data>
-  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Ricerca parola al passaggio del mouse (sperimentale)</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Ricerca parola al passaggio del mouse</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Apri nella mini finestra</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>Ricerca in corso…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>Nessun risultato</value></data>
@@ -1649,4 +1649,6 @@
   <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Impostazioni avanzate</value></data>
   <data name="HoverWordLookupDelay" xml:space="preserve"><value>Ritardo di ricerca della parola</value></data>
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Tempo di attesa dopo l’arresto del puntatore prima della ricerca. Un valore basso è più rapido; uno alto riduce le ricerche involontarie.</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>Laboratorio</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Prova qui le nuove funzionalità prima che vengano spostate nelle normali schede delle impostazioni.</value></data>
 </root>

@@ -1269,7 +1269,7 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Ứng dụng loại trừ</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Tên tiến trình cần loại trừ khỏi dịch chọn chuột, phân cách bằng dấu phẩy. Ví dụ: "code" cho VS Code.</value></data>
-  <data name="HoverWordLookup" xml:space="preserve"><value>Tra từ khi di chuột (thử nghiệm)</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>Tra từ khi di chuột</value></data>
   <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(giữ phím kích hoạt và trỏ vào một từ)</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>Phím kích hoạt</value></data>
   <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>Không cần phím (chỉ di chuột)</value></data>
@@ -1280,7 +1280,7 @@
   <data name="HoverWordLookupService" xml:space="preserve"><value>Dịch vụ tra từ ưu tiên</value></data>
   <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>Tự động (ưu tiên từ điển, thử dịch vụ tiếp theo khi thất bại)</value></data>
   <data name="HoverWordLookupDescription" xml:space="preserve"><value>Hiển thị cửa sổ nhỏ cạnh con trỏ với từ, phiên âm và nghĩa.</value></data>
-  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Tra từ khi di chuột (thử nghiệm)</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Tra từ khi di chuột</value></data>
   <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Mở trong cửa sổ mini</value></data>
   <data name="HoverLookupLoading" xml:space="preserve"><value>Đang tra cứu…</value></data>
   <data name="HoverLookupNoResult" xml:space="preserve"><value>Không có kết quả</value></data>
@@ -1649,4 +1649,6 @@
   <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Cài đặt nâng cao</value></data>
   <data name="HoverWordLookupDelay" xml:space="preserve"><value>Độ trễ tra từ</value></data>
   <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Thời gian con trỏ dừng trước khi bắt đầu tra từ. Giá trị thấp phản hồi nhanh hơn; giá trị cao giảm việc tra từ ngoài ý muốn.</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>Phòng thử nghiệm</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Dùng thử tính năng mới tại đây trước khi chuyển sang các thẻ cài đặt chính.</value></data>
 </root>

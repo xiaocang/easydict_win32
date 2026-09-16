@@ -2680,106 +2680,18 @@
 
                     </StackPanel>
 
-                    <StackPanel x:Name="GeneralTabContent"
-                                Spacing="24"
-                                Visibility="Collapsed">
-                    <!-- TTS Settings -->
-                    <!-- Behavior -->
-                    <StackPanel x:Name="BehaviorSection"
-                            Spacing="12">
-                        <TextBlock x:Name="BehaviorHeaderText"
-                                AutomationProperties.AutomationId="SettingsGeneralBehaviorHeader"
-                                Text="Behavior"
-                                FontSize="18"
-                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-
+                    <StackPanel x:Name="LabsTabContent"
+                                AutomationProperties.AutomationId="LabsTabContent"
+                                Spacing="12" Visibility="Collapsed">
+                        <TextBlock x:Name="LabsHeaderText" Text="Labs"
+                                   FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <TextBlock x:Name="LabsDescriptionText"
+                                   Text="Try new features here before they move to the main settings tabs."
+                                   FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="12">
-                                <!-- App Theme -->
-                                <ComboBox
-                                    x:Name="AppThemeCombo"
-                                    Header="App Theme"
-                                    Width="250"
-                                    SelectionChanged="OnAppThemeChanged"
-                                    HorizontalAlignment="Left">
-                                    <ComboBoxItem Content="System"
-                                            Tag="System"/>
-                                    <ComboBoxItem Content="Light"
-                                            Tag="Light"/>
-                                    <ComboBoxItem Content="Dark"
-                                            Tag="Dark"/>
-                                    <ComboBoxItem Content="Minimal"
-                                            Tag="Minimal"/>
-                                </ComboBox>
-                                <TextBlock
-                                    x:Name="AppThemeDescriptionText"
-                                    Text="Choose how Easydict appears. Select System to follow Windows theme."
-                                    FontSize="12"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        TextWrapping="Wrap"/>
-
-                                <controls:FluentSettingRow>
-<TextBlock AutomationProperties.AutomationId="MinimizeToTrayLabel" Text="{Binding Header, ElementName=MinimizeToTrayToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="MinimizeToTrayToggle"
-                                        Header="Minimize to system tray">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
-                                <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=MinimizeToTrayOnStartupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle"
-                                        Header="Start minimized to tray">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
-                                <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=ClipboardMonitorToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="ClipboardMonitorToggle"
-                                        Header="Monitor clipboard for text">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
-                                <controls:FluentSettingRow>
-<TextBlock Text="{Binding Header, ElementName=MouseSelectionTranslateToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-<ToggleSwitch x:Name="MouseSelectionTranslateToggle"
-                                        AutomationProperties.AutomationId="MouseSelectionTranslateToggle"
-                                        Header="Mouse selection translate">
-<ToggleSwitch.HeaderTemplate>
-<DataTemplate>
-<Grid Height="0"/>
-</DataTemplate>
-</ToggleSwitch.HeaderTemplate>
-</ToggleSwitch>
-</controls:FluentSettingRow>
-                                <StackPanel x:Name="MouseSelectionExcludedAppsPanel"
-                                        Spacing="4"
-                                        Margin="44,0,0,0"
-                                            Visibility="Collapsed">
-                                    <TextBox x:Name="MouseSelectionExcludedAppsBox"
-                                             Header="Excluded apps"
-                                             PlaceholderText="code, slack, discord"
-                                             MaxWidth="350"
-                                             HorizontalAlignment="Left"/>
-                                    <TextBlock x:Name="MouseSelectionExcludedAppsDescriptionText"
-                                               Text="Process names to exclude, separated by commas."
-                                               FontSize="11"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               TextWrapping="Wrap"
-                                               MaxWidth="350"
-                                               HorizontalAlignment="Left"/>
-                                </StackPanel>
                                 <!-- Hover word lookup (悬浮取词) -->
                                 <controls:FluentSettingRow>
 <TextBlock Text="{Binding Header, ElementName=HoverWordLookupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
@@ -2883,6 +2795,110 @@
                                                MaxWidth="350"
                                                HorizontalAlignment="Left"/>
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="GeneralTabContent"
+                                Spacing="24"
+                                Visibility="Collapsed">
+                    <!-- TTS Settings -->
+                    <!-- Behavior -->
+                    <StackPanel x:Name="BehaviorSection"
+                            Spacing="12">
+                        <TextBlock x:Name="BehaviorHeaderText"
+                                AutomationProperties.AutomationId="SettingsGeneralBehaviorHeader"
+                                Text="Behavior"
+                                FontSize="18"
+                                FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="12">
+                                <!-- App Theme -->
+                                <ComboBox
+                                    x:Name="AppThemeCombo"
+                                    Header="App Theme"
+                                    Width="250"
+                                    SelectionChanged="OnAppThemeChanged"
+                                    HorizontalAlignment="Left">
+                                    <ComboBoxItem Content="System"
+                                            Tag="System"/>
+                                    <ComboBoxItem Content="Light"
+                                            Tag="Light"/>
+                                    <ComboBoxItem Content="Dark"
+                                            Tag="Dark"/>
+                                    <ComboBoxItem Content="Minimal"
+                                            Tag="Minimal"/>
+                                </ComboBox>
+                                <TextBlock
+                                    x:Name="AppThemeDescriptionText"
+                                    Text="Choose how Easydict appears. Select System to follow Windows theme."
+                                    FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+
+                                <controls:FluentSettingRow>
+<TextBlock AutomationProperties.AutomationId="MinimizeToTrayLabel" Text="{Binding Header, ElementName=MinimizeToTrayToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="MinimizeToTrayToggle"
+                                        Header="Minimize to system tray">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=MinimizeToTrayOnStartupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle"
+                                        Header="Start minimized to tray">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ClipboardMonitorToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ClipboardMonitorToggle"
+                                        Header="Monitor clipboard for text">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=MouseSelectionTranslateToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="MouseSelectionTranslateToggle"
+                                        AutomationProperties.AutomationId="MouseSelectionTranslateToggle"
+                                        Header="Mouse selection translate">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <StackPanel x:Name="MouseSelectionExcludedAppsPanel"
+                                        Spacing="4"
+                                        Margin="44,0,0,0"
+                                            Visibility="Collapsed">
+                                    <TextBox x:Name="MouseSelectionExcludedAppsBox"
+                                             Header="Excluded apps"
+                                             PlaceholderText="code, slack, discord"
+                                             MaxWidth="350"
+                                             HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="MouseSelectionExcludedAppsDescriptionText"
+                                               Text="Process names to exclude, separated by commas."
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               MaxWidth="350"
+                                               HorizontalAlignment="Left"/>
+                                </StackPanel>
                                 <controls:FluentSettingRow>
 <TextBlock Text="{Binding Header, ElementName=AlwaysOnTopToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 <ToggleSwitch x:Name="AlwaysOnTopToggle"
@@ -2916,20 +2932,14 @@
 </ToggleSwitch.HeaderTemplate>
 </ToggleSwitch>
 </controls:FluentSettingRow>
-                                <ToggleSwitch x:Name="EnableLocalDictionarySuggestionsToggle">
+                                <ToggleSwitch x:Name="EnableLocalDictionarySuggestionsToggle"
+                                              AutomationProperties.AutomationId="EnableLocalDictionarySuggestionsToggle">
                                     <ToggleSwitch.Header>
                                         <StackPanel Orientation="Horizontal"
                                                     Spacing="6">
                                             <TextBlock x:Name="EnableLocalDictionarySuggestionsLabelText"
                                                        Text="Enable custom dictionary input suggestions"
                                                        VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                            <TextBlock x:Name="ExperimentalLabelText"
-                                                       Text="Experimental"
-                                                       FontSize="11"
-                                                       FontStyle="Italic"
-                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                       VerticalAlignment="Center"
-                                                       Margin="0,1,0,0"/>
                                         </StackPanel>
                                     </ToggleSwitch.Header>
                                 </ToggleSwitch>

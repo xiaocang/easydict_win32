@@ -27,6 +27,13 @@ public sealed class HoverLookupSettingsTests
         var settingsPath = Path.Combine(Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR")!, "settings.json");
         Invoke(Wait(window, "SettingsButton"));
         Invoke(Wait(window, "SettingsTab_General"));
+        window.FindFirstDescendant(cf => cf.ByAutomationId("HoverWordLookupToggle"))
+            .Should().BeNull("hover lookup belongs to Labs, not General");
+        var suggestions = Wait(window, "EnableLocalDictionarySuggestionsToggle");
+        suggestions.Name.Should().NotContain(language == "zh-CN" ? "实验性" : "Experimental");
+        var labsTab = Wait(window, "SettingsTab_Labs");
+        labsTab.Name.Should().Be(language == "zh-CN" ? "实验室" : "Labs");
+        Invoke(labsTab);
         Wait(window, "HoverWordLookupToggle").Patterns.Toggle.Pattern.Toggle();
         var expander = Wait(window, "HoverWordLookupAdvancedExpander").Patterns.ExpandCollapse.Pattern;
         expander.ExpandCollapseState.Value.Should().Be(ExpandCollapseState.Collapsed);
@@ -43,10 +50,15 @@ public sealed class HoverLookupSettingsTests
             var headerBounds = Wait(window, "HoverWordLookupModifierHeader").BoundingRectangle;
             var advanced = Wait(window, "HoverWordLookupAdvancedExpander");
             var advancedBounds = advanced.BoundingRectangle;
+            if (advanced.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.Value == ExpandCollapseState.Expanded)
+            {
+                var ocr = Wait(window, "HoverWordLookupOcrFallbackToggle");
+                if (ocr.IsOffscreen || ocr.BoundingRectangle.Height <= 0) return null;
+            }
             return headerBounds.Width > 20 && headerBounds.Top >= headerTop &&
                 advancedBounds.Bottom <= Math.Min(viewport.Bottom, windowBounds.Bottom) - 16 ? advanced : null;
         }
-        var visibleExpander = ScrollHelper.ScrollToFind(scroller, 70,
+        var visibleExpander = ScrollHelper.ScrollToFind(scroller, 0,
             FindVisibleHoverSettings);
         ScreenshotHelper.CaptureWindow(window, $"hover_delay_collapsed_{language}_{theme}");
         visibleExpander.Should().NotBeNull();
@@ -56,6 +68,7 @@ public sealed class HoverLookupSettingsTests
         var triggerHint = language == "zh-CN" ? "按住触发键并将鼠标停在单词上" : "hold the trigger key and point at a word";
         Wait(window, "HoverWordLookupModifierHeader").Name.Should().Contain(triggerHint);
         Wait(window, "HoverWordLookupToggle").Name.Should().NotContain(triggerHint);
+        Wait(window, "HoverWordLookupToggle").Name.Should().Be(language == "zh-CN" ? "悬浮取词 开" : "Hover word lookup On");
         expander.Expand();
         var slider = Wait(window, "HoverWordLookupDelaySlider");
         var range = slider.Patterns.RangeValue.Pattern;
@@ -68,17 +81,19 @@ public sealed class HoverLookupSettingsTests
             range.SetValue(delay);
             Retry.WhileFalse(() => Wait(window, "HoverWordLookupDelayValueText").Name == $"{delay} ms",
                 TimeSpan.FromSeconds(5)).Result.Should().BeTrue("the displayed latency must follow the slider");
+            Invoke(Wait(window, "SettingsTab_General"));
             Invoke(Wait(window, "SaveButton"));
             Retry.WhileFalse(() =>
             {
                 using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
                 return document.RootElement.GetProperty("HoverWordLookupDelayMs").GetInt32() == delay;
             }, TimeSpan.FromSeconds(5)).Result.Should().BeTrue("the delay must be saved");
+            Invoke(Wait(window, "SettingsTab_Labs"));
         }
 
         Invoke(Wait(window, "BackButton"));
         Invoke(Wait(window, "SettingsButton"));
-        Invoke(Wait(window, "SettingsTab_General"));
+        Invoke(Wait(window, "SettingsTab_Labs"));
         expander = Wait(window, "HoverWordLookupAdvancedExpander").Patterns.ExpandCollapse.Pattern;
         expander.ExpandCollapseState.Value.Should().Be(ExpandCollapseState.Collapsed);
         expander.Expand();
@@ -87,7 +102,7 @@ public sealed class HoverLookupSettingsTests
         scroller = Wait(window, "SettingsDetailsScrollViewer");
         if (!scroller.Patterns.Scroll.Pattern.VerticallyScrollable.Value)
             scroller = Wait(window, "MainScrollViewer");
-        ScrollHelper.ScrollToFind(scroller, 70, FindVisibleHoverSettings).Should().NotBeNull();
+        ScrollHelper.ScrollToFind(scroller, 100, FindVisibleHoverSettings).Should().NotBeNull();
         ScreenshotHelper.CaptureWindow(window, $"hover_delay_slider_{language}_{theme}");
     }
 
@@ -102,7 +117,6 @@ public sealed class HoverLookupSettingsTests
         var settingsPath = Path.Combine(Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR")!, "settings.json");
         Invoke(Wait(window, "SettingsButton"));
         Invoke(Wait(window, "SettingsTab_General"));
-        var hover = Wait(window, "HoverWordLookupToggle");
         var unrelated = Wait(window, "MinimizeToTrayToggle");
 
         foreach (var enabled in new[] { true, false })
@@ -113,8 +127,11 @@ public sealed class HoverLookupSettingsTests
             SendMessageTimeout(window.Properties.NativeWindowHandle.Value, 0x8000 + 205,
                 enabled ? (nint)1 : 0, 0, 2, 5000, out var handled).Should().NotBe(0);
             handled.Should().Be((nuint)1);
+            Invoke(Wait(window, "SettingsTab_Labs"));
+            var hover = Wait(window, "HoverWordLookupToggle");
             Retry.WhileFalse(() => (hover.Patterns.Toggle.Pattern.ToggleState == ToggleState.On) == enabled,
                 TimeSpan.FromSeconds(5)).Result.Should().BeTrue("the tray change must update the open page");
+            Invoke(Wait(window, "SettingsTab_General"));
             unrelated.Patterns.Toggle.Pattern.ToggleState.Value.Should().Be(unrelatedValue ? ToggleState.On : ToggleState.Off);
             Invoke(Wait(window, "SaveButton"));
             Retry.WhileFalse(() => SavedValuesMatch(enabled, unrelatedValue), TimeSpan.FromSeconds(5))

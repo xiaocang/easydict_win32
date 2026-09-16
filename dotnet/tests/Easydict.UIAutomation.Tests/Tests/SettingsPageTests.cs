@@ -514,6 +514,7 @@ public class SettingsPageTests : IDisposable
             new SettingsTabSwitchCase("SettingsTab_Views", "Views"),
             new SettingsTabSwitchCase("SettingsTab_Hotkeys", "Hotkeys"),
             new SettingsTabSwitchCase("SettingsTab_Advanced", "Advanced"),
+            new SettingsTabSwitchCase("SettingsTab_Labs", "Labs"),
             new SettingsTabSwitchCase("SettingsTab_Language", "Language"),
             new SettingsTabSwitchCase("SettingsTab_About", "About"),
             new SettingsTabSwitchCase("SettingsTab_General", "General"),

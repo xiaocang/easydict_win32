@@ -1269,6 +1269,22 @@
   <data name="ExcludedApps" xml:space="preserve"><value>제외 앱</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>마우스 선택 번역에서 제외할 프로세스 이름을 쉼표로 구분하여 입력. 예: VS Code는 "code".</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>마우스 오버 단어 조회</value></data>
+  <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(트리거 키를 누른 채 단어에 포인터를 올려놓기)</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>트리거 키</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>키 없음 (마우스 오버만)</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + 마우스 오버</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Shift + 마우스 오버</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + 마우스 오버</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>앱에서 텍스트를 읽을 수 없으면 OCR 사용</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>우선 조회 서비스</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>자동 (사전 서비스 우선, 실패 시 다음 서비스)</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>포인터 옆에 단어, 발음 기호, 뜻을 보여 주는 작은 팝업을 표시합니다.</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>마우스 오버 단어 조회</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>미니 창에서 열기</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>조회 중…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>결과 없음</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>조회 실패</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
@@ -1630,4 +1646,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>로그인이 취소되었습니다.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>브라우저를 열 수 없습니다. 대신 아래의 "API 키 받기" 링크를 사용하세요.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>연결 해제</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>고급 설정</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>단어 조회 지연</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>포인터가 멈춘 후 단어 조회를 시작하기까지의 시간입니다. 짧으면 빠르게 반응하고, 길면 실수로 실행되는 것을 줄입니다.</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>실험실</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>새 기능을 여기서 먼저 사용해 보세요. 안정화되면 일반 설정 탭으로 이동합니다.</value></data>
 </root>

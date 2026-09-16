@@ -2680,6 +2680,125 @@
 
                     </StackPanel>
 
+                    <StackPanel x:Name="LabsTabContent"
+                                AutomationProperties.AutomationId="LabsTabContent"
+                                Spacing="12" Visibility="Collapsed">
+                        <TextBlock x:Name="LabsHeaderText" Text="Labs"
+                                   FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <TextBlock x:Name="LabsDescriptionText"
+                                   Text="Try new features here before they move to the main settings tabs."
+                                   FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="12">
+                                <!-- Hover word lookup (悬浮取词) -->
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=HoverWordLookupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="HoverWordLookupToggle"
+                                        AutomationProperties.AutomationId="HoverWordLookupToggle"
+                                        Header="Hover word lookup">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <StackPanel x:Name="HoverWordLookupPanel"
+                                        Spacing="8"
+                                        Margin="44,0,0,0"
+                                            Visibility="Collapsed">
+                                    <TextBlock x:Name="HoverWordLookupModifierHeader"
+                                               AutomationProperties.AutomationId="HoverWordLookupModifierHeader"
+                                               TextWrapping="Wrap" FontSize="14"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}">
+                                        <Run x:Name="HoverWordLookupModifierLabel" Text="Trigger key"/>
+                                        <Run x:Name="HoverWordLookupTriggerDescriptionRun"
+                                             Text=" (hold the trigger key and point at a word)"
+                                             FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    </TextBlock>
+                                    <ComboBox x:Name="HoverWordLookupModifierCombo"
+                                              AutomationProperties.AutomationId="HoverWordLookupModifierCombo"
+                                              AutomationProperties.Name="Trigger key"
+                                              Width="250"
+                                              HorizontalAlignment="Left">
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierNoneItem"
+                                                Content="No key (hover only)"
+                                                Tag="None"/>
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierCtrlItem"
+                                                Content="Ctrl + hover"
+                                                Tag="Ctrl"/>
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierShiftItem"
+                                                Content="Shift + hover"
+                                                Tag="Shift"/>
+                                        <ComboBoxItem x:Name="HoverWordLookupModifierAltItem"
+                                                Content="Alt + hover"
+                                                Tag="Alt"/>
+                                    </ComboBox>
+                                    <Expander x:Name="HoverWordLookupAdvancedExpander"
+                                              AutomationProperties.AutomationId="HoverWordLookupAdvancedExpander"
+                                              Header="Advanced settings"
+                                              IsExpanded="False"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Stretch">
+                                        <StackPanel Spacing="12" Padding="0,8">
+                                            <Grid ColumnSpacing="8" Width="250" HorizontalAlignment="Left">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock x:Name="HoverWordLookupDelayLabel"
+                                                           Text="Hover delay" TextWrapping="Wrap"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <TextBlock x:Name="HoverWordLookupDelayValueText"
+                                                           Grid.Column="1"
+                                                           AutomationProperties.AutomationId="HoverWordLookupDelayValueText"
+                                                           Text="350 ms"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            </Grid>
+                                            <Slider x:Name="HoverWordLookupDelaySlider"
+                                                    AutomationProperties.AutomationId="HoverWordLookupDelaySlider"
+                                                    Minimum="10" Maximum="600" Value="350"
+                                                    StepFrequency="10" TickFrequency="100"
+                                                    TickPlacement="Outside"
+                                                    Width="250" HorizontalAlignment="Left"/>
+                                            <TextBlock x:Name="HoverWordLookupDelayDescriptionText"
+                                                       Text="How long the pointer rests before lookup starts. Lower is faster; higher reduces accidental lookups."
+                                                       FontSize="12" TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            <ComboBox x:Name="HoverWordLookupServiceCombo"
+                                                      AutomationProperties.AutomationId="HoverWordLookupServiceCombo"
+                                                      Header="Lookup service"
+                                                      Width="250" HorizontalAlignment="Left"/>
+                                            <controls:FluentSettingRow>
+                                                <TextBlock Text="{Binding Header, ElementName=HoverWordLookupOcrFallbackToggle}"
+                                                           TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <ToggleSwitch x:Name="HoverWordLookupOcrFallbackToggle"
+                                                              AutomationProperties.AutomationId="HoverWordLookupOcrFallbackToggle"
+                                                              Header="Use OCR when the app exposes no text">
+                                                    <ToggleSwitch.HeaderTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Height="0"/>
+                                                        </DataTemplate>
+                                                    </ToggleSwitch.HeaderTemplate>
+                                                </ToggleSwitch>
+                                            </controls:FluentSettingRow>
+                                        </StackPanel>
+                                    </Expander>
+                                    <TextBlock x:Name="HoverWordLookupDescriptionText"
+                                               Text="Shows a small popup with the word, its phonetics and meaning next to the pointer."
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               MaxWidth="350"
+                                               HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
                     <StackPanel x:Name="GeneralTabContent"
                                 Spacing="24"
                                 Visibility="Collapsed">
@@ -2813,20 +2932,14 @@
 </ToggleSwitch.HeaderTemplate>
 </ToggleSwitch>
 </controls:FluentSettingRow>
-                                <ToggleSwitch x:Name="EnableLocalDictionarySuggestionsToggle">
+                                <ToggleSwitch x:Name="EnableLocalDictionarySuggestionsToggle"
+                                              AutomationProperties.AutomationId="EnableLocalDictionarySuggestionsToggle">
                                     <ToggleSwitch.Header>
                                         <StackPanel Orientation="Horizontal"
                                                     Spacing="6">
                                             <TextBlock x:Name="EnableLocalDictionarySuggestionsLabelText"
                                                        Text="Enable custom dictionary input suggestions"
                                                        VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                            <TextBlock x:Name="ExperimentalLabelText"
-                                                       Text="Experimental"
-                                                       FontSize="11"
-                                                       FontStyle="Italic"
-                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                       VerticalAlignment="Center"
-                                                       Margin="0,1,0,0"/>
                                         </StackPanel>
                                     </ToggleSwitch.Header>
                                 </ToggleSwitch>

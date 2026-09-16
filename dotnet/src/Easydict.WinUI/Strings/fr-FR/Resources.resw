@@ -1269,6 +1269,22 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Applications exclues</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Noms de processus à exclure de la traduction par sélection, séparés par des virgules. Exemple : "code" pour VS Code.</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>Recherche de mot au survol</value></data>
+  <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(maintenez la touche de déclenchement et pointez un mot)</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>Touche de déclenchement</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>Aucune touche (survol seul)</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + survol</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Maj + survol</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + survol</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>Utiliser l'OCR si l'application n'expose aucun texte</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>Service de recherche prioritaire</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>Auto (dictionnaires en priorité, puis services suivants)</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>Affiche une petite fenêtre avec le mot, sa phonétique et son sens à côté du pointeur.</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>Recherche de mot au survol</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>Ouvrir dans la mini-fenêtre</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>Recherche…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>Aucun résultat</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>Échec de la recherche</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
@@ -1630,4 +1646,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>Connexion annulée.</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>Impossible d'ouvrir votre navigateur. Utilisez plutôt le lien « Obtenir une clé API » ci-dessous.</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>Déconnecter</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>Paramètres avancés</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>Délai de recherche du mot</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>Temps d’arrêt du pointeur avant la recherche. Un délai court accélère la réponse ; un délai long réduit les recherches involontaires.</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>Laboratoire</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>Essayez ici les nouvelles fonctionnalités avant leur intégration aux onglets de paramètres habituels.</value></data>
 </root>

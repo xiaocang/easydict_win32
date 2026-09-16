@@ -289,6 +289,53 @@ public sealed class SettingsService
     public List<string> MouseSelectionExcludedApps { get; set; } = ["code"];
 
     /// <summary>
+    /// Enable hover word lookup (悬浮取词): hold the trigger key and rest the pointer on a word
+    /// to see a small popup with its meaning. Shares <see cref="MouseSelectionExcludedApps"/>.
+    /// </summary>
+    public bool HoverWordLookupEnabled
+    {
+        get => _hoverWordLookupEnabled;
+        set
+        {
+            if (_hoverWordLookupEnabled == value) return;
+            _hoverWordLookupEnabled = value;
+            HoverWordLookupEnabledChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+    private bool _hoverWordLookupEnabled;
+
+    public event EventHandler? HoverWordLookupEnabledChanged;
+
+    /// <summary>
+    /// Trigger key for hover word lookup, stored as a <see cref="Models.HoverLookupModifier"/> name
+    /// ("None", "Ctrl", "Shift", "Alt").
+    /// </summary>
+    public string HoverWordLookupModifier { get; set; } = "Ctrl";
+
+    public const int MinHoverWordLookupDelayMs = HoverDwellDetector.MinDwellMs;
+    public const int MaxHoverWordLookupDelayMs = HoverDwellDetector.MaxDwellMs;
+    public const int DefaultHoverWordLookupDelayMs = HoverDwellDetector.DwellMs;
+
+    private int _hoverWordLookupDelayMs = DefaultHoverWordLookupDelayMs;
+
+    /// <summary>Pointer dwell before a lookup starts; excludes extraction and translation time.</summary>
+    public int HoverWordLookupDelayMs
+    {
+        get => _hoverWordLookupDelayMs;
+        set => _hoverWordLookupDelayMs = Math.Clamp(value, MinHoverWordLookupDelayMs, MaxHoverWordLookupDelayMs);
+    }
+
+    /// <summary>
+    /// Use OCR on the pixels around the pointer when the application exposes no accessible text.
+    /// </summary>
+    public bool HoverWordLookupUseOcrFallback { get; set; } = true;
+
+    /// <summary>
+    /// Translation service id used by the hover popup; empty = Auto (first enabled dictionary service).
+    /// </summary>
+    public string HoverWordLookupServiceId { get; set; } = "";
+
+    /// <summary>
     /// When true, the pop button uses the legacy Win32 SetWindowPos + per-monitor DPI math
     /// to position itself. When false, it uses the WinAppSDK 2.x PopupAnchor / DesktopPopupSiteBridge
     /// path which anchors relative to the source app's hwnd.
@@ -849,6 +896,13 @@ public sealed class SettingsService
         UseOcrWorker = ResolveWorkerIsolationSetting(nameof(UseOcrWorker), DisableOcrWorkerEnvironmentVariable);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
+        HoverWordLookupEnabled = GetValue(nameof(HoverWordLookupEnabled), false);
+        HoverWordLookupModifier = Models.HoverLookupModifierExtensions
+            .Parse(GetValue(nameof(HoverWordLookupModifier), "Ctrl"))
+            .ToString();
+        HoverWordLookupUseOcrFallback = GetValue(nameof(HoverWordLookupUseOcrFallback), true);
+        HoverWordLookupDelayMs = GetValue(nameof(HoverWordLookupDelayMs), DefaultHoverWordLookupDelayMs);
+        HoverWordLookupServiceId = GetValue(nameof(HoverWordLookupServiceId), "") ?? "";
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
         HistoryEnabled = GetValue(nameof(HistoryEnabled), false);
         HistoryRetentionDays = Math.Clamp(GetValue(nameof(HistoryRetentionDays), 30), 1, 3650);
@@ -1143,6 +1197,11 @@ public sealed class SettingsService
         _settings[nameof(HistoryRetentionDays)] = HistoryRetentionDays;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
+        _settings[nameof(HoverWordLookupEnabled)] = HoverWordLookupEnabled;
+        _settings[nameof(HoverWordLookupModifier)] = HoverWordLookupModifier;
+        _settings[nameof(HoverWordLookupUseOcrFallback)] = HoverWordLookupUseOcrFallback;
+        _settings[nameof(HoverWordLookupDelayMs)] = HoverWordLookupDelayMs;
+        _settings[nameof(HoverWordLookupServiceId)] = HoverWordLookupServiceId;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;

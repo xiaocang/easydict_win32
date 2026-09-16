@@ -18,7 +18,9 @@ public sealed partial class MouseHookService : IDisposable
     private const int WM_MOUSEWHEEL = 0x020A;
     private const int WM_RBUTTONDOWN = 0x0204;
     private const int WM_KEYDOWN = 0x0100;
+    private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_SYSKEYUP = 0x0105;
 
     /// <summary>
     /// Marker value set in dwExtraInfo of synthetic keyboard events sent by TextSelectionService.
@@ -98,7 +100,13 @@ public sealed partial class MouseHookService : IDisposable
     private LowLevelKeyboardProc? _keyboardHookProc;
     private bool _isDisposed;
     private bool _firstCallbackLogged;
-    private IntPtr _popButtonWindowHandle = IntPtr.Zero;
+
+    /// <summary>
+    /// Handles of our own popup windows (pop button, hover lookup popup). Left clicks that land
+    /// on one of these windows do not raise <see cref="OnMouseDown"/>, so the popup is not
+    /// dismissed before its own click handler runs. Only touched on the UI thread.
+    /// </summary>
+    private readonly List<IntPtr> _ownedWindowHandles = new(2);
 
     /// <summary>
     /// Cached system double-click time to avoid P/Invoke on every click.
@@ -121,9 +129,27 @@ public sealed partial class MouseHookService : IDisposable
     /// </summary>
     public void SetPopButtonWindowHandle(IntPtr hwnd)
     {
-        _popButtonWindowHandle = hwnd;
+        AddOwnedWindowHandle(hwnd);
         Debug.WriteLine($"[MouseHook] PopButton window handle registered: 0x{hwnd:X}");
     }
+
+    /// <summary>
+    /// Register one of our own popup windows so that left clicks landing on it do not raise
+    /// <see cref="OnMouseDown"/> (which would dismiss the popup before its click handler runs).
+    /// </summary>
+    public void AddOwnedWindowHandle(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || _ownedWindowHandles.Contains(hwnd)) return;
+        _ownedWindowHandles.Add(hwnd);
+        Debug.WriteLine($"[MouseHook] Owned window handle registered: 0x{hwnd:X}");
+    }
+
+    private bool IsOwnedWindow(IntPtr hwnd) => hwnd != IntPtr.Zero && _ownedWindowHandles.Contains(hwnd);
+
+    /// <summary>
+    /// Whether the low-level mouse hook is currently installed.
+    /// </summary>
+    public bool IsInstalled => _mouseHookId != IntPtr.Zero;
 
     /// <summary>
     /// Optional callback to check if the current foreground app is excluded.
@@ -156,6 +182,23 @@ public sealed partial class MouseHookService : IDisposable
     /// Fired on any key press (used to dismiss the pop button).
     /// </summary>
     public event Action? OnKeyDown;
+
+    /// <summary>
+    /// Fired on every mouse move with the current screen coordinate (physical pixels).
+    /// Used by hover word lookup for dwell detection; handlers must be cheap.
+    /// </summary>
+    public event Action<POINT>? OnMouseMove;
+
+    /// <summary>
+    /// A low-level keyboard event with its virtual-key code.
+    /// </summary>
+    public readonly record struct KeyboardHookEvent(bool IsKeyDown, uint VkCode);
+
+    /// <summary>
+    /// Fired on every key down AND key up with the virtual-key code
+    /// (used by hover word lookup to track the trigger modifier key).
+    /// </summary>
+    public event Action<KeyboardHookEvent>? OnKeyboardEvent;
 
     /// <summary>
     /// Install the global low-level mouse and keyboard hooks.
@@ -250,10 +293,10 @@ public sealed partial class MouseHookService : IDisposable
         {
             if (nCode >= 0)
             {
-                var extraInfo = ((KBDLLHOOKSTRUCT*)lParam)->dwExtraInfo;
-                if (extraInfo != EASYDICT_SYNTHETIC_KEY)
+                var hookStruct = (KBDLLHOOKSTRUCT*)lParam;
+                if (hookStruct->dwExtraInfo != EASYDICT_SYNTHETIC_KEY)
                 {
-                    ProcessKeyboardMessage((int)wParam);
+                    ProcessKeyboardMessage((int)wParam, hookStruct->vkCode);
                 }
             }
         }
@@ -283,23 +326,23 @@ public sealed partial class MouseHookService : IDisposable
         switch (message)
         {
             case WM_LBUTTONDOWN:
-                // Only do the expensive WindowFromPoint + GetAncestor calls when the
-                // pop button is actually registered (i.e. has been shown at least once).
+                // Only do the expensive WindowFromPoint + GetAncestor calls when one of our
+                // popup windows is actually registered (i.e. has been shown at least once).
                 // Before that, every click would pay two P/Invoke calls for nothing.
-                if (_popButtonWindowHandle != IntPtr.Zero)
+                if (_ownedWindowHandles.Count > 0)
                 {
                     var windowAtPoint = WindowFromPoint(pt);
                     var rootWindow = windowAtPoint != IntPtr.Zero ? GetAncestor(windowAtPoint, GA_ROOT) : IntPtr.Zero;
-                    bool isPopButtonClick = rootWindow == _popButtonWindowHandle || windowAtPoint == _popButtonWindowHandle;
+                    bool isOwnedWindowClick = IsOwnedWindow(rootWindow) || IsOwnedWindow(windowAtPoint);
 
-                    if (!isPopButtonClick)
+                    if (!isOwnedWindowClick)
                     {
-                        Debug.WriteLine($"[MouseHook] Click on window 0x{windowAtPoint:X} (root=0x{rootWindow:X}, PopButton=0x{_popButtonWindowHandle:X}), dismissing");
+                        Debug.WriteLine($"[MouseHook] Click on window 0x{windowAtPoint:X} (root=0x{rootWindow:X}), dismissing");
                         NativeCallbackGuard.Invoke("MouseHookService.OnMouseDown", OnMouseDown);
                     }
                     else
                     {
-                        Debug.WriteLine($"[MouseHook] Click on PopButton window 0x{windowAtPoint:X} (root=0x{rootWindow:X}), not dismissing");
+                        Debug.WriteLine($"[MouseHook] Click on owned popup window 0x{windowAtPoint:X} (root=0x{rootWindow:X}), not dismissing");
                     }
                 }
                 else
@@ -311,6 +354,7 @@ public sealed partial class MouseHookService : IDisposable
 
             case WM_MOUSEMOVE:
                 Detector.OnMouseMove(pt);
+                NativeCallbackGuard.Invoke("MouseHookService.OnMouseMove", OnMouseMove, pt);
                 break;
 
             case WM_LBUTTONUP:
@@ -356,13 +400,30 @@ public sealed partial class MouseHookService : IDisposable
     }
 
     /// <summary>
+    /// Process a keyboard message without a virtual-key code (legacy overload).
+    /// Public for unit testing without installing a real hook.
+    /// </summary>
+    public void ProcessKeyboardMessage(int message) => ProcessKeyboardMessage(message, 0);
+
+    /// <summary>
     /// Process a keyboard message. Public for unit testing without installing a real hook.
     /// </summary>
-    public void ProcessKeyboardMessage(int message)
+    public void ProcessKeyboardMessage(int message, uint vkCode)
     {
         if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
         {
             NativeCallbackGuard.Invoke("MouseHookService.OnKeyDown", OnKeyDown);
+            NativeCallbackGuard.Invoke(
+                "MouseHookService.OnKeyboardEvent",
+                OnKeyboardEvent,
+                new KeyboardHookEvent(true, vkCode));
+        }
+        else if (message == WM_KEYUP || message == WM_SYSKEYUP)
+        {
+            NativeCallbackGuard.Invoke(
+                "MouseHookService.OnKeyboardEvent",
+                OnKeyboardEvent,
+                new KeyboardHookEvent(false, vkCode));
         }
     }
 

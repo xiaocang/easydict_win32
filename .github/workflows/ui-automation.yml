@@ -269,7 +269,7 @@ jobs:
             filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MiniWindowLongTextTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PhoneticTranscriptionTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DictionaryWebViewRenderingTests.)"
             suffix: "mini-phonetic-dictionary"
           - name: "Core & Settings"
-            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowShowLatencyTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests.)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowShowLatencyTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.HoverLookupSettingsTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.HoverLookupLayoutTests.)"
             suffix: "core-settings-darkmode"
           - name: "Theme Contrast"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.ThemeContrastTests."
@@ -358,6 +358,15 @@ jobs:
 
           # Export for later steps
           echo "EASYDICT_PACKAGE_FAMILY_NAME=$($pkg.PackageFamilyName)" >> $env:GITHUB_ENV
+
+      - name: Configure isolated Core and Settings test launch
+        if: matrix.shard.name == 'Core & Settings'
+        shell: pwsh
+        run: |
+          # Hover fixtures require their temporary settings directory to reach the app.
+          # Explorer/MSIX activation does not inherit the test process environment.
+          $testExe = (Resolve-Path 'dotnet/msix/extracted/Easydict.WinUI.exe').Path
+          "EASYDICT_EXE_PATH=$testExe" >> $env:GITHUB_ENV
 
       - name: Configure Saved Items test desktop and isolated launch
         if: matrix.shard.name == 'Saved Items'

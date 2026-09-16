@@ -3,6 +3,7 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Capturing;
+using FlaUI.Core.Input;
 
 namespace Easydict.UIAutomation.Tests.Infrastructure;
 
@@ -396,10 +397,9 @@ public static class ScreenshotHelper
         {
             if (IsIconic(hwnd))
             {
-                ShowWindow(hwnd, ShowWindowRestore);
+                ShowWindowAsync(hwnd, ShowWindowRestore);
             }
 
-            BringWindowToTop(hwnd);
             SetWindowPos(
                 hwnd,
                 HwndTopMost,
@@ -407,7 +407,7 @@ public static class ScreenshotHelper
                 0,
                 0,
                 0,
-                SetWindowPosNoMove | SetWindowPosNoSize | SetWindowPosShowWindow);
+                SetWindowPosNoMove | SetWindowPosNoSize | SetWindowPosShowWindow | SetWindowPosAsync);
             SetWindowPos(
                 hwnd,
                 HwndNoTopMost,
@@ -415,19 +415,22 @@ public static class ScreenshotHelper
                 0,
                 0,
                 0,
-                SetWindowPosNoMove | SetWindowPosNoSize | SetWindowPosShowWindow);
+                SetWindowPosNoMove | SetWindowPosNoSize | SetWindowPosShowWindow | SetWindowPosAsync);
             SetForegroundWindow(hwnd);
 
-            try
-            {
-                window.SetForeground();
-            }
-            catch
-            {
-                // Native foreground activation above is the primary path.
-            }
-
             Thread.Sleep(250);
+            if (!IsForegroundWindow(hwnd) && GetWindowRect(hwnd, out var rect))
+            {
+                // Windows may reject programmatic foreground activation. A real
+                // click on the exposed caption gives this test window input focus.
+                // Verify the hit belongs to our HWND before sending mouse input.
+                var caption = new Point(rect.Left + 100, rect.Top + 16);
+                if (GetAncestor(WindowFromPoint(caption), 2) == hwnd)
+                {
+                    Mouse.Click(caption);
+                    Thread.Sleep(150);
+                }
+            }
             if (IsForegroundWindow(hwnd))
             {
                 Thread.Sleep(150);
@@ -504,6 +507,15 @@ public static class ScreenshotHelper
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(Point point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+    [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
     [DllImport("user32.dll")]
@@ -514,6 +526,7 @@ public static class ScreenshotHelper
     private const uint SetWindowPosNoSize = 0x0001;
     private const uint SetWindowPosNoMove = 0x0002;
     private const uint SetWindowPosShowWindow = 0x0040;
+    private const uint SetWindowPosAsync = 0x4000;
     private const int DwmWindowAttributeExtendedFrameBounds = 9;
     private const int SystemMetricVirtualScreenX = 76;
     private const int SystemMetricVirtualScreenY = 77;

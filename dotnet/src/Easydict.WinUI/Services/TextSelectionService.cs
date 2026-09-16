@@ -132,8 +132,20 @@ public static class TextSelectionService
 #if WINUI_TEST
     internal static int TestCaptureDelayMs { get; set; }
 #endif
-    private const int UiaSemaphoreTimeoutMs = 200;
-    private const int UiaExecutionTimeoutMs = 800;
+    internal const int UiaSemaphoreTimeoutMs = 200;
+    internal const int UiaExecutionTimeoutMs = 800;
+
+    /// <summary>
+    /// The process-wide UIA client, shared with hover word lookup so both features issue
+    /// UIA calls through the same object.
+    /// </summary>
+    internal static UIA3Automation Automation => _automation;
+
+    /// <summary>
+    /// Single-flight gate for UIA calls (Chromium providers can hang; callers race the call
+    /// against <see cref="UiaExecutionTimeoutMs"/> and must never run two UIA calls at once).
+    /// </summary>
+    internal static SemaphoreSlim AutomationSemaphore => _automationSemaphore;
     private const int DispatcherOperationTimeoutMs = 500;
 
     // Adaptive per-process suppression: after repeated non-text clipboard payloads

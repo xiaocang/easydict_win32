@@ -1269,6 +1269,22 @@
   <data name="ExcludedApps" xml:space="preserve"><value>除外アプリ</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>マウス選択翻訳から除外するプロセス名をカンマ区切りで入力。例：VS Code は "code"。</value></data>
+  <data name="HoverWordLookup" xml:space="preserve"><value>ホバー単語検索</value></data>
+  <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>（トリガーキーを押しながら単語にポインターを合わせる）</value></data>
+  <data name="HoverWordLookupModifier" xml:space="preserve"><value>トリガーキー</value></data>
+  <data name="HoverWordLookupModifierNone" xml:space="preserve"><value>キーなし（ホバーのみ）</value></data>
+  <data name="HoverWordLookupModifierCtrl" xml:space="preserve"><value>Ctrl + ホバー</value></data>
+  <data name="HoverWordLookupModifierShift" xml:space="preserve"><value>Shift + ホバー</value></data>
+  <data name="HoverWordLookupModifierAlt" xml:space="preserve"><value>Alt + ホバー</value></data>
+  <data name="HoverWordLookupOcrFallback" xml:space="preserve"><value>アプリからテキストを取得できない場合は OCR を使用</value></data>
+  <data name="HoverWordLookupService" xml:space="preserve"><value>優先する検索サービス</value></data>
+  <data name="HoverWordLookupServiceAuto" xml:space="preserve"><value>自動（辞書サービスを優先し、失敗時は次へ）</value></data>
+  <data name="HoverWordLookupDescription" xml:space="preserve"><value>ポインターの横に単語・発音記号・意味を示す小さなポップアップを表示します。</value></data>
+  <data name="TrayHoverWordLookup" xml:space="preserve"><value>ホバー単語検索</value></data>
+  <data name="HoverLookupOpenInMiniWindow" xml:space="preserve"><value>ミニウィンドウで開く</value></data>
+  <data name="HoverLookupLoading" xml:space="preserve"><value>検索中…</value></data>
+  <data name="HoverLookupNoResult" xml:space="preserve"><value>結果なし</value></data>
+  <data name="HoverLookupError" xml:space="preserve"><value>検索に失敗しました</value></data>
 
   <!-- Windows AI provider selection -->
   <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
@@ -1630,4 +1646,9 @@
   <data name="OrcaRouterSignInCancelled" xml:space="preserve"><value>サインインをキャンセルしました。</value></data>
   <data name="OrcaRouterSignInBrowserFailed" xml:space="preserve"><value>ブラウザーを開けませんでした。代わりに下の「API キーを取得」リンクをご利用ください。</value></data>
   <data name="DisconnectOrcaRouter" xml:space="preserve"><value>接続を解除</value></data>
+  <data name="HoverWordLookupAdvanced" xml:space="preserve"><value>詳細設定</value></data>
+  <data name="HoverWordLookupDelay" xml:space="preserve"><value>単語取得の遅延</value></data>
+  <data name="HoverWordLookupDelayDescription" xml:space="preserve"><value>ポインターが静止してから単語の検索を始めるまでの時間です。短いほど速く、長いほど誤動作を減らせます。</value></data>
+  <data name="SettingsTab_Labs" xml:space="preserve"><value>ラボ</value></data>
+  <data name="SettingsTab_Labs_Tooltip" xml:space="preserve"><value>新機能をここで試せます。安定後、通常の設定タブに移動します。</value></data>
 </root>

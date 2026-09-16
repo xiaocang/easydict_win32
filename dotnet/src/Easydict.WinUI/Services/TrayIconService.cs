@@ -40,6 +40,14 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public event Action<string, bool>? OnBrowserSupportAction;
 
+    /// <summary>
+    /// Event fired when the "Hover word lookup" toggle item is clicked.
+    /// Parameter: the new checked state.
+    /// </summary>
+    public event Action<bool>? OnHoverWordLookupToggled;
+
+    private ToggleMenuFlyoutItem? _hoverWordLookupItem;
+
     // Browser support menu items — stored for dynamic enable/disable updates
     private MenuFlyoutItem? _installChromeItem;
     private MenuFlyoutItem? _uninstallChromeItem;
@@ -246,6 +254,17 @@ public sealed class TrayIconService : IDisposable
         SetTip(fixedWindowItem);
         menu.Items.Add(fixedWindowItem);
 
+        // Hover word lookup (悬浮取词) on/off — a checkable item like Youdao's tray menu
+        var hoverWordLookupItem = new ToggleMenuFlyoutItem
+        {
+            Text = L("TrayHoverWordLookup"),
+            IsChecked = SettingsService.Instance.HoverWordLookupEnabled
+        };
+        hoverWordLookupItem.Click += (_, _) => OnHoverWordLookupToggled?.Invoke(hoverWordLookupItem.IsChecked);
+        SetTip(hoverWordLookupItem);
+        menu.Items.Add(hoverWordLookupItem);
+        _hoverWordLookupItem = hoverWordLookupItem;
+
         menu.Items.Add(new MenuFlyoutSeparator());
 
         // Browser support submenu
@@ -355,6 +374,15 @@ public sealed class TrayIconService : IDisposable
             _installAllItem.IsEnabled = anyNotInstalled;
         if (_uninstallAllItem != null)
             _uninstallAllItem.IsEnabled = anyInstalled;
+    }
+
+    /// <summary>
+    /// Sync the "Hover word lookup" tray item with the setting (e.g. after a Settings save).
+    /// </summary>
+    public void SetHoverWordLookupChecked(bool isChecked)
+    {
+        if (_isDisposed || _hoverWordLookupItem is null) return;
+        _hoverWordLookupItem.IsChecked = isChecked;
     }
 
     /// <summary>

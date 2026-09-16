@@ -39,6 +39,7 @@ public class SettingsPageSplitTabsTests
         "Hotkeys",
         "Plugins",
         "Advanced",
+        "Labs",
         "Language",
         "About"
     ];
@@ -57,6 +58,8 @@ public class SettingsPageSplitTabsTests
         "SettingsTab_Hotkeys_Tooltip",
         "SettingsTab_Advanced",
         "SettingsTab_Advanced_Tooltip",
+        "SettingsTab_Labs",
+        "SettingsTab_Labs_Tooltip",
         "SettingsTab_Language",
         "SettingsTab_Language_Tooltip",
         "SettingsTab_About",

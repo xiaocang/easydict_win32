@@ -391,7 +391,11 @@ public sealed class OcrTranslateService : IDisposable, IAsyncDisposable
         }
     }
 
-    private static string? GetPreferredOcrLanguage()
+    /// <summary>
+    /// Resolve the configured OCR language: "auto"/empty → null (engine default).
+    /// Shared with hover word lookup's OCR fallback.
+    /// </summary>
+    internal static string? GetPreferredOcrLanguage()
     {
         var setting = SettingsService.Instance.OcrLanguage;
         return string.IsNullOrEmpty(setting) || setting == "auto" ? null : setting;

@@ -1,17 +1,18 @@
-using Easydict.WinUI.Models;
-using Easydict.WinUI.Services;
+using Easydict.SidecarClient;
 using FluentAssertions;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
 
+/// <summary>
+/// Tests <see cref="OcrImageScaling"/> (Easydict.SidecarClient), which both the in-process
+/// <c>WindowsOcrService</c> and the out-of-process OCR worker call to recover small text
+/// (see issue #217). Kept here since there is no dedicated SidecarClient test project.
+/// </summary>
 [Trait("Category", "WinUI")]
 public sealed class OcrImageScalingTests
 {
     private const int MaxDimension = 10000;
-
-    private static OcrLine LineOfHeight(double height, string text = "abc")
-        => new() { Text = text, BoundingRect = new OcrRect(0, 0, 100, height) };
 
     [Fact]
     public void ComputeRetryScale_EnlargesBlindly_WhenFirstPassFoundNothing()
@@ -25,11 +26,7 @@ public sealed class OcrImageScalingTests
     public void ComputeRetryScale_TargetsReadableLineHeight_ForSmallLaptopText()
     {
         // A 13 px tall line is what an unscaled 1080p laptop panel produces for body text.
-        var scale = OcrImageScaling.ComputeRetryScale(
-            [LineOfHeight(13), LineOfHeight(13), LineOfHeight(14)],
-            800,
-            400,
-            MaxDimension);
+        var scale = OcrImageScaling.ComputeRetryScale([13, 13, 14], 800, 400, MaxDimension);
 
         scale.Should().BeApproximately(OcrImageScaling.TargetLineHeight / 13.0, 0.001);
     }
@@ -37,11 +34,7 @@ public sealed class OcrImageScalingTests
     [Fact]
     public void ComputeRetryScale_SkipsRetry_WhenTextIsAlreadyLargeEnough()
     {
-        var scale = OcrImageScaling.ComputeRetryScale(
-            [LineOfHeight(30), LineOfHeight(34)],
-            800,
-            400,
-            MaxDimension);
+        var scale = OcrImageScaling.ComputeRetryScale([30, 34], 800, 400, MaxDimension);
 
         scale.Should().Be(1.0);
     }
@@ -50,7 +43,7 @@ public sealed class OcrImageScalingTests
     public void ComputeRetryScale_SkipsRetry_WhenTheImageIsTooLargeToEnlargeMeaningfully()
     {
         // A near-budget capture can only grow a few percent, which cannot change the reading.
-        var scale = OcrImageScaling.ComputeRetryScale([LineOfHeight(5)], 3800, 3800, MaxDimension);
+        var scale = OcrImageScaling.ComputeRetryScale([5], 3800, 3800, MaxDimension);
 
         scale.Should().Be(1.0);
     }
@@ -58,7 +51,7 @@ public sealed class OcrImageScalingTests
     [Fact]
     public void ComputeRetryScale_IsCappedByMaxScale()
     {
-        var scale = OcrImageScaling.ComputeRetryScale([LineOfHeight(2)], 400, 200, MaxDimension);
+        var scale = OcrImageScaling.ComputeRetryScale([2], 400, 200, MaxDimension);
 
         scale.Should().Be(OcrImageScaling.MaxScale);
     }
@@ -66,7 +59,7 @@ public sealed class OcrImageScalingTests
     [Fact]
     public void ComputeRetryScale_StaysWithinEngineDimensionLimit()
     {
-        var scale = OcrImageScaling.ComputeRetryScale([LineOfHeight(5)], 4000, 500, MaxDimension);
+        var scale = OcrImageScaling.ComputeRetryScale([5], 4000, 500, MaxDimension);
 
         scale.Should().BeApproximately(2.5, 0.001);
         (4000 * scale).Should().BeLessThanOrEqualTo(MaxDimension);
@@ -75,7 +68,7 @@ public sealed class OcrImageScalingTests
     [Fact]
     public void ComputeRetryScale_StaysWithinPixelBudget()
     {
-        var scale = OcrImageScaling.ComputeRetryScale([LineOfHeight(5)], 3000, 2000, MaxDimension);
+        var scale = OcrImageScaling.ComputeRetryScale([5], 3000, 2000, MaxDimension);
 
         scale.Should().BeGreaterThan(1.0);
         ((long)(3000 * scale) * (long)(2000 * scale))
@@ -85,7 +78,7 @@ public sealed class OcrImageScalingTests
     [Fact]
     public void ComputeRetryScale_SkipsRetry_WhenSourceAlreadyExceedsEngineLimit()
     {
-        var scale = OcrImageScaling.ComputeRetryScale([LineOfHeight(5)], MaxDimension + 1, 200, MaxDimension);
+        var scale = OcrImageScaling.ComputeRetryScale([5], MaxDimension + 1, 200, MaxDimension);
 
         scale.Should().Be(1.0);
     }
@@ -96,30 +89,30 @@ public sealed class OcrImageScalingTests
     [InlineData(200, -1)]
     public void ComputeRetryScale_SkipsRetry_ForDegenerateImageSize(int width, int height)
     {
-        OcrImageScaling.ComputeRetryScale([LineOfHeight(5)], width, height, MaxDimension)
+        OcrImageScaling.ComputeRetryScale([5], width, height, MaxDimension)
             .Should().Be(1.0);
     }
 
     [Fact]
     public void MedianLineHeight_IgnoresDegenerateRectangles()
     {
-        var lines = new[] { LineOfHeight(0), LineOfHeight(10), LineOfHeight(20), LineOfHeight(30) };
+        double[] heights = [0, 10, 20, 30];
 
-        OcrImageScaling.MedianLineHeight(lines).Should().Be(20);
+        OcrImageScaling.MedianLineHeight(heights).Should().Be(20);
     }
 
     [Fact]
     public void MedianLineHeight_ReturnsZero_WhenNoUsableHeight()
     {
-        OcrImageScaling.MedianLineHeight([LineOfHeight(0)]).Should().Be(0);
+        OcrImageScaling.MedianLineHeight([0]).Should().Be(0);
         OcrImageScaling.MedianLineHeight([]).Should().Be(0);
     }
 
     [Fact]
     public void ShouldPreferRetry_PrefersThePassThatRecoveredMoreCharacters()
     {
-        var original = new OcrResult { Text = "He o" };
-        var retry = new OcrResult { Text = "Hello world" };
+        const string original = "He o";
+        const string retry = "Hello world";
 
         OcrImageScaling.ShouldPreferRetry(original, retry).Should().BeTrue();
         OcrImageScaling.ShouldPreferRetry(retry, original).Should().BeFalse();
@@ -128,25 +121,21 @@ public sealed class OcrImageScalingTests
     [Fact]
     public void ShouldPreferRetry_IgnoresWhitespaceDifferences()
     {
-        var original = new OcrResult { Text = "你好世界" };
-        var retry = new OcrResult { Text = "你 好\n世 界" };
+        const string original = "你好世界";
+        const string retry = "你 好\n世 界";
 
         OcrImageScaling.ShouldPreferRetry(original, retry).Should().BeFalse();
     }
 
     [Fact]
-    public void MapToSourceCoordinates_RestoresOriginalCaptureCoordinates()
+    public void MapRect_RestoresOriginalCaptureCoordinates()
     {
-        var result = new OcrResult
-        {
-            Text = "hi",
-            Lines = [new OcrLine { Text = "hi", BoundingRect = new OcrRect(20, 40, 60, 80) }]
-        };
+        var (x, y, width, height) = OcrImageScaling.MapRect(20, 40, 60, 80, 2.0, 4.0);
 
-        var mapped = OcrImageScaling.MapToSourceCoordinates(result, 2.0, 4.0);
-
-        mapped.Lines[0].BoundingRect.Should().Be(new OcrRect(10, 10, 30, 20));
-        mapped.Text.Should().Be("hi");
+        x.Should().Be(10);
+        y.Should().Be(10);
+        width.Should().Be(30);
+        height.Should().Be(20);
     }
 
     [Fact]

@@ -199,19 +199,90 @@ internal static class Program
         }
 
         var nativePixelData = await ReadPixelDataAsync(parameters).ConfigureAwait(false);
-        using var bitmap = new SoftwareBitmap(
-            BitmapPixelFormat.Bgra8,
-            parameters.PixelWidth,
-            parameters.PixelHeight,
-            BitmapAlphaMode.Ignore);
-        bitmap.CopyFromBuffer(nativePixelData.AsBuffer());
-        Array.Clear(nativePixelData);
-
         var engine = CreateEngine(parameters.PreferredLanguageTag);
         if (engine is null)
         {
+            Array.Clear(nativePixelData);
             return new OcrResultDto { Engine = OcrEngines.WindowsNative };
         }
+
+        try
+        {
+            var firstPass = await RunNativeOcrPassAsync(
+                engine, nativePixelData, parameters.PixelWidth, parameters.PixelHeight).ConfigureAwait(false);
+
+            return await RefineWithUpscaledPassAsync(
+                engine, firstPass, nativePixelData, parameters.PixelWidth, parameters.PixelHeight)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            Array.Clear(nativePixelData);
+        }
+    }
+
+    /// <summary>
+    /// Screenshots taken on a laptop panel often carry text too small for the engine, which
+    /// then returns partial text or nothing at all. When the first pass came back with
+    /// small (or no) lines, recognize the capture again enlarged and keep the better reading.
+    /// Mirrors <c>WindowsOcrService.RefineWithUpscaledPassAsync</c> (Easydict.WinUI) so both the
+    /// out-of-process worker — the path every shipped build uses by default — and the in-process
+    /// fallback recover the same small text (see issue #217).
+    /// </summary>
+    private static async Task<OcrResultDto> RefineWithUpscaledPassAsync(
+        WinOcr.OcrEngine engine,
+        OcrResultDto firstPass,
+        byte[] pixelData,
+        int pixelWidth,
+        int pixelHeight)
+    {
+        var lineHeights = firstPass.Lines.Select(line => line.BoundingRect.Height).ToList();
+        var scale = OcrImageScaling.ComputeRetryScale(
+            lineHeights, pixelWidth, pixelHeight, (int)WinOcr.OcrEngine.MaxImageDimension);
+        if (scale <= 1.0) return firstPass;
+
+        var (scaledWidth, scaledHeight) = OcrImageScaling.ScaledSize(pixelWidth, pixelHeight, scale);
+        Trace.WriteLine(
+            $"[OcrWorker] Retrying at {scaledWidth}x{scaledHeight} (x{scale:F2}) — " +
+            $"first pass median line height {OcrImageScaling.MedianLineHeight(lineHeights):F1}px");
+
+        byte[] scaledPixels;
+        try
+        {
+            scaledPixels = OcrImageScaling.ScaleBgra(pixelData, pixelWidth, pixelHeight, scaledWidth, scaledHeight);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Trace.WriteLine($"[OcrWorker] Upscale skipped: {ex.Message}");
+            return firstPass;
+        }
+
+        try
+        {
+            var secondPass = await RunNativeOcrPassAsync(
+                engine, scaledPixels, scaledWidth, scaledHeight).ConfigureAwait(false);
+
+            if (!OcrImageScaling.ShouldPreferRetry(firstPass.Text, secondPass.Text))
+            {
+                return firstPass;
+            }
+
+            return MapToSourceCoordinates(
+                secondPass,
+                (double)scaledWidth / pixelWidth,
+                (double)scaledHeight / pixelHeight);
+        }
+        finally
+        {
+            Array.Clear(scaledPixels);
+        }
+    }
+
+    private static async Task<OcrResultDto> RunNativeOcrPassAsync(
+        WinOcr.OcrEngine engine, byte[] pixelData, int width, int height)
+    {
+        using var bitmap = new SoftwareBitmap(BitmapPixelFormat.Bgra8, width, height, BitmapAlphaMode.Ignore);
+        bitmap.CopyFromBuffer(pixelData.AsBuffer());
 
         var winResult = await engine.RecognizeAsync(bitmap).AsTask();
         var lines = winResult.Lines.Select(ConvertLine).ToList();
@@ -223,6 +294,42 @@ internal static class Program
             TextAngle = winResult.TextAngle,
             DetectedLanguage = ConvertLanguage(engine),
             Engine = OcrEngines.WindowsNative,
+        };
+    }
+
+    /// <summary>
+    /// Maps a result recognized on an enlarged image back onto source-image coordinates,
+    /// so callers keep working in the coordinate space of the original capture.
+    /// </summary>
+    private static OcrResultDto MapToSourceCoordinates(OcrResultDto result, double scaleX, double scaleY)
+    {
+        if (result.Lines.Count == 0) return result;
+
+        var lines = result.Lines
+            .Select(line =>
+            {
+                var (x, y, w, h) = OcrImageScaling.MapRect(
+                    line.BoundingRect.X, line.BoundingRect.Y,
+                    line.BoundingRect.Width, line.BoundingRect.Height,
+                    scaleX, scaleY);
+                return new OcrLineDto
+                {
+                    Text = line.Text,
+                    Confidence = line.Confidence,
+                    Words = line.Words,
+                    BoundingRect = new OcrRectDto(x, y, w, h),
+                };
+            })
+            .ToList();
+
+        return new OcrResultDto
+        {
+            Text = result.Text,
+            Lines = lines,
+            DetectedLanguage = result.DetectedLanguage,
+            TextAngle = result.TextAngle,
+            Engine = result.Engine,
+            ModelId = result.ModelId,
         };
     }
 

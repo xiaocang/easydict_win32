@@ -241,8 +241,11 @@ protected override Task<TranslationResult> TranslateInternalAsync(
   through the endpoint (`SchemeAndServer`, not the authority) nor through a 407 `CONNECT` reply
   that quotes the whole URL. `HoverLookupFallback` keeps walking its sequential chain through a
   `ProxyError` — locally imported `mdx::` dictionaries are ordered after the remote services and
-  do no networking, so a dead proxy must not cut them off — but reports the proxy failure as the
-  cause when nothing answered, in preference to whichever service failed last
+  do no networking, so a dead proxy must not cut them off — but on the first `ProxyError` it
+  moves the network-free candidates (`HoverLookupRules.IsNetworkFree`) ahead of the rest, a
+  stable partition and never a filter, since nothing proves the remaining candidates share the
+  proxy (a loopback Ollama or a local CLI service does not). When nothing answered it reports the
+  proxy failure as the cause in preference to whichever service failed last
 - LLM streaming is handled through SSE (Server-Sent Events) parsing
 - Service configurations are encrypted using DPAPI (Data Protection API)
 - Language codes are mapped via overrideable `GetLanguageCode(Language)` per service

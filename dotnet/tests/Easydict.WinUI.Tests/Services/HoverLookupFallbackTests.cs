@@ -60,6 +60,56 @@ public class HoverLookupFallbackTests
     }
 
     [Fact]
+    public async Task AfterAProxyFailure_NetworkFreeCandidatesAreTriedFirst()
+    {
+        // Waiting out a connect timeout on every remote candidate before reaching a local
+        // dictionary is wasted once the proxy is known to be dead. Reordered, not filtered: the
+        // remote candidate that was skipped past is still attempted afterwards.
+        var calls = new List<string>();
+        var expected = Result();
+
+        var result = await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web", "mdx::local"], (id, _) =>
+            {
+                calls.Add(id);
+                return id == "mdx::local" ? Task.FromResult(expected) : throw ProxyFailure(id);
+            },
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None,
+            HoverLookupRules.IsNetworkFree);
+
+        result.Should().BeSameAs(expected);
+        calls.Should().Equal("youdao", "mdx::local");
+    }
+
+    [Fact]
+    public async Task APromotedLocalDictionaryThatMisses_StillLeavesTheRemoteCandidatesTried()
+    {
+        // The promotion must not cost a candidate: google_web is reached after the local
+        // dictionary returns nothing useful.
+        var calls = new List<string>();
+        var expected = Result();
+
+        var result = await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web", "mdx::local"], (id, _) =>
+            {
+                calls.Add(id);
+                return id switch
+                {
+                    "youdao" => throw ProxyFailure(id),
+                    "mdx::local" => Task.FromResult(Result("   ")),
+                    _ => Task.FromResult(expected),
+                };
+            },
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None,
+            HoverLookupRules.IsNetworkFree);
+
+        result.Should().BeSameAs(expected);
+        calls.Should().Equal("youdao", "mdx::local", "google_web");
+    }
+
+    [Fact]
     public async Task WhenEverythingFails_TheProxyIsReportedRatherThanTheLastService()
     {
         // The dead proxy is the one thing the user can act on, so it should not be buried under

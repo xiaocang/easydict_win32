@@ -17,6 +17,19 @@ public static class HoverLookupRules
     public const string MdxServiceIdPrefix = "mdx::";
 
     /// <summary>
+    /// Whether this candidate can answer without touching the network, so a dead proxy cannot
+    /// stop it.
+    /// </summary>
+    /// <remarks>
+    /// Sound in one direction only: an id this returns false for may still bypass the proxy — a
+    /// loopback Ollama, a local CLI service — because no service declares its routing. That is
+    /// why callers use it to reorder candidates and never to drop them.
+    /// </remarks>
+    public static bool IsNetworkFree(string? serviceId) =>
+        !string.IsNullOrEmpty(serviceId)
+        && serviceId.StartsWith(MdxServiceIdPrefix, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Order translation services for the popup, with the configured service first.
     /// </summary>
     /// <param name="configured">The configured service id ("" or null = Auto).</param>

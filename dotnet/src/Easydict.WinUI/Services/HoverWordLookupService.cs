@@ -466,7 +466,8 @@ public sealed partial class HoverWordLookupService : IDisposable
                 serviceIds,
                 (serviceId, attemptToken) => manager.TranslateAsync(request, attemptToken, serviceId),
                 TimeSpan.FromMilliseconds(TranslationTimeoutMs),
-                ct);
+                ct,
+                HoverLookupRules.IsNetworkFree);
             ct.ThrowIfCancellationRequested();
 
             if (result is null)

@@ -33,8 +33,13 @@
               Grid.Row="0"
               Margin="8,4,8,4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
+                <!-- The title column is the one that yields, not the action buttons. Auto columns
+                     are measured before star ones, so the status pill and the button row always
+                     get their desired width and the title absorbs whatever is left. With the star
+                     on the spacer instead, a narrow window spent the width on the title first and
+                     pushed the end of the button row - the settings gear - off screen. -->
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
@@ -162,22 +167,6 @@
                               Foreground="{ThemeResource ButtonForeground}"/>
                 </Button>
                 <Button
-                    x:Name="TextActionsButton"
-                    AutomationProperties.AutomationId="TextActionsButton"
-                    AutomationProperties.Name="Text actions"
-                    Style="{StaticResource EasydictIconButtonStyle}"
-                    ToolTipService.ToolTip="Text actions"
-                    Width="32"
-                    Height="32"
-                    VerticalAlignment="Center">
-                    <Button.Flyout>
-                        <MenuFlyout x:Name="TextActionsFlyout" Opening="OnTextActionsFlyoutOpening"/>
-                    </Button.Flyout>
-                    <FontIcon Glyph="&#xE721;"
-                              FontSize="18"
-                              Foreground="{ThemeResource ButtonForeground}"/>
-                </Button>
-                <Button
                     x:Name="HistoryButton"
                     AutomationProperties.AutomationId="HistoryButton"
                     AutomationProperties.Name="History"
@@ -209,6 +198,9 @@
                                    VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
+                <!-- Overflow for header buttons that may fold when the window is narrow.
+                     Never add Settings here: it is the only route into the settings page, so it
+                     stays a visible button of its own at every width. -->
                 <Button
                     x:Name="SavedItemsMoreButton"
                     AutomationProperties.AutomationId="SavedItemsMoreButton"
@@ -244,13 +236,17 @@
                               FontSize="18"
                               Foreground="{ThemeResource ButtonForeground}"/>
                 </Button>
-                <!-- Settings Button -->
+                <!-- Settings Button. 32x32 like every other header button: it sits at the end of
+                     the row, so any smaller reads as the gear being inset from its neighbours.
+                     Never shrink it, in any chrome. -->
                 <Button
                     x:Name="SettingsButton"
                     Click="OnSettingsClicked"
                     Style="{StaticResource EasydictIconButtonStyle}"
                     ToolTipService.ToolTip="Settings"
                     AutomationProperties.Name="Settings"
+                    Width="32"
+                    Height="32"
                     VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE713;"
                               FontSize="18"

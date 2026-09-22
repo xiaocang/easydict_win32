@@ -771,6 +771,10 @@
     <value>このサービスはお住まいの地域では利用できない可能性があります。Bing翻訳または他の地域対応サービスをお試しください。設定で有効なサービスを変更できます。</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>リクエストは送信されていません。設定 → Advanced → HTTPプロキシ でプロキシのアドレスを確認するか、プロキシをオフにしてください。</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>アプリのテーマ</value>

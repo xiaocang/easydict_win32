@@ -1554,16 +1554,35 @@ public sealed partial class FixedWindow : Window
             });
             return null;
         }
-        catch (Exception ex)
+        catch (TranslationException ex)
         {
+            // Keep the error code the service chose. Without this clause every grammar failure -
+            // bad key, rate limit, dead proxy - arrived as Unknown.
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isClosing) return;
-                serviceResult.Error = new TranslationException(ex.Message, ex)
+                serviceResult.Error = ex;
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
+                RequestResize();
+            });
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // The grammar stream is enumerated straight off the service, so nothing has had a
+            // chance to name the proxy yet.
+            var error = TranslationManager.DescribeProxyFailure(ex, serviceResult.ServiceId)
+                ?? new TranslationException(ex.Message, ex)
                 {
                     ErrorCode = TranslationErrorCode.Unknown,
                     ServiceId = serviceResult.ServiceId
                 };
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.Error = error;
                 serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
                 serviceResult.StreamingText = "";

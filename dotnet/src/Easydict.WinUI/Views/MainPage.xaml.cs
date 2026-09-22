@@ -6,11 +6,9 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
-using Easydict.TranslationService.TextActions;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
-using Easydict.WinUI.Services.TextActions;
 using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
@@ -32,6 +30,19 @@ namespace Easydict.WinUI.Views
     public partial class MainPage : Page
     {
         private const double SavedItemsHeaderBreakpoint = 600;
+
+        /// <summary>
+        /// Below this width the decorative status pill gives up its column. The action buttons
+        /// keep theirs: they are the only header content the user cannot reach another way.
+        /// </summary>
+        private const double StatusIndicatorBreakpoint = 560;
+
+        /// <summary>
+        /// Whether the theme/connection chrome wants the status pill shown. The width gate can
+        /// still hide it, so the two decisions are kept apart rather than fighting over
+        /// <see cref="StatusIndicator"/>.Visibility.
+        /// </summary>
+        private bool _statusChromeWantsIndicator = true;
         private LanguageDetectionService? _detectionService;
         private LanguageDetectionWarningPresenter? _detectionWarning;
         private LanguageDetectionWarningPresenter DetectionWarning =>
@@ -466,8 +477,9 @@ namespace Easydict.WinUI.Views
                 PinButton.Height = 32;
                 OcrButton.Width = 32;
                 OcrButton.Height = 32;
-                SettingsButton.Width = compact ? 28 : 32;
-                SettingsButton.Height = compact ? 28 : 32;
+                // Never compact-shrink: it would leave the gear inset next to its 32px neighbours.
+                SettingsButton.Width = 32;
+                SettingsButton.Height = 32;
                 SwapLanguageButton.Width = 32;
                 SwapLanguageButton.Height = 32;
                 SourcePlayButton.Width = 24;
@@ -501,8 +513,9 @@ namespace Easydict.WinUI.Views
             PinButton.Height = 32;
             OcrButton.Width = 32;
             OcrButton.Height = 32;
-            SettingsButton.Width = compact ? 28 : 32;
-            SettingsButton.Height = compact ? 28 : 32;
+            // Never compact-shrink: it would leave the gear inset next to its 32px neighbours.
+            SettingsButton.Width = 32;
+            SettingsButton.Height = 32;
             SwapLanguageButton.Width = 32;
             SwapLanguageButton.Height = 32;
             SourcePlayButton.Width = 24;
@@ -810,9 +823,7 @@ namespace Easydict.WinUI.Views
 
             if (SettingsService.Instance.CompactMode && !MinimalThemeService.IsActive)
             {
-                StatusIndicator.Visibility = _lastStatusConnected == false
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                SetStatusIndicatorWanted(_lastStatusConnected == false);
                 if (_lastStatusConnected != false)
                 {
                     return;
@@ -821,9 +832,7 @@ namespace Easydict.WinUI.Views
 
             if (MinimalThemeService.IsActive)
             {
-                StatusIndicator.Visibility = _lastStatusConnected == false
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                SetStatusIndicatorWanted(_lastStatusConnected == false);
                 StatusDot.Visibility = Visibility.Collapsed;
                 StatusText.Foreground = ThemeResourceService.GetBrush("TextFillColorPrimaryBrush")
                     ?? ThemeResourceService.GetBrush("ButtonForeground");
@@ -835,7 +844,7 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            StatusIndicator.Visibility = Visibility.Visible;
+            SetStatusIndicatorWanted(true);
             StatusDot.Visibility = Visibility.Visible;
             var statusForeground = ThemeResourceService.GetBrush("StatusIndicatorForegroundBrush", this)
                 ?? ThemeResourceService.GetBrush("AccentTextFillColorPrimaryBrush", this)
@@ -1254,8 +1263,6 @@ namespace Easydict.WinUI.Views
             // Tooltips
             ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
             ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
-            ToolTipService.SetToolTip(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
@@ -3215,16 +3222,35 @@ namespace Easydict.WinUI.Views
                 });
                 return null;
             }
-            catch (Exception ex)
+            catch (TranslationException ex)
             {
+                // Keep the error code the service chose. Without this clause every grammar
+                // failure - bad key, rate limit, dead proxy - arrived as Unknown.
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     if (_isClosing) return;
-                    serviceResult.Error = new TranslationException(ex.Message, ex)
+                    serviceResult.Error = ex;
+                    serviceResult.IsLoading = false;
+                    serviceResult.IsStreaming = false;
+                    serviceResult.StreamingText = "";
+                    RefreshServiceResultView(serviceResult);
+                });
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // The grammar stream is enumerated straight off the service, so nothing has had a
+                // chance to name the proxy yet.
+                var error = TranslationManager.DescribeProxyFailure(ex, serviceResult.ServiceId)
+                    ?? new TranslationException(ex.Message, ex)
                     {
                         ErrorCode = TranslationErrorCode.Unknown,
                         ServiceId = serviceResult.ServiceId
                     };
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_isClosing) return;
+                    serviceResult.Error = error;
                     serviceResult.IsLoading = false;
                     serviceResult.IsStreaming = false;
                     serviceResult.StreamingText = "";
@@ -3411,23 +3437,6 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Rebuild the Actions menu with the current text each time it opens.
         /// </summary>
-        private void OnTextActionsFlyoutOpening(object? sender, object e)
-        {
-            TextActionFlyoutBuilder.Populate(TextActionsFlyout, BuildTextActionContext);
-        }
-
-        private TextActionContext? BuildTextActionContext()
-        {
-            var text = InputTextBox.Text?.Trim();
-            if (string.IsNullOrEmpty(text))
-            {
-                return null;
-            }
-
-            var translation = _serviceResults.FirstOrDefault(r => r.HasSuccessfulResult)?.Result?.TranslatedText;
-            return new TextActionContext(text, translation, GetSourceLanguage(), GetTargetLanguage());
-        }
-
         private TranslationLanguage GetSourceLanguage()
         {
             return LanguageComboHelper.GetSelectedLanguage(SourceLangCombo);
@@ -4617,12 +4626,46 @@ namespace Easydict.WinUI.Views
             SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        /// <summary>
+        /// Folds History and Favorites into the "..." overflow when the header is short of room.
+        /// </summary>
+        /// <remarks>
+        /// Settings is deliberately not part of this, and must never be added to it: it is the
+        /// only way into the settings page, so it stays a directly visible button at every width.
+        /// Everything else in the header may fold, shrink or hide.
+        /// </remarks>
         private void ApplySavedItemsHeaderVisibility()
         {
             var useMoreMenu = IsCompactChrome || RootGrid.ActualWidth < SavedItemsHeaderBreakpoint;
             HistoryButton.Visibility = useMoreMenu ? Visibility.Collapsed : Visibility.Visible;
             FavoritesButton.Visibility = useMoreMenu ? Visibility.Collapsed : Visibility.Visible;
             SavedItemsMoreButton.Visibility = useMoreMenu ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Records whether the theme/connection chrome wants the status pill, then lets the width
+        /// gate have the final say.
+        /// </summary>
+        private void SetStatusIndicatorWanted(bool wanted)
+        {
+            _statusChromeWantsIndicator = wanted;
+            ApplyStatusIndicatorVisibility();
+        }
+
+        /// <summary>
+        /// Hides the status pill while the header is too narrow to carry it. Its column is Auto,
+        /// so the room it takes comes out of the title; leaving it up would push the title under
+        /// the pill, since a Grid does not clip a child to its cell.
+        /// </summary>
+        private void ApplyStatusIndicatorVisibility()
+        {
+            // Width 0 means the header has not been measured yet; do not hide on that.
+            var wideEnough = RootGrid.ActualWidth <= 0
+                || RootGrid.ActualWidth >= StatusIndicatorBreakpoint;
+
+            StatusIndicator.Visibility = _statusChromeWantsIndicator && wideEnough
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         private void OnHistoryClicked(object sender, RoutedEventArgs e)
@@ -5100,6 +5143,7 @@ namespace Easydict.WinUI.Views
         {
             UpdateSuggestionPopupPlacement();
             ApplySavedItemsHeaderVisibility();
+            ApplyStatusIndicatorVisibility();
         }
 
         private void OnSuggestionPopupOpened(object? sender, object e)

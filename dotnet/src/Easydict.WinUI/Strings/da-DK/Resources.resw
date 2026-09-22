@@ -771,6 +771,10 @@
     <value>Denne tjeneste er muligvis ikke tilgængelig i din region. Prøv Bing Translate eller andre regionskompatible tjenester. Du kan ændre aktiverede tjenester i Indstillinger.</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>Der blev ikke sendt nogen anmodning. Kontrollér proxyadressen under Indstillinger → Avanceret → HTTP-proxy, eller slå proxyen fra.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>App-tema</value>

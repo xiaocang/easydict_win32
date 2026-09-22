@@ -1,4 +1,6 @@
+using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
@@ -27,6 +29,114 @@ public class HoverLookupFallbackTests
 
         result.Should().BeSameAs(expected);
         calls.Should().Equal("first");
+    }
+
+    private static TranslationException ProxyFailure(string serviceId) => new(
+        "Cannot reach the HTTP proxy http://127.0.0.1:59999: connection refused")
+    {
+        ErrorCode = TranslationErrorCode.ProxyError,
+        ServiceId = serviceId,
+    };
+
+    [Fact]
+    public async Task ProxyFailure_DoesNotStopALocalDictionaryFromAnswering()
+    {
+        // Auto order puts locally imported mdx:: dictionaries after the remote services, and they
+        // do no networking at all — so a dead proxy must not cut the chain short.
+        var calls = new List<string>();
+        var expected = Result();
+
+        var result = await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web", "mdx::local"], (id, _) =>
+            {
+                calls.Add(id);
+                return id.StartsWith(HoverLookupRules.MdxServiceIdPrefix, StringComparison.Ordinal)
+                    ? Task.FromResult(expected)
+                    : throw ProxyFailure(id);
+            }, TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        result.Should().BeSameAs(expected);
+        calls.Should().Equal("youdao", "google_web", "mdx::local");
+    }
+
+    [Fact]
+    public async Task AfterAProxyFailure_NetworkFreeCandidatesAreTriedFirst()
+    {
+        // Waiting out a connect timeout on every remote candidate before reaching a local
+        // dictionary is wasted once the proxy is known to be dead. Reordered, not filtered: the
+        // remote candidate that was skipped past is still attempted afterwards.
+        var calls = new List<string>();
+        var expected = Result();
+
+        var result = await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web", "mdx::local"], (id, _) =>
+            {
+                calls.Add(id);
+                return id == "mdx::local" ? Task.FromResult(expected) : throw ProxyFailure(id);
+            },
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None,
+            HoverLookupRules.IsNetworkFree);
+
+        result.Should().BeSameAs(expected);
+        calls.Should().Equal("youdao", "mdx::local");
+    }
+
+    [Fact]
+    public async Task APromotedLocalDictionaryThatMisses_StillLeavesTheRemoteCandidatesTried()
+    {
+        // The promotion must not cost a candidate: google_web is reached after the local
+        // dictionary returns nothing useful.
+        var calls = new List<string>();
+        var expected = Result();
+
+        var result = await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web", "mdx::local"], (id, _) =>
+            {
+                calls.Add(id);
+                return id switch
+                {
+                    "youdao" => throw ProxyFailure(id),
+                    "mdx::local" => Task.FromResult(Result("   ")),
+                    _ => Task.FromResult(expected),
+                };
+            },
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None,
+            HoverLookupRules.IsNetworkFree);
+
+        result.Should().BeSameAs(expected);
+        calls.Should().Equal("youdao", "mdx::local", "google_web");
+    }
+
+    [Fact]
+    public async Task WhenEverythingFails_TheProxyIsReportedRatherThanTheLastService()
+    {
+        // The dead proxy is the one thing the user can act on, so it should not be buried under
+        // whichever service happened to fail last.
+        var act = async () => await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web"], (id, _) =>
+            {
+                if (id == "youdao")
+                {
+                    throw ProxyFailure(id);
+                }
+
+                throw new HttpRequestException("offline");
+            }, TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
+        thrown.WithInnerException<TranslationException>()
+            .Which.ErrorCode.Should().Be(TranslationErrorCode.ProxyError);
+    }
+
+    [Fact]
+    public void TheHoverDeadline_OutlastsTheProxyConnectTimeout()
+    {
+        // If the hover attempt gave up first, a dead proxy would be indistinguishable from the
+        // user dismissing the popup, and every service would report an unexplained timeout again.
+        TimeSpan.FromMilliseconds(HoverWordLookupService.TranslationTimeoutMs)
+            .Should().BeGreaterThan(TranslationManager.ProxiedConnectTimeout);
     }
 
     [Fact]

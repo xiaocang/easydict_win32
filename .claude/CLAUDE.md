@@ -225,6 +225,27 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 ```
 
 #### Key Design Points
+- Outbound HTTP shares one `SocketsHttpHandler` with a bounded `ConnectTimeout` (10 s direct,
+  `TranslationManager.ProxiedConnectTimeout` = 4 s when a proxy is configured), so a host that
+  swallows the TCP handshake cannot spend the whole request budget on it. The proxied value must
+  stay below the shortest caller deadline in the app — hover lookup's
+  `HoverWordLookupService.TranslationTimeoutMs` (5 s), an invariant a test locks — because a
+  caller whose own deadline fires first cannot be told apart from a user dismissing the query.
+  With a proxy configured, `ProxyFailureDetectingHandler` wraps that handler and re-labels a
+  connection that never reached the proxy (bypassed hosts excluded, so a local Ollama still
+  blames itself) as `ProxyUnreachableException`; that covers both a refused connect and the
+  `ConnectTimeout`, which .NET reports as a cancellation rather than an `HttpRequestException`.
+  `TranslationManager` turns it into `TranslationErrorCode.ProxyError`, which is non-retryable:
+  an unreachable proxy fails once within seconds, naming the proxy, instead of three times over
+  the full timeout per service. Credentials in the proxy URL never reach the message — neither
+  through the endpoint (`SchemeAndServer`, not the authority) nor through a 407 `CONNECT` reply
+  that quotes the whole URL. `HoverLookupFallback` keeps walking its sequential chain through a
+  `ProxyError` — locally imported `mdx::` dictionaries are ordered after the remote services and
+  do no networking, so a dead proxy must not cut them off — but on the first `ProxyError` it
+  moves the network-free candidates (`HoverLookupRules.IsNetworkFree`) ahead of the rest, a
+  stable partition and never a filter, since nothing proves the remaining candidates share the
+  proxy (a loopback Ollama or a local CLI service does not). When nothing answered it reports the
+  proxy failure as the cause in preference to whichever service failed last
 - LLM streaming is handled through SSE (Server-Sent Events) parsing
 - Service configurations are encrypted using DPAPI (Data Protection API)
 - Language codes are mapped via overrideable `GetLanguageCode(Language)` per service

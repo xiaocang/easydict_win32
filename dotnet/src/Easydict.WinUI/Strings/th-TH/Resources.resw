@@ -771,6 +771,10 @@
     <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE19;&#xE35;&#xE49;&#xE2D;&#xE32;&#xE08;&#xE44;&#xE21;&#xE48;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE43;&#xE19;&#xE20;&#xE39;&#xE21;&#xE34;&#xE20;&#xE32;&#xE04;&#xE02;&#xE2D;&#xE07;&#xE04;&#xE38;&#xE13; &#xE25;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; Bing Translate &#xE2B;&#xE23;&#xE37;&#xE2D;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE02;&#xE49;&#xE32;&#xE01;&#xE31;&#xE19;&#xE44;&#xE14;&#xE49;&#xE01;&#xE31;&#xE1A;&#xE20;&#xE39;&#xE21;&#xE34;&#xE20;&#xE32;&#xE04;&#xE2D;&#xE37;&#xE48;&#xE19; &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE43;&#xE19;&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>ไม่มีคำขอใดถูกส่งออกไป ตรวจสอบที่อยู่พร็อกซีใน การตั้งค่า → ขั้นสูง → HTTP Proxy หรือปิดพร็อกซี</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>&#xE18;&#xE35;&#xE21;&#xE41;&#xE2D;&#xE1B;</value>

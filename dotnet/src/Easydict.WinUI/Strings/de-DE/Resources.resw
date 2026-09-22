@@ -771,6 +771,10 @@
     <value>Dieser Dienst ist in Ihrer Region möglicherweise nicht verfügbar. Versuchen Sie stattdessen Bing Übersetzer oder andere regionskompatible Dienste. Sie können die aktivierten Dienste in den Einstellungen ändern.</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>Es wurde keine Anfrage gesendet. Prüfen Sie die Proxy-Adresse unter Einstellungen → Erweitert → HTTP-Proxy, oder schalten Sie den Proxy aus.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>App-Design</value>

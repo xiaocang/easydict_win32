@@ -771,6 +771,10 @@
     <value>قد لا تكون هذه الخدمة متاحة في منطقتك. جرب استخدام Bing Translate أو خدمات أخرى متوافقة مع المنطقة. يمكنك تغيير الخدمات المفعّلة في الإعدادات.</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>لم يتم إرسال أي طلب. تحقق من عنوان الوكيل في الإعدادات ← متقدم ← وكيل HTTP، أو أوقف تشغيل الوكيل.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>سمة التطبيق</value>

@@ -771,6 +771,10 @@
     <value>यह सेवा आपके क्षेत्र में उपलब्ध नहीं हो सकती। Bing Translate या अन्य क्षेत्र-संगत सेवाओं का उपयोग करें। आप सेटिंग्स में सक्रिय सेवाएँ बदल सकते हैं।</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>कोई अनुरोध नहीं भेजा गया। सेटिंग्स → उन्नत → HTTP Proxy में प्रॉक्सी पता जाँचें, या प्रॉक्सी बंद करें।</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>ऐप थीम</value>

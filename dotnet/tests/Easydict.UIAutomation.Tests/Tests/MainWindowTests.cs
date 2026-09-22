@@ -4,6 +4,7 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Tools;
 using Xunit;
 using Xunit.Abstractions;
+using static Easydict.UIAutomation.Tests.Tests.SavedItemsVisualTests;
 
 namespace Easydict.UIAutomation.Tests.Tests;
 
@@ -19,6 +20,35 @@ public class MainWindowTests : IDisposable
         _output = output;
         _launcher = new AppLauncher();
         _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+    }
+
+    [Fact]
+    public void SettingsButton_StaysInsideTheWindow_AtEveryWidth()
+    {
+        // The header's other buttons may fold into the "..." overflow when the window is narrow;
+        // Settings may not, because it is the only route into the settings page. It also sits
+        // last in the row, so a header short of width pushes it past the right edge first.
+        var window = _launcher.GetMainWindow();
+
+        foreach (var width in new[] { 1280, 960, 640, 560, 400 })
+        {
+            Resize(window, width);
+
+            var gear = Wait(window, "SettingsButton");
+            gear.IsOffscreen.Should().BeFalse(
+                $"the settings button must stay reachable at {width} DIP");
+
+            var gearRect = gear.BoundingRectangle;
+            var windowRect = window.BoundingRectangle;
+            gearRect.Width.Should().BeGreaterThan(0,
+                $"the settings button must not collapse at {width} DIP");
+            gearRect.Left.Should().BeGreaterThanOrEqualTo(windowRect.Left,
+                $"the settings button must stay inside the window at {width} DIP");
+            gearRect.Right.Should().BeLessThanOrEqualTo(windowRect.Right,
+                $"the settings button must not be pushed past the right edge at {width} DIP");
+
+            _output.WriteLine($"{width} DIP: gear at {gearRect}, window {windowRect}");
+        }
     }
 
     [Fact]

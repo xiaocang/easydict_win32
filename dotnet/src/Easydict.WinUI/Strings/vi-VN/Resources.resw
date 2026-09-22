@@ -771,6 +771,10 @@
     <value>D&#x1ECB;ch v&#x1EE5; n&#xE0;y c&#xF3; th&#x1EC3; kh&#xF4;ng kh&#x1EA3; d&#x1EE5;ng &#x1EDF; khu v&#x1EF1;c c&#x1EE7;a b&#x1EA1;n. H&#xE3;y th&#x1EED; s&#x1EED; d&#x1EE5;ng Bing Translate ho&#x1EB7;c c&#xE1;c d&#x1ECB;ch v&#x1EE5; t&#x1B0;&#x1A1;ng th&#xED;ch kh&#xE1;c. B&#x1EA1;n c&#xF3; th&#x1EC3; thay &#x111;&#x1ED5;i d&#x1ECB;ch v&#x1EE5; &#x111;&#xE3; b&#x1EAD;t trong C&#xE0;i &#x111;&#x1EB7;t.</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>Không có yêu cầu nào được gửi đi. Hãy kiểm tra địa chỉ proxy trong Cài đặt → Nâng cao → HTTP Proxy, hoặc tắt proxy.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>Giao di&#x1EC7;n &#x1EE9;ng d&#x1EE5;ng</value>

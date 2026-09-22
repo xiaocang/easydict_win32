@@ -176,6 +176,29 @@ public sealed class FluentWindowLayoutTests(ITestOutputHelper output)
                 else right.Top.Should().BeGreaterThan(left.Bottom);
                 Wait(window, "SourceLangCombo").IsOffscreen.Should().BeFalse();
                 Wait(window, "TargetLangCombo").IsOffscreen.Should().BeFalse();
+
+                // Other header buttons may fold into the "..." overflow when the window is
+                // narrow; Settings may not, because it is the only route into the settings page.
+                if (width < 600)
+                {
+                    Wait(window, "SavedItemsMoreButton").IsOffscreen.Should().BeFalse(
+                        $"the narrow header is expected to fold buttons into the overflow at {width}px");
+                }
+
+                // The settings gear sits last in the header's button row, so a header that runs
+                // out of width pushes it out of view before anything else.
+                var gear = Wait(window, "SettingsButton");
+                gear.IsOffscreen.Should().BeFalse(
+                    $"the settings button must stay reachable at {width}px");
+                var gearRect = gear.BoundingRectangle;
+                var windowRect = window.BoundingRectangle;
+                gearRect.Width.Should().BeGreaterThan(0,
+                    $"the settings button must not collapse at {width}px");
+                gearRect.Left.Should().BeGreaterThanOrEqualTo(windowRect.Left,
+                    $"the settings button must stay inside the window at {width}px");
+                gearRect.Right.Should().BeLessThanOrEqualTo(windowRect.Right,
+                    $"the settings button must not be pushed past the right edge at {width}px");
+
                 output.WriteLine(ScreenshotHelper.CaptureWindow(window, $"fluent_windows_{theme}_{compact}_{width}_main"));
             }
             Invoke(Wait(window, "ModeMenuButton"));

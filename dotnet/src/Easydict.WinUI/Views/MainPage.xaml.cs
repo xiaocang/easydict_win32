@@ -32,6 +32,19 @@ namespace Easydict.WinUI.Views
     public partial class MainPage : Page
     {
         private const double SavedItemsHeaderBreakpoint = 600;
+
+        /// <summary>
+        /// Below this width the decorative status pill gives up its column. The action buttons
+        /// keep theirs: they are the only header content the user cannot reach another way.
+        /// </summary>
+        private const double StatusIndicatorBreakpoint = 560;
+
+        /// <summary>
+        /// Whether the theme/connection chrome wants the status pill shown. The width gate can
+        /// still hide it, so the two decisions are kept apart rather than fighting over
+        /// <see cref="StatusIndicator"/>.Visibility.
+        /// </summary>
+        private bool _statusChromeWantsIndicator = true;
         private LanguageDetectionService? _detectionService;
         private LanguageDetectionWarningPresenter? _detectionWarning;
         private LanguageDetectionWarningPresenter DetectionWarning =>
@@ -812,9 +825,7 @@ namespace Easydict.WinUI.Views
 
             if (SettingsService.Instance.CompactMode && !MinimalThemeService.IsActive)
             {
-                StatusIndicator.Visibility = _lastStatusConnected == false
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                SetStatusIndicatorWanted(_lastStatusConnected == false);
                 if (_lastStatusConnected != false)
                 {
                     return;
@@ -823,9 +834,7 @@ namespace Easydict.WinUI.Views
 
             if (MinimalThemeService.IsActive)
             {
-                StatusIndicator.Visibility = _lastStatusConnected == false
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                SetStatusIndicatorWanted(_lastStatusConnected == false);
                 StatusDot.Visibility = Visibility.Collapsed;
                 StatusText.Foreground = ThemeResourceService.GetBrush("TextFillColorPrimaryBrush")
                     ?? ThemeResourceService.GetBrush("ButtonForeground");
@@ -837,7 +846,7 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            StatusIndicator.Visibility = Visibility.Visible;
+            SetStatusIndicatorWanted(true);
             StatusDot.Visibility = Visibility.Visible;
             var statusForeground = ThemeResourceService.GetBrush("StatusIndicatorForegroundBrush", this)
                 ?? ThemeResourceService.GetBrush("AccentTextFillColorPrimaryBrush", this)
@@ -4619,12 +4628,46 @@ namespace Easydict.WinUI.Views
             SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        /// <summary>
+        /// Folds History and Favorites into the "..." overflow when the header is short of room.
+        /// </summary>
+        /// <remarks>
+        /// Settings is deliberately not part of this, and must never be added to it: it is the
+        /// only way into the settings page, so it stays a directly visible button at every width.
+        /// Everything else in the header may fold, shrink or hide.
+        /// </remarks>
         private void ApplySavedItemsHeaderVisibility()
         {
             var useMoreMenu = IsCompactChrome || RootGrid.ActualWidth < SavedItemsHeaderBreakpoint;
             HistoryButton.Visibility = useMoreMenu ? Visibility.Collapsed : Visibility.Visible;
             FavoritesButton.Visibility = useMoreMenu ? Visibility.Collapsed : Visibility.Visible;
             SavedItemsMoreButton.Visibility = useMoreMenu ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Records whether the theme/connection chrome wants the status pill, then lets the width
+        /// gate have the final say.
+        /// </summary>
+        private void SetStatusIndicatorWanted(bool wanted)
+        {
+            _statusChromeWantsIndicator = wanted;
+            ApplyStatusIndicatorVisibility();
+        }
+
+        /// <summary>
+        /// Hides the status pill while the header is too narrow to carry it. Its column is Auto,
+        /// so the room it takes comes out of the title; leaving it up would push the title under
+        /// the pill, since a Grid does not clip a child to its cell.
+        /// </summary>
+        private void ApplyStatusIndicatorVisibility()
+        {
+            // Width 0 means the header has not been measured yet; do not hide on that.
+            var wideEnough = RootGrid.ActualWidth <= 0
+                || RootGrid.ActualWidth >= StatusIndicatorBreakpoint;
+
+            StatusIndicator.Visibility = _statusChromeWantsIndicator && wideEnough
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         private void OnHistoryClicked(object sender, RoutedEventArgs e)
@@ -5102,6 +5145,7 @@ namespace Easydict.WinUI.Views
         {
             UpdateSuggestionPopupPlacement();
             ApplySavedItemsHeaderVisibility();
+            ApplyStatusIndicatorVisibility();
         }
 
         private void OnSuggestionPopupOpened(object? sender, object e)

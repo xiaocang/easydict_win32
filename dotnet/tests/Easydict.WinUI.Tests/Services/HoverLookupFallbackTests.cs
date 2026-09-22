@@ -1,3 +1,4 @@
+using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using FluentAssertions;
@@ -27,6 +28,39 @@ public class HoverLookupFallbackTests
 
         result.Should().BeSameAs(expected);
         calls.Should().Equal("first");
+    }
+
+    [Fact]
+    public async Task ProxyFailure_StopsTheChainInsteadOfDialingTheSameDeadProxy()
+    {
+        // Every remaining service goes through the same proxy, so continuing can only spend
+        // another attempt timeout each before failing identically.
+        var calls = new List<string>();
+
+        var act = async () => await HoverLookupFallback.TranslateAsync(
+            ["first", "second", "third"], (id, _) =>
+            {
+                calls.Add(id);
+                throw new TranslationException(
+                    "Cannot reach the HTTP proxy http://127.0.0.1:59999: connection refused")
+                {
+                    ErrorCode = TranslationErrorCode.ProxyError,
+                    ServiceId = id,
+                };
+            }, TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        var thrown = await act.Should().ThrowAsync<TranslationException>();
+        thrown.Which.ErrorCode.Should().Be(TranslationErrorCode.ProxyError);
+        calls.Should().Equal("first");
+    }
+
+    [Fact]
+    public void TheHoverDeadline_OutlastsTheProxyConnectTimeout()
+    {
+        // If the hover attempt gave up first, a dead proxy would be indistinguishable from the
+        // user dismissing the popup, and every service would report an unexplained timeout again.
+        TimeSpan.FromMilliseconds(HoverWordLookupService.TranslationTimeoutMs)
+            .Should().BeGreaterThan(TranslationManager.ProxiedConnectTimeout);
     }
 
     [Fact]

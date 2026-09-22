@@ -43,9 +43,22 @@ public sealed class TranslationManager : IDisposable
     private const int DefaultMaxRetries = 2;
 
     // Without this the TCP handshake is bounded only by the OS (tens of seconds on Windows for a
-    // black-holed address), so a proxy that is switched off eats the whole request budget before
-    // anything is reported. Generous enough for a distant proxy, short enough to stay an answer.
-    private static readonly TimeSpan TransportConnectTimeout = TimeSpan.FromSeconds(10);
+    // black-holed address), so a host that swallows SYNs eats the whole request budget before
+    // anything is reported.
+    private static readonly TimeSpan DirectConnectTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// How long a connection to the user's configured proxy may take before it is called dead.
+    /// </summary>
+    /// <remarks>
+    /// Shorter than <see cref="DirectConnectTimeout"/> on purpose. A proxy is one hop the user
+    /// controls and usually runs nearby, and the fast path only engages if the connect gives up
+    /// before the caller's own deadline — the shortest in the app is hover word lookup's 5 s, and
+    /// a caller whose deadline fires first is indistinguishable from someone pressing Escape, so
+    /// the failure would go back to being an unexplained timeout. Still above Windows' 3 s initial
+    /// SYN retransmit, so a single lost packet does not fail the connect.
+    /// </remarks>
+    public static TimeSpan ProxiedConnectTimeout { get; } = TimeSpan.FromSeconds(4);
 
     // Copy-on-write registry: readers take the current snapshot without locking; writers replace
     // the whole dictionary under _servicesLock. Insertion order is preserved because a fresh copy
@@ -64,7 +77,7 @@ public sealed class TranslationManager : IDisposable
     {
         var handler = new SocketsHttpHandler
         {
-            ConnectTimeout = TransportConnectTimeout,
+            ConnectTimeout = DirectConnectTimeout,
             SslOptions = new SslClientAuthenticationOptions
             {
                 EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 |
@@ -84,6 +97,7 @@ public sealed class TranslationManager : IDisposable
                 };
                 handler.Proxy = proxy;
                 handler.UseProxy = true;
+                handler.ConnectTimeout = ProxiedConnectTimeout;
 
                 // Name the broken hop while the request URI is still in hand, so a proxy that is
                 // down reads as a proxy problem instead of every service failing on its own.

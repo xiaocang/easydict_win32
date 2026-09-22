@@ -102,6 +102,13 @@ public enum TranslationErrorCode
     ServiceUnavailable,
     InvalidResponse,
     InvalidModel,
-    LocalModelNeedsPreparation
+    LocalModelNeedsPreparation,
+
+    /// <summary>
+    /// The configured HTTP proxy could not be reached, so no request left the machine.
+    /// Distinct from <see cref="NetworkError"/>: the fix is in the proxy settings, not the
+    /// service, and retrying only delays the message the user needs to see.
+    /// </summary>
+    ProxyError
 }
 

@@ -771,6 +771,10 @@
     <value>Layanan ini mungkin tidak tersedia di wilayah Anda. Coba gunakan Bing Translate atau layanan lain yang kompatibel. Anda dapat mengubah layanan yang diaktifkan di Pengaturan.</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>Tidak ada permintaan yang dikirim. Periksa alamat proxy di Pengaturan → Lanjutan → HTTP Proxy, atau matikan proxy.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>Tema Aplikasi</value>

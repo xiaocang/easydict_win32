@@ -225,6 +225,13 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 ```
 
 #### Key Design Points
+- Outbound HTTP shares one `SocketsHttpHandler` with a 10 s `ConnectTimeout`, so a host that
+  swallows the TCP handshake cannot spend the whole request budget on it. With a proxy
+  configured, `ProxyFailureDetectingHandler` wraps that handler and re-labels a connection that
+  never reached the proxy (bypassed hosts excluded, so a local Ollama still blames itself) as
+  `ProxyUnreachableException`. `TranslationManager` turns that into
+  `TranslationErrorCode.ProxyError`, which is non-retryable: an unreachable proxy fails once
+  within seconds, naming the proxy, instead of three times over the full timeout per service
 - LLM streaming is handled through SSE (Server-Sent Events) parsing
 - Service configurations are encrypted using DPAPI (Data Protection API)
 - Language codes are mapped via overrideable `GetLanguageCode(Language)` per service

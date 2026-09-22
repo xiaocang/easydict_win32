@@ -771,6 +771,10 @@
     <value>此服务在您所在的地区可能不可用。请尝试使用必应翻译或其他国内可用的翻译服务。您可以在设置中更改启用的服务。</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>请求没有发出。请在 设置 → 高级 → HTTP 代理 中检查代理地址，或关闭代理。</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>应用主题</value>

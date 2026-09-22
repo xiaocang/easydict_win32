@@ -771,6 +771,10 @@
     <value>Perkhidmatan ini mungkin tidak tersedia di rantau anda. Cuba gunakan Bing Translate atau perkhidmatan lain yang serasi. Anda boleh menukar perkhidmatan yang diaktifkan dalam Tetapan.</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>Tiada permintaan dihantar. Semak alamat proksi di Tetapan → Lanjutan → Proksi HTTP, atau matikan proksi.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>Tema Aplikasi</value>

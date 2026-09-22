@@ -771,6 +771,10 @@
     <value>此服務在您所在的地區可能無法使用。請嘗試使用 Bing 翻譯或其他地區相容的翻譯服務。您可以在設定中更改啟用的服務。</value>
   </data>
 
+  <data name="ProxyUnreachableHint" xml:space="preserve">
+    <value>請求並未送出。請在 設定 → 進階 → HTTP 代理 中檢查代理位址，或關閉代理。</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>應用程式主題</value>

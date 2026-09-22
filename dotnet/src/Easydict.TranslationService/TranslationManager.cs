@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Security;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -41,6 +42,11 @@ public sealed class TranslationManager : IDisposable
 
     private const int DefaultMaxRetries = 2;
 
+    // Without this the TCP handshake is bounded only by the OS (tens of seconds on Windows for a
+    // black-holed address), so a proxy that is switched off eats the whole request budget before
+    // anything is reported. Generous enough for a distant proxy, short enough to stay an answer.
+    private static readonly TimeSpan TransportConnectTimeout = TimeSpan.FromSeconds(10);
+
     // Copy-on-write registry: readers take the current snapshot without locking; writers replace
     // the whole dictionary under _servicesLock. Insertion order is preserved because a fresh copy
     // never contains holes, which the settings UI relies on for default display ordering.
@@ -48,7 +54,7 @@ public sealed class TranslationManager : IDisposable
     private readonly object _servicesLock = new();
     private readonly IMemoryCache _cache;
     private readonly IMemoryCache _phoneticCache;
-    private readonly HttpClientHandler _httpHandler;
+    private readonly HttpMessageHandler _httpHandler;
     private readonly HttpClient _httpClient;
     private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<Phonetic>?>>> _phoneticFlightTracker = new();
 
@@ -56,13 +62,18 @@ public sealed class TranslationManager : IDisposable
 
     public TranslationManager(TranslationManagerOptions? options = null)
     {
-        var handler = new HttpClientHandler
+        var handler = new SocketsHttpHandler
         {
-            SslProtocols = System.Security.Authentication.SslProtocols.Tls12 |
-                           System.Security.Authentication.SslProtocols.Tls13
+            ConnectTimeout = TransportConnectTimeout,
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 |
+                                      System.Security.Authentication.SslProtocols.Tls13
+            }
         };
 
         // Configure proxy if enabled
+        HttpMessageHandler pipeline = handler;
         if (options?.ProxyEnabled == true && !string.IsNullOrWhiteSpace(options.ProxyUri))
         {
             if (Uri.TryCreate(options.ProxyUri, UriKind.Absolute, out var proxyUri))
@@ -73,6 +84,11 @@ public sealed class TranslationManager : IDisposable
                 };
                 handler.Proxy = proxy;
                 handler.UseProxy = true;
+
+                // Name the broken hop while the request URI is still in hand, so a proxy that is
+                // down reads as a proxy problem instead of every service failing on its own.
+                pipeline = new ProxyFailureDetectingHandler(
+                    handler, proxy, proxyUri.GetLeftPart(UriPartial.Authority));
                 System.Diagnostics.Debug.WriteLine($"[TranslationManager] Proxy configured: {proxyUri.Host}:{proxyUri.Port}, BypassLocal={options.ProxyBypassLocal}");
             }
             else
@@ -81,8 +97,8 @@ public sealed class TranslationManager : IDisposable
             }
         }
 
-        _httpHandler = handler;
-        _httpClient = new HttpClient(handler, disposeHandler: false)
+        _httpHandler = pipeline;
+        _httpClient = new HttpClient(pipeline, disposeHandler: false)
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
@@ -703,6 +719,14 @@ public sealed class TranslationManager : IDisposable
                         {
                             moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
                         }
+                        catch (Exception ex) when (
+                            !cancellationToken.IsCancellationRequested
+                            && ProxyFailureClassifier.FindProxyFailure(ex) is not null)
+                        {
+                            // Same reasoning as the non-streaming path: a dead proxy is the
+                            // user's to fix, and retrying it just prolongs an empty card.
+                            throw DescribeProxyFailure(ex, service.ServiceId)!;
+                        }
                         catch (TranslationException ex) when (
                             allowRetry && attempt < DefaultMaxRetries && !IsNonRetryable(ex.ErrorCode))
                         {
@@ -747,9 +771,37 @@ public sealed class TranslationManager : IDisposable
         }
         else if (service is IStreamTranslationService streamService)
         {
-            await foreach (var chunk in streamService.TranslateStreamAsync(request, cancellationToken).ConfigureAwait(false))
+            // Enumerated by hand rather than with await foreach so a proxy failure can be
+            // re-labelled; a catch cannot wrap a loop body that yields.
+            var enumerator = streamService.TranslateStreamAsync(request, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+            try
             {
-                yield return new TranslationStreamUpdate.TextDelta(chunk);
+                while (true)
+                {
+                    bool moved;
+                    try
+                    {
+                        moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (
+                        !cancellationToken.IsCancellationRequested
+                        && ProxyFailureClassifier.FindProxyFailure(ex) is not null)
+                    {
+                        throw DescribeProxyFailure(ex, service.ServiceId)!;
+                    }
+
+                    if (!moved)
+                    {
+                        break;
+                    }
+
+                    yield return new TranslationStreamUpdate.TextDelta(enumerator.Current);
+                }
+            }
+            finally
+            {
+                await enumerator.DisposeAsync().ConfigureAwait(false);
             }
         }
         else
@@ -794,6 +846,12 @@ public sealed class TranslationManager : IDisposable
                 // User-initiated cancellation — propagate immediately without retry
                 throw;
             }
+            catch (Exception ex) when (ProxyFailureClassifier.FindProxyFailure(ex) is not null)
+            {
+                // The configured proxy never answered, so nothing reached the service. Retrying
+                // multiplies the silence in front of a message only the user can act on.
+                throw DescribeProxyFailure(ex, service.ServiceId)!;
+            }
             catch (OperationCanceledException oce)
             {
                 // Per-request timeout: the linked CTS fired but the user did not cancel.
@@ -818,12 +876,38 @@ public sealed class TranslationManager : IDisposable
     }
 
     /// <summary>
+    /// Re-labels a failure that a <see cref="ProxyFailureDetectingHandler"/> already attributed to
+    /// the configured proxy, so the UI can say which hop is broken instead of showing the same
+    /// generic network error on every service. Returns null for every other failure.
+    /// </summary>
+    internal static TranslationException? DescribeProxyFailure(Exception exception, string serviceId)
+    {
+        var proxyFailure = ProxyFailureClassifier.FindProxyFailure(exception);
+        if (proxyFailure is null)
+        {
+            return null;
+        }
+
+        if (exception is TranslationException { ErrorCode: TranslationErrorCode.ProxyError } alreadyDescribed)
+        {
+            return alreadyDescribed;
+        }
+
+        return new TranslationException(proxyFailure.Message, exception)
+        {
+            ErrorCode = TranslationErrorCode.ProxyError,
+            ServiceId = serviceId
+        };
+    }
+
+    /// <summary>
     /// Error codes that describe a stable condition (bad key, unsupported pair, oversized text,
     /// missing model) rather than a transient failure. Retrying them only delays the error.
     /// </summary>
     private static bool IsNonRetryable(TranslationErrorCode code)
     {
         return code is TranslationErrorCode.RateLimited
+            or TranslationErrorCode.ProxyError
             or TranslationErrorCode.InvalidApiKey
             or TranslationErrorCode.UnsupportedLanguage
             or TranslationErrorCode.TextTooLong

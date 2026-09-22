@@ -15,6 +15,7 @@ internal static class ServiceResultStatusTextProvider
     public const string WaitingForResponseKey = "ServiceResult_WaitingForResponse";
     public const string TranslationErrorTooltipKey = "ServiceResult_TranslationErrorTooltip";
     public const string RetryKey = "ServiceResult_Retry";
+    public const string ProxyUnreachableHintKey = "ProxyUnreachableHint";
 
     public static string GetStatusText(ServiceQueryResult serviceResult)
     {
@@ -79,7 +80,20 @@ internal static class ServiceResultStatusTextProvider
             return LocalizationService.Instance.GetString("Codex_UpdateRequired");
         }
 
-        return error?.Message ?? GetErrorFallbackText();
+        var message = error?.Message ?? GetErrorFallbackText();
+
+        // The core message names the proxy and the transport error; the hint says where to fix it.
+        // Without it every service shows the same unexplained failure and the app reads as frozen.
+        if (error?.ErrorCode == TranslationErrorCode.ProxyError)
+        {
+            var hint = LocalizationService.Instance.GetString(ProxyUnreachableHintKey);
+            if (!string.IsNullOrEmpty(hint))
+            {
+                message = $"{message}\n{hint}";
+            }
+        }
+
+        return message;
     }
 
     public static string GetTranslationErrorTooltipText() =>

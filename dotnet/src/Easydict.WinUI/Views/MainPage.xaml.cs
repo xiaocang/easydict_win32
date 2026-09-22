@@ -466,8 +466,9 @@ namespace Easydict.WinUI.Views
                 PinButton.Height = 32;
                 OcrButton.Width = 32;
                 OcrButton.Height = 32;
-                SettingsButton.Width = compact ? 28 : 32;
-                SettingsButton.Height = compact ? 28 : 32;
+                // Never compact-shrink: it would leave the gear inset next to its 32px neighbours.
+                SettingsButton.Width = 32;
+                SettingsButton.Height = 32;
                 SwapLanguageButton.Width = 32;
                 SwapLanguageButton.Height = 32;
                 SourcePlayButton.Width = 24;
@@ -501,8 +502,9 @@ namespace Easydict.WinUI.Views
             PinButton.Height = 32;
             OcrButton.Width = 32;
             OcrButton.Height = 32;
-            SettingsButton.Width = compact ? 28 : 32;
-            SettingsButton.Height = compact ? 28 : 32;
+            // Never compact-shrink: it would leave the gear inset next to its 32px neighbours.
+            SettingsButton.Width = 32;
+            SettingsButton.Height = 32;
             SwapLanguageButton.Width = 32;
             SwapLanguageButton.Height = 32;
             SourcePlayButton.Width = 24;

@@ -244,13 +244,17 @@
                               FontSize="18"
                               Foreground="{ThemeResource ButtonForeground}"/>
                 </Button>
-                <!-- Settings Button -->
+                <!-- Settings Button. 32x32 like every other header button: it sits at the end of
+                     the row, so any smaller reads as the gear being inset from its neighbours.
+                     Never shrink it, in any chrome. -->
                 <Button
                     x:Name="SettingsButton"
                     Click="OnSettingsClicked"
                     Style="{StaticResource EasydictIconButtonStyle}"
                     ToolTipService.ToolTip="Settings"
                     AutomationProperties.Name="Settings"
+                    Width="32"
+                    Height="32"
                     VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE713;"
                               FontSize="18"

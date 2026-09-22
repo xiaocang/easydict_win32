@@ -931,7 +931,12 @@ public sealed class TranslationManager : IDisposable
     /// the configured proxy, so the UI can say which hop is broken instead of showing the same
     /// generic network error on every service. Returns null for every other failure.
     /// </summary>
-    internal static TranslationException? DescribeProxyFailure(Exception exception, string serviceId)
+    /// <remarks>
+    /// Public because not every caller reaches a service through this manager: the grammar
+    /// correction flows enumerate <c>IGrammarCorrectionService</c> directly, and without this they
+    /// would report a dead proxy as an unexplained error.
+    /// </remarks>
+    public static TranslationException? DescribeProxyFailure(Exception exception, string serviceId)
     {
         var proxyFailure = ProxyFailureClassifier.FindProxyFailure(exception);
         if (proxyFailure is null)

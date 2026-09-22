@@ -647,10 +647,38 @@ public sealed class TranslationManager : IDisposable
 
         if (service is IStreamTranslationService streamService)
         {
-            // Use streaming path
-            await foreach (var chunk in streamService.TranslateStreamAsync(request, cancellationToken).ConfigureAwait(false))
+            // Use streaming path. Enumerated by hand so a proxy failure is reported as one here
+            // too: a caller of this API would otherwise see a generic network error and could not
+            // show the proxy hint. A catch cannot wrap a loop body that yields.
+            var enumerator = streamService.TranslateStreamAsync(request, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+            try
             {
-                yield return chunk;
+                while (true)
+                {
+                    bool moved;
+                    try
+                    {
+                        moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (
+                        !cancellationToken.IsCancellationRequested
+                        && ProxyFailureClassifier.FindProxyFailure(ex) is not null)
+                    {
+                        throw DescribeProxyFailure(ex, service.ServiceId)!;
+                    }
+
+                    if (!moved)
+                    {
+                        break;
+                    }
+
+                    yield return enumerator.Current;
+                }
+            }
+            finally
+            {
+                await enumerator.DisposeAsync().ConfigureAwait(false);
             }
         }
         else

@@ -24,6 +24,32 @@ internal static class ProxyFailureClassifier
         IsFirstHopFailure(exception, MaxDepth);
 
     /// <summary>
+    /// Whether this cancellation is <see cref="SocketsHttpHandler.ConnectTimeout"/> expiring
+    /// rather than someone giving up on the request.
+    /// </summary>
+    /// <remarks>
+    /// .NET models that timeout as an <see cref="OperationCanceledException"/> wrapping a
+    /// <see cref="TimeoutException"/> — deliberately the same shape <see cref="HttpClient.Timeout"/>
+    /// produces, so the shape alone cannot tell the two apart. What separates them is whose token
+    /// was cancelled: HttpClient's timeout and the caller's own cancellation both cancel the token
+    /// handed down the pipeline, while the connect timeout runs on a token private to the
+    /// connection pool. Callers must check that their token is still uncancelled before trusting
+    /// this.
+    /// </remarks>
+    internal static bool IsConnectTimeout(OperationCanceledException exception)
+    {
+        for (var current = exception.InnerException; current is not null; current = current.InnerException)
+        {
+            if (current is TimeoutException)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// The <see cref="ProxyUnreachableException"/> somewhere in this exception's chain, if the
     /// failure was already attributed to the configured proxy.
     /// </summary>
@@ -58,8 +84,9 @@ internal static class ProxyFailureClassifier
 
     private static bool IsFirstHopFailure(Exception? exception, int remainingDepth)
     {
-        // A connect timeout surfaces as a bare TimeoutException under the HTTP exception; on its
-        // own a TimeoutException says nothing about the transport, hence the flag.
+        // A TimeoutException says nothing about the transport on its own; under an HTTP failure it
+        // does (a custom ConnectCallback timing out arrives that way). SocketsHttpHandler's own
+        // ConnectTimeout is not this shape — see IsConnectTimeout.
         var insideHttpFailure = false;
 
         for (; exception is not null && remainingDepth > 0; remainingDepth--)

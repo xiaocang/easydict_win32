@@ -37,6 +37,17 @@ internal sealed class ProxyFailureDetectingHandler : DelegatingHandler
         {
             throw new ProxyUnreachableException(_proxyEndpoint, ex);
         }
+        catch (OperationCanceledException ex) when (
+            !cancellationToken.IsCancellationRequested
+            && ProxyFailureClassifier.IsConnectTimeout(ex)
+            && GoesThroughProxy(request.RequestUri))
+        {
+            // A proxy that silently drops connection attempts never produces an
+            // HttpRequestException: the connection pool's own ConnectTimeout fires first and
+            // reports a cancellation. Our token being uncancelled is what rules out the caller
+            // giving up and HttpClient.Timeout, which cancel it before any of this unwinds.
+            throw new ProxyUnreachableException(_proxyEndpoint, ex);
+        }
     }
 
     private bool GoesThroughProxy(Uri? requestUri)

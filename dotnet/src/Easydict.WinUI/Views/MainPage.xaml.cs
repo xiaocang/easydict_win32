@@ -6,11 +6,9 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
-using Easydict.TranslationService.TextActions;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
-using Easydict.WinUI.Services.TextActions;
 using Easydict.WinUI.Services.SavedItems;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
@@ -1265,8 +1263,6 @@ namespace Easydict.WinUI.Views
             // Tooltips
             ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
             ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
-            ToolTipService.SetToolTip(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TextActionsButton, loc.GetStringOrDefault("TextActionsButtonTooltip", "Text actions"));
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
@@ -3422,23 +3418,6 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Rebuild the Actions menu with the current text each time it opens.
         /// </summary>
-        private void OnTextActionsFlyoutOpening(object? sender, object e)
-        {
-            TextActionFlyoutBuilder.Populate(TextActionsFlyout, BuildTextActionContext);
-        }
-
-        private TextActionContext? BuildTextActionContext()
-        {
-            var text = InputTextBox.Text?.Trim();
-            if (string.IsNullOrEmpty(text))
-            {
-                return null;
-            }
-
-            var translation = _serviceResults.FirstOrDefault(r => r.HasSuccessfulResult)?.Result?.TranslatedText;
-            return new TextActionContext(text, translation, GetSourceLanguage(), GetTargetLanguage());
-        }
-
         private TranslationLanguage GetSourceLanguage()
         {
             return LanguageComboHelper.GetSelectedLanguage(SourceLangCombo);

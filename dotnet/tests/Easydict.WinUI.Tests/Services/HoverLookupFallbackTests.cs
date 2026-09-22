@@ -1,5 +1,6 @@
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
@@ -30,28 +31,53 @@ public class HoverLookupFallbackTests
         calls.Should().Equal("first");
     }
 
-    [Fact]
-    public async Task ProxyFailure_StopsTheChainInsteadOfDialingTheSameDeadProxy()
+    private static TranslationException ProxyFailure(string serviceId) => new(
+        "Cannot reach the HTTP proxy http://127.0.0.1:59999: connection refused")
     {
-        // Every remaining service goes through the same proxy, so continuing can only spend
-        // another attempt timeout each before failing identically.
-        var calls = new List<string>();
+        ErrorCode = TranslationErrorCode.ProxyError,
+        ServiceId = serviceId,
+    };
 
-        var act = async () => await HoverLookupFallback.TranslateAsync(
-            ["first", "second", "third"], (id, _) =>
+    [Fact]
+    public async Task ProxyFailure_DoesNotStopALocalDictionaryFromAnswering()
+    {
+        // Auto order puts locally imported mdx:: dictionaries after the remote services, and they
+        // do no networking at all — so a dead proxy must not cut the chain short.
+        var calls = new List<string>();
+        var expected = Result();
+
+        var result = await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web", "mdx::local"], (id, _) =>
             {
                 calls.Add(id);
-                throw new TranslationException(
-                    "Cannot reach the HTTP proxy http://127.0.0.1:59999: connection refused")
-                {
-                    ErrorCode = TranslationErrorCode.ProxyError,
-                    ServiceId = id,
-                };
+                return id.StartsWith(HoverLookupRules.MdxServiceIdPrefix, StringComparison.Ordinal)
+                    ? Task.FromResult(expected)
+                    : throw ProxyFailure(id);
             }, TimeSpan.FromSeconds(5), CancellationToken.None);
 
-        var thrown = await act.Should().ThrowAsync<TranslationException>();
-        thrown.Which.ErrorCode.Should().Be(TranslationErrorCode.ProxyError);
-        calls.Should().Equal("first");
+        result.Should().BeSameAs(expected);
+        calls.Should().Equal("youdao", "google_web", "mdx::local");
+    }
+
+    [Fact]
+    public async Task WhenEverythingFails_TheProxyIsReportedRatherThanTheLastService()
+    {
+        // The dead proxy is the one thing the user can act on, so it should not be buried under
+        // whichever service happened to fail last.
+        var act = async () => await HoverLookupFallback.TranslateAsync(
+            ["youdao", "google_web"], (id, _) =>
+            {
+                if (id == "youdao")
+                {
+                    throw ProxyFailure(id);
+                }
+
+                throw new HttpRequestException("offline");
+            }, TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
+        thrown.WithInnerException<TranslationException>()
+            .Which.ErrorCode.Should().Be(TranslationErrorCode.ProxyError);
     }
 
     [Fact]

@@ -15,6 +15,7 @@ internal static class HoverLookupFallback
         CancellationToken cancellationToken)
     {
         Exception? lastError = null;
+        TranslationException? proxyFailure = null;
         foreach (var serviceId in serviceIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -32,28 +33,33 @@ internal static class HoverLookupFallback
 
                 Debug.WriteLine($"[HoverLookup] Service '{serviceId}' returned no meaning; trying next service");
             }
-            catch (TranslationException ex) when (ex.ErrorCode == TranslationErrorCode.ProxyError)
-            {
-                // Every remaining service dials the same dead proxy, so the rest of the chain can
-                // only spend another attempt timeout each before failing identically. Surface the
-                // proxy instead, which is the one thing the user can act on.
-                cancellationToken.ThrowIfCancellationRequested();
-                Debug.WriteLine($"[HoverLookup] Service '{serviceId}' cannot reach the proxy; stopping the chain");
-                throw;
-            }
             catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // Keep going even on a proxy failure: the candidate order puts locally imported
+                // mdx:: dictionaries after the remote ones, and those do no networking at all, so
+                // a dead proxy does not mean the rest of the chain cannot answer.
+                if (ex is TranslationException { ErrorCode: TranslationErrorCode.ProxyError } proxyEx)
+                {
+                    proxyFailure ??= proxyEx;
+                }
+
                 lastError = ex;
                 Debug.WriteLine($"[HoverLookup] Service '{serviceId}' failed; trying next service: {ex.Message}");
             }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (lastError != null)
+
+        // Prefer a proxy failure as the reported cause: when nothing answered, the dead proxy is
+        // the one thing the user can act on, and it should not be buried under whichever service
+        // happened to fail last.
+        var cause = proxyFailure ?? lastError;
+        if (cause != null)
         {
             // A service timeout is a lookup error, not cancellation of the whole hover operation.
-            throw new InvalidOperationException("All hover lookup services failed or returned no meaning.", lastError);
+            throw new InvalidOperationException("All hover lookup services failed or returned no meaning.", cause);
         }
 
         return null;

@@ -239,8 +239,10 @@ protected override Task<TranslationResult> TranslateInternalAsync(
   an unreachable proxy fails once within seconds, naming the proxy, instead of three times over
   the full timeout per service. Credentials in the proxy URL never reach the message — neither
   through the endpoint (`SchemeAndServer`, not the authority) nor through a 407 `CONNECT` reply
-  that quotes the whole URL. `HoverLookupFallback` stops its sequential chain on a `ProxyError`
-  rather than dialing the same dead proxy once per service
+  that quotes the whole URL. `HoverLookupFallback` keeps walking its sequential chain through a
+  `ProxyError` — locally imported `mdx::` dictionaries are ordered after the remote services and
+  do no networking, so a dead proxy must not cut them off — but reports the proxy failure as the
+  cause when nothing answered, in preference to whichever service failed last
 - LLM streaming is handled through SSE (Server-Sent Events) parsing
 - Service configurations are encrypted using DPAPI (Data Protection API)
 - Language codes are mapped via overrideable `GetLanguageCode(Language)` per service

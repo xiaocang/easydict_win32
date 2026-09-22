@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
@@ -24,6 +26,13 @@ public sealed class ProxyUnreachableException : HttpRequestException
     /// </summary>
     public string ProxyEndpoint { get; }
 
+    /// <summary>
+    /// Matches the "user:password@" of a URL so it can be dropped. The user-info part of an
+    /// authority cannot contain a slash, whitespace or a second "@".
+    /// </summary>
+    private static readonly Regex UrlCredentials = new(
+        @"://[^/\s@]*@", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static string BuildMessage(string proxyEndpoint, Exception inner)
     {
         return $"Cannot reach the HTTP proxy {proxyEndpoint}: {DescribeCause(inner)}";
@@ -32,8 +41,9 @@ public sealed class ProxyUnreachableException : HttpRequestException
     /// <summary>
     /// The innermost message describes the actual hop failure ("connection refused", "host
     /// unreachable"); the outer HTTP layer only repeats a generic "error occurred". Transport
-    /// messages name the proxy endpoint, never the request URL, so nothing about the query text
-    /// can reach the UI through here.
+    /// messages name the proxy, never the request URL, so nothing about the query text can reach
+    /// the UI through here — but a rejected CONNECT quotes the whole proxy URL, which is where a
+    /// user name and password would be, so those are stripped.
     /// </summary>
     private static string DescribeCause(Exception inner)
     {
@@ -43,6 +53,12 @@ public sealed class ProxyUnreachableException : HttpRequestException
             cause = cause.InnerException;
         }
 
-        return cause.Message;
+        return RedactCredentials(cause.Message);
     }
+
+    /// <summary>
+    /// Removes any "user:password@" from URLs in text that is about to be shown to the user.
+    /// </summary>
+    internal static string RedactCredentials(string text) =>
+        UrlCredentials.Replace(text, "://");
 }

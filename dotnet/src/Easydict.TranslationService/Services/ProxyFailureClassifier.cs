@@ -18,6 +18,16 @@ internal static class ProxyFailureClassifier
     private const int MaxDepth = 16;
 
     /// <summary>
+    /// How a configured proxy is named in a message the user will read.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not <c>GetLeftPart(UriPartial.Authority)</c>, which keeps any
+    /// "user:password@" the user typed into the proxy URL. This string reaches a result card.
+    /// </remarks>
+    internal static string DescribeEndpoint(Uri proxyUri) =>
+        proxyUri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped);
+
+    /// <summary>
     /// Whether <paramref name="exception"/> describes a connection that never got established.
     /// </summary>
     internal static bool IsFirstHopFailure(Exception? exception) =>

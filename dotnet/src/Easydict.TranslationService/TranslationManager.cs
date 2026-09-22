@@ -87,8 +87,12 @@ public sealed class TranslationManager : IDisposable
 
                 // Name the broken hop while the request URI is still in hand, so a proxy that is
                 // down reads as a proxy problem instead of every service failing on its own.
+                // SchemeAndServer rather than the authority: the latter keeps any "user:password@"
+                // the user typed into the proxy URL, and this string is shown on a result card.
                 pipeline = new ProxyFailureDetectingHandler(
-                    handler, proxy, proxyUri.GetLeftPart(UriPartial.Authority));
+                    handler,
+                    proxy,
+                    ProxyFailureClassifier.DescribeEndpoint(proxyUri));
                 System.Diagnostics.Debug.WriteLine($"[TranslationManager] Proxy configured: {proxyUri.Host}:{proxyUri.Port}, BypassLocal={options.ProxyBypassLocal}");
             }
             else
@@ -627,7 +631,9 @@ public sealed class TranslationManager : IDisposable
     /// <summary>
     /// Stream translate text using the specified or default service.
     /// Falls back to non-streaming if service doesn't support streaming.
-    /// Note: Streaming bypasses cache for real-time output.
+    /// Note: the streaming branch bypasses the cache for real-time output; the non-streaming
+    /// fallback goes through <see cref="TranslateAsync(TranslationRequest, CancellationToken, string?)"/>
+    /// and is cached like any other non-streaming query.
     /// </summary>
     public async IAsyncEnumerable<string> TranslateStreamAsync(
         TranslationRequest request,
@@ -683,8 +689,11 @@ public sealed class TranslationManager : IDisposable
         }
         else
         {
-            // Fallback to non-streaming - yield entire result at once
-            var result = await service.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
+            // Fallback to non-streaming - yield entire result at once. Routed through the manager,
+            // not the service, so this path gets the same policy, retry and proxy relabelling as
+            // TranslateStreamUpdatesAsync's equivalent branch; calling the service directly left a
+            // dead proxy reported as a generic network error.
+            var result = await TranslateAsync(request, cancellationToken, serviceId).ConfigureAwait(false);
             yield return result.TranslatedText;
         }
     }

@@ -239,6 +239,67 @@ public class ProxyFailureHandlingTests
     }
 
     [Fact]
+    public void CredentialsInTheProxyUrl_NeverReachTheReportedEndpoint()
+    {
+        // The proxy URL is a user-entered setting; it may carry a user name and password, and the
+        // endpoint string ends up on a translation result card.
+        var proxyUri = new Uri("http://alice:s3cret@proxy.internal:8080");
+
+        var reported = ProxyFailureClassifier.DescribeEndpoint(proxyUri);
+
+        reported.Should().Be("http://proxy.internal:8080");
+        proxyUri.GetLeftPart(UriPartial.Authority).Should().Contain(
+            "s3cret",
+            "the authority keeps the credentials, which is why DescribeEndpoint exists");
+    }
+
+    [Fact]
+    public void CredentialsQuotedByTheTransport_AreStrippedFromTheMessage()
+    {
+        // A proxy answering 407 to CONNECT quotes the whole proxy URL back at us.
+        var rejectedTunnel = new HttpRequestException(
+            "The proxy tunnel request to proxy 'http://alice:s3cret@proxy.internal:8080/' "
+            + "failed with status code '407'.");
+
+        var failure = new ProxyUnreachableException("http://proxy.internal:8080", rejectedTunnel);
+
+        failure.Message.Should().NotContain("s3cret");
+        failure.Message.Should().NotContain("alice");
+        failure.Message.Should().Contain("proxy.internal:8080");
+        failure.Message.Should().Contain("407");
+    }
+
+    [Fact]
+    public async Task LegacyStreamApi_ReportsAProxyFailureFromANonStreamingService()
+    {
+        // The overload falls back to a plain query for a service that cannot stream; that branch
+        // has to report the proxy too.
+        using var manager = new TranslationManager();
+        var service = new FailingService("proxy-nonstreaming", () => new TranslationException(
+            "Network error: something went wrong",
+            new ProxyUnreachableException(
+                ProxyEndpoint, new SocketException((int)SocketError.ConnectionRefused)))
+        {
+            ErrorCode = TranslationErrorCode.NetworkError,
+            ServiceId = "proxy-nonstreaming"
+        });
+        manager.RegisterService(service);
+
+        var act = async () =>
+        {
+            await foreach (var _ in manager.TranslateStreamAsync(
+                NewRequest(), CancellationToken.None, "proxy-nonstreaming"))
+            {
+            }
+        };
+
+        var thrown = await act.Should().ThrowAsync<TranslationException>();
+        thrown.Which.ErrorCode.Should().Be(TranslationErrorCode.ProxyError);
+        thrown.Which.Message.Should().Contain(ProxyEndpoint);
+        service.Attempts.Should().Be(1, "the fallback inherits the no-retry rule as well");
+    }
+
+    [Fact]
     public void AlreadyDescribedProxyFailure_IsPassedThroughUnchanged()
     {
         // Re-labelling twice would bury the proxy's name under a second wrapper.

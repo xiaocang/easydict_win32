@@ -13,12 +13,16 @@ internal interface IOpenAIFormatStrategy
     /// <summary>The format this strategy implements.</summary>
     OpenAIApiFormat Format { get; }
 
-    /// <summary>Serialize chat messages into the format-specific request body shape.</summary>
+    /// <summary>
+    /// Serialize chat messages into the format-specific request body shape.
+    /// <paramref name="maxOutputTokens"/> is omitted from the body when null.
+    /// </summary>
     object BuildRequestBody(
         IReadOnlyList<ChatMessage> messages,
         string model,
         double temperature,
-        string? reasoningEffort);
+        string? reasoningEffort,
+        int? maxOutputTokens = null);
 
     /// <summary>Parse the SSE response stream into text chunks.</summary>
     IAsyncEnumerable<string> ParseStreamAsync(Stream stream, CancellationToken cancellationToken);

@@ -142,6 +142,106 @@ public class OllamaServiceTests
     }
 
     [Fact]
+    public async Task TranslateStreamAsync_BoundsOutputTokens()
+    {
+        _mockHandler.EnqueueStreamingResponse(new[] { """{"choices":[{"delta":{"content":"Hi"}}]}""" });
+
+        await foreach (var _ in _service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        })) { }
+
+        _mockHandler.LastRequestBody.Should().Contain($"\"max_tokens\":{OllamaService.MinOutputTokens}");
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_DefaultsToStandardPrompt()
+    {
+        (await SendAndReadSystemPromptAsync()).Should().Be(BaseOpenAIService.TranslationSystemPrompt);
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_ConcisePrompt_ReplacesSystemPrompt()
+    {
+        _service.ConfigurePrompt(OllamaPromptStyle.Concise);
+
+        (await SendAndReadSystemPromptAsync()).Should().Be(OllamaService.ConciseSystemPrompt);
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_CustomPrompt_FillsLanguagePlaceholders()
+    {
+        _service.ConfigurePrompt(OllamaPromptStyle.Custom, "  From {from} to {to}. Translation only.  ");
+
+        (await SendAndReadSystemPromptAsync(Language.English, Language.Japanese))
+            .Should().Be("From English to Japanese. Translation only.");
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_BlankCustomPrompt_FallsBackToStandard()
+    {
+        _service.ConfigurePrompt(OllamaPromptStyle.Custom, "   ");
+
+        (await SendAndReadSystemPromptAsync()).Should().Be(BaseOpenAIService.TranslationSystemPrompt);
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_PerRequestInstructionsStillAppendToChosenPrompt()
+    {
+        _service.ConfigurePrompt(OllamaPromptStyle.Concise);
+
+        var prompt = await SendAndReadSystemPromptAsync(customPrompt: "Keep it formal.");
+
+        prompt.Should().StartWith(OllamaService.ConciseSystemPrompt);
+        prompt.Should().EndWith("Additional instructions: Keep it formal.");
+    }
+
+    [Theory]
+    [InlineData("Concise", OllamaPromptStyle.Concise)]
+    [InlineData("custom", OllamaPromptStyle.Custom)]
+    [InlineData("Standard", OllamaPromptStyle.Standard)]
+    [InlineData("", OllamaPromptStyle.Standard)]
+    [InlineData(null, OllamaPromptStyle.Standard)]
+    [InlineData("bogus", OllamaPromptStyle.Standard)]
+    [InlineData("7", OllamaPromptStyle.Standard)]
+    public void OllamaPromptStyleParser_ParsesStoredValue(string? value, OllamaPromptStyle expected)
+    {
+        OllamaPromptStyleParser.Parse(value).Should().Be(expected);
+    }
+
+    private async Task<string> SendAndReadSystemPromptAsync(
+        Language from = Language.Auto,
+        Language to = Language.SimplifiedChinese,
+        string? customPrompt = null)
+    {
+        _mockHandler.EnqueueStreamingResponse(new[] { """{"choices":[{"delta":{"content":"Hi"}}]}""" });
+
+        await foreach (var _ in _service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = from,
+            ToLanguage = to,
+            CustomPrompt = customPrompt
+        })) { }
+
+        using var body = System.Text.Json.JsonDocument.Parse(_mockHandler.LastRequestBody!);
+        var system = body.RootElement.GetProperty("messages")[0];
+        system.GetProperty("role").GetString().Should().Be("system");
+        return system.GetProperty("content").GetString()!;
+    }
+
+    [Theory]
+    [InlineData(0, OllamaService.MinOutputTokens)]
+    [InlineData(10, OllamaService.MinOutputTokens)]
+    [InlineData(1000, 4000)]
+    [InlineData(1_000_000, OllamaService.MaxOutputTokensCeiling)]
+    public void GetOutputTokenLimit_ScalesWithInputWithinBounds(int inputLength, int expected)
+    {
+        OllamaService.GetOutputTokenLimit(inputLength).Should().Be(expected);
+    }
+
+    [Fact]
     public async Task TranslateStreamAsync_UsesCustomEndpoint()
     {
         // Arrange

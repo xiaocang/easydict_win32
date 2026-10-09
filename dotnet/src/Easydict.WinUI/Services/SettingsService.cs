@@ -149,6 +149,15 @@ public sealed class SettingsService
     public string OllamaEndpoint { get; set; } = "http://localhost:11434/v1/chat/completions";
     public string OllamaModel { get; set; } = "llama3.2";
 
+    /// <summary>
+    /// Ollama translation prompt, stored as a <c>TranslationService.Models.OllamaPromptStyle</c> name:
+    /// "Standard" (detailed), "Concise" (for small models) or "Custom".
+    /// </summary>
+    public string OllamaPromptStyle { get; set; } = "Standard";
+
+    /// <summary>System prompt used when <see cref="OllamaPromptStyle"/> is "Custom".</summary>
+    public string OllamaCustomPrompt { get; set; } = "";
+
     // Local AI provider settings. Stored as the enum name.
     // "WindowsAI" is retained as the persisted value for the Phi Silica backend.
     public string LocalAIProvider { get; set; } = "Auto";
@@ -731,6 +740,11 @@ public sealed class SettingsService
     public bool ProxyBypassLocal { get; set; } = true;
 
     /// <summary>
+    /// Bypass proxy for services hosted in mainland China (*.cn, Youdao, DeepSeek, cn.bing.com, ...).
+    /// </summary>
+    public bool ProxyBypassChina { get; set; }
+
+    /// <summary>
     /// Enable DPI-aware window positioning and scaling.
     /// Set to false to revert to legacy behavior if issues occur.
     /// </summary>
@@ -838,6 +852,8 @@ public sealed class SettingsService
         // Ollama settings
         OllamaEndpoint = GetValue(nameof(OllamaEndpoint), "http://localhost:11434/v1/chat/completions");
         OllamaModel = GetValue(nameof(OllamaModel), "llama3.2");
+        OllamaPromptStyle = GetValue(nameof(OllamaPromptStyle), "Standard");
+        OllamaCustomPrompt = GetValue(nameof(OllamaCustomPrompt), "");
 
         // Local AI settings
         LocalAIProvider = GetValue(nameof(LocalAIProvider), "Auto");
@@ -1066,6 +1082,7 @@ public sealed class SettingsService
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
         ProxyUri = GetValue(nameof(ProxyUri), "");
         ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
+        ProxyBypassChina = GetValue(nameof(ProxyBypassChina), false);
         GrammarIncludeExplanations = GetValue(nameof(GrammarIncludeExplanations), true);
         EnableLocalDictionarySuggestions = GetValue(nameof(EnableLocalDictionarySuggestions), false);
 
@@ -1142,6 +1159,8 @@ public sealed class SettingsService
         // Ollama settings
         _settings[nameof(OllamaEndpoint)] = OllamaEndpoint;
         _settings[nameof(OllamaModel)] = OllamaModel;
+        _settings[nameof(OllamaPromptStyle)] = OllamaPromptStyle;
+        _settings[nameof(OllamaCustomPrompt)] = OllamaCustomPrompt;
 
         // Local AI settings
         _settings[nameof(LocalAIProvider)] = LocalAIProvider;
@@ -1324,6 +1343,7 @@ public sealed class SettingsService
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;
         _settings[nameof(ProxyUri)] = ProxyUri;
         _settings[nameof(ProxyBypassLocal)] = ProxyBypassLocal;
+        _settings[nameof(ProxyBypassChina)] = ProxyBypassChina;
         _settings[nameof(GrammarIncludeExplanations)] = GrammarIncludeExplanations;
         _settings[nameof(EnableLocalDictionarySuggestions)] = EnableLocalDictionarySuggestions;
 

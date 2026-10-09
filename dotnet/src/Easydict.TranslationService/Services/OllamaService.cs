@@ -13,6 +13,23 @@ public sealed class OllamaService : BaseOpenAIService
     private const string DefaultEndpoint = "http://localhost:11434/v1/chat/completions";
     private const string DefaultModel = "llama3.2";
 
+    /// <summary>
+    /// Output-token floor. High enough that a thinking model (qwen3, deepseek-r1) can finish
+    /// its reasoning before the answer on a short query, which counts against the same limit.
+    /// </summary>
+    internal const int MinOutputTokens = 2048;
+
+    /// <summary>Output-token ceiling, reached only by very long inputs.</summary>
+    internal const int MaxOutputTokensCeiling = 16384;
+
+    /// <summary>
+    /// Short imperative prompt for <see cref="OllamaPromptStyle.Concise"/>. The user message
+    /// already names the source and target languages.
+    /// </summary>
+    internal const string ConciseSystemPrompt = """
+        You are a translation engine. Output only the translation of the given text: no explanations, notes, quotation marks or original text. Write entirely in the target language and never keep words from the source language. Translate idioms by meaning, not word for word.
+        """;
+
     private static readonly IReadOnlyList<Language> _ollamaLanguages = new[]
     {
         Language.SimplifiedChinese,
@@ -38,6 +55,8 @@ public sealed class OllamaService : BaseOpenAIService
     private string _endpoint = DefaultEndpoint;
     private string _model = DefaultModel;
     private List<string> _availableModels = new();
+    private OllamaPromptStyle _promptStyle = OllamaPromptStyle.Standard;
+    private string _customPrompt = "";
 
     public OllamaService(HttpClient httpClient) : base(httpClient) { }
 
@@ -50,6 +69,17 @@ public sealed class OllamaService : BaseOpenAIService
     public override string Endpoint => _endpoint;
     public override string ApiKey => ""; // No API key needed
     public override string Model => _model;
+
+    /// <summary>
+    /// Ollama generates until end-of-sequence by default and serves one request at a time,
+    /// so a small model that rambles holds every later query behind it. Bound the output
+    /// with room to spare: a translation is rarely longer than a few tokens per input char.
+    /// </summary>
+    protected override int? GetMaxOutputTokens(string inputText)
+        => GetOutputTokenLimit(inputText.Length);
+
+    internal static int GetOutputTokenLimit(int inputLength)
+        => (int)Math.Clamp(inputLength * 4L, MinOutputTokens, MaxOutputTokensCeiling);
 
     /// <summary>
     /// List of locally available Ollama models.
@@ -68,6 +98,37 @@ public sealed class OllamaService : BaseOpenAIService
             _endpoint = endpoint;
         if (!string.IsNullOrEmpty(model))
             _model = model;
+    }
+
+    /// <summary>
+    /// Choose the translation system prompt. A <see cref="OllamaPromptStyle.Custom"/> prompt
+    /// may use <c>{from}</c> and <c>{to}</c> for the language names; a blank custom prompt
+    /// falls back to the standard one.
+    /// </summary>
+    public void ConfigurePrompt(OllamaPromptStyle style, string? customPrompt = null)
+    {
+        _promptStyle = style;
+        _customPrompt = customPrompt?.Trim() ?? "";
+    }
+
+    public OllamaPromptStyle PromptStyle => _promptStyle;
+
+    protected override string GetTranslationSystemPrompt(TranslationRequest request)
+    {
+        switch (_promptStyle)
+        {
+            case OllamaPromptStyle.Concise:
+                return ConciseSystemPrompt;
+            case OllamaPromptStyle.Custom when _customPrompt.Length > 0:
+                var source = request.FromLanguage == Language.Auto
+                    ? "the detected language"
+                    : request.FromLanguage.GetDisplayName();
+                return _customPrompt
+                    .Replace("{from}", source, StringComparison.Ordinal)
+                    .Replace("{to}", request.ToLanguage.GetDisplayName(), StringComparison.Ordinal);
+            default:
+                return base.GetTranslationSystemPrompt(request);
+        }
     }
 
     /// <summary>

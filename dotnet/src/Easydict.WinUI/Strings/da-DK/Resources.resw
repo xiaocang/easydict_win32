@@ -440,6 +440,9 @@
   <data name="BypassProxyForLocalhost" xml:space="preserve">
     <value>Omgå proxy for localhost</value>
   </data>
+  <data name="BypassProxyForChinaMainland" xml:space="preserve">
+    <value>Omgå proxy for tjenester i Fastlandskina</value>
+  </data>
   <data name="ProxyDescription" xml:space="preserve">
     <value>Proxyændringer træder i kraft efter genstart af appen. Localhost-omgåelse sikrer, at Ollama fungerer uden proxy.</value>
   </data>
@@ -572,6 +575,24 @@
   </data>
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>Kunne ikke hente modeller fra Ollama. Sørg for, at Ollama kører og er tilgængelig.</value>
+  </data>
+  <data name="OllamaPromptStyle" xml:space="preserve">
+    <value>Prompt</value>
+  </data>
+  <data name="OllamaPromptStyle_Standard" xml:space="preserve">
+    <value>Standard (detaljeret)</value>
+  </data>
+  <data name="OllamaPromptStyle_Concise" xml:space="preserve">
+    <value>Kortfattet (små modeller)</value>
+  </data>
+  <data name="OllamaPromptStyle_Custom" xml:space="preserve">
+    <value>Brugerdefineret</value>
+  </data>
+  <data name="OllamaCustomPrompt" xml:space="preserve">
+    <value>Brugerdefineret systemprompt</value>
+  </data>
+  <data name="OllamaCustomPrompt_Placeholder" xml:space="preserve">
+    <value>Brug {from} og {to} for sprognavnene. Eksempel: Translate into {to}. Output only the translation.</value>
   </data>
   <data name="Copied" xml:space="preserve">
     <value>Kopieret!</value>

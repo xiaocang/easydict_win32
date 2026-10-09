@@ -260,6 +260,8 @@ internal sealed class WorkerSpawner
             CustomOpenAIModel = settings.CustomOpenAIModel,
             OllamaEndpoint = settings.OllamaEndpoint,
             OllamaModel = settings.OllamaModel,
+            OllamaPromptStyle = settings.OllamaPromptStyle,
+            OllamaCustomPrompt = settings.OllamaCustomPrompt,
             OpenRouterApiKey = settings.OpenRouterApiKey,
             OpenRouterModel = settings.OpenRouterModel,
             OrcaRouterApiKey = settings.OrcaRouterApiKey,
@@ -275,6 +277,7 @@ internal sealed class WorkerSpawner
             ProxyEnabled = settings.ProxyEnabled,
             ProxyUri = settings.ProxyUri,
             ProxyBypassLocal = settings.ProxyBypassLocal,
+            ProxyBypassChina = settings.ProxyBypassChina,
 
             // Long-doc specifics
             LongDocMaxConcurrency = settings.LongDocMaxConcurrency,

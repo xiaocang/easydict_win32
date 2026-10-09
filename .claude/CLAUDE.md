@@ -246,6 +246,17 @@ protected override Task<TranslationResult> TranslateInternalAsync(
   stable partition and never a filter, since nothing proves the remaining candidates share the
   proxy (a loopback Ollama or a local CLI service does not). When nothing answered it reports the
   proxy failure as the cause in preference to whichever service failed last
+- `ProxyBypassRules.Create` builds the `WebProxy`: "bypass local" plus the optional
+  `ProxyBypassChina` setting (Settings → proxy, next to bypass local), which sends the `.cn` TLD
+  and mainland-hosted services under other TLDs (`cn.bing.com`, Youdao, DeepSeek, Volcengine, …)
+  direct. Its `BypassList` entries are anchored regexes, so look-alike hosts stay proxied
+- Language detection (`LanguageDetectionService`) settles kana / Hangul / Han-only text locally
+  (Han only when the user's pair leaves one Chinese reading) and otherwise walks google → bing;
+  `DetectionProviderHealth` moves a provider that just failed to the end of that chain for
+  10 minutes, so a blackholed provider costs one timeout rather than one per query
+- Ollama: `OllamaPromptStyle` (`Standard` / `Concise` for ~7B models / `Custom` with `{from}` /
+  `{to}`) is chosen in its settings expander; output is capped at 4× input length (2048–16384
+  tokens) via `BaseOpenAIService.GetMaxOutputTokens`, because Ollama serves one request at a time
 - LLM streaming is handled through SSE (Server-Sent Events) parsing
 - Service configurations are encrypted using DPAPI (Data Protection API)
 - Language codes are mapped via overrideable `GetLanguageCode(Language)` per service

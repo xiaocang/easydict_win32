@@ -380,6 +380,19 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void ProxyBypassChina_DefaultsToFalse()
+    {
+        _settings.ProxyBypassChina.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OllamaPrompt_DefaultsToStandard()
+    {
+        _settings.OllamaPromptStyle.Should().Be("Standard");
+        _settings.OllamaCustomPrompt.Should().BeEmpty();
+    }
+
+    [Fact]
     public void EnableDpiAwareness_DefaultsToTrue()
     {
         _settings.EnableDpiAwareness.Should().BeTrue();

@@ -440,6 +440,9 @@
   <data name="BypassProxyForLocalhost" xml:space="preserve">
     <value>B&#x1ECF; qua proxy cho localhost</value>
   </data>
+  <data name="BypassProxyForChinaMainland" xml:space="preserve">
+    <value>Bỏ qua proxy cho dịch vụ Trung Quốc đại lục</value>
+  </data>
   <data name="ProxyDescription" xml:space="preserve">
     <value>Thay &#x111;&#x1ED5;i proxy c&#xF3; hi&#x1EC7;u l&#x1EF1;c sau khi kh&#x1EDF;i &#x111;&#x1ED9;ng l&#x1EA1;i &#x1EE9;ng d&#x1EE5;ng. B&#x1ECF; qua localhost &#x111;&#x1EA3;m b&#x1EA3;o Ollama ho&#x1EA1;t &#x111;&#x1ED9;ng kh&#xF4;ng c&#x1EA7;n proxy.</value>
   </data>
@@ -572,6 +575,24 @@
   </data>
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>Kh&#xF4;ng th&#x1EC3; l&#x1EA5;y danh s&#xE1;ch model t&#x1EEB; Ollama. H&#xE3;y &#x111;&#x1EA3;m b&#x1EA3;o Ollama &#x111;ang ch&#x1EA1;y v&#xE0; c&#xF3; th&#x1EC3; truy c&#x1EAD;p.</value>
+  </data>
+  <data name="OllamaPromptStyle" xml:space="preserve">
+    <value>Lời nhắc</value>
+  </data>
+  <data name="OllamaPromptStyle_Standard" xml:space="preserve">
+    <value>Tiêu chuẩn (chi tiết)</value>
+  </data>
+  <data name="OllamaPromptStyle_Concise" xml:space="preserve">
+    <value>Ngắn gọn (mô hình nhỏ)</value>
+  </data>
+  <data name="OllamaPromptStyle_Custom" xml:space="preserve">
+    <value>Tùy chỉnh</value>
+  </data>
+  <data name="OllamaCustomPrompt" xml:space="preserve">
+    <value>Lời nhắc hệ thống tùy chỉnh</value>
+  </data>
+  <data name="OllamaCustomPrompt_Placeholder" xml:space="preserve">
+    <value>Dùng {from} và {to} cho tên ngôn ngữ. Ví dụ: Translate into {to}. Output only the translation.</value>
   </data>
   <data name="Copied" xml:space="preserve">
     <value>&#x110;&#xE3; sao ch&#xE9;p!</value>

@@ -20,7 +20,8 @@ internal sealed class ChatCompletionsFormatStrategy : IOpenAIFormatStrategy
         IReadOnlyList<ChatMessage> messages,
         string model,
         double temperature,
-        string? reasoningEffort)
+        string? reasoningEffort,
+        int? maxOutputTokens = null)
     {
         var body = new Dictionary<string, object?>
         {
@@ -29,6 +30,11 @@ internal sealed class ChatCompletionsFormatStrategy : IOpenAIFormatStrategy
             ["temperature"] = temperature,
             ["stream"] = true,
         };
+
+        if (maxOutputTokens is { } limit)
+        {
+            body["max_tokens"] = limit;
+        }
 
         if (!string.IsNullOrWhiteSpace(reasoningEffort))
         {

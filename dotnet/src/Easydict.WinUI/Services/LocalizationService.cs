@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Windows.ApplicationModel.Resources;
 using Windows.Globalization;
 
@@ -18,6 +19,12 @@ public sealed class LocalizationService
     private ResourceContext _resourceContext;
     private ResourceMap _resourceMap;
     private string _currentLanguage;
+
+    // Resolved strings for the current language. Pages such as Settings localize
+    // hundreds of controls per load and each lookup is a WinRT ResourceMap call
+    // (a missing key even throws), so results are memoized until the language
+    // changes. Replaced, never cleared, so a concurrent reader keeps a consistent map.
+    private ConcurrentDictionary<string, string> _stringCache = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Supported UI languages.
@@ -82,6 +89,24 @@ public sealed class LocalizationService
     /// <param name="key">The resource key.</param>
     /// <returns>The localized string, or the key if not found.</returns>
     public string GetString(string key)
+    {
+        if (key is null)
+        {
+            return ResolveString(key!);
+        }
+
+        var cache = _stringCache;
+        if (cache.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        var value = ResolveString(key);
+        cache.TryAdd(key, value);
+        return value;
+    }
+
+    private string ResolveString(string key)
     {
         try
         {
@@ -149,6 +174,7 @@ public sealed class LocalizationService
 
         // Create new ResourceContext with the new language
         _resourceContext = CreateResourceContextForLanguage(languageCode);
+        _stringCache = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
 
         // Save to settings
         var settings = SettingsService.Instance;

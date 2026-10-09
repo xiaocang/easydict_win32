@@ -39,8 +39,12 @@ public sealed partial class SettingsPage
         try
         {
             var settings = ReadFoundryLocalSettingsFromInputs();
-            var status = await TranslationManagerService.Instance
-                .GetFoundryLocalStatusAsync(settings.Endpoint, settings.Model, cancellationToken);
+            // The status check starts the `foundry` CLI (PATH search + CreateProcess)
+            // before its first await; keep that off the UI thread while Settings opens.
+            var status = await Task.Run(
+                () => TranslationManagerService.Instance
+                    .GetFoundryLocalStatusAsync(settings.Endpoint, settings.Model, cancellationToken),
+                cancellationToken);
 
             if (_isUnloaded || cancellationToken.IsCancellationRequested)
             {

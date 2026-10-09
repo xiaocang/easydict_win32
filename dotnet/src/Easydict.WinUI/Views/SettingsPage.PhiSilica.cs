@@ -24,6 +24,29 @@ public sealed partial class SettingsPage
     private bool _suppressLocalAIProviderChange;
     private double? _phiSilicaLastProgressPercent;
 
+    // While Settings loads, the provider combo, panel emphasis, header badge and the
+    // Phi Silica / OpenVINO panels each ask for the same provider status — six or more
+    // Windows AI probes and OpenVINO file scans per open. Inside a snapshot scope the
+    // first answer is reused; outside it every call probes again, so status changes
+    // after preparation or a download are always picked up.
+    private bool _localAIStatusSnapshotActive;
+    private LocalModelStatus? _phiSilicaStatusSnapshot;
+    private LocalModelStatus? _openVinoStatusSnapshot;
+
+    private void BeginLocalAIStatusSnapshot()
+    {
+        _localAIStatusSnapshotActive = true;
+        _phiSilicaStatusSnapshot = null;
+        _openVinoStatusSnapshot = null;
+    }
+
+    private void EndLocalAIStatusSnapshot()
+    {
+        _localAIStatusSnapshotActive = false;
+        _phiSilicaStatusSnapshot = null;
+        _openVinoStatusSnapshot = null;
+    }
+
     private void InitializePhiSilicaPanel()
     {
         PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged -= OnPhiSilicaPreparationProgressChanged;
@@ -147,7 +170,7 @@ public sealed partial class SettingsPage
             return LocalAIProviderMode.FoundryLocal;
         }
 
-        if (GetOpenVinoService()?.GetStatus().State == LocalModelState.Ready)
+        if (GetOpenVinoLocalModelStatus()?.State == LocalModelState.Ready)
         {
             return LocalAIProviderMode.OpenVINO;
         }
@@ -204,10 +227,10 @@ public sealed partial class SettingsPage
         {
             LocalAIProviderMode.WindowsAI => GetPhiSilicaLocalModelStatus().State == LocalModelState.Ready,
             LocalAIProviderMode.FoundryLocal => IsFoundryLocalConfigured(),
-            LocalAIProviderMode.OpenVINO => GetOpenVinoService()?.GetStatus().State == LocalModelState.Ready,
+            LocalAIProviderMode.OpenVINO => GetOpenVinoLocalModelStatus()?.State == LocalModelState.Ready,
             _ => GetPhiSilicaLocalModelStatus().State == LocalModelState.Ready
                 || IsFoundryLocalConfigured()
-                || GetOpenVinoService()?.GetStatus().State == LocalModelState.Ready,
+                || GetOpenVinoLocalModelStatus()?.State == LocalModelState.Ready,
         };
 
         WindowsLocalAIStatusBadge.Text = isReady ? "✓" : "⚠";
@@ -281,9 +304,31 @@ public sealed partial class SettingsPage
             : Visibility.Collapsed;
     }
 
-    private static LocalModelStatus GetPhiSilicaLocalModelStatus()
+    private LocalModelStatus GetPhiSilicaLocalModelStatus()
     {
+        if (_localAIStatusSnapshotActive)
+        {
+            return _phiSilicaStatusSnapshot ??=
+                PhiSilicaBackendHealthMonitor.Shared.GetStatus(PhiSilicaAvailability.Client);
+        }
+
         return PhiSilicaBackendHealthMonitor.Shared.GetStatus(PhiSilicaAvailability.Client);
+    }
+
+    private LocalModelStatus? GetOpenVinoLocalModelStatus()
+    {
+        var svc = GetOpenVinoService();
+        if (svc is null)
+        {
+            return null;
+        }
+
+        if (_localAIStatusSnapshotActive)
+        {
+            return _openVinoStatusSnapshot ??= svc.GetStatus();
+        }
+
+        return svc.GetStatus();
     }
 
     private async void OnPreparePhiSilicaModel(object sender, RoutedEventArgs e)

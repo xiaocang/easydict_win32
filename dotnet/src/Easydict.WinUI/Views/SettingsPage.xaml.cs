@@ -3231,16 +3231,29 @@ public sealed partial class SettingsPage : Page
             // Restore test status indicators
             RestoreTestStatusIndicators();
 
-            InitializeLocalAIProviderCombo();
+            BeginLocalAIStatusSnapshot();
+            try
+            {
+                // Also initializes the OpenVINO panel (status + StatusChanged
+                // subscription) when it is visible for the selected provider.
+                InitializeLocalAIProviderCombo();
 
-            // Probe Windows AI (Phi Silica) availability and attach to any
-            // shared preparation task started from another surface.
-            InitializePhiSilicaPanel();
-            InitializeFoundryLocalPanel();
+                // Probe Windows AI (Phi Silica) availability and attach to any
+                // shared preparation task started from another surface.
+                InitializePhiSilicaPanel();
+                InitializeFoundryLocalPanel();
 
-            // Same for the OpenVINO local NLLB provider: read cache status and
-            // subscribe to status-change events for download progress.
-            InitializeOpenVinoPanel();
+                if (!_openVinoSubscribed)
+                {
+                    // Same for the OpenVINO local NLLB provider: read cache status and
+                    // subscribe to status-change events for download progress.
+                    InitializeOpenVinoPanel();
+                }
+            }
+            finally
+            {
+                EndLocalAIStatusSnapshot();
+            }
         }
 
         if (ShouldLoadSettingsTab(SettingsTabId.Plugins, deferLazyTabData))
@@ -4501,10 +4514,15 @@ public sealed partial class SettingsPage : Page
             }
         }
 
+        string? installedPpOcrV6ModelId = null;
         if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
         {
             var modelId = GetSelectedPpOcrV6ModelId();
-            if (await Task.Run(() => _ppOcrV6ModelStore.GetStateBySize(modelId)) != PpOcrV6ModelState.Installed)
+            if (await Task.Run(() => _ppOcrV6ModelStore.GetStateBySize(modelId)) == PpOcrV6ModelState.Installed)
+            {
+                installedPpOcrV6ModelId = modelId;
+            }
+            else
             {
                 var errorDialog = new ContentDialog
                 {
@@ -4638,7 +4656,7 @@ public sealed partial class SettingsPage : Page
         }
         _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
         _settings.OcrEnableThinking = ocrOptions.EnableThinking;
-        SavePpOcrV6Settings();
+        SavePpOcrV6Settings(installedPpOcrV6ModelId);
 
         // Save OpenRouter settings
         _settings.OpenRouterModel = GetEditableComboValue(OpenRouterModelCombo, "openrouter/free");
@@ -6584,7 +6602,10 @@ public sealed partial class SettingsPage : Page
 #endif
         try
         {
-            var count = await GetCacheEntryCountAsync();
+            // Microsoft.Data.Sqlite's async API completes synchronously, so opening the
+            // database (native init, schema check) and COUNT(*) would otherwise run on
+            // the UI thread right after Settings appears.
+            var count = await Task.Run(() => GetCacheEntryCountAsync(), cancellationToken);
             if (cancellationToken.IsCancellationRequested)
             {
 #if DEBUG

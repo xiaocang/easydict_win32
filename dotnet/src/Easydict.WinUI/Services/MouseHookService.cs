@@ -262,9 +262,16 @@ public sealed partial class MouseHookService : IDisposable
         // Cache the system double-click time to avoid P/Invoke on every click.
         _cachedDoubleClickTime = GetDoubleClickTime();
 
-        using var curProcess = Process.GetCurrentProcess();
-        using var curModule = curProcess.MainModule!;
-        var moduleHandle = GetModuleHandle(curModule.ModuleName);
+        // Settings re-applies the hook state on every save; nothing to do when both
+        // hooks are already in place.
+        if (_mouseHookId != IntPtr.Zero && _keyboardHookId != IntPtr.Zero)
+        {
+            return true;
+        }
+
+        // The executable's own module handle. Process.MainModule would enumerate every
+        // module loaded in the process (hundreds for a WinUI app) just to read its name.
+        var moduleHandle = GetModuleHandle(null);
 
         if (_mouseHookId == IntPtr.Zero)
         {

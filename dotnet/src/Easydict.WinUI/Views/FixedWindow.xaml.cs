@@ -2336,7 +2336,54 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void RefreshServiceResults()
     {
+        // Settings calls this on every save. Rebuilding tears down every result control
+        // (and any translation on screen), so only do it when a row would change.
+        if (ServiceResultsMatchSettings())
+        {
+            return;
+        }
+
         InitializeServiceResults();
+    }
+
+    /// <summary>
+    /// True when the rows on screen are exactly what <see cref="InitializeServiceResults"/>
+    /// would build from the current settings.
+    /// </summary>
+    private bool ServiceResultsMatchSettings()
+    {
+        var enabledServices = _settings.FixedWindowEnabledServices;
+        if (_serviceResults.Count != enabledServices.Count)
+        {
+            return false;
+        }
+
+        var enabledQuerySettings = _settings.FixedWindowServiceEnabledQuery;
+        var manager = TranslationManagerService.Instance.Manager;
+        var grammarSourceLanguage = _lastQuickQueryResolution?.EffectiveSourceLanguage
+            ?? TranslationLanguage.Auto;
+
+        for (var i = 0; i < enabledServices.Count; i++)
+        {
+            var serviceId = enabledServices[i];
+            var existing = _serviceResults[i];
+            manager.Services.TryGetValue(serviceId, out var service);
+            var origin = ServiceOriginHelper.Resolve(service, serviceId);
+            var isGrammarCapable = service is not null
+                && GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage);
+
+            if (!string.Equals(existing.ServiceId, serviceId, StringComparison.Ordinal)
+                || !string.Equals(existing.ServiceDisplayName, service?.DisplayName ?? serviceId, StringComparison.Ordinal)
+                || existing.Origin != origin
+                || existing.EnabledQuery != ServiceQuerySelection.IsEnabled(serviceId, origin, enabledQuerySettings)
+                || existing.IsGrammarCapable != isGrammarCapable
+                || existing.CurrentMode != _currentMode)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

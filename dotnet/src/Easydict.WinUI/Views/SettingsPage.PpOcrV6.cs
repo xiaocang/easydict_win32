@@ -338,7 +338,11 @@ public sealed partial class SettingsPage
             : Math.Clamp((int)Math.Round(value), PpOcrV6ModelCatalog.MinThreadCount, PpOcrV6ModelCatalog.MaxThreadCount);
     }
 
-    private void SavePpOcrV6Settings()
+    /// <param name="installedModelId">
+    /// The PP-OCRv6 model that save validation already found installed (checked off the
+    /// UI thread), or null when PP-OCRv6 is not the selected engine.
+    /// </param>
+    private void SavePpOcrV6Settings(string? installedModelId)
     {
         if (PpOcrV6ModelCombo.Items.Count == 0)
         {
@@ -348,7 +352,7 @@ public sealed partial class SettingsPage
         if (GetSelectedOcrEngine() == OcrEngineType.PpOcrV6)
         {
             var modelId = GetSelectedPpOcrV6ModelId();
-            if (_ppOcrV6ModelStore.GetStateBySize(modelId) == PpOcrV6ModelState.Installed)
+            if (string.Equals(modelId, installedModelId, StringComparison.Ordinal))
             {
                 _settings.PpOcrV6ModelId = modelId;
             }

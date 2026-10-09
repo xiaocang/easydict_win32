@@ -79,6 +79,10 @@ public sealed class HotkeyService : IDisposable
     [DllImport("comctl32.dll")]
     private static extern nint DefSubclassProc(nint hWnd, uint uMsg, nint wParam, nint lParam);
 
+    // Hotkey settings the current registrations were made from; null when nothing is
+    // registered yet or the last pass had a failure (so the next reload retries).
+    private string? _registeredHotkeySignature;
+
     public HotkeyService(Window window)
     {
         CrashDiagnostics.Log("[Hotkey] Constructor entered");
@@ -115,6 +119,9 @@ public sealed class HotkeyService : IDisposable
         CrashDiagnostics.Log($"[Hotkey] SetWindowSubclass: {subclassResult}");
 
         var failures = RegisterAllHotkeys();
+        _registeredHotkeySignature = failures.Count == 0
+            ? BuildHotkeySignature(SettingsService.Instance)
+            : null;
 
         _isInitialized = true;
         CrashDiagnostics.Log($"[Hotkey] Hotkey service initialized. {failures.Count} failure(s).");
@@ -137,6 +144,16 @@ public sealed class HotkeyService : IDisposable
             return Array.Empty<HotkeyRegistrationFailure>();
         }
 
+        // Settings calls this on every save. When the hotkey settings are the same ones
+        // that last registered cleanly, re-registering would only churn RegisterHotKey
+        // and the diagnostics log on the UI thread. A previous pass with failures is
+        // always retried, since the conflicting app may have released its hotkey.
+        var signature = BuildHotkeySignature(SettingsService.Instance);
+        if (signature == _registeredHotkeySignature)
+        {
+            return Array.Empty<HotkeyRegistrationFailure>();
+        }
+
         CrashDiagnostics.Log("[Hotkey] Reloading hotkeys...");
 
         // Unregister all current hotkeys
@@ -151,9 +168,28 @@ public sealed class HotkeyService : IDisposable
 
         // Re-register with current settings
         var failures = RegisterAllHotkeys();
+        _registeredHotkeySignature = failures.Count == 0 ? signature : null;
 
         CrashDiagnostics.Log($"[Hotkey] Hotkey reload complete. {failures.Count} failure(s).");
         return failures;
+    }
+
+    /// <summary>
+    /// Identifies the hotkey configuration that <see cref="RegisterAllHotkeys"/> reads,
+    /// so a reload can tell whether anything it registers would change.
+    /// </summary>
+    internal static string BuildHotkeySignature(SettingsService settings)
+    {
+        static string Slot(bool enabled, string? hotkey) => enabled ? hotkey ?? string.Empty : "\0";
+
+        return string.Join(
+            "\n",
+            Slot(settings.EnableShowWindowHotkey, settings.ShowWindowHotkey),
+            Slot(settings.EnableTranslateSelectionHotkey, settings.TranslateSelectionHotkey),
+            Slot(settings.EnableShowMiniWindowHotkey, settings.ShowMiniWindowHotkey),
+            Slot(settings.EnableShowFixedWindowHotkey, settings.ShowFixedWindowHotkey),
+            Slot(settings.EnableOcrTranslateHotkey, settings.OcrTranslateHotkey),
+            Slot(settings.EnableSilentOcrHotkey, settings.SilentOcrHotkey));
     }
 
     /// <summary>

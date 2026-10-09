@@ -41,7 +41,7 @@ public sealed partial class SettingsPage
             _openVinoSubscribed = true;
         }
 
-        UpdateOpenVinoStatusUi(svc.GetStatus());
+        UpdateOpenVinoStatusUi(GetOpenVinoLocalModelStatus() ?? svc.GetStatus());
     }
 
     private void OnOpenVinoStatusChanged(object? sender, LocalModelStatus status)

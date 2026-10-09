@@ -312,6 +312,9 @@ namespace Easydict.WinUI
                 _trayIconService.OnTranslateClipboard += OnTrayTranslateClipboard;
                 _trayIconService.OnOcrTranslate += OnTrayOcrTranslate;
                 _trayIconService.OnOpenSettings += OnTrayOpenSettings;
+                // Same path as the show-window hotkey: restores page content released by
+                // the memory gate and raises an already-visible background window.
+                _trayIconService.OnShowWindowRequested += ShowAndActivateWindow;
                 _trayIconService.OnBrowserSupportAction += OnBrowserSupportAction;
                 _trayIconService.OnHoverWordLookupToggled += OnTrayHoverWordLookupToggled;
                 _trayIconService.Initialize();

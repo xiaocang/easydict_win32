@@ -2131,7 +2131,10 @@ public sealed class SettingsService
             return;
         }
 
-        _settings[key] = ProtectSensitiveSetting(value);
+        // Keeps the stored ciphertext when the value is unchanged. Protect() salts every
+        // call, so re-protecting would make settings.json differ on every Settings save
+        // and defeat Save()'s unchanged-content skip.
+        SaveSensitiveSetting(key, value, preserveUnmigratedSensitiveSettings: false);
         _sensitiveSettingsPendingMigration.Remove(key);
     }
 

@@ -41,6 +41,9 @@ public static class BrowserSupportService
     // Firefox extension ID — must match gecko.id in manifest.v2.json
     private const string FirefoxExtensionId = "easydict-ocr@easydict.app";
 
+    // Firefox Add-ons (AMO) listing slug
+    private const string FirefoxAddonSlug = "easydict-ocr-translate";
+
     private static readonly string ChromeRegistryPath =
         $@"Software\Google\Chrome\NativeMessagingHosts\{NativeHostName}";
 
@@ -427,13 +430,10 @@ public static class BrowserSupportService
 
     /// <summary>
     /// Open Firefox Add-ons extension page in default browser.
-    /// TODO: Replace with actual Firefox Add-ons URL after publishing.
     /// </summary>
     public static void OpenFirefoxStorePage()
     {
-        // Placeholder — update after publishing to Firefox Add-ons
-        // Process.Start(new ProcessStartInfo("https://addons.mozilla.org/en-US/firefox/addon/ADDON_SLUG/") { UseShellExecute = true });
-        Debug.WriteLine("[BrowserSupport] Firefox Add-ons page not yet available (extension not published)");
+        Process.Start(new ProcessStartInfo($"https://addons.mozilla.org/firefox/addon/{FirefoxAddonSlug}/") { UseShellExecute = true });
     }
 
     // ───────────────────── Registrar Process ─────────────────────

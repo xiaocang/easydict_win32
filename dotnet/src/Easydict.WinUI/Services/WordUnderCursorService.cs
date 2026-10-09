@@ -349,6 +349,11 @@ public sealed class WordUnderCursorService
             }
 
             var normalized = NormalizeWord(word.Text);
+            if (normalized is not null)
+            {
+                normalized = FixIlConfusion(normalized);
+            }
+
             if (normalized is null || !LooksLikeWord(normalized))
             {
                 return null;
@@ -399,6 +404,84 @@ public sealed class WordUnderCursorService
         }
 
         return raw.Substring(start, end - start + 1);
+    }
+
+    /// <summary>
+    /// Undo the OCR confusion between capital "I" and lowercase "l", which are near-identical in
+    /// sans-serif fonts ("HeIlo" → "Hello", "lt" → "It"). Only plain ASCII Latin tokens (letters and
+    /// apostrophes) are touched, and only where English spelling makes the answer unambiguous;
+    /// anything else is returned unchanged. Meant for OCR output only — UIA text is exact.
+    /// </summary>
+    internal static string FixIlConfusion(string word)
+    {
+        if (string.IsNullOrEmpty(word))
+        {
+            return word;
+        }
+
+        var hasLowercase = false;
+        var hasIl = false;
+        foreach (var c in word)
+        {
+            if (c is 'I' or 'l')
+            {
+                hasIl = true;
+            }
+
+            if (c is >= 'a' and <= 'z')
+            {
+                // "l" may be a misread capital I, so it does not prove the word is mixed-case.
+                hasLowercase |= c != 'l';
+            }
+            else if (!(c is >= 'A' and <= 'Z' || c is '\'' or '’'))
+            {
+                return word;
+            }
+        }
+
+        if (!hasIl)
+        {
+            return word;
+        }
+
+        var chars = word.ToCharArray();
+
+        // "l", "l'm", "l'll", "l've", "l'd" → the pronoun "I".
+        if (chars[0] == 'l' && (chars.Length == 1 || chars[1] is '\'' or '’'))
+        {
+            chars[0] = 'I';
+        }
+
+        if (!hasLowercase)
+        {
+            // All caps (length ≥ 2, or a lone I/l handled above): a lowercase-looking l is an I.
+            for (var i = 0; i < chars.Length; i++)
+            {
+                if (chars[i] == 'l')
+                {
+                    chars[i] = 'I';
+                }
+            }
+
+            return new string(chars);
+        }
+
+        // No English word starts with "l" + these consonants, so a leading "l" there is an "I" ("lt", "lsland").
+        if (chars[0] == 'l' && chars.Length > 1 && "tfnsdmcgkpqvwxzjhr".Contains(char.ToLowerInvariant(chars[1])))
+        {
+            chars[0] = 'I';
+        }
+
+        // A capital I right after a lowercase letter is an l ("HeIlo"), except in "McIntosh"-style names.
+        for (var i = 1; i < chars.Length; i++)
+        {
+            if (chars[i] == 'I' && chars[i - 1] is >= 'a' and <= 'z' && !(i == 2 && chars[0] == 'M' && chars[1] == 'c'))
+            {
+                chars[i] = 'l';
+            }
+        }
+
+        return new string(chars);
     }
 
     /// <summary>

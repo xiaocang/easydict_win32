@@ -129,7 +129,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **40+ 语种支持** - 在设置中自定义可用语种，从 40 多种语言中选择显示在源语言/目标语言选择器中的语种，涵盖东亚、欧洲、中东、南亚和东南亚语言
 
-- **HTTP 代理支持** - 配置代理服务器
+- **HTTP 代理支持** - 配置代理服务器，可选本地地址及中国大陆服务绕过代理
 
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
@@ -151,7 +151,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
   - 彩云小译（支持繁体中文）
   - 小牛翻译（450+ 语种，支持繁体中文）
   - Linguee 词典（当前不可用；上游示例 API 已离线，默认禁用）
-  - Ollama（本地 LLM，默认：llama3.2）
+  - Ollama（本地 LLM，默认：llama3.2；可选标准、简洁或自定义翻译提示词）
   - Windows Local AI（Copilot+ PC 上使用 Phi Silica，OpenVINO 回退）
   - OpenRouter（统一网关，可访问 400+ 模型，提供免费模型）
   - OrcaRouter（OpenAI 兼容网关，API 基础地址为 `https://api.orcarouter.ai/v1`，提供免费模型；支持一键「使用 OrcaRouter 登录」，通过 PKCE 在应用内直接获取 API 密钥） [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)

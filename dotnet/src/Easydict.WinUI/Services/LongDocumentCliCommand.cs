@@ -62,6 +62,7 @@ internal static class LongDocumentCliCommand
         new("EASYDICT_PROXY_ENABLED", nameof(SettingsService.ProxyEnabled)),
         new("EASYDICT_PROXY_URI", nameof(SettingsService.ProxyUri)),
         new("EASYDICT_PROXY_BYPASS_LOCAL", nameof(SettingsService.ProxyBypassLocal)),
+        new("EASYDICT_PROXY_BYPASS_CHINA", nameof(SettingsService.ProxyBypassChina)),
         new("EASYDICT_DOCUMENT_OUTPUT_MODE", nameof(SettingsService.DocumentOutputMode)),
         new("EASYDICT_LAYOUT_DETECTION_MODE", nameof(SettingsService.LayoutDetectionMode)),
         new("EASYDICT_LONGDOC_MAX_CONCURRENCY", nameof(SettingsService.LongDocMaxConcurrency)),

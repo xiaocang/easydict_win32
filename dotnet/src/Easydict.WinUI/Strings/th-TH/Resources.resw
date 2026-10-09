@@ -440,6 +440,9 @@
   <data name="BypassProxyForLocalhost" xml:space="preserve">
     <value>&#xE02;&#xE49;&#xE32;&#xE21; proxy &#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A; localhost</value>
   </data>
+  <data name="BypassProxyForChinaMainland" xml:space="preserve">
+    <value>ข้ามพร็อกซีสำหรับบริการในจีนแผ่นดินใหญ่</value>
+  </data>
   <data name="ProxyDescription" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19; proxy &#xE08;&#xE30;&#xE21;&#xE35;&#xE1C;&#xE25;&#xE2B;&#xE25;&#xE31;&#xE07;&#xE08;&#xE32;&#xE01;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;&#xE41;&#xE2D;&#xE1B; &#xE01;&#xE32;&#xE23;&#xE02;&#xE49;&#xE32;&#xE21; localhost &#xE0A;&#xE48;&#xE27;&#xE22;&#xE43;&#xE2B;&#xE49; Ollama &#xE17;&#xE33;&#xE07;&#xE32;&#xE19;&#xE44;&#xE14;&#xE49;&#xE42;&#xE14;&#xE22;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; proxy</value>
   </data>
@@ -572,6 +575,24 @@
   </data>
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>&#xE44;&#xE21;&#xE48;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE14;&#xE36;&#xE07;&#xE23;&#xE32;&#xE22;&#xE01;&#xE32;&#xE23; model &#xE08;&#xE32;&#xE01; Ollama &#xE15;&#xE23;&#xE27;&#xE08;&#xE2A;&#xE2D;&#xE1A;&#xE43;&#xE2B;&#xE49;&#xE41;&#xE19;&#xE48;&#xE43;&#xE08;&#xE27;&#xE48;&#xE32; Ollama &#xE01;&#xE33;&#xE25;&#xE31;&#xE07;&#xE17;&#xE33;&#xE07;&#xE32;&#xE19;&#xE41;&#xE25;&#xE30;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE40;&#xE02;&#xE49;&#xE32;&#xE16;&#xE36;&#xE07;&#xE44;&#xE14;&#xE49;</value>
+  </data>
+  <data name="OllamaPromptStyle" xml:space="preserve">
+    <value>พรอมต์</value>
+  </data>
+  <data name="OllamaPromptStyle_Standard" xml:space="preserve">
+    <value>มาตรฐาน (ละเอียด)</value>
+  </data>
+  <data name="OllamaPromptStyle_Concise" xml:space="preserve">
+    <value>กระชับ (โมเดลขนาดเล็ก)</value>
+  </data>
+  <data name="OllamaPromptStyle_Custom" xml:space="preserve">
+    <value>กำหนดเอง</value>
+  </data>
+  <data name="OllamaCustomPrompt" xml:space="preserve">
+    <value>พรอมต์ระบบแบบกำหนดเอง</value>
+  </data>
+  <data name="OllamaCustomPrompt_Placeholder" xml:space="preserve">
+    <value>ใช้ {from} และ {to} แทนชื่อภาษา ตัวอย่าง: Translate into {to}. Output only the translation.</value>
   </data>
   <data name="Copied" xml:space="preserve">
     <value>&#xE04;&#xE31;&#xE14;&#xE25;&#xE2D;&#xE01;&#xE41;&#xE25;&#xE49;&#xE27;!</value>

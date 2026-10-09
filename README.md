@@ -129,7 +129,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **40+ Languages** - Customizable language selection in Settings — choose which languages appear in source/target pickers from 40+ options spanning East Asian, European, Middle Eastern, South Asian, and Southeast Asian languages
 
-- **HTTP Proxy Support** - Configure proxy server
+- **HTTP Proxy Support** - Configure proxy server, optionally bypassing it for localhost and for services hosted in mainland China
 
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
@@ -151,7 +151,7 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Caiyun (彩云小译, Traditional Chinese supported)
   - NiuTrans (小牛翻译, 450+ languages, Traditional Chinese supported)
   - Linguee Dictionary (currently unavailable; upstream sample API is offline and disabled by default)
-  - Ollama (local LLM, default: llama3.2)
+  - Ollama (local LLM, default: llama3.2; standard, concise or custom translation prompt)
   - Windows Local AI (Phi Silica on Copilot+ PCs, OpenVINO fallback)
   - OpenRouter (unified gateway to 400+ models, free models available)
   - OrcaRouter (OpenAI-compatible gateway at `https://api.orcarouter.ai/v1`, free models available; one-click **Sign in with OrcaRouter** obtains an API key via PKCE without leaving the app) [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)

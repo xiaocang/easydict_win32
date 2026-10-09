@@ -245,7 +245,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             : request.FromLanguage.GetDisplayName();
         var targetLangName = request.ToLanguage.GetDisplayName();
 
-        var systemPrompt = TranslationSystemPrompt;
+        var systemPrompt = GetTranslationSystemPrompt(request);
         if (!string.IsNullOrWhiteSpace(request.CustomPrompt))
         {
             systemPrompt += $"\n\nAdditional instructions: {request.CustomPrompt}";
@@ -257,6 +257,12 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             new(ChatRole.User, $"Translate the following {sourceLangName} text into {targetLangName} text: \"\"\"{request.Text}\"\"\"")
         };
     }
+
+    /// <summary>
+    /// System prompt for a translation request, before any per-request custom instructions
+    /// are appended. Override to give a service its own prompt.
+    /// </summary>
+    protected virtual string GetTranslationSystemPrompt(TranslationRequest request) => TranslationSystemPrompt;
 
     /// <summary>
     /// Build chat messages for grammar correction request.

@@ -1449,6 +1449,12 @@ public sealed partial class SettingsPage : Page
         CustomOpenAIModelBox.Header = loc.GetString("Model");
         OllamaEndpointBox.Header = loc.GetString("EndpointOptional");
         OllamaModelCombo.Header = loc.GetString("Model");
+        OllamaPromptStyleCombo.Header = loc.GetString("OllamaPromptStyle");
+        OllamaPromptStyleStandardItem.Content = loc.GetString("OllamaPromptStyle_Standard");
+        OllamaPromptStyleConciseItem.Content = loc.GetString("OllamaPromptStyle_Concise");
+        OllamaPromptStyleCustomItem.Content = loc.GetString("OllamaPromptStyle_Custom");
+        OllamaCustomPromptBox.Header = loc.GetString("OllamaCustomPrompt");
+        OllamaCustomPromptBox.PlaceholderText = loc.GetString("OllamaCustomPrompt_Placeholder");
         OpenRouterKeyHeaderText.Text = loc.GetString("ApiKey");
         OpenRouterModelCombo.Header = loc.GetString("Model");
         OpenRouterDescriptionText.Text = loc.GetString("OpenRouterDescription");
@@ -1571,6 +1577,7 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.Header = loc.GetString("UseHttpProxy");
         ProxyUriBox.Header = loc.GetString("ProxyUrl");
         ProxyBypassLocalToggle.Header = loc.GetString("BypassProxyForLocalhost");
+        ProxyBypassChinaToggle.Header = loc.GetString("BypassProxyForChinaMainland");
 
         // Toggle switch On/Off content (override system locale defaults)
         var toggleOn = loc.GetString("ToggleOn");
@@ -1583,6 +1590,8 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.OffContent = toggleOff;
         ProxyBypassLocalToggle.OnContent = toggleOn;
         ProxyBypassLocalToggle.OffContent = toggleOff;
+        ProxyBypassChinaToggle.OnContent = toggleOn;
+        ProxyBypassChinaToggle.OffContent = toggleOff;
         TranslationCacheToggle.OnContent = toggleOn;
         TranslationCacheToggle.OffContent = toggleOff;
         MinimizeToTrayToggle.OnContent = toggleOn;
@@ -2352,6 +2361,7 @@ public sealed partial class SettingsPage : Page
         OpenAIModelCombo.SelectionChanged += OnSettingChanged;
         OpenAIApiFormatCombo.SelectionChanged += OnOpenAIApiFormatChanged;
         OllamaModelCombo.SelectionChanged += OnSettingChanged;
+        OllamaPromptStyleCombo.SelectionChanged += OnOllamaPromptStyleChanged;
         OpenRouterModelCombo.SelectionChanged += OnSettingChanged;
         OrcaRouterModelCombo.SelectionChanged += OnSettingChanged;
         DeepSeekModelCombo.SelectionChanged += OnSettingChanged;
@@ -2387,6 +2397,7 @@ public sealed partial class SettingsPage : Page
         EnableLocalDictionarySuggestionsToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
+        ProxyBypassChinaToggle.Toggled += OnSettingChanged;
         TtsSpeedSlider.ValueChanged += OnSettingChanged;
         ResultFontScaleSlider.ValueChanged += OnSettingChanged;
         MouseSelectionPopDelaySlider.ValueChanged += OnSettingChanged;
@@ -2398,6 +2409,7 @@ public sealed partial class SettingsPage : Page
         OpenAIKeyBox.PasswordChanged += OnSettingChanged;
         OpenAIEndpointBox.TextChanged += OnSettingChanged;
         OllamaEndpointBox.TextChanged += OnSettingChanged;
+        OllamaCustomPromptBox.TextChanged += OnSettingChanged;
         FoundryLocalEndpointBox.TextChanged += OnSettingChanged;
         FoundryLocalModelBox.TextChanged += OnSettingChanged;
         ProxyUriBox.TextChanged += OnSettingChanged;
@@ -2484,6 +2496,7 @@ public sealed partial class SettingsPage : Page
         OpenAIModelCombo.SelectionChanged -= OnSettingChanged;
         OpenAIApiFormatCombo.SelectionChanged -= OnOpenAIApiFormatChanged;
         OllamaModelCombo.SelectionChanged -= OnSettingChanged;
+        OllamaPromptStyleCombo.SelectionChanged -= OnOllamaPromptStyleChanged;
         OpenRouterModelCombo.SelectionChanged -= OnSettingChanged;
         OrcaRouterModelCombo.SelectionChanged -= OnSettingChanged;
         DeepSeekModelCombo.SelectionChanged -= OnSettingChanged;
@@ -2518,6 +2531,7 @@ public sealed partial class SettingsPage : Page
         ShowSwapButtonToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
+        ProxyBypassChinaToggle.Toggled -= OnSettingChanged;
         TtsSpeedSlider.ValueChanged -= OnSettingChanged;
         ResultFontScaleSlider.ValueChanged -= OnSettingChanged;
         MouseSelectionPopDelaySlider.ValueChanged -= OnSettingChanged;
@@ -2528,6 +2542,7 @@ public sealed partial class SettingsPage : Page
         OpenAIKeyBox.PasswordChanged -= OnSettingChanged;
         OpenAIEndpointBox.TextChanged -= OnSettingChanged;
         OllamaEndpointBox.TextChanged -= OnSettingChanged;
+        OllamaCustomPromptBox.TextChanged -= OnSettingChanged;
         FoundryLocalEndpointBox.TextChanged -= OnSettingChanged;
         FoundryLocalModelBox.TextChanged -= OnSettingChanged;
         ProxyUriBox.TextChanged -= OnSettingChanged;
@@ -2920,6 +2935,8 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(string.IsNullOrWhiteSpace(customModel) ? "gpt-3.5-turbo" : customModel, _settings.CustomOpenAIModel)
             || !SameSetting(string.IsNullOrWhiteSpace(ollamaEndpoint) ? "http://localhost:11434/v1/chat/completions" : ollamaEndpoint, _settings.OllamaEndpoint)
             || !SameSetting(OllamaModelCombo.Text?.Trim() ?? "llama3.2", _settings.OllamaModel)
+            || !SameSetting(GetTagComboValue(OllamaPromptStyleCombo, "Standard"), _settings.OllamaPromptStyle)
+            || !SameSetting(OllamaCustomPromptBox.Text?.Trim() ?? "", _settings.OllamaCustomPrompt)
             || !SameSetting(GetSelectedTag(LocalAIProviderCombo) ?? "Auto", _settings.LocalAIProvider)
             || !SameSetting(FoundryLocalEndpointBox.Text?.Trim() ?? "", _settings.FoundryLocalEndpoint)
             || !SameSetting(string.IsNullOrWhiteSpace(foundryLocalModel) ? FoundryLocalService.DefaultModel : foundryLocalModel, _settings.FoundryLocalModel)
@@ -3018,6 +3035,7 @@ public sealed partial class SettingsPage : Page
             || PpOcrV6SettingsDifferFromSettings()
             || ProxyEnabledToggle.IsOn != _settings.ProxyEnabled
             || ProxyBypassLocalToggle.IsOn != _settings.ProxyBypassLocal
+            || ProxyBypassChinaToggle.IsOn != _settings.ProxyBypassChina
             || !SameSetting(ProxyUriBox.Text?.Trim() ?? "", _settings.ProxyUri)
             || !SameSetting(GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto", _settings.LayoutDetectionMode)
             || !SameSetting(GetSelectedTag(VisionLayoutServiceCombo) ?? "gemini", _settings.VisionLayoutServiceId)
@@ -3183,6 +3201,10 @@ public sealed partial class SettingsPage : Page
             // Ollama settings
             OllamaEndpointBox.Text = _settings.OllamaEndpoint;
             OllamaModelCombo.Text = _settings.OllamaModel;
+            SelectComboByTag(OllamaPromptStyleCombo,
+                Easydict.TranslationService.Models.OllamaPromptStyleParser.Parse(_settings.OllamaPromptStyle).ToString());
+            OllamaCustomPromptBox.Text = _settings.OllamaCustomPrompt;
+            UpdateOllamaCustomPromptVisibility();
 
             // Foundry Local settings
             FoundryLocalEndpointBox.Text = _settings.FoundryLocalEndpoint;
@@ -3351,6 +3373,7 @@ public sealed partial class SettingsPage : Page
             ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
             ProxyUriBox.Text = _settings.ProxyUri;
             ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
+            ProxyBypassChinaToggle.IsOn = _settings.ProxyBypassChina;
 
             // Layout Detection settings
             SelectComboByTag(LayoutDetectionModeCombo, _settings.LayoutDetectionMode);
@@ -4442,6 +4465,7 @@ public sealed partial class SettingsPage : Page
         var originalProxyEnabled = _settings.ProxyEnabled;
         var originalProxyUri = _settings.ProxyUri;
         var originalProxyBypassLocal = _settings.ProxyBypassLocal;
+        var originalProxyBypassChina = _settings.ProxyBypassChina;
 
         // Capture whether any enabled hotkey was already Win+Space, so the
         // OS-override notice is shown only when the user newly selects it.
@@ -4620,6 +4644,8 @@ public sealed partial class SettingsPage : Page
             ? "http://localhost:11434/v1/chat/completions"
             : ollamaEndpoint;
         _settings.OllamaModel = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
+        _settings.OllamaPromptStyle = GetTagComboValue(OllamaPromptStyleCombo, "Standard");
+        _settings.OllamaCustomPrompt = OllamaCustomPromptBox.Text?.Trim() ?? "";
         _settings.LocalAIProvider = GetSelectedTag(LocalAIProviderCombo) ?? "Auto";
         _settings.FoundryLocalEndpoint = FoundryLocalEndpointBox.Text?.Trim() ?? "";
         var foundryLocalModel = FoundryLocalModelBox.Text?.Trim();
@@ -4702,6 +4728,7 @@ public sealed partial class SettingsPage : Page
         // Save HTTP Proxy settings (already validated above)
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;
         _settings.ProxyBypassLocal = ProxyBypassLocalToggle.IsOn;
+        _settings.ProxyBypassChina = ProxyBypassChinaToggle.IsOn;
         _settings.ProxyUri = proxyUri;
 
         // Save behavior settings
@@ -4799,7 +4826,8 @@ public sealed partial class SettingsPage : Page
         // Otherwise, just reconfigure services with new settings (API keys, models, endpoints)
         var proxyChanged = originalProxyEnabled != _settings.ProxyEnabled ||
                            originalProxyUri != _settings.ProxyUri ||
-                           originalProxyBypassLocal != _settings.ProxyBypassLocal;
+                           originalProxyBypassLocal != _settings.ProxyBypassLocal ||
+                           originalProxyBypassChina != _settings.ProxyBypassChina;
         if (proxyChanged)
         {
             TranslationManagerService.Instance.ReconfigureProxy();
@@ -5698,6 +5726,20 @@ public sealed partial class SettingsPage : Page
     /// the current selection. The hint only appears in Auto mode after a
     /// successful test has resolved a concrete format.
     /// </summary>
+    private void OnOllamaPromptStyleChanged(object sender, SelectionChangedEventArgs e)
+    {
+        OnSettingChanged(sender, e);
+        UpdateOllamaCustomPromptVisibility();
+    }
+
+    private void UpdateOllamaCustomPromptVisibility()
+    {
+        OllamaCustomPromptBox.Visibility =
+            GetTagComboValue(OllamaPromptStyleCombo, "Standard") == "Custom"
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
+
     private void OnOpenAIApiFormatChanged(object sender, SelectionChangedEventArgs e)
     {
         OnSettingChanged(sender, e);
@@ -5857,6 +5899,11 @@ public sealed partial class SettingsPage : Page
                 ollama.Configure(
                     string.IsNullOrWhiteSpace(endpoint) ? "http://localhost:11434/v1/chat/completions" : endpoint,
                     model);
+                // Test with the prompt as currently selected, so it can be tried before saving.
+                ollama.ConfigurePrompt(
+                    Easydict.TranslationService.Models.OllamaPromptStyleParser.Parse(
+                        GetTagComboValue(OllamaPromptStyleCombo, "Standard")),
+                    OllamaCustomPromptBox.Text);
             }
         }, TestOllamaButton, OllamaStatusText);
     }

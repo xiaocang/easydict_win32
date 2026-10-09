@@ -82,6 +82,10 @@ public sealed class TrayIconService : IDisposable
         // Handle left click to show window
         _taskbarIcon.LeftClickCommand = new RelayCommand(ShowWindow);
 
+        // A double click is delivered as WM_LBUTTONDBLCLK instead of a second left click,
+        // so without its own command it would do nothing (only single/triple clicks worked).
+        _taskbarIcon.DoubleClickCommand = new RelayCommand(ShowWindow);
+
         RefreshThemeIcon();
 
         // Force create the tray icon when created programmatically (not via XAML).

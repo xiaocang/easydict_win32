@@ -440,6 +440,9 @@
   <data name="BypassProxyForLocalhost" xml:space="preserve">
     <value>localhost के लिए proxy बायपास करें</value>
   </data>
+  <data name="BypassProxyForChinaMainland" xml:space="preserve">
+    <value>मुख्य भूमि चीन की सेवाओं के लिए प्रॉक्सी बायपास करें</value>
+  </data>
   <data name="ProxyDescription" xml:space="preserve">
     <value>Proxy परिवर्तन ऐप पुनः आरंभ के बाद लागू होते हैं। Localhost बायपास सुनिश्चित करता है कि Ollama बिना proxy के काम करे।</value>
   </data>
@@ -572,6 +575,24 @@
   </data>
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>Ollama से model प्राप्त करने में विफल। सुनिश्चित करें कि Ollama चल रहा है और पहुँच योग्य है।</value>
+  </data>
+  <data name="OllamaPromptStyle" xml:space="preserve">
+    <value>Prompt</value>
+  </data>
+  <data name="OllamaPromptStyle_Standard" xml:space="preserve">
+    <value>मानक (विस्तृत)</value>
+  </data>
+  <data name="OllamaPromptStyle_Concise" xml:space="preserve">
+    <value>संक्षिप्त (छोटे मॉडल)</value>
+  </data>
+  <data name="OllamaPromptStyle_Custom" xml:space="preserve">
+    <value>कस्टम</value>
+  </data>
+  <data name="OllamaCustomPrompt" xml:space="preserve">
+    <value>कस्टम सिस्टम prompt</value>
+  </data>
+  <data name="OllamaCustomPrompt_Placeholder" xml:space="preserve">
+    <value>भाषा नामों के लिए {from} और {to} का उपयोग करें। उदाहरण: Translate into {to}. Output only the translation.</value>
   </data>
   <data name="Copied" xml:space="preserve">
     <value>कॉपी हो गया!</value>

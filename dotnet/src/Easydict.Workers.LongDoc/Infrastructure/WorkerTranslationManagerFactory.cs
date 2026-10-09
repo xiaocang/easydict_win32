@@ -27,6 +27,7 @@ internal static class WorkerTranslationManagerFactory
             ProxyEnabled = snapshot.ProxyEnabled ?? false,
             ProxyUri = snapshot.ProxyUri,
             ProxyBypassLocal = snapshot.ProxyBypassLocal ?? false,
+            ProxyBypassChina = snapshot.ProxyBypassChina ?? false,
         };
 
         var manager = new TranslationManager(options);
@@ -104,6 +105,9 @@ internal static class WorkerTranslationManagerFactory
             if (svc is OllamaService ollama)
             {
                 ollama.Configure(snapshot.OllamaEndpoint, snapshot.OllamaModel);
+                ollama.ConfigurePrompt(
+                    Easydict.TranslationService.Models.OllamaPromptStyleParser.Parse(snapshot.OllamaPromptStyle),
+                    snapshot.OllamaCustomPrompt);
             }
         });
 

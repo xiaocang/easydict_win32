@@ -67,4 +67,16 @@ public sealed class LongDocWorkerTranslationManagerFactoryTests
         service.Model.Should().Be("orcarouter/auto");
         service.Endpoint.Should().Be("https://api.orcarouter.ai/v1/chat/completions");
     }
+
+    [Fact]
+    public void Build_ConfiguresOllamaPromptStyle()
+    {
+        using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot
+        {
+            OllamaPromptStyle = "Concise",
+        });
+
+        manager.Services["ollama"].Should().BeOfType<OllamaService>()
+            .Which.PromptStyle.Should().Be(Easydict.TranslationService.Models.OllamaPromptStyle.Concise);
+    }
 }

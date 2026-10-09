@@ -440,6 +440,9 @@
   <data name="BypassProxyForLocalhost" xml:space="preserve">
     <value>本地地址绕过代理</value>
   </data>
+  <data name="BypassProxyForChinaMainland" xml:space="preserve">
+    <value>中国大陆服务绕过代理</value>
+  </data>
   <data name="ProxyDescription" xml:space="preserve">
     <value>代理更改在应用重启后生效。本地绕过确保 Ollama 无需代理即可工作。</value>
   </data>
@@ -572,6 +575,24 @@
   </data>
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>无法从 Ollama 获取模型列表。请确保 Ollama 正在运行并可访问。</value>
+  </data>
+  <data name="OllamaPromptStyle" xml:space="preserve">
+    <value>提示词</value>
+  </data>
+  <data name="OllamaPromptStyle_Standard" xml:space="preserve">
+    <value>标准（详细）</value>
+  </data>
+  <data name="OllamaPromptStyle_Concise" xml:space="preserve">
+    <value>简洁（适合小模型）</value>
+  </data>
+  <data name="OllamaPromptStyle_Custom" xml:space="preserve">
+    <value>自定义</value>
+  </data>
+  <data name="OllamaCustomPrompt" xml:space="preserve">
+    <value>自定义系统提示词</value>
+  </data>
+  <data name="OllamaCustomPrompt_Placeholder" xml:space="preserve">
+    <value>可用 {from} 和 {to} 表示语言名称。例如：Translate into {to}. Output only the translation.</value>
   </data>
   <data name="Copied" xml:space="preserve">
     <value>已复制！</value>

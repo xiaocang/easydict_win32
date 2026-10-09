@@ -440,6 +440,9 @@
   <data name="BypassProxyForLocalhost" xml:space="preserve">
     <value>تجاوز الوكيل للمضيف المحلي</value>
   </data>
+  <data name="BypassProxyForChinaMainland" xml:space="preserve">
+    <value>تجاوز الوكيل لخدمات البر الرئيسي الصيني</value>
+  </data>
   <data name="ProxyDescription" xml:space="preserve">
     <value>تسري تغييرات الوكيل بعد إعادة تشغيل التطبيق. تجاوز المضيف المحلي يضمن عمل Ollama بدون وكيل.</value>
   </data>
@@ -572,6 +575,24 @@
   </data>
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>فشل جلب النماذج من Ollama. تأكد من أن Ollama قيد التشغيل ويمكن الوصول إليه.</value>
+  </data>
+  <data name="OllamaPromptStyle" xml:space="preserve">
+    <value>الموجّه</value>
+  </data>
+  <data name="OllamaPromptStyle_Standard" xml:space="preserve">
+    <value>قياسي (مفصّل)</value>
+  </data>
+  <data name="OllamaPromptStyle_Concise" xml:space="preserve">
+    <value>موجز (للنماذج الصغيرة)</value>
+  </data>
+  <data name="OllamaPromptStyle_Custom" xml:space="preserve">
+    <value>مخصص</value>
+  </data>
+  <data name="OllamaCustomPrompt" xml:space="preserve">
+    <value>موجّه نظام مخصص</value>
+  </data>
+  <data name="OllamaCustomPrompt_Placeholder" xml:space="preserve">
+    <value>استخدم {from} و{to} لأسماء اللغات. مثال: Translate into {to}. Output only the translation.</value>
   </data>
   <data name="Copied" xml:space="preserve">
     <value>تم النسخ!</value>

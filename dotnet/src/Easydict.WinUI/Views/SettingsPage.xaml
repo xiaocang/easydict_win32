@@ -609,6 +609,28 @@
                                             VerticalAlignment="Bottom"
                                             Padding="8,4"/>
                                 </StackPanel>
+                                <ComboBox x:Name="OllamaPromptStyleCombo"
+                                        Header="Prompt"
+                                        Width="250"
+                                        HorizontalAlignment="Left">
+                                    <ComboBoxItem x:Name="OllamaPromptStyleStandardItem"
+                                            Content="Standard (detailed)"
+                                            Tag="Standard"/>
+                                    <ComboBoxItem x:Name="OllamaPromptStyleConciseItem"
+                                            Content="Concise (small models)"
+                                            Tag="Concise"/>
+                                    <ComboBoxItem x:Name="OllamaPromptStyleCustomItem"
+                                            Content="Custom"
+                                            Tag="Custom"/>
+                                </ComboBox>
+                                <TextBox x:Name="OllamaCustomPromptBox"
+                                        Header="Custom system prompt"
+                                        Width="450"
+                                        MinHeight="96"
+                                        AcceptsReturn="True"
+                                        TextWrapping="Wrap"
+                                        HorizontalAlignment="Left"
+                                        Visibility="Collapsed"/>
                                 <TextBlock Text="Ollama must be running locally. Click Refresh to load available models."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -3706,6 +3728,17 @@
 <ToggleSwitch x:Name="ProxyBypassLocalToggle"
                                         Header="Bypass proxy for localhost"
                                         IsOn="True">
+<ToggleSwitch.HeaderTemplate>
+<DataTemplate>
+<Grid Height="0"/>
+</DataTemplate>
+</ToggleSwitch.HeaderTemplate>
+</ToggleSwitch>
+</controls:FluentSettingRow>
+                                <controls:FluentSettingRow>
+<TextBlock Text="{Binding Header, ElementName=ProxyBypassChinaToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+<ToggleSwitch x:Name="ProxyBypassChinaToggle"
+                                        Header="Bypass proxy for China mainland services">
 <ToggleSwitch.HeaderTemplate>
 <DataTemplate>
 <Grid Height="0"/>

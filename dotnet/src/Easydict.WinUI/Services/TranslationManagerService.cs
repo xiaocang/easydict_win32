@@ -285,7 +285,8 @@ public sealed class TranslationManagerService : IDisposable
         {
             ProxyEnabled = _settings.ProxyEnabled,
             ProxyUri = _settings.ProxyUri,
-            ProxyBypassLocal = _settings.ProxyBypassLocal
+            ProxyBypassLocal = _settings.ProxyBypassLocal,
+            ProxyBypassChina = _settings.ProxyBypassChina
         };
 
         _translationManager = new TranslationManager(options);
@@ -344,6 +345,9 @@ public sealed class TranslationManagerService : IDisposable
                 ollama.Configure(
                     _settings.OllamaEndpoint,
                     _settings.OllamaModel);
+                ollama.ConfigurePrompt(
+                    Easydict.TranslationService.Models.OllamaPromptStyleParser.Parse(_settings.OllamaPromptStyle),
+                    _settings.OllamaCustomPrompt);
             }
         });
 
@@ -920,7 +924,8 @@ public sealed class TranslationManagerService : IDisposable
             {
                 ProxyEnabled = _settings.ProxyEnabled,
                 ProxyUri = _settings.ProxyUri,
-                ProxyBypassLocal = _settings.ProxyBypassLocal
+                ProxyBypassLocal = _settings.ProxyBypassLocal,
+                ProxyBypassChina = _settings.ProxyBypassChina
             };
 
             oldManager = _translationManager;

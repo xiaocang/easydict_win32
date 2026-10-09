@@ -440,6 +440,9 @@
   <data name="BypassProxyForLocalhost" xml:space="preserve">
     <value>Lewati proxy untuk localhost</value>
   </data>
+  <data name="BypassProxyForChinaMainland" xml:space="preserve">
+    <value>Lewati proxy untuk layanan Tiongkok daratan</value>
+  </data>
   <data name="ProxyDescription" xml:space="preserve">
     <value>Perubahan proxy berlaku setelah aplikasi dimulai ulang. Melewati localhost memastikan Ollama berfungsi tanpa proxy.</value>
   </data>
@@ -572,6 +575,24 @@
   </data>
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>Gagal mengambil model dari Ollama. Pastikan Ollama berjalan dan dapat diakses.</value>
+  </data>
+  <data name="OllamaPromptStyle" xml:space="preserve">
+    <value>Prompt</value>
+  </data>
+  <data name="OllamaPromptStyle_Standard" xml:space="preserve">
+    <value>Standar (terperinci)</value>
+  </data>
+  <data name="OllamaPromptStyle_Concise" xml:space="preserve">
+    <value>Ringkas (model kecil)</value>
+  </data>
+  <data name="OllamaPromptStyle_Custom" xml:space="preserve">
+    <value>Kustom</value>
+  </data>
+  <data name="OllamaCustomPrompt" xml:space="preserve">
+    <value>Prompt sistem kustom</value>
+  </data>
+  <data name="OllamaCustomPrompt_Placeholder" xml:space="preserve">
+    <value>Gunakan {from} dan {to} untuk nama bahasa. Contoh: Translate into {to}. Output only the translation.</value>
   </data>
   <data name="Copied" xml:space="preserve">
     <value>Disalin!</value>

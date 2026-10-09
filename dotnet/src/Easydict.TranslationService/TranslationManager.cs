@@ -30,6 +30,11 @@ public class TranslationManagerOptions
     /// Bypass proxy for localhost addresses (important for Ollama).
     /// </summary>
     public bool ProxyBypassLocal { get; set; } = true;
+
+    /// <summary>
+    /// Bypass proxy for services hosted in mainland China (<see cref="ProxyBypassRules"/>).
+    /// </summary>
+    public bool ProxyBypassChina { get; set; }
 }
 
 /// <summary>
@@ -91,10 +96,7 @@ public sealed class TranslationManager : IDisposable
         {
             if (Uri.TryCreate(options.ProxyUri, UriKind.Absolute, out var proxyUri))
             {
-                var proxy = new WebProxy(proxyUri)
-                {
-                    BypassProxyOnLocal = options.ProxyBypassLocal
-                };
+                var proxy = ProxyBypassRules.Create(proxyUri, options.ProxyBypassLocal, options.ProxyBypassChina);
                 handler.Proxy = proxy;
                 handler.UseProxy = true;
                 handler.ConnectTimeout = ProxiedConnectTimeout;
@@ -107,7 +109,7 @@ public sealed class TranslationManager : IDisposable
                     handler,
                     proxy,
                     ProxyFailureClassifier.DescribeEndpoint(proxyUri));
-                System.Diagnostics.Debug.WriteLine($"[TranslationManager] Proxy configured: {proxyUri.Host}:{proxyUri.Port}, BypassLocal={options.ProxyBypassLocal}");
+                System.Diagnostics.Debug.WriteLine($"[TranslationManager] Proxy configured: {proxyUri.Host}:{proxyUri.Port}, BypassLocal={options.ProxyBypassLocal}, BypassChina={options.ProxyBypassChina}");
             }
             else
             {

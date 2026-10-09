@@ -108,6 +108,12 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("ollamaModel")]
     public string? OllamaModel { get; init; }
 
+    [JsonPropertyName("ollamaPromptStyle")]
+    public string? OllamaPromptStyle { get; init; }
+
+    [JsonPropertyName("ollamaCustomPrompt")]
+    public string? OllamaCustomPrompt { get; init; }
+
     [JsonPropertyName("openRouterApiKey")]
     public string? OpenRouterApiKey { get; init; }
 
@@ -144,6 +150,9 @@ public sealed class SettingsSnapshot
 
     [JsonPropertyName("proxyBypassLocal")]
     public bool? ProxyBypassLocal { get; init; }
+
+    [JsonPropertyName("proxyBypassChina")]
+    public bool? ProxyBypassChina { get; init; }
 
     // ── Long-doc specifics ──────────────────────────────────────────────────
 

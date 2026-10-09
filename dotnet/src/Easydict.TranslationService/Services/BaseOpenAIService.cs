@@ -101,6 +101,13 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     protected virtual string? ResponsesReasoningEffort => null;
 
     /// <summary>
+    /// Upper bound on generated tokens for an input of <paramref name="inputText"/>,
+    /// or null to leave it to the provider (the default). Cloud providers already cap
+    /// output; a local server may not, and one runaway generation then holds it busy.
+    /// </summary>
+    protected virtual int? GetMaxOutputTokens(string inputText) => null;
+
+    /// <summary>
     /// Whether this service requires an API key to function.
     /// Override to false for services like Ollama that don't need auth.
     /// </summary>
@@ -193,7 +200,8 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             messages,
             Model,
             GetEffectiveTemperature(detectedFormat),
-            GetReasoningEffort(detectedFormat));
+            GetReasoningEffort(detectedFormat),
+            GetMaxOutputTokens(request.Text));
 
         await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
         {
@@ -217,7 +225,8 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             messages,
             Model,
             GetEffectiveTemperature(detectedFormat),
-            GetReasoningEffort(detectedFormat));
+            GetReasoningEffort(detectedFormat),
+            GetMaxOutputTokens(request.Text));
 
         await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
         {

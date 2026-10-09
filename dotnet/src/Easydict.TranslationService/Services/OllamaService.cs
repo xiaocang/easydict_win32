@@ -13,6 +13,15 @@ public sealed class OllamaService : BaseOpenAIService
     private const string DefaultEndpoint = "http://localhost:11434/v1/chat/completions";
     private const string DefaultModel = "llama3.2";
 
+    /// <summary>
+    /// Output-token floor. High enough that a thinking model (qwen3, deepseek-r1) can finish
+    /// its reasoning before the answer on a short query, which counts against the same limit.
+    /// </summary>
+    internal const int MinOutputTokens = 2048;
+
+    /// <summary>Output-token ceiling, reached only by very long inputs.</summary>
+    internal const int MaxOutputTokensCeiling = 16384;
+
     private static readonly IReadOnlyList<Language> _ollamaLanguages = new[]
     {
         Language.SimplifiedChinese,
@@ -50,6 +59,17 @@ public sealed class OllamaService : BaseOpenAIService
     public override string Endpoint => _endpoint;
     public override string ApiKey => ""; // No API key needed
     public override string Model => _model;
+
+    /// <summary>
+    /// Ollama generates until end-of-sequence by default and serves one request at a time,
+    /// so a small model that rambles holds every later query behind it. Bound the output
+    /// with room to spare: a translation is rarely longer than a few tokens per input char.
+    /// </summary>
+    protected override int? GetMaxOutputTokens(string inputText)
+        => GetOutputTokenLimit(inputText.Length);
+
+    internal static int GetOutputTokenLimit(int inputLength)
+        => (int)Math.Clamp(inputLength * 4L, MinOutputTokens, MaxOutputTokensCeiling);
 
     /// <summary>
     /// List of locally available Ollama models.

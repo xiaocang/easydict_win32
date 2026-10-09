@@ -25,6 +25,11 @@ public sealed class TranslationManagerService : IDisposable
     private readonly SettingsService _settings;
     private readonly object _lock = new object();
 
+    // Imported MDX services registered by RegisterImportedMdxServices, keyed by service id,
+    // with the descriptor they were built from. Accessed only from ConfigureServices.
+    private readonly Dictionary<string, (string Key, SettingsService.ImportedMdxDictionary Descriptor, MdxDictionaryTranslationService Service)> _mdxRegistrations =
+        new(StringComparer.Ordinal);
+
     // Reference counting for safe disposal during streaming operations
     private readonly Dictionary<TranslationManager, int> _handleCounts = new();
     private readonly List<TranslationManager> _disposalQueue = new();
@@ -601,6 +606,20 @@ public sealed class TranslationManagerService : IDisposable
                 continue;
             }
 
+            // ConfigureServices runs on every Settings save. Keep a dictionary that is
+            // still registered with an unchanged descriptor: replacing it would drop the
+            // parsed MDX (the next lookup re-reads the file) and re-probe its MDD files.
+            var registrationKey = BuildMdxRegistrationKey(dictionary);
+            if (_mdxRegistrations.TryGetValue(dictionary.ServiceId, out var registration)
+                && registration.Key == registrationKey
+                && ReferenceEquals(registration.Descriptor, dictionary)
+                && _translationManager.Services.TryGetValue(dictionary.ServiceId, out var registered)
+                && ReferenceEquals(registered, registration.Service))
+            {
+                LocalDictionaryIndexService.Instance.RegisterDescriptor(dictionary);
+                continue;
+            }
+
             try
             {
                 var service = new MdxDictionaryTranslationService(
@@ -631,6 +650,7 @@ public sealed class TranslationManagerService : IDisposable
 
                 service.DictionaryLoaded += loadedService => QueueMdxIndexBuild(dictionary, loadedService);
                 _translationManager.RegisterService(service);
+                _mdxRegistrations[dictionary.ServiceId] = (BuildMdxRegistrationKey(dictionary), dictionary, service);
                 LocalDictionaryIndexService.Instance.RegisterDescriptor(dictionary);
             }
             catch (Exception ex)
@@ -638,6 +658,18 @@ public sealed class TranslationManagerService : IDisposable
                 Debug.WriteLine($"[TranslationManagerService] Failed to load MDX dictionary '{dictionary.FilePath}': {ex.Message}");
             }
         }
+    }
+
+    private static string BuildMdxRegistrationKey(SettingsService.ImportedMdxDictionary dictionary)
+    {
+        return string.Join(
+            "\n",
+            dictionary.DisplayName,
+            dictionary.FilePath,
+            dictionary.IsEncrypted ? "1" : "0",
+            dictionary.Regcode ?? string.Empty,
+            dictionary.Email ?? string.Empty,
+            string.Join("\t", dictionary.MddFilePaths));
     }
 
     /// <summary>

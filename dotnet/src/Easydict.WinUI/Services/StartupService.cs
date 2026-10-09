@@ -34,10 +34,16 @@ public static class StartupService
             var exePath = Environment.ProcessPath;
             if (!string.IsNullOrEmpty(exePath))
             {
-                key.SetValue(AppName, $"\"{exePath}\"");
+                // Settings applies this on every save; leave the Run entry alone when it
+                // already points at this executable.
+                var value = $"\"{exePath}\"";
+                if (!string.Equals(key.GetValue(AppName) as string, value, StringComparison.Ordinal))
+                {
+                    key.SetValue(AppName, value);
+                }
             }
         }
-        else
+        else if (key.GetValue(AppName) != null)
         {
             key.DeleteValue(AppName, throwOnMissingValue: false);
         }

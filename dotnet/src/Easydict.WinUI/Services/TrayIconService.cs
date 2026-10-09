@@ -30,6 +30,12 @@ public sealed class TrayIconService : IDisposable
     public event Action? OnOpenSettings;
 
     /// <summary>
+    /// Raised when the tray asks for the main window. When nobody handles it,
+    /// <see cref="ShowWindow"/> falls back to showing and activating the window itself.
+    /// </summary>
+    public event Action? OnShowWindowRequested;
+
+    /// <summary>
     /// Event fired when "OCR Translate" is clicked.
     /// </summary>
     public event Action? OnOcrTranslate;
@@ -72,7 +78,11 @@ public sealed class TrayIconService : IDisposable
         _taskbarIcon = new TaskbarIcon
         {
             ToolTipText = "Easydict - Dictionary & Translation",
-            ContextMenuMode = ContextMenuMode.SecondWindow
+            ContextMenuMode = ContextMenuMode.SecondWindow,
+            // By default H.NotifyIcon holds a left click for the system double-click
+            // time (~500 ms) in case a double click follows. The tray icon has no
+            // double-click action, so that wait was pure latency on every click.
+            NoLeftClickDelay = true
         };
 
         // Set up context menu
@@ -390,6 +400,13 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public void ShowWindow()
     {
+        var showWindowRequested = OnShowWindowRequested;
+        if (showWindowRequested is not null)
+        {
+            showWindowRequested();
+            return;
+        }
+
         // If the window was hidden via AppWindow.Hide(), Activate() alone won't restore it.
         _appWindow?.Show();
         _window.Activate();

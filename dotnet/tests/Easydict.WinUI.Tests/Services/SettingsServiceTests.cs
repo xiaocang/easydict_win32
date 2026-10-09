@@ -159,6 +159,51 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void Save_UnchangedBobPluginSecureOption_DoesNotRewriteSettingsFile()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        var settingsPath = Path.Combine(testDirectory.Path, "settings.json");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        settings.SetBobPluginSecureOption("bob:demo:1", "apiKey", "secret-value");
+        settings.Save();
+
+        var savedJson = File.ReadAllText(settingsPath);
+        var fixedTimestamp = new DateTime(2024, 01, 01, 00, 00, 00, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(settingsPath, fixedTimestamp);
+
+        // Settings writes every plugin option back on save, changed or not.
+        settings.SetBobPluginSecureOption("bob:demo:1", "apiKey", "secret-value");
+        settings.Save();
+
+        File.ReadAllText(settingsPath).Should().Be(savedJson);
+        File.GetLastWriteTimeUtc(settingsPath).Should().Be(fixedTimestamp);
+        settings.GetBobPluginSecureOption("bob:demo:1", "apiKey").Should().Be("secret-value");
+
+        settings.SetBobPluginSecureOption("bob:demo:1", "apiKey", "rotated-value");
+        settings.Save();
+
+        File.ReadAllText(settingsPath).Should().NotBe(savedJson);
+        settings.GetBobPluginSecureOption("bob:demo:1", "apiKey").Should().Be("rotated-value");
+    }
+
+    [Fact]
+    public void HotkeySignature_ChangesOnlyWhenRegisteredHotkeysWouldChange()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        var original = HotkeyService.BuildHotkeySignature(settings);
+
+        HotkeyService.BuildHotkeySignature(settings).Should().Be(original);
+
+        settings.ShowWindowHotkey = "Ctrl+Alt+Q";
+        var changedKey = HotkeyService.BuildHotkeySignature(settings);
+        changedKey.Should().NotBe(original);
+
+        settings.EnableOcrTranslateHotkey = !settings.EnableOcrTranslateHotkey;
+        HotkeyService.BuildHotkeySignature(settings).Should().NotBe(changedKey);
+    }
+
+    [Fact]
     public void Instance_ReturnsSameInstance()
     {
         var instance1 = SettingsService.Instance;

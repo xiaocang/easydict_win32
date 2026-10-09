@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using System.Collections;
 using System.Globalization;
+using System.Reflection;
 using Easydict.WindowsAI.Services;
 using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.Text;
@@ -44,8 +45,22 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     /// </summary>
     public static Func<string, string?>? HintLocalizer { get; set; }
 
+    // The OS build, the Windows activation state and the Windows App SDK assembly
+    // identity cannot change while the process runs (an OS update needs a reboot),
+    // yet every ready-state / fingerprint probe used to re-read them. The activation
+    // probe is a WMI query that can take seconds, and Settings probes several times
+    // per open, so each is computed once per process.
+    private static readonly Lazy<WindowsBuildInfo> CachedWindowsBuildInfo =
+        new(TryGetWindowsBuildInfo, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<bool?> CachedWindowsActivationStatus =
+        new(TryGetWindowsActivationStatus, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<AssemblyName> CachedLanguageModelAssemblyName =
+        new(() => typeof(LanguageModel).Assembly.GetName(), LazyThreadSafetyMode.ExecutionAndPublication);
+
     public WindowsLanguageModelClient()
-        : this(TryGetWindowsBuildInfo, TryGetRawReadyState)
+        : this(() => CachedWindowsBuildInfo.Value, TryGetRawReadyState)
     {
     }
 
@@ -111,7 +126,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
                 ProcessArchitecture: RuntimeInformation.ProcessArchitecture.ToString(),
                 BackendName: "PhiSilica",
                 ComponentMarker: "Microsoft.Windows.AI.Text; readyState=not-probed",
-                WindowsActivated: TryGetWindowsActivationStatus(),
+                WindowsActivated: CachedWindowsActivationStatus.Value,
                 PhiSilicaAiComponentsPresent: null);
         }
 
@@ -122,7 +137,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
         WindowsBuildInfo buildInfo,
         AIFeatureReadyState? rawReadyState)
     {
-        var languageModelAssembly = typeof(LanguageModel).Assembly.GetName();
+        var languageModelAssembly = CachedLanguageModelAssemblyName.Value;
         return new WindowsAIHealthFingerprint(
             OsBuild: FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version),
             Ubr: buildInfo.Ubr,
@@ -130,7 +145,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
             ProcessArchitecture: RuntimeInformation.ProcessArchitecture.ToString(),
             BackendName: "PhiSilica",
             ComponentMarker: FormatComponentMarker(languageModelAssembly.Name, rawReadyState),
-            WindowsActivated: TryGetWindowsActivationStatus(),
+            WindowsActivated: CachedWindowsActivationStatus.Value,
             PhiSilicaAiComponentsPresent: TryGetPhiSilicaAiComponentsPresence(rawReadyState));
     }
 
@@ -305,7 +320,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
 
     private static int? TryGetUbr()
     {
-        return TryGetWindowsBuildInfo().Ubr;
+        return CachedWindowsBuildInfo.Value.Ubr;
     }
 
     private static WindowsBuildInfo TryGetWindowsBuildInfo()
@@ -513,7 +528,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
 
     private static void AddEnvironmentFingerprint(List<string> diagnostics)
     {
-        var buildInfo = TryGetWindowsBuildInfo();
+        var buildInfo = CachedWindowsBuildInfo.Value;
         diagnostics.Add($"osBuild={FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version)}");
         diagnostics.Add($"processArch={System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
     }

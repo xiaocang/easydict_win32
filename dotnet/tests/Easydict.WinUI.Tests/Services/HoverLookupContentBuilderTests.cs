@@ -133,7 +133,7 @@ public class HoverLookupContentBuilderTests
     }
 
     [Fact]
-    public void FormatPhonetics_PrefersUsUk_FormatsWithSlashes_AndCapsAtTwo()
+    public void FormatPhonetics_PrefersUkUs_FormatsWithSlashes_AndCapsAtTwo()
     {
         var result = Result("你好", new WordResult
         {
@@ -146,7 +146,7 @@ public class HoverLookupContentBuilderTests
             ]
         });
 
-        HoverLookupContentBuilder.FormatPhonetics(result).Should().Be("美 /həˈloʊ/  英 /hɛˈləʊ/");
+        HoverLookupContentBuilder.FormatPhonetics(result).Should().Be("英 /hɛˈləʊ/  美 /həˈloʊ/");
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class HoverLookupContentBuilderTests
             ]
         });
 
-        HoverLookupContentBuilder.FormatPhonetics(result).Should().Be("美 /həˈloʊ/  /hello/");
+        HoverLookupContentBuilder.FormatPhonetics(result).Should().Be("英 /həˈloʊ/  /hello/");
     }
 
     [Fact]

@@ -157,11 +157,12 @@ public static class PhoneticDisplayHelper
                 "src" or "dest" => true,
                 _ => false
             })
-            // Pronunciation first, then romanizations of either side
+            // Pronunciation first (British before American, matching Youdao's own layout),
+            // then romanizations of either side
             .OrderBy(p => p.Accent switch
             {
-                "US" => 0,
-                "UK" => 1,
+                "UK" => 0,
+                "US" => 1,
                 "src" => 2,
                 _ => 3
             })

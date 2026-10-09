@@ -120,7 +120,7 @@ public static class HoverLookupContentBuilder
     }
 
     /// <summary>
-    /// Up to two phonetics, US/UK first, e.g. "美 /həˈloʊ/  英 /hɛˈləʊ/". Null when none.
+    /// Up to two phonetics, UK/US first, e.g. "英 /hɛˈləʊ/  美 /həˈloʊ/". Null when none.
     /// </summary>
     internal static string? FormatPhonetics(TranslationResult result)
     {
@@ -153,8 +153,8 @@ public static class HoverLookupContentBuilder
 
     private static int AccentRank(string? accent) => accent switch
     {
-        "US" => 0,
-        "UK" => 1,
+        "UK" => 0,
+        "US" => 1,
         "src" => 2,
         "dest" => 3,
         _ => 4,

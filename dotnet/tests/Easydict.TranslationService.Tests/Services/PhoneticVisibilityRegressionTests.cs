@@ -64,8 +64,8 @@ public class PhoneticVisibilityRegressionTests
         var displayed = PhoneticDisplayHelper.GetDisplayPhonetics(result);
 
         displayed.Should().HaveCount(2, "Youdao supplies both a US and a UK pronunciation");
-        displayed.Select(p => p.Accent).Should().Equal("US", "UK");
-        displayed.Select(p => p.Text).Should().Equal("həˈloʊ", "həˈləʊ");
+        displayed.Select(p => p.Accent).Should().Equal("UK", "US");
+        displayed.Select(p => p.Text).Should().Equal("həˈləʊ", "həˈloʊ");
     }
 
     [Fact]

@@ -457,7 +457,7 @@ public class PhoneticDisplayHelperTests
 
         PhoneticDisplayHelper.GetDisplayPhonetics(result)
             .Select(p => p.Accent)
-            .Should().Equal("US", "UK", "src");
+            .Should().Equal("UK", "US", "src");
     }
 
     [Fact]

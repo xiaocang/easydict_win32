@@ -396,6 +396,128 @@ public class LanguageDetectionServiceTests : IDisposable
         detected.Should().Be(Language.Japanese);
     }
 
+    [Theory]
+    [InlineData("こんにちは世界", Language.SimplifiedChinese, Language.English, Language.Japanese)]
+    [InlineData("東京の天気", Language.SimplifiedChinese, Language.English, Language.Japanese)]
+    [InlineData("안녕하세요 세계", Language.SimplifiedChinese, Language.English, Language.Korean)]
+    [InlineData("熟能生巧", Language.SimplifiedChinese, Language.English, Language.SimplifiedChinese)]
+    [InlineData("熟能生巧", Language.English, Language.SimplifiedChinese, Language.SimplifiedChinese)]
+    [InlineData("熟能生巧", Language.TraditionalChinese, Language.English, Language.TraditionalChinese)]
+    [InlineData("我用 Python 写代码", Language.SimplifiedChinese, Language.English, Language.SimplifiedChinese)]
+    public void DetectByScript_WhenScriptSettlesLanguage_ReturnsIt(
+        string text, Language first, Language second, Language expected)
+    {
+        LanguageDetectionService.DetectByScript(text, first, second).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("Practice makes perfect", Language.SimplifiedChinese, Language.English)] // Latin: could be any language
+    [InlineData("Bonjour le monde", Language.SimplifiedChinese, Language.English)]
+    [InlineData("熟能生巧", Language.Japanese, Language.English)] // kanji-only Japanese is possible
+    [InlineData("熟能生巧", Language.SimplifiedChinese, Language.TraditionalChinese)] // script cannot pick a variant
+    [InlineData("熟能生巧", Language.English, Language.French)] // no Chinese in the pair
+    [InlineData("The word 你好 means hello", Language.SimplifiedChinese, Language.English)]
+    [InlineData("Привет 世界", Language.SimplifiedChinese, Language.English)]
+    public void DetectByScript_WhenScriptIsAmbiguous_ReturnsNull(string text, Language first, Language second)
+    {
+        LanguageDetectionService.DetectByScript(text, first, second).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DetectAsync_WhenScriptSettlesLanguage_SkipsOnlineDetection()
+    {
+        var calls = 0;
+        using var detector = new LanguageDetectionService(_settings, (_, _) =>
+        {
+            calls++;
+            return Task.FromResult(Language.English);
+        });
+
+        (await detector.DetectAsync("こんにちは世界")).Should().Be(Language.Japanese);
+        calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DetectWithFallback_AfterPrimaryFails_TriesFallbackFirstNextTime()
+    {
+        var health = new DetectionProviderHealth();
+        var googleCalls = 0;
+        var providers = new Dictionary<string, ITranslationService>
+        {
+            ["google"] = new StubDetector(_ =>
+            {
+                googleCalls++;
+                return Task.FromException<Language>(new TaskCanceledException());
+            }),
+            ["bing"] = new StubDetector(_ => Task.FromResult(Language.English))
+        };
+
+        (await LanguageDetectionService.DetectWithFallbackAsync(
+            "hello world", providers, CancellationToken.None, health: health)).Should().Be(Language.English);
+        (await LanguageDetectionService.DetectWithFallbackAsync(
+            "good morning", providers, CancellationToken.None, health: health)).Should().Be(Language.English);
+
+        googleCalls.Should().Be(1, "a provider that just timed out must not cost the next detection its timeout");
+    }
+
+    [Fact]
+    public async Task DetectWithFallback_DemotedProviderIsStillTriedWhenFallbackFails()
+    {
+        var health = new DetectionProviderHealth();
+        health.ReportFailure("google");
+        var providers = new Dictionary<string, ITranslationService>
+        {
+            ["google"] = new StubDetector(_ => Task.FromResult(Language.French)),
+            ["bing"] = new StubDetector(_ => Task.FromException<Language>(new HttpRequestException()))
+        };
+
+        (await LanguageDetectionService.DetectWithFallbackAsync(
+            "bonjour le monde", providers, CancellationToken.None, health: health)).Should().Be(Language.French);
+        health.Order(["google", "bing"]).Should().Equal("google", "bing");
+    }
+
+    [Fact]
+    public void DetectionProviderHealth_DemotionExpires()
+    {
+        var clock = new ManualTimeProvider();
+        var health = new DetectionProviderHealth(clock, TimeSpan.FromMinutes(10));
+
+        health.ReportFailure("google");
+        health.Order(["google", "bing"]).Should().Equal("bing", "google");
+
+        clock.Advance(TimeSpan.FromMinutes(10));
+        health.Order(["google", "bing"]).Should().Equal("google", "bing");
+    }
+
+    [Fact]
+    public async Task DetectWithFallback_WhenUserCancels_DoesNotDemoteProvider()
+    {
+        var health = new DetectionProviderHealth();
+        using var cts = new CancellationTokenSource();
+        var providers = new Dictionary<string, ITranslationService>
+        {
+            ["google"] = new StubDetector(ct =>
+            {
+                cts.Cancel();
+                return Task.FromCanceled<Language>(ct);
+            }),
+            ["bing"] = new StubDetector(_ => Task.FromResult(Language.English))
+        };
+
+        var act = () => LanguageDetectionService.DetectWithFallbackAsync(
+            "hello world", providers, cts.Token, health: health);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        health.Order(["google", "bing"]).Should().Equal("google", "bing");
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => _now;
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
     private sealed class RateLimitedHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

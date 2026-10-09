@@ -22,7 +22,8 @@ internal sealed class ResponsesFormatStrategy : IOpenAIFormatStrategy
         IReadOnlyList<ChatMessage> messages,
         string model,
         double temperature,
-        string? reasoningEffort)
+        string? reasoningEffort,
+        int? maxOutputTokens = null)
     {
         var instructions = messages.FirstOrDefault(m => m.Role == ChatRole.System)?.Content;
         var input = string.Join(
@@ -38,6 +39,11 @@ internal sealed class ResponsesFormatStrategy : IOpenAIFormatStrategy
             ["stream"] = true,
             ["store"] = false,
         };
+
+        if (maxOutputTokens is { } limit)
+        {
+            body["max_output_tokens"] = limit;
+        }
 
         if (!string.IsNullOrWhiteSpace(reasoningEffort))
         {

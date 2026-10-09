@@ -16,6 +16,13 @@ public sealed class LanguageDetectionService : IDisposable
     private readonly SettingsService _settings;
     private readonly Func<string, CancellationToken, Action?, Task<Language>> _detectLanguage;
     private static readonly string[] DetectionServiceIds = ["google", "bing"];
+
+    /// <summary>
+    /// Shared across windows so one window learning that a provider is unreachable spares
+    /// the others the same timeout.
+    /// </summary>
+    private static readonly DetectionProviderHealth SharedProviderHealth = new();
+
     /// <summary>
     /// Per-provider deadline. Detection is a small request; when it does not answer quickly
     /// the network or proxy is unhealthy, and waiting longer only delays the translation
@@ -116,6 +123,17 @@ public sealed class LanguageDetectionService : IDisposable
             return Language.Auto;
         }
 
+        // Scripts that name their language outright need no network round trip.
+        var local = DetectByScript(
+            text,
+            LanguageExtensions.FromCode(_settings.FirstLanguage),
+            LanguageExtensions.FromCode(_settings.SecondLanguage));
+        if (local is { } localLanguage)
+        {
+            Debug.WriteLine($"[Detection] Detected locally by script: {localLanguage}");
+            return localLanguage;
+        }
+
         try
         {
             var detected = await _detectLanguage(text, cancellationToken, onRateLimited);
@@ -165,7 +183,65 @@ public sealed class LanguageDetectionService : IDisposable
 #endif
         // Keep both providers alive if proxy settings change during detection.
         using var handle = TranslationManagerService.Instance.AcquireHandle();
-        return await DetectWithFallbackAsync(text, handle.Manager.Services, cancellationToken, onRateLimited);
+        return await DetectWithFallbackAsync(
+            text, handle.Manager.Services, cancellationToken, onRateLimited, health: SharedProviderHealth);
+    }
+
+    /// <summary>
+    /// Cheap script-based detection for text whose script settles the language:
+    /// kana → Japanese, Hangul → Korean, and Han text → the Chinese variant in the user's
+    /// language pair when the pair leaves no other Han-script reading (no Japanese, only
+    /// one Chinese variant). Returns null whenever the script is ambiguous — notably for
+    /// Latin text, which could be any of dozens of languages — so the online chain decides.
+    /// </summary>
+    internal static Language? DetectByScript(string text, Language firstLanguage, Language secondLanguage)
+    {
+        int han = 0, kana = 0, hangul = 0, latin = 0, other = 0;
+        foreach (var c in text)
+        {
+            if (c is (>= '\u3040' and <= '\u309F') or (>= '\u30A0' and <= '\u30FF') or (>= '\u31F0' and <= '\u31FF'))
+                kana++;
+            else if (c is (>= '\uAC00' and <= '\uD7AF') or (>= '\u1100' and <= '\u11FF') or (>= '\u3130' and <= '\u318F'))
+                hangul++;
+            else if (c is (>= '\u4E00' and <= '\u9FFF') or (>= '\u3400' and <= '\u4DBF') or (>= '\uF900' and <= '\uFAFF'))
+                han++;
+            else if (char.IsLetter(c))
+            {
+                if (c < '\u0250')
+                    latin++;
+                else
+                    other++;
+            }
+        }
+
+        // Another script (Cyrillic, Arabic, Thai, ...) means mixed or unfamiliar text.
+        if (other > 0)
+            return null;
+
+        if (kana > 0 && hangul == 0)
+            return Language.Japanese;
+
+        if (hangul > 0 && kana == 0 && han == 0)
+            return Language.Korean;
+
+        // Han text often embeds Latin terms ("我用 Python 写代码"), but a Han word quoted in
+        // a Latin sentence must not flip the sentence to Chinese. One Han character carries
+        // roughly a word, a Latin word averages a few letters.
+        if (han == 0 || hangul > 0 || han * 3 < latin)
+            return null;
+
+        static bool IsChinese(Language l) => l is Language.SimplifiedChinese or Language.TraditionalChinese;
+        static bool IsOtherHan(Language l) => l is Language.Japanese or Language.ClassicalChinese;
+
+        if (IsOtherHan(firstLanguage) || IsOtherHan(secondLanguage))
+            return null;
+
+        var firstIsChinese = IsChinese(firstLanguage);
+        var secondIsChinese = IsChinese(secondLanguage);
+        if (firstIsChinese == secondIsChinese)
+            return null; // Neither, or both variants: the script cannot pick one.
+
+        return firstIsChinese ? firstLanguage : secondLanguage;
     }
 
     /// <summary>
@@ -173,6 +249,8 @@ public sealed class LanguageDetectionService : IDisposable
     /// <paramref name="attemptTimeout"/> and <paramref name="totalTimeout"/> default to
     /// <see cref="DetectionAttemptTimeout"/> and <see cref="DetectionTotalTimeout"/>;
     /// they are overridable so tests do not have to wait out the real deadlines.
+    /// <paramref name="health"/>, when given, moves providers that failed recently to the end
+    /// of the chain and records each attempt's outcome.
     /// </summary>
     internal static async Task<Language> DetectWithFallbackAsync(
         string text,
@@ -180,14 +258,16 @@ public sealed class LanguageDetectionService : IDisposable
         CancellationToken cancellationToken,
         Action? onRateLimited = null,
         TimeSpan? attemptTimeout = null,
-        TimeSpan? totalTimeout = null)
+        TimeSpan? totalTimeout = null,
+        DetectionProviderHealth? health = null)
     {
         // Bound the whole chain, not just each attempt: with every provider unreachable the
         // per-attempt timeouts otherwise add up in front of the translation.
         using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budgetCts.CancelAfter(totalTimeout ?? DetectionTotalTimeout);
 
-        foreach (var serviceId in DetectionServiceIds)
+        var serviceIds = health?.Order(DetectionServiceIds) ?? DetectionServiceIds;
+        foreach (var serviceId in serviceIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (budgetCts.IsCancellationRequested)
@@ -207,6 +287,8 @@ public sealed class LanguageDetectionService : IDisposable
             {
                 var detected = await service.DetectLanguageAsync(text, attemptCts.Token);
                 cancellationToken.ThrowIfCancellationRequested();
+                // An answer, even "unknown", proves the provider is reachable.
+                health?.ReportSuccess(serviceId);
                 if (detected != Language.Auto)
                     return detected;
             }
@@ -216,6 +298,7 @@ public sealed class LanguageDetectionService : IDisposable
             }
             catch (Exception ex)
             {
+                health?.ReportFailure(serviceId);
                 if (IsRateLimited(ex))
                     onRateLimited?.Invoke();
 

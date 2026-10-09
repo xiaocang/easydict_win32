@@ -142,6 +142,30 @@ public class OllamaServiceTests
     }
 
     [Fact]
+    public async Task TranslateStreamAsync_BoundsOutputTokens()
+    {
+        _mockHandler.EnqueueStreamingResponse(new[] { """{"choices":[{"delta":{"content":"Hi"}}]}""" });
+
+        await foreach (var _ in _service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        })) { }
+
+        _mockHandler.LastRequestBody.Should().Contain($"\"max_tokens\":{OllamaService.MinOutputTokens}");
+    }
+
+    [Theory]
+    [InlineData(0, OllamaService.MinOutputTokens)]
+    [InlineData(10, OllamaService.MinOutputTokens)]
+    [InlineData(1000, 4000)]
+    [InlineData(1_000_000, OllamaService.MaxOutputTokensCeiling)]
+    public void GetOutputTokenLimit_ScalesWithInputWithinBounds(int inputLength, int expected)
+    {
+        OllamaService.GetOutputTokenLimit(inputLength).Should().Be(expected);
+    }
+
+    [Fact]
     public async Task TranslateStreamAsync_UsesCustomEndpoint()
     {
         // Arrange

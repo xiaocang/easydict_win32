@@ -1117,7 +1117,6 @@ public sealed class SettingsService
     private void SaveCore(bool preserveUnmigratedSensitiveSettings)
     {
         NormalizeDeepLModeSettings();
-        var previousJson = JsonSerializer.Serialize(_settings, SettingsJsonOptions);
         RemoveRuntimeOnlyWorkerIsolationSettings();
 
         _settings[nameof(SourceLanguage)] = SourceLanguage;
@@ -1350,8 +1349,11 @@ public sealed class SettingsService
         try
         {
             var json = JsonSerializer.Serialize(_settings, SettingsJsonOptions);
-            if (File.Exists(_settingsFilePath)
-                && string.Equals(json, previousJson, StringComparison.Ordinal))
+            // Compare with the file, not a snapshot of _settings. SetBobPluginSecureOption
+            // and other callers update the dictionary before Save, so a snapshot taken
+            // at the start of this method already contains the new value and would
+            // skip writing a real change.
+            if (SettingsFileHasSameContent(json))
             {
                 _sensitiveSettingsPendingMigration.Clear();
                 System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings unchanged; save skipped for: {_settingsFilePath}");
@@ -1374,6 +1376,25 @@ public sealed class SettingsService
 
             // Re-throw the exception so callers know save failed
             throw;
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="json"/> already matches the settings file.
+    /// A read failure is treated as a mismatch so Save still attempts to write.
+    /// </summary>
+    private bool SettingsFileHasSameContent(string json)
+    {
+        try
+        {
+            return File.Exists(_settingsFilePath)
+                && string.Equals(File.ReadAllText(_settingsFilePath), json, StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[SettingsService] Could not read settings before save: {ex.Message}");
+            return false;
         }
     }
 

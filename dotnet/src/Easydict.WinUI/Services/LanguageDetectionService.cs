@@ -108,6 +108,19 @@ public sealed class LanguageDetectionService : IDisposable
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Script detection reads the language pair. It has to run before the text-only
+        // cache: Han text cached while the pair was ambiguous (Japanese/English) must not
+        // keep hiding the Chinese reading after the user switches to Chinese/English.
+        var local = DetectByScript(
+            text,
+            LanguageExtensions.FromCode(_settings.FirstLanguage),
+            LanguageExtensions.FromCode(_settings.SecondLanguage));
+        if (local is { } localLanguage)
+        {
+            Debug.WriteLine($"[Detection] Detected locally by script: {localLanguage}");
+            return localLanguage;
+        }
+
         // Check cache (guard against disposed cache)
         var cacheKey = GetCacheKey(text);
         try
@@ -121,17 +134,6 @@ public sealed class LanguageDetectionService : IDisposable
         catch (ObjectDisposedException)
         {
             return Language.Auto;
-        }
-
-        // Scripts that name their language outright need no network round trip.
-        var local = DetectByScript(
-            text,
-            LanguageExtensions.FromCode(_settings.FirstLanguage),
-            LanguageExtensions.FromCode(_settings.SecondLanguage));
-        if (local is { } localLanguage)
-        {
-            Debug.WriteLine($"[Detection] Detected locally by script: {localLanguage}");
-            return localLanguage;
         }
 
         try
@@ -191,7 +193,9 @@ public sealed class LanguageDetectionService : IDisposable
     /// Cheap script-based detection for text whose script settles the language:
     /// kana → Japanese, Hangul → Korean, and Han text → the Chinese variant in the user's
     /// language pair when the pair leaves no other Han-script reading (no Japanese, only
-    /// one Chinese variant). Returns null whenever the script is ambiguous — notably for
+    /// one Chinese variant). A quoted character does not settle a Latin sentence: kana,
+    /// Hangul, and Han each have to outnumber the Latin letters by about one character
+    /// per three letters. Returns null whenever the script is ambiguous — notably for
     /// Latin text, which could be any of dozens of languages — so the online chain decides.
     /// </summary>
     internal static Language? DetectByScript(string text, Language firstLanguage, Language secondLanguage)
@@ -218,11 +222,13 @@ public sealed class LanguageDetectionService : IDisposable
         if (other > 0)
             return null;
 
+        // One kana or Hangul character carries roughly a word. "What does あ mean?"
+        // must stay ambiguous so online detection can call the sentence English.
         if (kana > 0 && hangul == 0)
-            return Language.Japanese;
+            return kana * 3 >= latin ? Language.Japanese : null;
 
         if (hangul > 0 && kana == 0 && han == 0)
-            return Language.Korean;
+            return hangul * 3 >= latin ? Language.Korean : null;
 
         // Han text often embeds Latin terms ("我用 Python 写代码"), but a Han word quoted in
         // a Latin sentence must not flip the sentence to Chinese. One Han character carries

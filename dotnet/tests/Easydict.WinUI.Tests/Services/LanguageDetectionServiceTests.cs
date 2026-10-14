@@ -13,6 +13,7 @@ namespace Easydict.WinUI.Tests.Services;
 /// Verifies language detection and intelligent target language selection.
 /// </summary>
 [Trait("Category", "WinUI")]
+[Collection("SettingsService")]
 public class LanguageDetectionServiceTests : IDisposable
 {
     private readonly SettingsService _settings;
@@ -399,7 +400,9 @@ public class LanguageDetectionServiceTests : IDisposable
     [Theory]
     [InlineData("こんにちは世界", Language.SimplifiedChinese, Language.English, Language.Japanese)]
     [InlineData("東京の天気", Language.SimplifiedChinese, Language.English, Language.Japanese)]
+    [InlineData("こんにちは world", Language.SimplifiedChinese, Language.English, Language.Japanese)]
     [InlineData("안녕하세요 세계", Language.SimplifiedChinese, Language.English, Language.Korean)]
+    [InlineData("안녕하세요 hello", Language.SimplifiedChinese, Language.English, Language.Korean)]
     [InlineData("熟能生巧", Language.SimplifiedChinese, Language.English, Language.SimplifiedChinese)]
     [InlineData("熟能生巧", Language.English, Language.SimplifiedChinese, Language.SimplifiedChinese)]
     [InlineData("熟能生巧", Language.TraditionalChinese, Language.English, Language.TraditionalChinese)]
@@ -417,6 +420,9 @@ public class LanguageDetectionServiceTests : IDisposable
     [InlineData("熟能生巧", Language.SimplifiedChinese, Language.TraditionalChinese)] // script cannot pick a variant
     [InlineData("熟能生巧", Language.English, Language.French)] // no Chinese in the pair
     [InlineData("The word 你好 means hello", Language.SimplifiedChinese, Language.English)]
+    [InlineData("What does あ mean?", Language.Japanese, Language.English)]
+    [InlineData("What does 안 mean?", Language.Korean, Language.English)]
+    [InlineData("What あ汉字汉字汉字", Language.SimplifiedChinese, Language.English)]
     [InlineData("Привет 世界", Language.SimplifiedChinese, Language.English)]
     public void DetectByScript_WhenScriptIsAmbiguous_ReturnsNull(string text, Language first, Language second)
     {
@@ -435,6 +441,40 @@ public class LanguageDetectionServiceTests : IDisposable
 
         (await detector.DetectAsync("こんにちは世界")).Should().Be(Language.Japanese);
         calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DetectAsync_WhenLanguagePairChanges_ScriptResultOverridesCachedOnlineDetection()
+    {
+        var originalFirst = _settings.FirstLanguage;
+        var originalSecond = _settings.SecondLanguage;
+        var calls = 0;
+        try
+        {
+            // Kanji-only text is ambiguous while Japanese is in the pair, so detection goes
+            // online and the text-only cache stores that answer.
+            _settings.FirstLanguage = "ja";
+            _settings.SecondLanguage = "en";
+            using var detector = new LanguageDetectionService(_settings, (_, _) =>
+            {
+                calls++;
+                return Task.FromResult(Language.Japanese);
+            });
+
+            (await detector.DetectAsync("熟能生巧")).Should().Be(Language.Japanese);
+            calls.Should().Be(1);
+
+            _settings.FirstLanguage = "zh";
+            _settings.SecondLanguage = "en";
+
+            (await detector.DetectAsync("熟能生巧")).Should().Be(Language.SimplifiedChinese);
+            calls.Should().Be(1, "a result cached for the previous pair must not hide the current script reading");
+        }
+        finally
+        {
+            _settings.FirstLanguage = originalFirst;
+            _settings.SecondLanguage = originalSecond;
+        }
     }
 
     [Fact]

@@ -233,7 +233,9 @@ internal sealed class SapiPlaybackController
                 playbackStarted = true;
             }
 
-            await completion.Task;
+            // Resume on the thread pool. Stop can be called from a UI context that is
+            // not pumping, and this await must still run so playback can finish.
+            await completion.Task.ConfigureAwait(false);
         }
         finally
         {
@@ -261,24 +263,9 @@ internal sealed class SapiPlaybackController
         lock (_lock)
         {
             activePlayback = _activePlayback;
-            if (activePlayback == null)
-            {
-                return;
-            }
-
-            try
-            {
-                activePlayback.Synthesizer.CancelAll();
-            }
-            catch (ObjectDisposedException ex)
-            {
-                activePlayback.Completion.TrySetException(ex);
-            }
-            catch (InvalidOperationException ex)
-            {
-                activePlayback.Completion.TrySetException(ex);
-            }
         }
+
+        CancelSynthesizer(activePlayback);
     }
 
     private void CancelPlayback(
@@ -286,25 +273,56 @@ internal sealed class SapiPlaybackController
         TaskCompletionSource<bool> completion,
         CancellationToken cancellationToken)
     {
+        ActivePlayback? activePlayback;
         lock (_lock)
         {
-            if (!ReferenceEquals(_activePlayback?.Synthesizer, synthesizer))
-            {
-                completion.TrySetCanceled(cancellationToken);
-                return;
-            }
+            activePlayback = _activePlayback;
+        }
 
-            try
+        if (!ReferenceEquals(activePlayback?.Synthesizer, synthesizer))
+        {
+            completion.TrySetCanceled(cancellationToken);
+            return;
+        }
+
+        CancelSynthesizer(activePlayback, cancellationToken);
+    }
+
+    /// <summary>
+    /// Cancel outside <see cref="_lock"/>. The synthesizer callback can resume
+    /// <see cref="SpeakAsync"/>, and that resume takes the lock.
+    /// </summary>
+    private static void CancelSynthesizer(ActivePlayback? activePlayback, CancellationToken cancellationToken = default)
+    {
+        if (activePlayback == null)
+        {
+            return;
+        }
+
+        try
+        {
+            activePlayback.Synthesizer.CancelAll();
+        }
+        catch (ObjectDisposedException ex)
+        {
+            if (cancellationToken.CanBeCanceled)
             {
-                synthesizer.CancelAll();
+                activePlayback.Completion.TrySetCanceled(cancellationToken);
             }
-            catch (ObjectDisposedException)
+            else
             {
-                completion.TrySetCanceled(cancellationToken);
+                activePlayback.Completion.TrySetException(ex);
             }
-            catch (InvalidOperationException)
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (cancellationToken.CanBeCanceled)
             {
-                completion.TrySetCanceled(cancellationToken);
+                activePlayback.Completion.TrySetCanceled(cancellationToken);
+            }
+            else
+            {
+                activePlayback.Completion.TrySetException(ex);
             }
         }
     }

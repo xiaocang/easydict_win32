@@ -277,6 +277,39 @@ public class TextToSpeechLifecycleTests
     }
 
     [Fact]
+    public async Task Stop_CompletesWhenTheCallerContextDoesNotPump()
+    {
+        await Task.Run(async () =>
+        {
+            var previous = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(new BlockingSynchronizationContext());
+            try
+            {
+                var synthesizer = new FakeSapiSpeechSynthesizer();
+                var controller = new SapiPlaybackController(() => synthesizer);
+                var playback = controller.SpeakAsync("voice", "hello", 0, CancellationToken.None);
+                synthesizer.Started.Task.IsCompleted.Should().BeTrue();
+                controller.IsPlaying.Should().BeTrue();
+
+                controller.Stop();
+
+                var finished = await Task.WhenAny(playback, Task.Delay(TimeSpan.FromSeconds(2)))
+                    .ConfigureAwait(false);
+                finished.Should().BeSameAs(playback);
+                Func<Task> waitForStop = async () => await playback.ConfigureAwait(false);
+                await waitForStop.Should().ThrowAsync<OperationCanceledException>()
+                    .ConfigureAwait(false);
+                controller.IsPlaying.Should().BeFalse();
+                synthesizer.CancelCount.Should().Be(1);
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(previous);
+            }
+        }).WaitAsync(TestTimeout);
+    }
+
+    [Fact]
     public async Task Stop_WhenCancellationThrows_CompletesWithErrorInsteadOfHanging()
     {
         // Arrange
@@ -293,6 +326,19 @@ public class TextToSpeechLifecycleTests
         await waitForFailure.Should().ThrowAsync<InvalidOperationException>();
         controller.IsPlaying.Should().BeFalse();
         synthesizer.DisposeCount.Should().Be(1);
+    }
+
+    /// <summary>
+    /// Posts work and never runs it. Models a UI context whose dispatcher is not pumping.
+    /// </summary>
+    private sealed class BlockingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+        }
+
+        public override void Send(SendOrPostCallback d, object? state)
+            => throw new InvalidOperationException("The caller context cannot pump.");
     }
 
     private sealed class FakeSapiSpeechSynthesizer : ISapiSpeechSynthesizer

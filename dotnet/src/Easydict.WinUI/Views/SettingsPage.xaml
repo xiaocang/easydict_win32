@@ -2907,6 +2907,10 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
                                     <RadioButton x:Name="TrayIconDefaultOption"
                                                  Grid.Column="0"
                                                  Style="{StaticResource TrayIconOptionStyle}"

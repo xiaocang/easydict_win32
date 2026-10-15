@@ -5512,21 +5512,86 @@ public sealed partial class SettingsPage : Page
         OnSettingChanged(sender, e);
     }
 
+    private int _appliedTrayIconOptionColumns;
+    private double _appliedTrayIconOptionWidth = double.NaN;
+    private bool _applyingTrayIconOptionLayout;
+
     private void OnTrayIconOptionsSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (_isUnloaded || _isTornDown || e.NewSize.Width < 32)
+        if (_isUnloaded || _isTornDown || _applyingTrayIconOptionLayout)
             return;
 
-        var column = (e.NewSize.Width - 12 * 3) / 4;
-        var image = Math.Floor(column - 20);
-        if (image < 48)
+        ApplyTrayIconOptionLayout(e.NewSize.Width);
+    }
+
+    private void ApplyTrayIconOptionLayout(double width)
+    {
+        if (width < 32)
             return;
-        if (image > 320)
-            image = 320;
-        SetTrayIconTileSize(TrayIconDefaultImage, image);
-        SetTrayIconTileSize(TrayIconEImage, image);
-        SetTrayIconTileSize(TrayIconAjpImage, image);
-        SetTrayIconTileSize(TrayIconWenImage, image);
+
+        var layout = TrayIconOptionLayout.Compute(width);
+        if (_appliedTrayIconOptionColumns == layout.Columns
+            && Math.Abs(_appliedTrayIconOptionWidth - width) < 0.5)
+            return;
+
+        _applyingTrayIconOptionLayout = true;
+        try
+        {
+            // Place into the surviving columns before dropping the extras, or Grid.SetColumn throws.
+            if (layout.Columns < TrayIconOptions.ColumnDefinitions.Count)
+                PlaceTrayIconOptions(layout.Columns);
+            EnsureTrayIconColumnCount(layout.Columns);
+            PlaceTrayIconOptions(layout.Columns);
+            TrayIconOptions.RowSpacing = layout.Columns == 4 ? 0 : TrayIconOptionLayout.ColumnGap;
+
+            SetTrayIconTileSize(TrayIconDefaultImage, layout.ImageSize);
+            SetTrayIconTileSize(TrayIconEImage, layout.ImageSize);
+            SetTrayIconTileSize(TrayIconAjpImage, layout.ImageSize);
+            SetTrayIconTileSize(TrayIconWenImage, layout.ImageSize);
+
+            _appliedTrayIconOptionColumns = layout.Columns;
+            _appliedTrayIconOptionWidth = width;
+        }
+        finally
+        {
+            _applyingTrayIconOptionLayout = false;
+        }
+
+        var actual = TrayIconOptions.ActualWidth;
+        if (actual >= 32 && Math.Abs(actual - width) >= 0.5)
+            ApplyTrayIconOptionLayout(actual);
+    }
+
+    private void EnsureTrayIconColumnCount(int columns)
+    {
+        var definitions = TrayIconOptions.ColumnDefinitions;
+        while (definitions.Count > columns)
+            definitions.RemoveAt(definitions.Count - 1);
+        while (definitions.Count < columns)
+            definitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+    }
+
+    private void PlaceTrayIconOptions(int columns)
+    {
+        if (columns >= 4)
+        {
+            PlaceTrayIconOption(TrayIconDefaultOption, 0, 0);
+            PlaceTrayIconOption(TrayIconEOption, 1, 0);
+            PlaceTrayIconOption(TrayIconAjpOption, 2, 0);
+            PlaceTrayIconOption(TrayIconWenOption, 3, 0);
+            return;
+        }
+
+        PlaceTrayIconOption(TrayIconDefaultOption, 0, 0);
+        PlaceTrayIconOption(TrayIconEOption, 1, 0);
+        PlaceTrayIconOption(TrayIconAjpOption, 0, 1);
+        PlaceTrayIconOption(TrayIconWenOption, 1, 1);
+    }
+
+    private static void PlaceTrayIconOption(RadioButton option, int column, int row)
+    {
+        Grid.SetColumn(option, column);
+        Grid.SetRow(option, row);
     }
 
     private static void SetTrayIconTileSize(Image image, double size)

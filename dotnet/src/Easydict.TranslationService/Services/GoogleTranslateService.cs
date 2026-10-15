@@ -14,6 +14,12 @@ public sealed class GoogleTranslateService : BaseTranslationService
 {
     private const string BaseUrl = "https://translate.googleapis.com/translate_a/single";
 
+    // Fallback endpoint used by the Google Translate web frontend (public wt_lib key).
+    // shortcut: the public key may rotate; if 429s reappear, refresh it from
+    // LunaTranslator's translator/google.py (github.com/HIllya51/LunaTranslator)
+    private const string WebFallbackUrl = "https://translate-pa.googleapis.com/v1/translateHtml";
+    private const string WebFallbackApiKey = "AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520";
+
     private static readonly IReadOnlyList<Language> _googleLanguages =
     [
         Language.SimplifiedChinese, Language.TraditionalChinese, Language.English,
@@ -49,10 +55,21 @@ public sealed class GoogleTranslateService : BaseTranslationService
 
         var url = BuildUrl(request.Text, sourceCode, targetCode);
 
-        using var response = await HttpClient.GetAsync(url, cancellationToken);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        AddBrowserHeaders(httpRequest);
+        using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                var fallback = await TryTranslateViaWebEndpointAsync(request, sourceCode, targetCode, cancellationToken);
+                if (fallback != null)
+                {
+                    return fallback;
+                }
+            }
+
             throw new TranslationException($"Google API error: {response.StatusCode}")
             {
                 ErrorCode = response.StatusCode == HttpStatusCode.TooManyRequests
@@ -72,7 +89,9 @@ public sealed class GoogleTranslateService : BaseTranslationService
     {
         var url = BuildUrl(text, "auto", "en");
 
-        using var response = await HttpClient.GetAsync(url, cancellationToken);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        AddBrowserHeaders(httpRequest);
+        using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -231,6 +250,98 @@ public sealed class GoogleTranslateService : BaseTranslationService
         }
 
         return phonetics.Count > 0 ? phonetics : null;
+    }
+
+    /// <summary>
+    /// 429 fallback: POST to the endpoint the Google Translate web frontend uses
+    /// (same approach as LunaTranslator's translator/google.py). Plain text only —
+    /// no dictionary/phonetics; DetectedLanguage is read from root[1][0] when the
+    /// endpoint reports it. Returns null on any failure except
+    /// cancellation/timeout (rethrown so the caller's retry policy applies); the
+    /// caller then keeps throwing the original gtx error.
+    /// </summary>
+    private async Task<TranslationResult?> TryTranslateViaWebEndpointAsync(
+        TranslationRequest request,
+        string sourceCode,
+        string targetCode,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // JSON+protobuf body of the web client: [[[[text], sl, tl], "wt_lib"]]
+            var payload = JsonSerializer.Serialize(new object[]
+            {
+                new object[] { new object[] { request.Text }, sourceCode, targetCode },
+                "wt_lib"
+            });
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, WebFallbackUrl)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json+protobuf")
+            };
+            httpRequest.Headers.Add("X-Goog-Api-Key", WebFallbackApiKey);
+            AddBrowserHeaders(httpRequest);
+
+            using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Array ||
+                root.GetArrayLength() == 0 ||
+                root[0].ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            // The endpoint returns HTML-escaped text (LunaTranslator unescapes it too);
+            // concatenate all chunks so long inputs are not truncated
+            var sb = new StringBuilder();
+            foreach (var chunk in root[0].EnumerateArray())
+            {
+                if (chunk.ValueKind == JsonValueKind.String)
+                {
+                    sb.Append(chunk.GetString());
+                }
+            }
+
+            var text = WebUtility.HtmlDecode(sb.ToString());
+            if (string.IsNullOrEmpty(text))
+            {
+                return null;
+            }
+
+            // root[1][0] carries the detected source language (verified live with sl=auto)
+            var detected = Language.Auto;
+            if (root.GetArrayLength() > 1 &&
+                root[1].ValueKind == JsonValueKind.Array &&
+                root[1].GetArrayLength() > 0 &&
+                root[1][0].ValueKind == JsonValueKind.String)
+            {
+                detected = LanguageCodes.FromIso639(root[1][0].GetString() ?? "");
+            }
+
+            return new TranslationResult
+            {
+                TranslatedText = text,
+                OriginalText = request.Text,
+                DetectedLanguage = detected,
+                TargetLanguage = request.ToLanguage,
+                ServiceName = DisplayName
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }
 

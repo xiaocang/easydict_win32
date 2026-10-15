@@ -437,4 +437,149 @@ public class GoogleTranslateServiceTests
         result.WordResult!.Phonetics.Should().NotBeNull();
         result.WordResult.Phonetics!.Should().Contain(p => p.Text == "nǐ hǎo. xièxiè." && p.Accent == "src");
     }
+
+    [Fact]
+    public async Task TranslateAsync_SendsBrowserUserAgent()
+    {
+        // Google throttles bare no-UA clients with 429 TooManyRequests
+        _mockHandler.EnqueueJsonResponse("""{"sentences": [{"trans": "Hi"}], "src": "en"}""");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        await _service.TranslateAsync(request);
+
+        var sentRequest = _mockHandler.LastRequest;
+        sentRequest!.Headers.UserAgent.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task TranslateAsync_OnGtx429_FallsBackToWebEndpoint()
+    {
+        // Arrange: gtx GET returns 429, then the web-endpoint POST succeeds
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueJsonResponse("""[["Hola"]]""");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.Spanish
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.TranslatedText.Should().Be("Hola");
+        result.OriginalText.Should().Be("Hello");
+
+        var requests = _mockHandler.Requests;
+        requests.Should().HaveCount(2);
+        requests[1].Method.Should().Be(HttpMethod.Post);
+        requests[1].RequestUri!.Host.Should().Be("translate-pa.googleapis.com");
+        requests[1].Headers.Contains("X-Goog-Api-Key").Should().BeTrue();
+        _mockHandler.LastRequestBody.Should().Contain("wt_lib").And.Contain("Hello");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_OnGtxAndWebEndpoint429_ThrowsRateLimited()
+    {
+        // Arrange: both the gtx GET and the web-endpoint POST return 429
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<TranslationException>(
+            () => _service.TranslateAsync(request));
+
+        exception.ErrorCode.Should().Be(TranslationErrorCode.RateLimited);
+        exception.ServiceId.Should().Be("google");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_OnFallbackMalformedJson_ThrowsRateLimited()
+    {
+        // Arrange: gtx 429, then the web endpoint returns a non-JSON body
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueJsonResponse("not json");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act & Assert: fallback failure degrades to the original gtx error
+        var exception = await Assert.ThrowsAsync<TranslationException>(
+            () => _service.TranslateAsync(request));
+
+        exception.ErrorCode.Should().Be(TranslationErrorCode.RateLimited);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_FallbackDecodesHtmlEntities()
+    {
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueJsonResponse("""[["Hola &amp; mundo"]]""");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.Spanish
+        };
+
+        var result = await _service.TranslateAsync(request);
+
+        result.TranslatedText.Should().Be("Hola & mundo");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_FallbackConcatenatesChunks()
+    {
+        // The web endpoint may return one string per chunk for long inputs
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueJsonResponse("""[["Hola ", "mundo"]]""");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.Spanish
+        };
+
+        var result = await _service.TranslateAsync(request);
+
+        result.TranslatedText.Should().Be("Hola mundo");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_FallbackResult_ReportsDetectedLanguage()
+    {
+        // The web endpoint reports the detected source language at root[1][0]
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueJsonResponse("""[["Hola"],["es"]]""");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.Auto,
+            ToLanguage = Language.Spanish
+        };
+
+        var result = await _service.TranslateAsync(request);
+
+        result.DetectedLanguage.Should().Be(Language.Spanish);
+        result.TranslatedText.Should().Be("Hola");
+    }
 }

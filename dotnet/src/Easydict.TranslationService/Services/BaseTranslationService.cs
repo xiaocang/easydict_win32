@@ -135,6 +135,24 @@ public abstract class BaseTranslationService : ITranslationService
     }
 
     /// <summary>
+    /// Add browser-like headers to a request. Google throttles bare no-UA clients with 429;
+    /// Bing/Youdao already send a User-Agent per request. Headers must stay per-request
+    /// because the HttpClient instance is shared by all services.
+    /// </summary>
+    /// <summary>
+    /// Browser User-Agent. Google throttles bare no-UA clients with 429.
+    /// </summary>
+    protected const string BrowserUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+
+    protected static void AddBrowserHeaders(HttpRequestMessage request)
+    {
+        request.Headers.Add("User-Agent", BrowserUserAgent);
+        request.Headers.Add("Accept", "*/*");
+        request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+    }
+
+    /// <summary>
     /// Clean up the final translation result.
     /// Removes common artifacts like surrounding quotes and whitespace.
     /// </summary>

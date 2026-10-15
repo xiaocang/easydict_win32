@@ -50,7 +50,9 @@ public sealed class GoogleWebTranslateService : BaseTranslationService
 
         var url = BuildUrl(request.Text, sourceCode, targetCode);
 
-        using var response = await HttpClient.GetAsync(url, cancellationToken);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        AddBrowserHeaders(httpRequest);
+        using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -73,7 +75,9 @@ public sealed class GoogleWebTranslateService : BaseTranslationService
     {
         var url = BuildUrl(text, "auto", "en");
 
-        using var response = await HttpClient.GetAsync(url, cancellationToken);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        AddBrowserHeaders(httpRequest);
+        using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);

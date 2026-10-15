@@ -12,6 +12,7 @@ public class BrowserRegistrarCoreTests : IDisposable
     private readonly string _tempDir;
     private readonly string _bridgeDir;
     private readonly string _sourceDir;
+    private readonly string _testRegistryRoot;
     private readonly BrowserRegistrarCore _core;
 
     public BrowserRegistrarCoreTests()
@@ -22,11 +23,26 @@ public class BrowserRegistrarCoreTests : IDisposable
         Directory.CreateDirectory(_bridgeDir);
         Directory.CreateDirectory(_sourceDir);
 
-        _core = new BrowserRegistrarCore(_bridgeDir);
+        // Use an isolated, per-instance HKCU key instead of the real Chrome/Firefox
+        // NativeMessagingHosts keys, so these tests can't race with other test
+        // projects (e.g. BrowserSupportServiceTests) that read the real keys.
+        _testRegistryRoot = $@"Software\Easydict.Tests\{Guid.NewGuid():N}";
+        _core = new BrowserRegistrarCore(_bridgeDir,
+            chromeRegistryPath: $@"{_testRegistryRoot}\Chrome\{BrowserRegistrarCore.NativeHostName}",
+            firefoxRegistryPath: $@"{_testRegistryRoot}\Firefox\{BrowserRegistrarCore.NativeHostName}");
     }
 
     public void Dispose()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(_testRegistryRoot, throwOnMissingSubKey: false);
+            }
+            catch { }
+        }
+
         try
         {
             if (Directory.Exists(_tempDir))

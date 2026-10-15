@@ -19,10 +19,19 @@ internal sealed class BrowserRegistrarCore
         $@"Software\Mozilla\NativeMessagingHosts\{NativeHostName}";
 
     private readonly string _bridgeDirectory;
+    private readonly string _chromeRegistryPath;
+    private readonly string _firefoxRegistryPath;
 
-    internal BrowserRegistrarCore(string bridgeDirectory)
+    /// <param name="bridgeDirectory">Directory where the bridge exe and manifests are deployed.</param>
+    /// <param name="chromeRegistryPath">HKCU-relative key for the Chrome host; defaults to the real Chrome key.
+    /// Tests pass an isolated key so they never touch real browser registration.</param>
+    /// <param name="firefoxRegistryPath">HKCU-relative key for the Firefox host; defaults to the real Firefox key.</param>
+    internal BrowserRegistrarCore(string bridgeDirectory,
+        string? chromeRegistryPath = null, string? firefoxRegistryPath = null)
     {
         _bridgeDirectory = bridgeDirectory;
+        _chromeRegistryPath = chromeRegistryPath ?? ChromeRegistryPath;
+        _firefoxRegistryPath = firefoxRegistryPath ?? FirefoxRegistryPath;
     }
 
     internal string BridgeExePath => Path.Combine(_bridgeDirectory, BridgeExeName);
@@ -55,14 +64,14 @@ internal sealed class BrowserRegistrarCore
         if (chrome)
         {
             var manifestPath = WriteChromeManifest(chromeExtIds);
-            WriteRegistryKey(ChromeRegistryPath, manifestPath);
+            WriteRegistryKey(_chromeRegistryPath, manifestPath);
             installed.Add("chrome");
         }
 
         if (firefox)
         {
             var manifestPath = WriteFirefoxManifest(firefoxExtId);
-            WriteRegistryKey(FirefoxRegistryPath, manifestPath);
+            WriteRegistryKey(_firefoxRegistryPath, manifestPath);
             installed.Add("firefox");
         }
 
@@ -77,20 +86,20 @@ internal sealed class BrowserRegistrarCore
 
         if (chrome)
         {
-            DeleteRegistryKey(ChromeRegistryPath);
+            DeleteRegistryKey(_chromeRegistryPath);
             DeleteFile(Path.Combine(_bridgeDirectory, "chrome-manifest.json"));
             uninstalled.Add("chrome");
         }
 
         if (firefox)
         {
-            DeleteRegistryKey(FirefoxRegistryPath);
+            DeleteRegistryKey(_firefoxRegistryPath);
             DeleteFile(Path.Combine(_bridgeDirectory, "firefox-manifest.json"));
             uninstalled.Add("firefox");
         }
 
         // Clean up bridge directory if no browser remains registered
-        if (!IsRegistered(ChromeRegistryPath) && !IsRegistered(FirefoxRegistryPath))
+        if (!IsRegistered(_chromeRegistryPath) && !IsRegistered(_firefoxRegistryPath))
         {
             try
             {
@@ -108,8 +117,8 @@ internal sealed class BrowserRegistrarCore
     internal StatusResult GetStatus()
     {
         return new StatusResult(
-            ChromeInstalled: IsRegistered(ChromeRegistryPath),
-            FirefoxInstalled: IsRegistered(FirefoxRegistryPath),
+            ChromeInstalled: IsRegistered(_chromeRegistryPath),
+            FirefoxInstalled: IsRegistered(_firefoxRegistryPath),
             BridgeExists: File.Exists(BridgeExePath),
             BridgeDirectory: _bridgeDirectory);
     }

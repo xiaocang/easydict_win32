@@ -14,15 +14,16 @@ public class BrowserSupportServiceTests
     [Fact]
     public void IsChromeSupportInstalled_ReturnsBool()
     {
-        // Should not throw — just returns false when registry key is absent
-        var result = BrowserSupportService.IsChromeSupportInstalled;
-        result.Should().BeFalse();
+        // Reads real HKCU state, which other tests or a local install may change,
+        // so only assert that the check completes without throwing.
+        var act = () => BrowserSupportService.IsChromeSupportInstalled;
+        act.Should().NotThrow();
     }
 
     [Fact]
     public void IsFirefoxSupportInstalled_ReturnsBool()
     {
-        var result = BrowserSupportService.IsFirefoxSupportInstalled;
-        result.Should().BeFalse();
+        var act = () => BrowserSupportService.IsFirefoxSupportInstalled;
+        act.Should().NotThrow();
     }
 }

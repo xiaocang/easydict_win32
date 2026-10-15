@@ -18,6 +18,8 @@ public sealed class TrayIconService : IDisposable
     private bool _isDisposed;
     private System.Drawing.Icon? _ownedIcon;
     private bool? _iconDark;
+    private string? _appliedIconId;
+    private string? _appliedIconPath;
 
     /// <summary>
     /// Event fired when "Translate Clipboard" is clicked.
@@ -112,25 +114,51 @@ public sealed class TrayIconService : IDisposable
     {
         if (_isDisposed || _taskbarIcon is null) return;
         var dark = ThemedIconService.IsTaskbarDark;
-        if (_iconDark == dark) return;
+        var iconId = TrayIconCatalog.Normalize(SettingsService.Instance.TrayIconId);
+        var iconPath = TrayIconCatalog.ResolveExistingPath(iconId, dark);
+        if (_iconDark == dark
+            && string.Equals(_appliedIconId, iconId, StringComparison.Ordinal)
+            && string.Equals(_appliedIconPath, iconPath, StringComparison.OrdinalIgnoreCase)
+            && _ownedIcon is not null)
+        {
+            return;
+        }
+
         System.Drawing.Icon? next = null;
         try
         {
-            var themedIconPath = ThemedIconService.GetTrayIconPath(dark);
-            next = File.Exists(themedIconPath)
-                ? new System.Drawing.Icon(themedIconPath)
-                : GetTrayIconPath() is { } path ? new System.Drawing.Icon(path) : null;
+            next = TryLoadTrayIcon(iconPath);
+            if (next is null)
+            {
+                var fallback = TrayIconCatalog.ResolveExistingPath(TrayIconCatalog.DefaultId, dark);
+                if (!string.Equals(fallback, iconPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    iconPath = fallback;
+                    next = TryLoadTrayIcon(fallback);
+                }
+            }
+
+            if (next is null && GetTrayIconPath() is { } legacyPath
+                && !string.Equals(legacyPath, iconPath, StringComparison.OrdinalIgnoreCase))
+            {
+                iconPath = legacyPath;
+                next = TryLoadTrayIcon(legacyPath);
+            }
+
             if (next is null)
             {
                 _taskbarIcon.IconSource = CreateTrayIconSource();
                 return;
             }
+
             _taskbarIcon.Icon = next;
             var previous = _ownedIcon;
             _ownedIcon = next;
             next = null;
             previous?.Dispose();
             _iconDark = dark;
+            _appliedIconId = iconId;
+            _appliedIconPath = iconPath;
         }
         catch (Exception ex)
         {
@@ -138,6 +166,20 @@ public sealed class TrayIconService : IDisposable
             if (_ownedIcon is null) _taskbarIcon.IconSource = CreateTrayIconSource();
         }
         finally { next?.Dispose(); }
+    }
+
+    private static System.Drawing.Icon? TryLoadTrayIcon(string? path)
+    {
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+        try
+        {
+            return new System.Drawing.Icon(path);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[TrayIcon] Failed to load '{path}': {ex.Message}");
+            return null;
+        }
     }
 
     private static string? GetTrayIconPath()

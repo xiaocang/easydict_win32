@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>In Taskleiste minimieren</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>Taskleistensymbol</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>Wählen Sie ein mitgeliefertes Taskleistensymbol. Standard bleibt das aktuelle Symbol.</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>Standard</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>Dieses Symbol ist noch nicht enthalten. Die Taskleiste behält das aktuelle Symbol, bis die Datei hinzugefügt wird.</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>Zwischenablage auf Text überwachen</value>
   </data>

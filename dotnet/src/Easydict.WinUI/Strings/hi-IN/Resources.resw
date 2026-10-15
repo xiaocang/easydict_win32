@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>सिस्टम ट्रे में छोटा करें</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>सिस्टम ट्रे आइकन</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>ऐप के साथ दिए आइकन में से चुनें। डिफ़ॉल्ट वही वर्तमान आइकन रहता है।</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>डिफ़ॉल्ट</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>यह आइकन अभी ऐप में शामिल नहीं है। फ़ाइल जुड़ने तक ट्रे वर्तमान आइकन रखता है।</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>क्लिपबोर्ड पर नज़र रखें</value>
   </data>

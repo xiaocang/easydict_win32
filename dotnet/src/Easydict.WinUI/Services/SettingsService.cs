@@ -613,6 +613,12 @@ public sealed class SettingsService
     /// </summary>
     public bool MinimizeToTrayOnStartup { get; set; } = false;
 
+    /// <summary>
+    /// Built-in system tray icon id. <see cref="TrayIconCatalog.DefaultId"/> keeps the current icon.
+    /// The other ids use artwork shipped under Assets/Branding/TrayIcons.
+    /// </summary>
+    public string TrayIconId { get; set; } = TrayIconCatalog.DefaultId;
+
     // Mini window settings
     public string ShowMiniWindowHotkey { get; set; } = "Ctrl+Alt+M";
     public bool MiniWindowAutoClose { get; set; } = true;
@@ -932,6 +938,7 @@ public sealed class SettingsService
             CodexCliService.DefaultReasoningEffort);
 
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
+        TrayIconId = TrayIconCatalog.Normalize(GetValue(nameof(TrayIconId), TrayIconCatalog.DefaultId));
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
         UseLongDocWorker = ResolveWorkerIsolationSetting(nameof(UseLongDocWorker), DisableLongDocWorkerEnvironmentVariable);
@@ -1236,6 +1243,7 @@ public sealed class SettingsService
         _settings[nameof(CodexReasoningEffort)] = CodexReasoningEffort;
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
+        _settings[nameof(TrayIconId)] = TrayIconCatalog.Normalize(TrayIconId);
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
         HistoryRetentionDays = Math.Clamp(HistoryRetentionDays, 1, 3650);

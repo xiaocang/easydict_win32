@@ -9,9 +9,14 @@ param(
     [string]$OutputTrayPng,
 
     [Parameter(Mandatory = $false)]
+    [int]$TrayPngSize = 32,
+
+    [Parameter(Mandatory = $false)]
     [int[]]$Sizes = @(16, 24, 32, 48, 64, 128, 256),
     [switch]$DarkMode,
     [switch]$SmoothDarkOutline,
+    [switch]$TightCrop,
+    [double]$TightPad = 0.02,
     [string]$OutputPngDirectory
 )
 
@@ -111,6 +116,12 @@ Write-Host "Output ICO : $outputFull"
 Write-Host "Sizes      : $($Sizes -join ', ')"
 
 $sourceImage = [System.Drawing.Image]::FromFile($sourceFull)
+if ($TightCrop) {
+    $cropped = [Easydict.IconTools.IconRasterizer]::TightSquare($sourceImage, $TightPad)
+    $sourceImage.Dispose()
+    $sourceImage = $cropped
+    Write-Host "Tight crop : $($sourceImage.Width)px square, pad $TightPad"
+}
 try {
     $pngImages = @()
     foreach ($s in $Sizes) {
@@ -135,7 +146,8 @@ try {
 
         $trayDir = Split-Path -Parent $OutputTrayPng
         if ($trayDir) { New-Item -ItemType Directory -Force -Path $trayDir | Out-Null }
-        [System.IO.File]::WriteAllBytes($OutputTrayPng, (New-PngBytes -Source $sourceImage -Size 32))
+        if ($TrayPngSize -le 0) { throw "TrayPngSize must be positive." }
+        [System.IO.File]::WriteAllBytes($OutputTrayPng, (New-PngBytes -Source $sourceImage -Size $TrayPngSize))
     }
 }
 finally {

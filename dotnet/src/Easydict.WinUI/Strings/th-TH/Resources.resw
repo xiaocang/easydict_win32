@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>ไอคอนถาดระบบ</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>เลือกไอคอนที่มาพร้อมกับ Easydict ค่าเริ่มต้นยังเป็นไอคอนปัจจุบัน</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>ค่าเริ่มต้น</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>ไอคอนนี้ยังไม่ได้รวมมากับแอป ถาดระบบจะใช้ไอคอนปัจจุบันจนกว่าจะเพิ่มไฟล์</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE2A;&#xE2D;&#xE1A;&#xE04;&#xE25;&#xE34;&#xE1B;&#xE1A;&#xE2D;&#xE23;&#xE4C;&#xE14;</value>
   </data>

@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>시스템 트레이로 최소화</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>시스템 트레이 아이콘</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>앱에 포함된 트레이 아이콘을 선택합니다. 기본값은 현재 아이콘입니다.</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>기본</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>이 아이콘은 아직 앱에 포함되어 있지 않습니다. 파일을 추가하기 전까지 트레이는 현재 아이콘을 유지합니다.</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>클립보드 텍스트 모니터링</value>
   </data>

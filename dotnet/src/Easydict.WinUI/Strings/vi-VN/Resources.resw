@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>Thu nh&#x1ECF; v&#xE0;o khay h&#x1EC7; th&#x1ED1;ng</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>Biểu tượng khay hệ thống</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>Chọn biểu tượng đi kèm Easydict. Mặc định vẫn là biểu tượng hiện tại.</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>Mặc định</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>Biểu tượng này chưa được đóng gói. Khay hệ thống giữ biểu tượng hiện tại cho đến khi tệp được thêm.</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>Theo d&#xF5;i clipboard</value>
   </data>

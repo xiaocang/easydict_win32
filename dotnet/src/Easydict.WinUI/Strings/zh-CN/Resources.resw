@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>最小化到系统托盘</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>系统托盘图标</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>选择软件自带的托盘图标。默认仍使用当前图标。</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>默认</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>此图标尚未随软件提供。在加入文件之前，托盘仍使用当前图标。</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>监控剪贴板文本</value>
   </data>

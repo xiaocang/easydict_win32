@@ -20,6 +20,76 @@
             <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter"/>
             <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter"/>
             <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter"/>
+            <Style x:Key="TrayIconOptionStyle" TargetType="RadioButton">
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="Padding" Value="4"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="VerticalAlignment" Value="Top"/>
+                <Setter Property="UseSystemFocusVisuals" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <Grid>
+                                <Border x:Name="SelectionBorder"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="2"
+                                        CornerRadius="8"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <Border x:Name="FocusRing"
+                                        Margin="-3"
+                                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="11"
+                                        IsHitTestVisible="False"
+                                        Opacity="0"/>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal"/>
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="SelectionBorder.Background" Value="{ThemeResource ButtonBackgroundPointerOver}"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="SelectionBorder.Background" Value="{ThemeResource ButtonBackgroundPressed}"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="SelectionBorder.Opacity" Value="0.45"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="CheckStates">
+                                        <VisualState x:Name="Checked">
+                                            <VisualState.Setters>
+                                                <Setter Target="SelectionBorder.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Unchecked"/>
+                                        <VisualState x:Name="Indeterminate"/>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="FocusStates">
+                                        <VisualState x:Name="Focused">
+                                            <VisualState.Setters>
+                                                <Setter Target="FocusRing.Opacity" Value="1"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Unfocused"/>
+                                        <VisualState x:Name="PointerFocused"/>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
             <ItemsPanelTemplate x:Key="SettingsRailItemsPanel">
                 <StackPanel Spacing="6"/>
             </ItemsPanelTemplate>
@@ -2817,6 +2887,162 @@
                                                MaxWidth="350"
                                                HorizontalAlignment="Left"/>
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="12">
+                                <TextBlock x:Name="TrayIconLabelText"
+                                           AutomationProperties.AutomationId="TrayIconLabel"
+                                           Text="System tray icon"
+                                           FontSize="14"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <Grid x:Name="TrayIconOptions"
+                                      AutomationProperties.AutomationId="TrayIconOptions"
+                                      HorizontalAlignment="Stretch"
+                                      ColumnSpacing="12"
+                                      SizeChanged="OnTrayIconOptionsSizeChanged">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <RadioButton x:Name="TrayIconDefaultOption"
+                                                 Grid.Column="0"
+                                                 Style="{StaticResource TrayIconOptionStyle}"
+                                                 Tag="default"
+                                                 GroupName="TrayIcon"
+                                                 AutomationProperties.AutomationId="TrayIconOptionDefault"
+                                                 Checked="OnTrayIconOptionChecked">
+                                        <StackPanel Spacing="8" HorizontalAlignment="Stretch">
+                                            <Grid HorizontalAlignment="Center">
+                                                <TextBlock x:Name="TrayIconDefaultFallback"
+                                                           Text="ED"
+                                                           FontSize="20"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           Visibility="Collapsed"/>
+                                                <Image x:Name="TrayIconDefaultImage"
+                                                       Width="160"
+                                                       Height="160"
+                                                       Stretch="Uniform"
+                                                       UseLayoutRounding="True"/>
+                                            </Grid>
+                                            <TextBlock x:Name="TrayIconDefaultCaption"
+                                                       Text="Default"
+                                                       FontSize="14"
+                                                       HorizontalAlignment="Center"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="TrayIconEOption"
+                                                 Grid.Column="1"
+                                                 Style="{StaticResource TrayIconOptionStyle}"
+                                                 Tag="e"
+                                                 GroupName="TrayIcon"
+                                                 AutomationProperties.AutomationId="TrayIconOptionE"
+                                                 Checked="OnTrayIconOptionChecked">
+                                        <StackPanel Spacing="8" HorizontalAlignment="Stretch">
+                                            <Grid HorizontalAlignment="Center">
+                                                <TextBlock x:Name="TrayIconEFallback"
+                                                           Text="E"
+                                                           FontSize="20"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           Visibility="Collapsed"/>
+                                                <Image x:Name="TrayIconEImage"
+                                                       Width="160"
+                                                       Height="160"
+                                                       Stretch="Uniform"
+                                                       UseLayoutRounding="True"/>
+                                            </Grid>
+                                            <TextBlock x:Name="TrayIconECaption"
+                                                       Text="E"
+                                                       FontSize="14"
+                                                       HorizontalAlignment="Center"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="TrayIconAjpOption"
+                                                 Grid.Column="2"
+                                                 Style="{StaticResource TrayIconOptionStyle}"
+                                                 Tag="ajp"
+                                                 GroupName="TrayIcon"
+                                                 AutomationProperties.AutomationId="TrayIconOptionAjp"
+                                                 Checked="OnTrayIconOptionChecked">
+                                        <StackPanel Spacing="8" HorizontalAlignment="Stretch">
+                                            <Grid HorizontalAlignment="Center">
+                                                <TextBlock x:Name="TrayIconAjpFallback"
+                                                           Text="あ"
+                                                           FontSize="20"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           Visibility="Collapsed"/>
+                                                <Image x:Name="TrayIconAjpImage"
+                                                       Width="160"
+                                                       Height="160"
+                                                       Stretch="Uniform"
+                                                       UseLayoutRounding="True"/>
+                                            </Grid>
+                                            <TextBlock x:Name="TrayIconAjpCaption"
+                                                       Text="あ"
+                                                       FontSize="14"
+                                                       HorizontalAlignment="Center"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="TrayIconWenOption"
+                                                 Grid.Column="3"
+                                                 Style="{StaticResource TrayIconOptionStyle}"
+                                                 Tag="wen"
+                                                 GroupName="TrayIcon"
+                                                 AutomationProperties.AutomationId="TrayIconOptionWen"
+                                                 Checked="OnTrayIconOptionChecked">
+                                        <StackPanel Spacing="8" HorizontalAlignment="Stretch">
+                                            <Grid HorizontalAlignment="Center">
+                                                <TextBlock x:Name="TrayIconWenFallback"
+                                                           Text="文"
+                                                           FontSize="20"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           Visibility="Collapsed"/>
+                                                <Image x:Name="TrayIconWenImage"
+                                                       Width="160"
+                                                       Height="160"
+                                                       Stretch="Uniform"
+                                                       UseLayoutRounding="True"/>
+                                            </Grid>
+                                            <TextBlock x:Name="TrayIconWenCaption"
+                                                       Text="文"
+                                                       FontSize="14"
+                                                       HorizontalAlignment="Center"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                </Grid>
+                                <TextBlock x:Name="TrayIconDescriptionText"
+                                           Text="Choose a tray icon included with Easydict. Default keeps the current icon."
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="TrayIconMissingText"
+                                           AutomationProperties.AutomationId="TrayIconMissingText"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           Visibility="Collapsed"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

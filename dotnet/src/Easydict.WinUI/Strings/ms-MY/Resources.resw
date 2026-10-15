@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>Kecilkan ke dulang sistem</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>Ikon dulang sistem</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>Pilih ikon yang disertakan bersama Easydict. Lalai kekal ikon semasa.</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>Lalai</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>Ikon ini belum disertakan. Dulang kekal pada ikon semasa sehingga fail ditambah.</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>Pantau papan keratan untuk teks</value>
   </data>

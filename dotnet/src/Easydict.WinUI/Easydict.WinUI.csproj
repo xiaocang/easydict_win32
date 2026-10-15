@@ -262,6 +262,12 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         </Content>
+        <!-- Tray icons. Masters in source\ stay in the repo and are not shipped. -->
+        <Content Include="Assets\Branding\TrayIcons\*.ico;Assets\Branding\TrayIcons\*.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+        <Content Remove="Assets\Branding\TrayIcons\source\**" />
         <!-- The unplated master is a build-time source; ship the generated icons only. -->
         <Content Include="Assets\*.png" Exclude="Assets\icon_unplated_1024.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

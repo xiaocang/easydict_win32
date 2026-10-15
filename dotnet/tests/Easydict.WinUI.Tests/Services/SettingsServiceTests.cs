@@ -1119,6 +1119,26 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void TrayIconId_DefaultsToTheCurrentIconAndRoundTripsKnownIds()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        var settingsPath = Path.Combine(testDirectory.Path, "settings.json");
+
+        var defaults = CreateIsolatedSettingsService(testDirectory.Path);
+        defaults.TrayIconId.Should().Be(TrayIconCatalog.DefaultId);
+
+        defaults.TrayIconId = TrayIconCatalog.EId;
+        defaults.Save();
+        CreateIsolatedSettingsService(testDirectory.Path).TrayIconId.Should().Be(TrayIconCatalog.EId);
+
+        File.WriteAllText(settingsPath, """{"TrayIconId":"not-an-icon"}""");
+        CreateIsolatedSettingsService(testDirectory.Path).TrayIconId.Should().Be(TrayIconCatalog.DefaultId);
+
+        File.WriteAllText(settingsPath, """{"TrayIconId":" WEN "}""");
+        CreateIsolatedSettingsService(testDirectory.Path).TrayIconId.Should().Be(TrayIconCatalog.WenId);
+    }
+
+    [Fact]
     public void TtsSettings_RoundTripThroughSave()
     {
         var originalSpeed = _settings.TtsSpeed;

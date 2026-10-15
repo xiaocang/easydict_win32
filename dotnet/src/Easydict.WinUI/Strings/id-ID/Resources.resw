@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>Minimalkan ke baki sistem</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>Ikon baki sistem</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>Pilih ikon yang disertakan bersama Easydict. Default tetap ikon saat ini.</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>Ikon ini belum disertakan. Baki tetap memakai ikon saat ini sampai berkas ditambahkan.</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>Pantau papan klip untuk teks</value>
   </data>

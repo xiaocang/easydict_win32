@@ -249,10 +249,13 @@ Write-Host "  Failed: $failCount" -ForegroundColor $(if ($failCount -gt 0) { "Re
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Native title bars and the system tray share ICO assets, with a subtle outline for dark themes.
+# TightCrop drops the source canvas margin so the glyph fills the tray slot. The 4% pad
+# leaves room for the dark outline at 16px. Square44 logos above keep the original safe area.
 $windowIconDir = Join-Path $OutputDir 'Branding/Unplated'
 foreach ($dark in @($false, $true)) {
     $iconName = if ($dark) { 'AppIcon.Dark.ico' } else { 'AppIcon.ico' }
     & "$PSScriptRoot/generate-app-icon-ico.ps1" `
-        -SourcePng $UnplatedIcon -OutputIco (Join-Path $windowIconDir $iconName) -DarkMode:$dark -SmoothDarkOutline
+        -SourcePng $UnplatedIcon -OutputIco (Join-Path $windowIconDir $iconName) `
+        -DarkMode:$dark -SmoothDarkOutline -TightCrop -TightPad 0.04
     if (-not $?) { throw "Failed to generate $iconName" }
 }

@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>Réduire dans la barre des tâches</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>Icône de la zone de notification</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>Choisissez une icône fournie avec Easydict. Le choix par défaut conserve l'icône actuelle.</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>Par défaut</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>Cette icône n'est pas encore fournie. La zone de notification conserve l'icône actuelle tant que le fichier n'est pas ajouté.</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>Surveiller le presse-papiers</value>
   </data>

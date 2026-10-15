@@ -1580,6 +1580,14 @@ namespace Easydict.WinUI
         }
 
         /// <summary>
+        /// Apply the selected built-in system tray icon.
+        /// </summary>
+        public static void ApplyTrayIcon()
+        {
+            Instance._trayIconService?.RefreshThemeIcon();
+        }
+
+        /// <summary>
         /// Apply app theme setting to all windows.
         /// </summary>
         /// <param name="theme">Theme name: "System", "Light", "Dark", or "Minimal"</param>

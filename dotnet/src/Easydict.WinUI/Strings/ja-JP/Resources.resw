@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>システムトレイに最小化</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>システムトレイのアイコン</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>Easydict に同梱されたトレイアイコンを選びます。既定では現在のアイコンのままです。</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>既定</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>このアイコンはまだ同梱されていません。ファイルを追加するまで、トレイは現在のアイコンのままです。</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>クリップボードのテキストを監視</value>
   </data>

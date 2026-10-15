@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>تصغير إلى علبة النظام</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>أيقونة علبة النظام</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>اختر أيقونة مرفقة مع التطبيق. يبقى الخيار الافتراضي هو الأيقونة الحالية.</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>افتراضي</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>هذه الأيقونة غير مرفقة بعد. تبقى علبة النظام على الأيقونة الحالية إلى أن يضاف الملف.</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>مراقبة الحافظة للنصوص</value>
   </data>

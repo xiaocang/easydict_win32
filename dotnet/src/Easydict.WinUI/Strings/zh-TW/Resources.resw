@@ -454,6 +454,27 @@
   <data name="MinimizeToTray" xml:space="preserve">
     <value>最小化到系統匣</value>
   </data>
+  <data name="TrayIcon" xml:space="preserve">
+    <value>系統匣圖示</value>
+  </data>
+  <data name="TrayIconDescription" xml:space="preserve">
+    <value>選擇軟體自帶的系統匣圖示。預設仍使用目前圖示。</value>
+  </data>
+  <data name="TrayIconDefault" xml:space="preserve">
+    <value>預設</value>
+  </data>
+  <data name="TrayIconE" xml:space="preserve">
+    <value>E</value>
+  </data>
+  <data name="TrayIconAjp" xml:space="preserve">
+    <value>あ</value>
+  </data>
+  <data name="TrayIconWen" xml:space="preserve">
+    <value>文</value>
+  </data>
+  <data name="TrayIconPlaceholderMissing" xml:space="preserve">
+    <value>此圖示尚未隨軟體提供。在加入檔案之前，系統匣仍使用目前圖示。</value>
+  </data>
   <data name="MonitorClipboard" xml:space="preserve">
     <value>監控剪貼簿文字</value>
   </data>

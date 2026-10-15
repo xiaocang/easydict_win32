@@ -96,6 +96,15 @@ public sealed class MemoryGateTests : IDisposable
         WriteMarker("EASYDICT_MEMORY_GATE_CLOSED_MARKER_PATH");
         WaitForReleaseOrIdle(postCloseIdle);
         WritePhaseMarker("19-post-close-idle-complete");
+
+        // Keep the app alive (the test teardown would shut it down) until the script has
+        // taken the final gcdump and written the release marker. Previously the test
+        // returned right after the idle, so the final dump raced app shutdown and failed.
+        // No-op when no release marker is configured (local runs / other callers).
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EASYDICT_MEMORY_GATE_RELEASE_MARKER_PATH")))
+        {
+            WaitForReleaseOrIdle(ResolveDelaySeconds("EASYDICT_MEMORY_GATE_RELEASE_TIMEOUT_SECONDS", 180));
+        }
     }
 
     [Fact]

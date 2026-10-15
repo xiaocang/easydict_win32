@@ -645,12 +645,18 @@ function Invoke-Gcdump([string]$GcdumpTool, [int]$ProcessId, [string]$DumpPath, 
     & $GcdumpTool collect -p $ProcessId -o $DumpPath *>&1 | Tee-Object -FilePath $LogPath
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "dotnet-gcdump collect failed for '$DumpPath'."
+        # gcdump is diagnostic only: do not leak its exit code into the step result
+        # (the GitHub pwsh wrapper ends with `exit $LASTEXITCODE`).
+        $global:LASTEXITCODE = 0
         return $false
     }
 
     & $GcdumpTool report $DumpPath *>&1 | Tee-Object -FilePath $ReportPath
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "dotnet-gcdump report failed for '$DumpPath'."
+        # gcdump is diagnostic only: do not leak its exit code into the step result
+        # (the GitHub pwsh wrapper ends with `exit $LASTEXITCODE`).
+        $global:LASTEXITCODE = 0
         return $false
     }
 
@@ -1083,3 +1089,6 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host "Memory gate passed."
+# Exit explicitly so a stale $LASTEXITCODE from an earlier (non-fatal) native
+# tool call cannot fail the step after the gate has passed.
+exit 0

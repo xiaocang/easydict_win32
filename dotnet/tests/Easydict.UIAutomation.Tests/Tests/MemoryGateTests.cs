@@ -103,7 +103,7 @@ public sealed class MemoryGateTests : IDisposable
         // No-op when no release marker is configured (local runs / other callers).
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EASYDICT_MEMORY_GATE_RELEASE_MARKER_PATH")))
         {
-            WaitForReleaseOrIdle(ResolveDelaySeconds("EASYDICT_MEMORY_GATE_RELEASE_TIMEOUT_SECONDS", 180));
+            WaitForReleaseOrIdle(ResolveDelaySeconds("EASYDICT_MEMORY_GATE_RELEASE_TIMEOUT_SECONDS", 600, maxSeconds: 1800));
         }
     }
 
@@ -149,7 +149,9 @@ public sealed class MemoryGateTests : IDisposable
         });
     }
 
-    private static int ResolveDelaySeconds(string name, int defaultValue)
+    // maxSeconds is a safety cap; the release hold uses a higher one (30 min, well under
+    // the 45-min job timeout) because the script derives it from the gcdump retry budget.
+    private static int ResolveDelaySeconds(string name, int defaultValue, int maxSeconds = 300)
     {
         var value = Environment.GetEnvironmentVariable(name);
         if (!int.TryParse(value, out var seconds))
@@ -157,7 +159,7 @@ public sealed class MemoryGateTests : IDisposable
             return defaultValue;
         }
 
-        return Math.Clamp(seconds, 0, 300);
+        return Math.Clamp(seconds, 0, maxSeconds);
     }
 
     private static bool ResolveFlag(string name)

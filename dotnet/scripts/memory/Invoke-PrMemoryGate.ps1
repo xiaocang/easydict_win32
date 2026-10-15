@@ -12,6 +12,8 @@ param(
     [int]$GcHeapAbsoluteAllowanceMB = 16,
     [int]$HandleCountPostCloseGrowthAllowance = 8,
     [string]$DiagnosticsToolVersion = "8.*",
+    [int]$GcdumpMaxAttempts = 3,
+    [int]$GcdumpTimeoutSeconds = 60,
     [switch]$SkipBuild,
     [switch]$SkipToolInstall,
     [switch]$RunRealTranslation
@@ -635,7 +637,19 @@ function New-PhaseSnapshots(
     return $snapshots.ToArray()
 }
 
-function Invoke-Gcdump([string]$GcdumpTool, [int]$ProcessId, [string]$DumpPath, [string]$ReportPath, [string]$LogPath, [int]$MaxAttempts = 3, [int]$TimeoutSeconds = 60) {
+function Get-GcdumpBackoffSeconds([int]$Attempt) { return 2 * $Attempt }
+
+# Worst case for one Invoke-Gcdump call: every attempt hits --timeout, plus the
+# backoffs between attempts. Used to size the scenario's release hold.
+function Get-GcdumpWorstCaseSeconds([int]$MaxAttempts, [int]$TimeoutSeconds) {
+    $total = $MaxAttempts * $TimeoutSeconds
+    for ($attempt = 1; $attempt -lt $MaxAttempts; $attempt++) {
+        $total += Get-GcdumpBackoffSeconds $attempt
+    }
+    return $total
+}
+
+function Invoke-Gcdump([string]$GcdumpTool, [int]$ProcessId, [string]$DumpPath, [string]$ReportPath, [string]$LogPath, [int]$MaxAttempts = $GcdumpMaxAttempts, [int]$TimeoutSeconds = $GcdumpTimeoutSeconds) {
     Remove-Item -LiteralPath $LogPath -Force -ErrorAction SilentlyContinue
     $collected = $false
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
@@ -658,7 +672,7 @@ function Invoke-Gcdump([string]$GcdumpTool, [int]$ProcessId, [string]$DumpPath, 
 
         Add-Content -LiteralPath $LogPath -Value "[attempt $attempt] failed (exit $LASTEXITCODE)"
         if ($attempt -lt $MaxAttempts) {
-            Start-Sleep -Seconds (2 * $attempt)
+            Start-Sleep -Seconds (Get-GcdumpBackoffSeconds $attempt)
         }
     }
 
@@ -799,8 +813,12 @@ $env:EASYDICT_MEMORY_GATE_PROCESS_ID_PATH = $processIdMarker
 $env:EASYDICT_MEMORY_GATE_CLOSED_MARKER_PATH = $closedMarker
 $env:EASYDICT_MEMORY_GATE_RELEASE_MARKER_PATH = $releaseMarker
 # The scenario holds the app open after the post-close idle until the release marker
-# appears, so the final gcdump never races app shutdown.
-$env:EASYDICT_MEMORY_GATE_RELEASE_TIMEOUT_SECONDS = "180"
+# appears, so the final gcdump never races app shutdown. Size the hold from the same
+# retry settings Invoke-Gcdump uses (baseline + final worst case, plus margin for
+# gcdump report / marker polling) so the two cannot drift apart.
+$gcdumpWorstCaseSeconds = Get-GcdumpWorstCaseSeconds $GcdumpMaxAttempts $GcdumpTimeoutSeconds
+$releaseHoldSeconds = (2 * $gcdumpWorstCaseSeconds) + 120
+$env:EASYDICT_MEMORY_GATE_RELEASE_TIMEOUT_SECONDS = [string]$releaseHoldSeconds
 $env:EASYDICT_MEMORY_GATE_PHASE_DIR = $phaseDir
 
 $testArgs = @(

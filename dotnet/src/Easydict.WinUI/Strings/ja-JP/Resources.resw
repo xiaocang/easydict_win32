@@ -1719,4 +1719,44 @@
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>テキストを選択してから翻訳アイコンが表示されるまでの待ち時間です。小さいほど速く表示されます。トリプルクリックでアイコンがちらつく場合は大きくしてください。</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>選択テキストを取得しています…</value></data>
   <data name="StatusRecognizingText" xml:space="preserve"><value>文字を認識しています…</value></data>
+  <data name="AiProfilesTitle" xml:space="preserve"><value>AI profiles</value></data>
+  <data name="AiProfilesSubtitle" xml:space="preserve"><value>Choose a provider, then configure each account in its own profile.</value></data>
+  <data name="AiProfileAdd" xml:space="preserve"><value>Add profile</value></data>
+  <data name="AiProfileSelectProvider" xml:space="preserve"><value>Select provider</value></data>
+  <data name="AiProfileNone" xml:space="preserve"><value>Not set</value></data>
+  <data name="AiProfileName" xml:space="preserve"><value>Profile name</value></data>
+  <data name="AiProfileEnabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="AiProfileDisabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="AiProfileDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="AiProfileTest" xml:space="preserve"><value>Test</value></data>
+  <data name="AiProfileRefreshModels" xml:space="preserve"><value>Refresh models</value></data>
+  <data name="AiProfileCancelAction" xml:space="preserve"><value>Cancel</value></data>
+  <data name="AiProfileEmptyState" xml:space="preserve"><value>Select a profile or add one to configure an AI service.</value></data>
+  <data name="AiProfileSaveHint" xml:space="preserve"><value>Changes take effect when you save settings.</value></data>
+  <data name="AiProfileKeepSecretHint" xml:space="preserve"><value>A saved secret is protected. Leave blank to keep it unchanged.</value></data>
+  <data name="AiProfileClearSecret" xml:space="preserve"><value>Clear</value></data>
+  <data name="AiProfileDeleteTitle" xml:space="preserve"><value>Delete AI profile?</value></data>
+  <data name="AiProfileDeleteMessage" xml:space="preserve"><value>This profile will be removed when you save. Any service selections that use it will move to another profile of the same provider, or be cleared.</value></data>
+  <data name="AiProfileNameRequired" xml:space="preserve"><value>Enter a name for this AI profile.</value></data>
+  <data name="AiProfileApiKeyRequired" xml:space="preserve"><value>Enter the required credential or disable this profile before saving.</value></data>
+  <data name="AiProfileModelRequired" xml:space="preserve"><value>Enter a model for this profile before saving.</value></data>
+  <data name="AiProfileTesting" xml:space="preserve"><value>Testing…</value></data>
+  <data name="AiProfileLoadingModels" xml:space="preserve"><value>Loading models…</value></data>
+  <data name="AiProfileTestSuccess" xml:space="preserve"><value>Test succeeded.</value></data>
+  <data name="AiProfileModelsLoaded" xml:space="preserve"><value>Loaded {0} models.</value></data>
+  <data name="AiProfileModelsUnavailable" xml:space="preserve"><value>This provider does not support model listing.</value></data>
+  <data name="AiProfileModelPickerTitle" xml:space="preserve"><value>Select a model</value></data>
+  <data name="AiProfileModelPickerEmpty" xml:space="preserve"><value>No models were returned.</value></data>
+  <data name="AiProfileFieldApiKey" xml:space="preserve"><value>API key</value></data>
+  <data name="AiProfileFieldToken" xml:space="preserve"><value>Access token</value></data>
+  <data name="AiProfileFieldEndpoint" xml:space="preserve"><value>Endpoint</value></data>
+  <data name="AiProfileFieldModel" xml:space="preserve"><value>Model</value></data>
+  <data name="AiProfileFieldTemperature" xml:space="preserve"><value>Temperature</value></data>
+  <data name="AiProfileFieldApiFormat" xml:space="preserve"><value>API format</value></data>
+  <data name="AiProfileFieldPromptStyle" xml:space="preserve"><value>Prompt style</value></data>
+  <data name="AiProfileFieldCustomPrompt" xml:space="preserve"><value>Custom prompt</value></data>
+  <data name="AiProfileFieldSignedInViaSso" xml:space="preserve"><value>Signed in with SSO</value></data>
+  <data name="AiProfileFieldExecutablePath" xml:space="preserve"><value>Executable path (optional)</value></data>
+  <data name="AiProfileFieldReasoningEffort" xml:space="preserve"><value>Reasoning effort</value></data>
+  <data name="AiProfileTestInput" xml:space="preserve"><value>Hello. Please translate this sentence into Chinese.</value></data>
 </root>

@@ -1719,4 +1719,44 @@
   <data name="MouseSelectionPopDelayDescription" xml:space="preserve"><value>选中文本后等待多久才显示翻译图标。数值越小弹出越快；如果三击选择时图标闪烁，可适当调大。</value></data>
   <data name="StatusCapturingSelection" xml:space="preserve"><value>正在获取选中文本…</value></data>
   <data name="StatusRecognizingText" xml:space="preserve"><value>正在识别文字…</value></data>
+  <data name="AiProfilesTitle" xml:space="preserve"><value>AI 服务配置</value></data>
+  <data name="AiProfilesSubtitle" xml:space="preserve"><value>选择服务类型，为每个账户单独配置档案。</value></data>
+  <data name="AiProfileAdd" xml:space="preserve"><value>添加配置</value></data>
+  <data name="AiProfileSelectProvider" xml:space="preserve"><value>选择服务</value></data>
+  <data name="AiProfileNone" xml:space="preserve"><value>未设置</value></data>
+  <data name="AiProfileName" xml:space="preserve"><value>配置名称</value></data>
+  <data name="AiProfileEnabled" xml:space="preserve"><value>启用</value></data>
+  <data name="AiProfileDisabled" xml:space="preserve"><value>已停用</value></data>
+  <data name="AiProfileDelete" xml:space="preserve"><value>删除</value></data>
+  <data name="AiProfileTest" xml:space="preserve"><value>测试</value></data>
+  <data name="AiProfileRefreshModels" xml:space="preserve"><value>刷新模型</value></data>
+  <data name="AiProfileCancelAction" xml:space="preserve"><value>取消</value></data>
+  <data name="AiProfileEmptyState" xml:space="preserve"><value>选择一个配置，或添加服务后开始配置。</value></data>
+  <data name="AiProfileSaveHint" xml:space="preserve"><value>保存设置后更改才会生效。</value></data>
+  <data name="AiProfileKeepSecretHint" xml:space="preserve"><value>已保存的密钥经过保护。留空可保留原值。</value></data>
+  <data name="AiProfileClearSecret" xml:space="preserve"><value>清除</value></data>
+  <data name="AiProfileDeleteTitle" xml:space="preserve"><value>删除 AI 配置？</value></data>
+  <data name="AiProfileDeleteMessage" xml:space="preserve"><value>保存时会删除此配置。使用它的服务选择会转到同类型的其他配置；若没有其他配置，则清除此选择。</value></data>
+  <data name="AiProfileNameRequired" xml:space="preserve"><value>请为此 AI 配置填写名称。</value></data>
+  <data name="AiProfileApiKeyRequired" xml:space="preserve"><value>请输入必需的凭据，或在保存前停用此配置。</value></data>
+  <data name="AiProfileModelRequired" xml:space="preserve"><value>保存前请填写模型名称。</value></data>
+  <data name="AiProfileTesting" xml:space="preserve"><value>正在测试…</value></data>
+  <data name="AiProfileLoadingModels" xml:space="preserve"><value>正在加载模型…</value></data>
+  <data name="AiProfileTestSuccess" xml:space="preserve"><value>测试成功。</value></data>
+  <data name="AiProfileModelsLoaded" xml:space="preserve"><value>已加载 {0} 个模型。</value></data>
+  <data name="AiProfileModelsUnavailable" xml:space="preserve"><value>此服务不支持模型列表。</value></data>
+  <data name="AiProfileModelPickerTitle" xml:space="preserve"><value>选择模型</value></data>
+  <data name="AiProfileModelPickerEmpty" xml:space="preserve"><value>服务未返回模型。</value></data>
+  <data name="AiProfileFieldApiKey" xml:space="preserve"><value>API 密钥</value></data>
+  <data name="AiProfileFieldToken" xml:space="preserve"><value>访问令牌</value></data>
+  <data name="AiProfileFieldEndpoint" xml:space="preserve"><value>服务地址</value></data>
+  <data name="AiProfileFieldModel" xml:space="preserve"><value>模型</value></data>
+  <data name="AiProfileFieldTemperature" xml:space="preserve"><value>温度</value></data>
+  <data name="AiProfileFieldApiFormat" xml:space="preserve"><value>API 格式</value></data>
+  <data name="AiProfileFieldPromptStyle" xml:space="preserve"><value>提示词风格</value></data>
+  <data name="AiProfileFieldCustomPrompt" xml:space="preserve"><value>自定义提示词</value></data>
+  <data name="AiProfileFieldSignedInViaSso" xml:space="preserve"><value>通过 SSO 登录</value></data>
+  <data name="AiProfileFieldExecutablePath" xml:space="preserve"><value>可执行文件路径（可选）</value></data>
+  <data name="AiProfileFieldReasoningEffort" xml:space="preserve"><value>推理强度</value></data>
+  <data name="AiProfileTestInput" xml:space="preserve"><value>Hello. Please translate this sentence into Chinese.</value></data>
 </root>

@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Numerics;
 using Easydict.BobPlugin;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -22,10 +23,14 @@ using Easydict.WinUI.Services.SavedItems;
 using Easydict.SidecarClient.Protocol;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.System;
+using Windows.UI.ViewManagement;
+using Microsoft.UI.Composition;
 
 namespace Easydict.WinUI.Views;
 
@@ -243,6 +248,15 @@ public sealed partial class SettingsPage : Page
     // Dynamic UI references for encrypted MDX dictionary credential fields
     private readonly Dictionary<string, (TextBox EmailBox, PasswordBox RegcodeBox)> _mdxCredentialFields = new();
     private readonly List<(Image Icon, string IconName)> _serviceConfigurationHeaderIcons = [];
+    private readonly ObservableCollection<AiProfileDraft> _aiProfileDrafts = [];
+    private readonly Dictionary<string, FrameworkElement> _aiProfileFieldControls = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _deletedAiProfileIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _aiProfileServiceIdsToRemoveFromUi = new(StringComparer.Ordinal);
+    private readonly ConditionalWeakTable<UIElement, object> _motionBoundElements = new();
+    private readonly UISettings _uiSettings = new();
+    private AiProfileDraft? _selectedAiProfileDraft;
+    private CancellationTokenSource? _aiProfileActionCts;
+    private bool _isBuildingAiProfileEditor;
 
     private readonly ObservableCollection<SettingsTabItem> _settingsTabs =
     [
@@ -259,6 +273,98 @@ public sealed partial class SettingsPage : Page
     private readonly HashSet<SettingsTabId> _initializedSettingsTabData = [];
 
     private sealed record PasswordTailHint(Border Container, TextBlock Text);
+
+    private sealed class AiProfileDraft : INotifyPropertyChanged
+    {
+        private string _name;
+        private bool _isEnabled;
+        private string _displayLabel;
+
+        public AiProfileDraft(
+            string draftKey,
+            string? profileId,
+            string? serviceId,
+            AiProviderDefinition provider,
+            string name,
+            bool isEnabled,
+            Dictionary<string, string> configuration,
+            bool isNew,
+            ImageSource iconSource)
+        {
+            DraftKey = draftKey;
+            ProfileId = profileId;
+            ServiceId = serviceId;
+            Provider = provider;
+            _name = name;
+            _displayLabel = name;
+            _isEnabled = isEnabled;
+            Configuration = configuration;
+            BaseName = name;
+            BaseIsEnabled = isEnabled;
+            BaseConfiguration = new Dictionary<string, string>(configuration, StringComparer.Ordinal);
+            IsNew = isNew;
+            IconSource = iconSource;
+        }
+
+        public string DraftKey { get; }
+        public string? ProfileId { get; set; }
+        public string? ServiceId { get; set; }
+        public AiProviderDefinition Provider { get; }
+        public string ProviderType => Provider.Id;
+        public string ProviderDisplayName => $"{Provider.DisplayName} · {AiProfileText(IsEnabled ? "AiProfileEnabled" : "AiProfileDisabled", IsEnabled ? "Enabled" : "Disabled")}";
+        public ImageSource IconSource { get; }
+        public bool IsNew { get; }
+        public string BaseName { get; }
+        public bool BaseIsEnabled { get; }
+        public Dictionary<string, string> BaseConfiguration { get; }
+        public Dictionary<string, string> Configuration { get; }
+        public Dictionary<string, string> SecretEdits { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> ClearedSecretFields { get; } = new(StringComparer.Ordinal);
+
+        public string Name
+        {
+            get => _name;
+            set
+            {
+                if (string.Equals(_name, value, StringComparison.Ordinal)) return;
+                _name = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DisplayLabel));
+            }
+        }
+
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set
+            {
+                if (_isEnabled == value) return;
+                _isEnabled = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ProviderDisplayName));
+            }
+        }
+
+        public string DisplayLabel
+        {
+            get => _displayLabel;
+            set
+            {
+                if (string.Equals(_displayLabel, value, StringComparison.Ordinal)) return;
+                _displayLabel = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public void NotifyLocalizationChanged()
+        {
+            OnPropertyChanged(nameof(ProviderDisplayName));
+            OnPropertyChanged(nameof(DisplayLabel));
+        }
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
 
 
 #if DEBUG
@@ -393,6 +499,7 @@ public sealed partial class SettingsPage : Page
         ApplyThemeChrome();
         ApplyLingueeAvailability();
         InitializeServiceConfigurationHeaderIcons();
+        InitializeAiProfilesEditor();
         InitializePasswordTailHints();
 #if DEBUG
         PerfLog("ctor: end InitializeComponent");
@@ -400,6 +507,7 @@ public sealed partial class SettingsPage : Page
         LogObjectState("ctor after InitializeComponent");
 #endif
         this.Loaded += OnPageLoaded;
+        this.Loaded += OnSettingsPageLoaded;
         this.Unloaded += OnPageUnloaded;
         this.ActualThemeChanged += OnActualThemeChanged;
     }
@@ -430,6 +538,900 @@ public sealed partial class SettingsPage : Page
         }
 
         UpdateServiceConfigurationHeaderIconSources();
+    }
+
+    private void InitializeAiProfilesEditor()
+    {
+        var oldProviderTags = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Ollama", "OpenAI", "DeepSeek", "Groq", "Zhipu", "Kimi", "GitHub",
+            "Gemini", "CustomOpenAI", "OpenRouter", "OrcaRouter", "Doubao",
+            "claude-code", "codex"
+        };
+        foreach (var expander in ServiceConfigurationSection.Children.OfType<Expander>())
+        {
+            if (expander.Tag is string tag && oldProviderTags.Contains(tag))
+            {
+                expander.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        ApplyAiProfileEditorLocalization();
+
+        foreach (var provider in AiProviderCatalog.All)
+        {
+            AiProfileProviderComboBox.Items.Add(new ComboBoxItem
+            {
+                Content = provider.DisplayName,
+                Tag = provider.Id
+            });
+        }
+
+        AiProfileListView.ItemsSource = _aiProfileDrafts;
+        if (_settings.AiServiceProfilesLoadError is not null)
+        {
+            AiProfileActionStatusText.Text = _settings.AiServiceProfilesLoadError;
+            AiProfileAddButton.IsEnabled = false;
+            AiProfileProviderComboBox.IsEnabled = false;
+        }
+        else
+        {
+            foreach (var profile in _settings.AiServiceProfiles)
+            {
+                if (AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
+                {
+                    _aiProfileDrafts.Add(CreateAiProfileDraft(profile, provider));
+                }
+            }
+        }
+
+        RefreshAiProfileListLabels();
+        if (_aiProfileDrafts.Count > 0)
+        {
+            AiProfileListView.SelectedIndex = 0;
+        }
+        else
+        {
+            RenderAiProfileEditor(null);
+        }
+    }
+
+    private static string AiProfileText(string key, string fallback)
+    {
+        var localized = LocalizationService.Instance.GetString(key);
+        return string.Equals(localized, key, StringComparison.Ordinal) ? fallback : localized;
+    }
+
+    private void ApplyAiProfileEditorLocalization()
+    {
+        if (AiProfilesTitleText is null) return;
+        AiProfilesTitleText.Text = AiProfileText("AiProfilesTitle", "AI profiles");
+        AiProfilesSubtitleText.Text = AiProfileText("AiProfilesSubtitle", "Choose a provider, then configure each account in its own profile.");
+        AiProfileAddButton.Content = AiProfileText("AiProfileAdd", "Add profile");
+        AiProfileProviderComboBox.PlaceholderText = AiProfileText("AiProfileSelectProvider", "Select provider");
+        AiProfileNameBox.Header = AiProfileText("AiProfileName", "Profile name");
+        AiProfileEnabledToggle.Header = AiProfileText("AiProfileEnabled", "Enabled");
+        AiProfileDeleteButton.Content = AiProfileText("AiProfileDelete", "Delete");
+        AiProfileTestButton.Content = AiProfileText("AiProfileTest", "Test");
+        AiProfileRefreshModelsButton.Content = AiProfileText("AiProfileRefreshModels", "Refresh models");
+        AiProfileCancelActionButton.Content = AiProfileText("AiProfileCancelAction", "Cancel");
+        AiProfileEmptyStateText.Text = AiProfileText("AiProfileEmptyState", "Select a profile or add one to configure an AI service.");
+        AiProfileEditorHintText.Text = AiProfileText("AiProfileSaveHint", "Changes take effect when you save settings.");
+        foreach (var draft in _aiProfileDrafts) draft.NotifyLocalizationChanged();
+        if (_selectedAiProfileDraft is not null) RenderAiProfileEditor(_selectedAiProfileDraft);
+    }
+
+    private static string AiProfileFieldText(AiProviderFieldDefinition field)
+    {
+        var key = field.Id switch
+        {
+            "apiKey" => "ApiKey",
+            "token" => "Token",
+            "endpoint" => "Endpoint",
+            "model" => "Model",
+            "temperature" => "Temperature",
+            "apiFormat" => "ApiFormat",
+            "promptStyle" => "PromptStyle",
+            "customPrompt" => "CustomPrompt",
+            "signedInViaSso" => "SignedInViaSso",
+            "executablePath" => "ExecutablePath",
+            "reasoningEffort" => "ReasoningEffort",
+            _ => field.Id
+        };
+        return AiProfileText($"AiProfileField{key}", field.Id);
+    }
+
+    private AiProfileDraft CreateAiProfileDraft(AiServiceProfile profile, AiProviderDefinition provider)
+    {
+        var draft = new AiProfileDraft(
+            profile.ProfileId,
+            profile.ProfileId,
+            profile.ServiceId,
+            provider,
+            profile.Name,
+            profile.IsEnabled,
+            new Dictionary<string, string>(profile.Configuration, StringComparer.Ordinal),
+            isNew: false,
+            CreateAiProviderIcon(provider));
+        return draft;
+    }
+
+    private AiProfileDraft CreateNewAiProfileDraft(AiProviderDefinition provider)
+    {
+        var baseName = provider.DisplayName;
+        var name = baseName;
+        var suffix = 2;
+        while (_aiProfileDrafts.Any(draft => draft.ProviderType == provider.Id
+            && string.Equals(draft.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            name = $"{baseName} {suffix++}";
+        }
+
+        return new AiProfileDraft(
+            $"draft:{Guid.NewGuid():N}",
+            null,
+            null,
+            provider,
+            name,
+            isEnabled: true,
+            provider.Fields.Where(field => !field.IsSecret)
+                .ToDictionary(field => field.Id, field => field.DefaultValue, StringComparer.Ordinal),
+            isNew: true,
+            CreateAiProviderIcon(provider));
+    }
+
+    private ImageSource CreateAiProviderIcon(AiProviderDefinition provider)
+    {
+        var iconName = provider.Id switch
+        {
+            "openai" => "OpenAI",
+            "ollama" => "Ollama",
+            "deepseek" => "DeepSeek",
+            "groq" => "Groq",
+            "zhipu" => "Zhipu",
+            "kimi" => "Kimi",
+            "github" => ServiceIconAssetResolver.GitHubOnLightIconName,
+            "custom-openai" => "CustomOpenAI",
+            "openrouter" => "OpenRouter",
+            "orcarouter" => "OrcaRouter",
+            "gemini" => "Gemini",
+            "doubao" => "Doubao",
+            "claude-code" => "claude-code",
+            "codex" => "codex",
+            _ => provider.Id
+        };
+        return new BitmapImage(ServiceIconAssetResolver.GetIconUri(iconName, ActualTheme));
+    }
+
+    private void RefreshAiProfileListLabels()
+    {
+        var groups = _aiProfileDrafts.GroupBy(
+            draft => $"{draft.ProviderType}\0{draft.Name.Trim()}",
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var group in groups)
+        {
+            var duplicateCount = group.Count();
+            var index = 1;
+            foreach (var draft in group)
+            {
+                draft.DisplayLabel = duplicateCount > 1 ? $"{draft.Name} ({index++})" : draft.Name;
+            }
+        }
+    }
+
+    private void ResetAiProfileDrafts()
+    {
+        _isBuildingAiProfileEditor = true;
+        try
+        {
+            _deletedAiProfileIds.Clear();
+            _aiProfileDrafts.Clear();
+            foreach (var profile in _settings.AiServiceProfiles)
+            {
+                if (AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
+                {
+                    _aiProfileDrafts.Add(CreateAiProfileDraft(profile, provider));
+                }
+            }
+            RefreshAiProfileListLabels();
+            AiProfileListView.SelectedIndex = _aiProfileDrafts.Count > 0 ? 0 : -1;
+            _selectedAiProfileDraft = _aiProfileDrafts.Count > 0 ? _aiProfileDrafts[0] : null;
+            RenderAiProfileEditor(_selectedAiProfileDraft);
+        }
+        finally
+        {
+            _isBuildingAiProfileEditor = false;
+        }
+    }
+
+    private void OnAddAiProfileClick(object sender, RoutedEventArgs e)
+    {
+        if (AiProfileProviderComboBox.SelectedItem is not ComboBoxItem { Tag: string providerId }
+            || !AiProviderCatalog.TryGet(providerId, out var provider))
+        {
+            return;
+        }
+
+        var draft = CreateNewAiProfileDraft(provider);
+        _aiProfileDrafts.Add(draft);
+        RefreshAiProfileListLabels();
+        AiProfileListView.SelectedItem = draft;
+        MarkAiProfileEditorChanged();
+    }
+
+    private void OnAiProfileSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isBuildingAiProfileEditor) return;
+        CancelAiProfileAction();
+        _selectedAiProfileDraft = AiProfileListView.SelectedItem as AiProfileDraft;
+        RenderAiProfileEditor(_selectedAiProfileDraft);
+    }
+
+    private void RenderAiProfileEditor(AiProfileDraft? draft)
+    {
+        _isBuildingAiProfileEditor = true;
+        try
+        {
+            _aiProfileFieldControls.Clear();
+            AiProfileFieldsPanel.Children.Clear();
+            if (draft is null)
+            {
+                AiProfileEditorPanel.Visibility = Visibility.Collapsed;
+                AiProfileEmptyStateText.Visibility = Visibility.Visible;
+                AiProfileActionStatusText.Text = string.Empty;
+                return;
+            }
+
+            AiProfileEmptyStateText.Visibility = Visibility.Collapsed;
+            AiProfileEditorPanel.Visibility = Visibility.Visible;
+            AiProfileNameBox.Text = draft.Name;
+            AiProfileEnabledToggle.IsOn = draft.IsEnabled;
+            AiProfileDeleteButton.IsEnabled = true;
+            AiProfileTestButton.IsEnabled = true;
+            AiProfileRefreshModelsButton.IsEnabled = true;
+            AiProfileRefreshModelsButton.Visibility = draft.Provider.SupportsModelListing
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            AiProfileActionProgressRing.IsActive = false;
+            AiProfileActionProgressRing.Visibility = Visibility.Collapsed;
+            AiProfileCancelActionButton.Visibility = Visibility.Collapsed;
+            AiProfileActionStatusText.Text = string.Empty;
+
+            foreach (var field in draft.Provider.Fields)
+            {
+                BuildAiProfileField(draft, field);
+            }
+        }
+        finally
+        {
+            _isBuildingAiProfileEditor = false;
+        }
+    }
+
+    private void BuildAiProfileField(AiProfileDraft draft, AiProviderFieldDefinition field)
+    {
+        draft.Configuration.TryGetValue(field.Id, out var configValue);
+        var value = configValue ?? field.DefaultValue;
+        var label = AiProfileFieldText(field);
+        var row = new StackPanel { Spacing = 4 };
+
+        if (field.IsSecret)
+        {
+            row.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 13
+            });
+            var controls = new Grid { ColumnSpacing = 8 };
+            controls.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var password = new PasswordBox
+            {
+                PlaceholderText = draft.IsNew
+                    ? label
+                    : AiProfileText("AiProfileKeepSecretHint", "A saved secret is protected. Leave blank to keep it unchanged."),
+                PasswordRevealMode = PasswordRevealMode.Hidden
+            };
+            password.PasswordChanged += (_, _) => OnAiProfileFieldChanged(field.Id, password);
+            Grid.SetColumn(password, 0);
+            controls.Children.Add(password);
+            var clearButton = new Button
+            {
+                Content = AiProfileText("AiProfileClearSecret", "Clear"),
+                Tag = field.Id,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsEnabled = !draft.IsNew && !string.IsNullOrEmpty(_settings.GetAiServiceProfileSecret(draft.ProfileId!, field.Id))
+            };
+            clearButton.Click += OnClearAiProfileSecretClick;
+            Grid.SetColumn(clearButton, 1);
+            controls.Children.Add(clearButton);
+            row.Children.Add(controls);
+            row.Children.Add(new TextBlock
+            {
+                Text = AiProfileText("AiProfileKeepSecretHint", "A saved secret is protected. Leave blank to keep it unchanged."),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap
+            });
+            _aiProfileFieldControls[field.Id] = password;
+        }
+        else if (field.Id is "apiFormat" or "promptStyle" or "reasoningEffort")
+        {
+            var combo = new ComboBox
+            {
+                Header = label,
+                MinWidth = 230,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            var options = field.Id switch
+            {
+                "apiFormat" => new[] { "Auto", "ChatCompletions", "Responses" },
+                "promptStyle" => new[] { "Standard", "Concise", "Custom" },
+                "reasoningEffort" => new[] { "minimal", "low", "medium", "high", "xhigh" },
+                _ => [value]
+            };
+            foreach (var option in options.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                combo.Items.Add(new ComboBoxItem { Content = option, Tag = option });
+            }
+            SelectComboByTag(combo, value);
+            combo.SelectionChanged += (_, _) => OnAiProfileFieldChanged(field.Id, combo);
+            _aiProfileFieldControls[field.Id] = combo;
+            row.Children.Add(combo);
+        }
+        else if (field.Id == "signedInViaSso")
+        {
+            var toggle = new ToggleSwitch
+            {
+                Header = label,
+                IsOn = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            };
+            toggle.Toggled += (_, _) => OnAiProfileFieldChanged(field.Id, toggle);
+            _aiProfileFieldControls[field.Id] = toggle;
+            row.Children.Add(toggle);
+        }
+        else
+        {
+            var textBox = new TextBox
+            {
+                Header = label,
+                Text = value,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                TextWrapping = field.Id == "customPrompt" ? TextWrapping.Wrap : TextWrapping.NoWrap,
+                AcceptsReturn = field.Id == "customPrompt",
+                MinHeight = field.Id == "customPrompt" ? 110 : 0,
+                PlaceholderText = field.Id == "executablePath" ? "Automatic discovery" : string.Empty
+            };
+            textBox.TextChanged += (_, _) => OnAiProfileFieldChanged(field.Id, textBox);
+            _aiProfileFieldControls[field.Id] = textBox;
+            row.Children.Add(textBox);
+        }
+
+        AiProfileFieldsPanel.Children.Add(row);
+    }
+
+    private void OnAiProfileFieldChanged(string fieldId, FrameworkElement control)
+    {
+        if (_isBuildingAiProfileEditor || _selectedAiProfileDraft is null) return;
+        var draft = _selectedAiProfileDraft;
+        if (control is PasswordBox password)
+        {
+            if (!string.IsNullOrEmpty(password.Password))
+            {
+                draft.SecretEdits[fieldId] = password.Password;
+                draft.ClearedSecretFields.Remove(fieldId);
+            }
+            else
+            {
+                draft.SecretEdits.Remove(fieldId);
+            }
+        }
+        else if (control is TextBox textBox)
+        {
+            draft.Configuration[fieldId] = textBox.Text;
+        }
+        else if (control is ComboBox combo)
+        {
+            draft.Configuration[fieldId] = GetTagComboValue(combo, draft.Configuration.GetValueOrDefault(fieldId, string.Empty));
+        }
+        else if (control is ToggleSwitch toggle)
+        {
+            draft.Configuration[fieldId] = toggle.IsOn ? "true" : "false";
+        }
+
+        CancelAiProfileAction();
+        RefreshAiProfileListLabels();
+        MarkAiProfileEditorChanged();
+    }
+
+    private void OnAiProfileNameChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isBuildingAiProfileEditor || _selectedAiProfileDraft is null) return;
+        _selectedAiProfileDraft.Name = AiProfileNameBox.Text;
+        RefreshAiProfileListLabels();
+        MarkAiProfileEditorChanged();
+    }
+
+    private void OnAiProfileEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isBuildingAiProfileEditor || _selectedAiProfileDraft is null) return;
+        _selectedAiProfileDraft.IsEnabled = AiProfileEnabledToggle.IsOn;
+        MarkAiProfileEditorChanged();
+    }
+
+    private void OnClearAiProfileSecretClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string fieldId } || _selectedAiProfileDraft is null) return;
+        var draft = _selectedAiProfileDraft;
+        draft.SecretEdits.Remove(fieldId);
+        draft.ClearedSecretFields.Add(fieldId);
+        if (_aiProfileFieldControls.TryGetValue(fieldId, out var control) && control is PasswordBox password)
+        {
+            _isBuildingAiProfileEditor = true;
+            password.Password = string.Empty;
+            _isBuildingAiProfileEditor = false;
+        }
+        MarkAiProfileEditorChanged();
+    }
+
+    private void MarkAiProfileEditorChanged()
+    {
+        if (_isBuildingAiProfileEditor) return;
+        _hasUnsavedChanges = HasAnyTrackedSettingChanges();
+        SaveButton.Visibility = _hasUnsavedChanges ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnCancelAiProfileActionClick(object sender, RoutedEventArgs e)
+        => CancelAiProfileAction();
+
+    private void CancelAiProfileAction()
+    {
+        try { _aiProfileActionCts?.Cancel(); }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async void OnDeleteAiProfileClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedAiProfileDraft is not { } draft) return;
+        if (!draft.IsNew)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = AiProfileText("AiProfileDeleteTitle", "Delete AI profile?"),
+                Content = AiProfileText("AiProfileDeleteMessage", "This profile will be removed when you save."),
+                PrimaryButtonText = AiProfileText("AiProfileDelete", "Delete"),
+                CloseButtonText = AiProfileText("Cancel", "Cancel"),
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot
+            };
+            if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary) return;
+            _deletedAiProfileIds.Add(draft.ProfileId!);
+        }
+
+        var index = _aiProfileDrafts.IndexOf(draft);
+        _aiProfileDrafts.Remove(draft);
+        RefreshAiProfileListLabels();
+        if (_aiProfileDrafts.Count == 0)
+        {
+            AiProfileListView.SelectedItem = null;
+            _selectedAiProfileDraft = null;
+            RenderAiProfileEditor(null);
+        }
+        else
+        {
+            AiProfileListView.SelectedIndex = Math.Clamp(index, 0, _aiProfileDrafts.Count - 1);
+        }
+        MarkAiProfileEditorChanged();
+    }
+
+    private bool AiProfileDraftHasChanges(AiProfileDraft draft)
+    {
+        if (draft.IsNew
+            || !string.Equals(draft.Name.Trim(), draft.BaseName, StringComparison.Ordinal)
+            || draft.IsEnabled != draft.BaseIsEnabled
+            || !AiProfileConfigurationsEqual(draft.Configuration, draft.BaseConfiguration))
+        {
+            return true;
+        }
+
+        foreach (var fieldId in draft.ClearedSecretFields)
+        {
+            if (!string.IsNullOrEmpty(_settings.GetAiServiceProfileSecret(draft.ProfileId!, fieldId))) return true;
+        }
+        foreach (var pair in draft.SecretEdits)
+        {
+            if (!string.Equals(pair.Value, _settings.GetAiServiceProfileSecret(draft.ProfileId!, pair.Key), StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool AiProfileConfigurationsEqual(
+        IReadOnlyDictionary<string, string> left,
+        IReadOnlyDictionary<string, string> right)
+    {
+        return left.Count == right.Count
+            && left.All(pair => right.TryGetValue(pair.Key, out var value)
+                && string.Equals(pair.Value, value, StringComparison.Ordinal));
+    }
+
+    private bool AiProfileEditorHasChanges()
+        => _deletedAiProfileIds.Count > 0 || _aiProfileDrafts.Any(AiProfileDraftHasChanges);
+
+    private bool ValidateAiProfileDrafts(out string? error)
+    {
+        error = null;
+        foreach (var draft in _aiProfileDrafts.Where(AiProfileDraftHasChanges))
+        {
+            if (string.IsNullOrWhiteSpace(draft.Name))
+            {
+                error = AiProfileText("AiProfileNameRequired", "Enter a name for this AI profile.");
+                return false;
+            }
+
+            if (!draft.IsEnabled) continue;
+            if (draft.Provider.RequiresModel
+                && (!draft.Configuration.TryGetValue("model", out var model) || string.IsNullOrWhiteSpace(model)))
+            {
+                error = AiProfileText("AiProfileModelRequired", "Enter a model for this profile before saving.");
+                return false;
+            }
+
+            foreach (var secretField in draft.Provider.SecretFields)
+            {
+                var secret = draft.SecretEdits.TryGetValue(secretField.Id, out var editedSecret)
+                    ? editedSecret
+                    : draft.ClearedSecretFields.Contains(secretField.Id)
+                        ? string.Empty
+                        : draft.IsNew
+                            ? string.Empty
+                            : _settings.GetAiServiceProfileSecret(draft.ProfileId!, secretField.Id);
+                if (draft.Provider.RequiresApiKey && string.IsNullOrWhiteSpace(secret))
+                {
+                    error = AiProfileText("AiProfileApiKeyRequired", "Enter the required credential or disable this profile before saving.");
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private void ApplyAiProfileDrafts()
+    {
+        var submissions = _aiProfileDrafts.Select(draft => new AiServiceProfileDraftSubmission(
+            draft.DraftKey,
+            draft.ProfileId,
+            draft.ServiceId,
+            draft.ProviderType,
+            draft.Name,
+            draft.IsEnabled,
+            new Dictionary<string, string>(draft.Configuration, StringComparer.Ordinal),
+            new Dictionary<string, string>(draft.SecretEdits, StringComparer.Ordinal),
+            new HashSet<string>(draft.ClearedSecretFields, StringComparer.Ordinal),
+            draft.IsNew,
+            AiProfileDraftHasChanges(draft))).ToArray();
+        var result = AiServiceProfileDraftSaver.Save(_settings, submissions, _deletedAiProfileIds.ToArray());
+
+        foreach (var draft in _aiProfileDrafts)
+        {
+            if (!result.ProfilesByDraftKey.TryGetValue(draft.DraftKey, out var profile)) continue;
+            draft.ProfileId = profile.ProfileId;
+            draft.ServiceId = profile.ServiceId;
+        }
+
+        foreach (var change in result.ReferenceChanges)
+        {
+            _aiProfileServiceIdsToRemoveFromUi.Add(change.FromServiceId);
+            var replacement = change.ToServiceId is null
+                ? null
+                : _aiProfileDrafts.FirstOrDefault(draft => draft.ServiceId == change.ToServiceId);
+            RedirectAiProfileServiceCollection(_mainWindowServices, change.FromServiceId, replacement);
+            RedirectAiProfileServiceCollection(_miniWindowServices, change.FromServiceId, replacement);
+            RedirectAiProfileServiceCollection(_fixedWindowServices, change.FromServiceId, replacement);
+        }
+
+        RefreshAiProfileDependentServiceCombos();
+    }
+
+    private void RefreshAiProfileDependentServiceCombos()
+    {
+        foreach (var serviceId in _aiProfileServiceIdsToRemoveFromUi)
+        {
+            RemoveComboItemsByTag(HoverWordLookupServiceCombo, serviceId);
+        }
+        _aiProfileServiceIdsToRemoveFromUi.Clear();
+        AppendAiProfileChoices(HoverWordLookupServiceCombo);
+        SetTagComboValue(HoverWordLookupServiceCombo, _settings.HoverWordLookupServiceId, "");
+        RefreshVisionLayoutProfileChoices();
+    }
+
+    private void AppendAiProfileChoices(ComboBox combo)
+    {
+        foreach (var profile in _settings.AiServiceProfiles)
+        {
+            var label = AiProviderCatalog.TryGet(profile.ProviderType, out var provider)
+                ? $"{profile.Name} · {provider.DisplayName}"
+                : profile.Name;
+            var item = combo.Items.OfType<ComboBoxItem>().FirstOrDefault(candidate =>
+                string.Equals(candidate.Tag as string, profile.ServiceId, StringComparison.Ordinal));
+            if (item is null)
+            {
+                combo.Items.Add(new ComboBoxItem { Content = label, Tag = profile.ServiceId });
+            }
+            else
+            {
+                item.Content = label;
+            }
+        }
+    }
+
+    private void RefreshVisionLayoutProfileChoices()
+    {
+        var legacyAiIds = AiProviderCatalog.All.Select(provider => provider.LegacyServiceId)
+            .Append("custom_openai")
+            .ToHashSet(StringComparer.Ordinal);
+        for (var index = VisionLayoutServiceCombo.Items.Count - 1; index >= 0; index--)
+        {
+            if (VisionLayoutServiceCombo.Items[index] is ComboBoxItem item
+                && (legacyAiIds.Contains(item.Tag as string ?? string.Empty)
+                    || (item.Tag as string)?.StartsWith("ai-profile:", StringComparison.Ordinal) == true
+                    || string.Equals(item.Name, "AiProfileNoneChoice", StringComparison.Ordinal)))
+            {
+                VisionLayoutServiceCombo.Items.RemoveAt(index);
+            }
+        }
+
+        VisionLayoutServiceCombo.Items.Insert(0, new ComboBoxItem
+        {
+            Name = "AiProfileNoneChoice",
+            Content = AiProfileText("AiProfileNone", "Not set"),
+            Tag = string.Empty
+        });
+        foreach (var profile in _settings.AiServiceProfiles)
+        {
+            var providerName = AiProviderCatalog.TryGet(profile.ProviderType, out var provider)
+                ? provider.DisplayName
+                : profile.ProviderType;
+            VisionLayoutServiceCombo.Items.Add(new ComboBoxItem
+            {
+                Content = $"{profile.Name} · {providerName}",
+                Tag = profile.ServiceId
+            });
+        }
+        SetTagComboValue(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId, string.Empty);
+    }
+
+    private static void RemoveComboItemsByTag(ComboBox combo, string serviceId)
+    {
+        for (var index = combo.Items.Count - 1; index >= 0; index--)
+        {
+            if (combo.Items[index] is ComboBoxItem item
+                && string.Equals(item.Tag as string, serviceId, StringComparison.Ordinal))
+            {
+                combo.Items.RemoveAt(index);
+            }
+        }
+    }
+
+    private static void RedirectAiProfileServiceCollection(
+        ObservableCollection<ServiceCheckItem> collection,
+        string removedServiceId,
+        AiProfileDraft? replacement)
+    {
+        var removed = collection.FirstOrDefault(item => item.ServiceId == removedServiceId);
+        if (removed is null) return;
+        var existingReplacement = replacement is null
+            ? null
+            : collection.FirstOrDefault(item => item.ServiceId == replacement.ServiceId);
+        if (replacement is not null && existingReplacement is null)
+        {
+            collection.Add(new ServiceCheckItem
+            {
+                ServiceId = replacement.ServiceId!,
+                DisplayName = replacement.Name,
+                IsChecked = removed.IsChecked,
+                EnabledQuery = removed.EnabledQuery,
+                IsAvailable = removed.IsAvailable,
+                IsUnconfigured = false
+            });
+        }
+        else if (existingReplacement is not null)
+        {
+            existingReplacement.IsChecked |= removed.IsChecked;
+        }
+        collection.Remove(removed);
+    }
+
+    private AiServiceProfile CreateRuntimeSnapshotForAiProfileDraft(AiProfileDraft draft)
+    {
+        var draftId = draft.ProfileId ?? draft.DraftKey;
+        return new AiServiceProfile
+        {
+            ProfileId = draftId,
+            ServiceId = draft.ServiceId ?? $"ai-profile:{draftId}",
+            ProviderType = draft.ProviderType,
+            Name = string.IsNullOrWhiteSpace(draft.Name) ? draft.ProviderDisplayName : draft.Name.Trim(),
+            IsEnabled = true,
+            ConfigurationRevision = 0,
+            Configuration = new Dictionary<string, string>(draft.Configuration, StringComparer.Ordinal)
+        };
+    }
+
+    private ITranslationService CreateRuntimeServiceForAiProfileDraft(AiProfileDraft draft)
+    {
+        return AiProfileTranslationServiceFactory.Create(
+            CreateRuntimeSnapshotForAiProfileDraft(draft),
+            fieldId => draft.ClearedSecretFields.Contains(fieldId)
+                ? null
+                : draft.SecretEdits.TryGetValue(fieldId, out var editedSecret)
+                    ? editedSecret
+                    : draft.ProfileId is null
+                        ? null
+                        : _settings.GetAiServiceProfileSecret(draft.ProfileId, fieldId),
+            TranslationManagerService.Instance.Manager.SharedHttpClient);
+    }
+
+    private CancellationTokenSource BeginAiProfileAction(AiProfileDraft draft, string status)
+    {
+        CancelAiProfileAction();
+        _aiProfileActionCts?.Dispose();
+        var source = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+        source.CancelAfter(TimeSpan.FromSeconds(20));
+        _aiProfileActionCts = source;
+        AiProfileActionStatusText.Text = status;
+        AiProfileActionProgressRing.Visibility = Visibility.Visible;
+        AiProfileActionProgressRing.IsActive = true;
+        AiProfileTestButton.IsEnabled = false;
+        AiProfileRefreshModelsButton.IsEnabled = false;
+        AiProfileCancelActionButton.Visibility = Visibility.Visible;
+        return source;
+    }
+
+    private void EndAiProfileAction(AiProfileDraft draft, CancellationTokenSource source, string? status = null)
+    {
+        var isCurrent = ReferenceEquals(_aiProfileActionCts, source);
+        var isSelected = _selectedAiProfileDraft?.DraftKey == draft.DraftKey;
+        if (isCurrent) _aiProfileActionCts = null;
+        source.Dispose();
+        if (!isCurrent || !isSelected) return;
+
+        AiProfileActionProgressRing.IsActive = false;
+        AiProfileActionProgressRing.Visibility = Visibility.Collapsed;
+        AiProfileTestButton.IsEnabled = true;
+        AiProfileRefreshModelsButton.IsEnabled = draft.Provider.SupportsModelListing;
+        AiProfileCancelActionButton.Visibility = Visibility.Collapsed;
+        if (status is not null) AiProfileActionStatusText.Text = status;
+    }
+
+    private async void OnTestAiProfileClick(object sender, RoutedEventArgs e)
+    {
+        var draft = _selectedAiProfileDraft;
+        if (draft is null) return;
+        UpdateAiProfileListLabelsAndDirtyState();
+        var source = BeginAiProfileAction(draft, AiProfileText("AiProfileTesting", "Testing…"));
+        try
+        {
+            var service = CreateRuntimeServiceForAiProfileDraft(draft);
+            var request = new TranslationRequest
+            {
+                Text = AiProfileText("AiProfileTestInput", "Hello. Please translate this sentence into Chinese."),
+                FromLanguage = TranslationLanguage.English,
+                ToLanguage = TranslationLanguage.SimplifiedChinese,
+                BypassCache = true
+            };
+            var result = await service.TranslateAsync(request, source.Token);
+            var message = string.IsNullOrWhiteSpace(result.TranslatedText)
+                ? result.InfoMessage ?? AiProfileText("AiProfileModelPickerEmpty", "No result was returned.")
+                : AiProfileText("AiProfileTestSuccess", "Test succeeded.");
+            EndAiProfileAction(draft, source, message);
+        }
+        catch (OperationCanceledException)
+        {
+            EndAiProfileAction(draft, source, AiProfileText("Cancelled", "Canceled."));
+        }
+        catch (Exception ex)
+        {
+            EndAiProfileAction(draft, source, ex.Message);
+        }
+    }
+
+    private async void OnRefreshAiProfileModelsClick(object sender, RoutedEventArgs e)
+    {
+        var draft = _selectedAiProfileDraft;
+        if (draft is null || !draft.Provider.SupportsModelListing) return;
+        UpdateAiProfileListLabelsAndDirtyState();
+        var source = BeginAiProfileAction(draft, AiProfileText("AiProfileLoadingModels", "Loading models…"));
+        try
+        {
+            var service = CreateRuntimeServiceForAiProfileDraft(draft);
+            if (service is not IModelCatalogProvider catalog)
+            {
+                EndAiProfileAction(draft, source, AiProfileText("AiProfileModelsUnavailable", "This provider does not support model listing."));
+                return;
+            }
+
+            var models = await catalog.FetchModelsAsync(source.Token);
+            if (models.Count == 0)
+            {
+                EndAiProfileAction(draft, source, AiProfileText("AiProfileModelPickerEmpty", "No models were returned."));
+                return;
+            }
+
+            var picker = new ComboBox
+            {
+                MinWidth = 360,
+                IsEditable = true,
+                DisplayMemberPath = nameof(ModelCatalogEntry.DisplayLabel)
+            };
+            foreach (var model in models)
+            {
+                picker.Items.Add(new ComboBoxItem { Content = model.DisplayLabel, Tag = model.Id });
+            }
+            if (draft.Configuration.TryGetValue("model", out var currentModel))
+            {
+                var currentItem = picker.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
+                    string.Equals(item.Tag as string, currentModel, StringComparison.Ordinal));
+                if (currentItem is not null) picker.SelectedItem = currentItem;
+                picker.Text = currentModel;
+            }
+            var dialog = new ContentDialog
+            {
+                Title = AiProfileText("AiProfileModelPickerTitle", "Select a model"),
+                Content = picker,
+                PrimaryButtonText = AiProfileText("OK", "OK"),
+                CloseButtonText = AiProfileText("Cancel", "Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = XamlRoot
+            };
+            using var cancellationRegistration = source.Token.Register(() =>
+                DispatcherQueue.TryEnqueue(() => { try { dialog.Hide(); } catch (COMException) { } }));
+            var response = await ShowDialogAsync(dialog);
+            if (source.IsCancellationRequested)
+            {
+                EndAiProfileAction(draft, source);
+                return;
+            }
+            if (response == ContentDialogResult.Primary)
+            {
+                var selectedModel = picker.SelectedItem is ComboBoxItem selected
+                    ? selected.Tag as string
+                    : picker.Text?.Trim();
+                if (!string.IsNullOrWhiteSpace(selectedModel))
+                {
+                    draft.Configuration["model"] = selectedModel;
+                    if (_aiProfileFieldControls.TryGetValue("model", out var modelControl) && modelControl is TextBox modelBox)
+                    {
+                        modelBox.Text = selectedModel;
+                    }
+                    RefreshAiProfileListLabels();
+                    MarkAiProfileEditorChanged();
+                }
+            }
+            EndAiProfileAction(draft, source, string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                AiProfileText("AiProfileModelsLoaded", "Loaded {0} models."),
+                models.Count));
+        }
+        catch (OperationCanceledException)
+        {
+            EndAiProfileAction(draft, source, AiProfileText("Cancelled", "Canceled."));
+        }
+        catch (Exception ex)
+        {
+            EndAiProfileAction(draft, source, ex.Message);
+        }
+    }
+
+    private void UpdateAiProfileListLabelsAndDirtyState()
+    {
+        if (_isBuildingAiProfileEditor) return;
+        if (_selectedAiProfileDraft is not null)
+        {
+            _selectedAiProfileDraft.Name = AiProfileNameBox.Text;
+            _selectedAiProfileDraft.IsEnabled = AiProfileEnabledToggle.IsOn;
+            RefreshAiProfileListLabels();
+        }
     }
 
     private void AddServiceConfigurationHeaderIcon(Expander expander, string iconName)
@@ -944,6 +1946,238 @@ public sealed partial class SettingsPage : Page
         SelectSettingsTab(SettingsTabId.General, resetScroll: false);
     }
 
+    private void OnSettingsPageLoaded(object sender, RoutedEventArgs e)
+        => AttachSettingsInteractionAnimations(SettingsContentRoot);
+
+    private bool SettingsAnimationsEnabled
+    {
+        get
+        {
+#if WINUI_TEST
+            if (string.Equals(
+                Environment.GetEnvironmentVariable("EASYDICT_UIA_DISABLE_SETTINGS_ANIMATIONS"),
+                "true",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+#endif
+            return _uiSettings.AnimationsEnabled;
+        }
+    }
+
+    private void AttachSettingsInteractionAnimations(DependencyObject root)
+    {
+        if (!SettingsAnimationsEnabled) return;
+
+        var pending = new Queue<DependencyObject>();
+        pending.Enqueue(root);
+        while (pending.Count > 0)
+        {
+            var current = pending.Dequeue();
+            if (current is UIElement element && !_motionBoundElements.TryGetValue(element, out _))
+            {
+                _motionBoundElements.Add(element, new object());
+                switch (element)
+                {
+                    case Button button:
+                        button.PointerPressed += OnMotionPointerPressed;
+                        button.PointerReleased += OnMotionPointerReleased;
+                        button.PointerCaptureLost += OnMotionPointerCaptureLost;
+                        button.KeyDown += OnMotionButtonKeyDown;
+                        button.KeyUp += OnMotionButtonKeyUp;
+                        break;
+                    case ComboBox comboBox:
+                        comboBox.DropDownOpened += OnMotionComboBoxDropDownOpened;
+                        comboBox.DropDownClosed += OnMotionComboBoxDropDownClosed;
+                        break;
+                    case Expander expander:
+                        expander.Expanding += OnMotionExpanderExpanding;
+                        break;
+                }
+            }
+
+            int childCount;
+            try
+            {
+                childCount = VisualTreeHelper.GetChildrenCount(current);
+            }
+            catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+            {
+                LogSettingsMotionFailure("ReadVisualChildren", current as UIElement, ex);
+                continue;
+            }
+
+            for (var index = 0; index < childCount; index++)
+            {
+                try
+                {
+                    pending.Enqueue(VisualTreeHelper.GetChild(current, index));
+                }
+                catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+                {
+                    LogSettingsMotionFailure("GetVisualChild", current as UIElement, ex);
+                    break;
+                }
+            }
+        }
+    }
+
+    private void OnMotionPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement element) AnimateScale(element, 0.975f, TimeSpan.FromMilliseconds(80), "ButtonPointerPress");
+    }
+
+    private void OnMotionPointerReleased(object sender, PointerRoutedEventArgs e)
+        => RestoreMotionScale(sender, "ButtonPointerRelease");
+
+    private void OnMotionPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        => RestoreMotionScale(sender, "ButtonPointerCaptureLost");
+
+    private void OnMotionButtonKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is VirtualKey.Enter or VirtualKey.Space && sender is UIElement element)
+        {
+            AnimateScale(element, 0.975f, TimeSpan.FromMilliseconds(80), "ButtonKeyboardPress");
+        }
+    }
+
+    private void OnMotionButtonKeyUp(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is VirtualKey.Enter or VirtualKey.Space) RestoreMotionScale(sender, "ButtonKeyboardRelease");
+    }
+
+    private void OnMotionComboBoxDropDownOpened(object? sender, object e)
+    {
+        if (sender is not UIElement element || !SettingsAnimationsEnabled) return;
+        Visual? visual = null;
+        try
+        {
+            visual = ElementCompositionPreview.GetElementVisual(element);
+            visual.CenterPoint = new Vector3((float)element.ActualSize.X / 2, (float)element.ActualSize.Y / 2, 0);
+            var animation = visual.Compositor.CreateVector3KeyFrameAnimation();
+            animation.Duration = TimeSpan.FromMilliseconds(180);
+            animation.InsertKeyFrame(0, visual.Scale);
+            animation.InsertKeyFrame(0.42f, new Vector3(1.018f, 1.018f, 1f), CreateSettingsEase(visual.Compositor));
+            animation.InsertKeyFrame(1, Vector3.One, CreateSettingsEase(visual.Compositor));
+            visual.StartAnimation(nameof(Visual.Scale), animation);
+        }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            ResetMotionVisual(visual, nameof(Visual.Scale), Vector3.One);
+            LogSettingsMotionFailure("ComboBoxDropDownOpened", element, ex);
+        }
+    }
+
+    private void OnMotionComboBoxDropDownClosed(object? sender, object e)
+        => RestoreMotionScale(sender, "ComboBoxDropDownClosed");
+
+    private void OnMotionExpanderExpanding(Expander sender, ExpanderExpandingEventArgs e)
+    {
+        if (sender is Expander { Content: UIElement content }) AnimateSettingsEntrance(content, "ExpanderExpanding");
+    }
+
+    private void RestoreMotionScale(object? sender, string operation)
+    {
+        if (sender is UIElement element) AnimateScale(element, 1f, TimeSpan.FromMilliseconds(150), operation);
+    }
+
+    private void AnimateScale(UIElement element, float scale, TimeSpan duration, string operation)
+    {
+        if (!SettingsAnimationsEnabled) return;
+        Visual? visual = null;
+        try
+        {
+            visual = ElementCompositionPreview.GetElementVisual(element);
+            visual.CenterPoint = new Vector3((float)element.ActualSize.X / 2, (float)element.ActualSize.Y / 2, 0);
+            var animation = visual.Compositor.CreateVector3KeyFrameAnimation();
+            animation.Duration = duration;
+            animation.InsertKeyFrame(1, new Vector3(scale, scale, 1f), CreateSettingsEase(visual.Compositor));
+            visual.StartAnimation(nameof(Visual.Scale), animation);
+        }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            ResetMotionVisual(visual, nameof(Visual.Scale), Vector3.One);
+            LogSettingsMotionFailure(operation, element, ex);
+        }
+    }
+
+    private void AnimateSettingsEntrance(UIElement element, string operation)
+    {
+        if (!SettingsAnimationsEnabled || element is not FrameworkElement { IsLoaded: true }) return;
+        Visual? visual = null;
+        var originalOffset = Vector3.Zero;
+        try
+        {
+            visual = ElementCompositionPreview.GetElementVisual(element);
+            var compositor = visual.Compositor;
+            originalOffset = visual.Offset;
+            var opacity = compositor.CreateScalarKeyFrameAnimation();
+            opacity.Duration = TimeSpan.FromMilliseconds(240);
+            opacity.InsertKeyFrame(0, 0f);
+            opacity.InsertKeyFrame(1, 1f, CreateSettingsEase(compositor));
+            var offset = compositor.CreateVector3KeyFrameAnimation();
+            offset.Duration = TimeSpan.FromMilliseconds(300);
+            offset.InsertKeyFrame(0, originalOffset + new Vector3(0, 5, 0));
+            offset.InsertKeyFrame(1, originalOffset, CreateSettingsEase(compositor));
+            visual.Opacity = 0;
+            visual.Offset = originalOffset + new Vector3(0, 5, 0);
+            visual.StartAnimation(nameof(Visual.Opacity), opacity);
+            visual.StartAnimation(nameof(Visual.Offset), offset);
+        }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            ResetMotionVisual(visual, nameof(Visual.Opacity), 1f);
+            ResetMotionVisual(visual, nameof(Visual.Offset), originalOffset);
+            LogSettingsMotionFailure(operation, element, ex);
+        }
+    }
+
+    private static void ResetMotionVisual(Visual? visual, string propertyName, object value)
+    {
+        if (visual is null) return;
+        try
+        {
+            visual.StopAnimation(propertyName);
+            switch (value)
+            {
+                case Vector3 vector:
+                    if (propertyName == nameof(Visual.Scale)) visual.Scale = vector;
+                    else if (propertyName == nameof(Visual.Offset)) visual.Offset = vector;
+                    break;
+                case float scalar when propertyName == nameof(Visual.Opacity):
+                    visual.Opacity = scalar;
+                    break;
+            }
+        }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(
+                $"SettingsPage.Motion.Reset.{propertyName}",
+                ex,
+                isTerminating: false,
+                isHandled: true);
+        }
+    }
+
+    private static void LogSettingsMotionFailure(string operation, UIElement? element, Exception exception)
+    {
+        var control = element switch
+        {
+            FrameworkElement { Name.Length: > 0 } frameworkElement => frameworkElement.Name,
+            null => "<unavailable>",
+            _ => element.GetType().FullName ?? element.GetType().Name
+        };
+        CrashDiagnostics.LogException(
+            $"SettingsPage.Motion.{operation} control={control}",
+            exception,
+            isTerminating: false,
+            isHandled: true);
+    }
+
+    private static CubicBezierEasingFunction CreateSettingsEase(Compositor compositor)
+        => compositor.CreateCubicBezierEasingFunction(new Vector2(0.22f, 1f), new Vector2(0.36f, 1f));
+
     private async void OnSettingsTabClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: SettingsTabId tabId })
@@ -951,7 +2185,22 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        await SelectSettingsTabAsync(tabId, resetScroll: true);
+        try
+        {
+            await SelectSettingsTabAsync(tabId, resetScroll: true);
+        }
+        catch (Exception ex)
+        {
+            // Keep initialization/binding failures visible to the global error path.
+            // The non-critical motion helpers catch their own failures and simply skip
+            // that animation, so an exception here means the tab transition itself failed.
+            CrashDiagnostics.LogException(
+                $"SettingsPage.SelectTab tab={tabId}",
+                ex,
+                isTerminating: false,
+                isHandled: false);
+            throw;
+        }
     }
 
     private async void OnRateAppLinkClick(object sender, RoutedEventArgs e)
@@ -1132,6 +2381,7 @@ public sealed partial class SettingsPage : Page
 
     private void ApplySettingsTabSelection(SettingsTabId tabId, bool resetScroll)
     {
+        var previousTabId = _settingsTabs.FirstOrDefault(item => item.IsSelected)?.Id;
         foreach (var item in _settingsTabs)
         {
             item.IsSelected = item.Id == tabId;
@@ -1158,13 +2408,30 @@ public sealed partial class SettingsPage : Page
             _settingsDetailsOffset = _settingsStackedOffset = 0;
         }
 
-        // Theme chrome is refreshed on actual theme changes (OnActualThemeChanged →
-        // QueueApplyThemeChrome) and when a tab's XAML is first inflated
-        // (EnsureTabContentLoaded above). Visibility-toggle switches reuse the brushes
-        // already assigned on the inflated subtrees, so re-walking the visual tree here
-        // costs ~ms-to-tens-of-ms on the Services tab for no observable change.
+        // Theme chrome is refreshed on actual theme changes and when lazy tab XAML is
+        // first inflated. Visibility-toggle switches reuse those brushes; motion wiring is
+        // attached only to the newly selected subtree and remains idempotent.
+        if (previousTabId != tabId && GetSettingsTabContent(tabId) is { } selectedContent)
+        {
+            AttachSettingsInteractionAnimations(selectedContent);
+            AnimateSettingsEntrance(selectedContent, "TabEntrance");
+        }
         QueueSettingsTabRenderProbe(tabId);
     }
+
+    private UIElement? GetSettingsTabContent(SettingsTabId tabId) => tabId switch
+    {
+        SettingsTabId.General => GeneralTabContent,
+        SettingsTabId.Services => ServicesTabContent,
+        SettingsTabId.Views => ViewsTabContent,
+        SettingsTabId.Hotkeys => HotkeysTabContent,
+        SettingsTabId.Plugins => PluginsTabContent,
+        SettingsTabId.Advanced => AdvancedTabContent,
+        SettingsTabId.Labs => LabsTabContent,
+        SettingsTabId.Language => LanguageTabContent,
+        SettingsTabId.About => AboutTabContent,
+        _ => null
+    };
 
     partial void QueueSettingsTabRenderProbe(SettingsTabId tabId);
     partial void CancelSettingsTabRenderProbe();
@@ -1683,6 +2950,7 @@ public sealed partial class SettingsPage : Page
         ApplyOcrLocalization(loc);
         ApplyLayoutDetectionLocalization(loc);
         ApplyPasswordRevealLocalization(loc);
+        ApplyAiProfileEditorLocalization();
     }
 
     private static void SetLocalAiRating(TextBlock? ratingText, string rating, string tooltip)
@@ -2911,7 +4179,8 @@ public sealed partial class SettingsPage : Page
 
     private bool HasAnyTrackedSettingChanges()
     {
-        return IsSettingsTabInitialized(SettingsTabId.Services) && ServicesTabSettingsDifferFromSettings()
+        return AiProfileEditorHasChanges()
+            || IsSettingsTabInitialized(SettingsTabId.Services) && ServicesTabSettingsDifferFromSettings()
             || IsSettingsTabInitialized(SettingsTabId.General) && GeneralTabSettingsDifferFromSettings()
             || IsSettingsTabInitialized(SettingsTabId.Labs) && LabsTabSettingsDifferFromSettings()
             || IsSettingsTabInitialized(SettingsTabId.Language) && LanguageTabSettingsDifferFromSettings()
@@ -3362,6 +4631,7 @@ public sealed partial class SettingsPage : Page
             HoverWordLookupDelaySlider.Value = _settings.HoverWordLookupDelayMs;
             HoverWordLookupDelayValueText.Text = $"{_settings.HoverWordLookupDelayMs} ms";
             PopulateHoverWordLookupServiceCombo();
+            AppendAiProfileChoices(HoverWordLookupServiceCombo);
             SetTagComboValue(HoverWordLookupServiceCombo, _settings.HoverWordLookupServiceId, "");
             HoverWordLookupPanel.Visibility = _settings.HoverWordLookupEnabled
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -3419,6 +4689,7 @@ public sealed partial class SettingsPage : Page
             // Layout Detection settings
             SelectComboByTag(LayoutDetectionModeCombo, _settings.LayoutDetectionMode);
             SelectComboByTag(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId);
+            RefreshVisionLayoutProfileChoices();
             UpdateLayoutDetectionUI();
 
             // Formula Detection
@@ -4700,7 +5971,22 @@ public sealed partial class SettingsPage : Page
             return false;
         }
 
+        if (!ValidateAiProfileDrafts(out var aiProfileValidationError))
+        {
+            var errorDialog = new ContentDialog
+            {
+                Title = AiProfileText("AiProfilesTitle", "AI profiles"),
+                Content = aiProfileValidationError,
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(errorDialog);
+            return false;
+        }
+
         // === All validations passed — apply settings ===
+
+        ApplyAiProfileDrafts();
 
         // Save international services setting
         _settings.EnableInternationalServices = EnableInternationalServicesToggle.IsOn;
@@ -4977,6 +6263,7 @@ public sealed partial class SettingsPage : Page
 
         // Persist to storage
         _settings.Save();
+        ResetAiProfileDrafts();
         ResetServiceReorderModes();
 
         // Reload hotkeys immediately
@@ -5005,6 +6292,9 @@ public sealed partial class SettingsPage : Page
         {
             TranslationManagerService.Instance.ReconfigureServices();
         }
+
+        LoadSettingsForTab(SettingsTabId.Views);
+        LoadSettingsForTab(SettingsTabId.Labs);
 
         // Apply always-on-top setting immediately
         App.ApplyAlwaysOnTop(_settings.AlwaysOnTop);

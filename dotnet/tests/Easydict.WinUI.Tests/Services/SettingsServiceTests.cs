@@ -3,6 +3,7 @@ using Easydict.TranslationService;
 using Easydict.WindowsAI;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.TranslationService.Models;
 using FluentAssertions;
 using System.Text.Json;
 using Xunit;
@@ -204,6 +205,225 @@ public class SettingsServiceTests
         reloaded.GetAiServiceProfileSecret(first.ProfileId, "apiKey").Should().Be("synthetic-personal-key");
         reloaded.GetAiServiceProfileSecret(second.ProfileId, "apiKey").Should().Be("synthetic-work-key");
         reloaded.AiServiceProfiles.Select(profile => profile.ServiceId).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void AiProfiles_DeletingProfileRedirectsReferencesOrRemovesThemWhenNoReplacementExists()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{\"VisionLayoutServiceId\":\"\"}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        var first = settings.AddAiServiceProfile("openai", "Personal");
+        var second = settings.AddAiServiceProfile("openai", "Work");
+        var onlyGroq = settings.AddAiServiceProfile("groq", "Groq");
+
+        settings.MiniWindowEnabledServices.Add(first.ServiceId);
+        settings.MainWindowEnabledServices.Add(onlyGroq.ServiceId);
+        settings.FixedWindowServiceEnabledQuery[first.ServiceId] = false;
+        settings.MainWindowServiceEnabledQuery[onlyGroq.ServiceId] = true;
+        settings.ServiceTestStatus[first.ServiceId] = true;
+        settings.AddOrReplaceTextAction(new TextAction
+        {
+            Id = "profile-action",
+            Title = "Use profile",
+            Type = TextActionType.RunService,
+            ServiceId = first.ServiceId,
+            IsEnabled = true,
+            ShowOnPopButton = true
+        });
+        settings.AddOrReplaceTextAction(new TextAction
+        {
+            Id = "removed-profile-action",
+            Title = "Use Groq",
+            Type = TextActionType.RunService,
+            ServiceId = onlyGroq.ServiceId
+        });
+        settings.TextActions.Should().Contain(action => action.Id == "profile-action");
+        settings.HoverWordLookupServiceId = first.ServiceId;
+        settings.VisionLayoutServiceId = onlyGroq.ServiceId;
+
+        settings.RemoveAiServiceProfile(first.ProfileId, second.ServiceId).Should().BeTrue();
+        settings.TextActions.Should().ContainSingle(action => action.Id == "profile-action")
+            .Which.ServiceId.Should().Be(second.ServiceId);
+        settings.RemoveAiServiceProfile(onlyGroq.ProfileId).Should().BeTrue();
+
+        settings.MiniWindowEnabledServices.Should().Contain(second.ServiceId).And.NotContain(first.ServiceId);
+        settings.FixedWindowServiceEnabledQuery.Should().ContainKey(second.ServiceId).And.NotContainKey(first.ServiceId);
+        settings.FixedWindowServiceEnabledQuery[second.ServiceId].Should().BeFalse();
+        settings.ServiceTestStatus.Should().NotContainKey(first.ServiceId);
+        settings.TextActions.Should().ContainSingle(action => action.Id == "profile-action")
+            .Which.ServiceId.Should().Be(second.ServiceId);
+        settings.TextActions.Should().NotContain(action => action.Id == "removed-profile-action");
+        settings.HoverWordLookupServiceId.Should().Be(second.ServiceId);
+        settings.MainWindowEnabledServices.Should().NotContain(onlyGroq.ServiceId);
+        settings.MainWindowServiceEnabledQuery.Should().NotContainKey(onlyGroq.ServiceId);
+        settings.VisionLayoutServiceId.Should().BeEmpty();
+        settings.Save();
+
+        var reloaded = CreateIsolatedSettingsService(testDirectory.Path);
+        reloaded.AiServiceProfiles.Select(profile => profile.ProfileId).Should().Equal(second.ProfileId);
+        reloaded.MiniWindowEnabledServices.Should().Contain(second.ServiceId).And.NotContain(first.ServiceId);
+        reloaded.MainWindowEnabledServices.Should().NotContain(onlyGroq.ServiceId);
+        reloaded.TextActions.Should().ContainSingle(action => action.Id == "profile-action")
+            .Which.ServiceId.Should().Be(second.ServiceId);
+        reloaded.VisionLayoutServiceId.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AiProfileDraftSaver_NewAndExistingDraftsPersistAllFieldsIndependently()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{\"VisionLayoutServiceId\":\"\"}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        var existing = settings.AddAiServiceProfile("openai", "Work");
+        settings.UpdateAiServiceProfileConfiguration(existing.ProfileId, new Dictionary<string, string>
+        {
+            ["endpoint"] = "https://old-work.invalid/v1/chat/completions",
+            ["model"] = "old-work-model",
+            ["temperature"] = "0.3",
+            ["apiFormat"] = "Auto"
+        });
+        settings.SetAiServiceProfileSecret(existing.ProfileId, "apiKey", "synthetic-old-work-key");
+        settings.Save();
+
+        var existingDraft = new AiServiceProfileDraftSubmission(
+            "existing-work",
+            existing.ProfileId,
+            existing.ServiceId,
+            "openai",
+            "Work Account",
+            false,
+            new Dictionary<string, string>
+            {
+                ["endpoint"] = "https://updated-work.invalid/v1/chat/completions",
+                ["model"] = "updated-work-model",
+                ["temperature"] = "0.7",
+                ["apiFormat"] = "ChatCompletions"
+            },
+            new Dictionary<string, string> { ["apiKey"] = "synthetic-updated-work-key" },
+            new HashSet<string>(StringComparer.Ordinal),
+            IsNew: false,
+            HasChanges: true);
+        var newDraft = new AiServiceProfileDraftSubmission(
+            "new-personal",
+            null,
+            null,
+            "openai",
+            "Personal",
+            true,
+            new Dictionary<string, string>
+            {
+                ["endpoint"] = "https://personal.invalid/v1/chat/completions",
+                ["model"] = "personal-model",
+                ["temperature"] = "0.2",
+                ["apiFormat"] = "Responses"
+            },
+            new Dictionary<string, string> { ["apiKey"] = "synthetic-personal-key" },
+            new HashSet<string>(StringComparer.Ordinal),
+            IsNew: true,
+            HasChanges: true);
+
+        var result = AiServiceProfileDraftSaver.Save(settings, [existingDraft, newDraft], []);
+        result.ProfilesByDraftKey.Should().ContainKeys("existing-work", "new-personal");
+        settings.Save();
+
+        var reloaded = CreateIsolatedSettingsService(testDirectory.Path);
+        var savedExisting = reloaded.AiServiceProfiles.Single(profile => profile.ProfileId == existing.ProfileId);
+        savedExisting.Name.Should().Be("Work Account");
+        savedExisting.IsEnabled.Should().BeFalse();
+        savedExisting.Configuration["endpoint"].Should().Be("https://updated-work.invalid/v1/chat/completions");
+        savedExisting.Configuration["model"].Should().Be("updated-work-model");
+        savedExisting.Configuration["temperature"].Should().Be("0.7");
+        savedExisting.Configuration["apiFormat"].Should().Be("ChatCompletions");
+        reloaded.GetAiServiceProfileSecret(existing.ProfileId, "apiKey").Should().Be("synthetic-updated-work-key");
+
+        var savedNew = reloaded.AiServiceProfiles.Single(profile => profile.Name == "Personal");
+        savedNew.IsEnabled.Should().BeTrue();
+        savedNew.Configuration["endpoint"].Should().Be("https://personal.invalid/v1/chat/completions");
+        savedNew.Configuration["model"].Should().Be("personal-model");
+        savedNew.Configuration["temperature"].Should().Be("0.2");
+        savedNew.Configuration["apiFormat"].Should().Be("Responses");
+        reloaded.GetAiServiceProfileSecret(savedNew.ProfileId, "apiKey").Should().Be("synthetic-personal-key");
+    }
+
+    [Fact]
+    public void AiProfileDraftSaver_DeleteRedirectsReferencesAndTextActionsToSameProviderReplacement()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{\"VisionLayoutServiceId\":\"\"}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        var deleted = settings.AddAiServiceProfile("openai", "Old account");
+        var replacement = settings.AddAiServiceProfile("openai", "Replacement");
+        settings.MiniWindowEnabledServices.Add(deleted.ServiceId);
+        settings.MainWindowServiceEnabledQuery[deleted.ServiceId] = false;
+        settings.HoverWordLookupServiceId = deleted.ServiceId;
+        settings.AddOrReplaceTextAction(new TextAction
+        {
+            Id = "draft-delete-action",
+            Title = "Use deleted profile",
+            Type = TextActionType.RunService,
+            ServiceId = deleted.ServiceId,
+            IsEnabled = true,
+            ShowOnPopButton = true
+        });
+
+        var replacementDraft = new AiServiceProfileDraftSubmission(
+            "replacement",
+            replacement.ProfileId,
+            replacement.ServiceId,
+            replacement.ProviderType,
+            replacement.Name,
+            replacement.IsEnabled,
+            new Dictionary<string, string>(replacement.Configuration, StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal),
+            IsNew: false,
+            HasChanges: false);
+        var result = AiServiceProfileDraftSaver.Save(settings, [replacementDraft], [deleted.ProfileId]);
+
+        result.ReferenceChanges.Should().ContainSingle(change =>
+            change.FromServiceId == deleted.ServiceId && change.ToServiceId == replacement.ServiceId);
+        settings.HoverWordLookupServiceId.Should().Be(replacement.ServiceId);
+        settings.MiniWindowEnabledServices.Should().Contain(replacement.ServiceId).And.NotContain(deleted.ServiceId);
+        settings.MainWindowServiceEnabledQuery.Should().ContainKey(replacement.ServiceId).And.NotContainKey(deleted.ServiceId);
+        settings.MainWindowServiceEnabledQuery[replacement.ServiceId].Should().BeFalse();
+        settings.TextActions.Should().ContainSingle(action => action.Id == "draft-delete-action")
+            .Which.ServiceId.Should().Be(replacement.ServiceId);
+        settings.Save();
+
+        var reloaded = CreateIsolatedSettingsService(testDirectory.Path);
+        reloaded.AiServiceProfiles.Select(profile => profile.ProfileId).Should().Equal(replacement.ProfileId);
+        reloaded.HoverWordLookupServiceId.Should().Be(replacement.ServiceId);
+        reloaded.MiniWindowEnabledServices.Should().Contain(replacement.ServiceId).And.NotContain(deleted.ServiceId);
+        reloaded.TextActions.Should().ContainSingle(action => action.Id == "draft-delete-action")
+            .Which.ServiceId.Should().Be(replacement.ServiceId);
+    }
+
+    [Fact]
+    public void AiProfiles_UnmanagedEmptyRegistryDoesNotDisableLegacyProviderDiscoveryOnSave()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{\"VisionLayoutServiceId\":\"\"}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+
+        settings.HistoryEnabled = true;
+        settings.Save();
+
+        using var saved = JsonDocument.Parse(File.ReadAllText(Path.Combine(testDirectory.Path, "settings.json")));
+        saved.RootElement.TryGetProperty("AiServiceProfiles", out _).Should().BeFalse();
+        settings.AiServiceProfilesAreAuthoritative.Should().BeFalse();
+    }
+
+    [Fact]
+    public void AiProfiles_LegacyProviderConfigurationDetectionDistinguishesDefaultsFromStaleValues()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{\"VisionLayoutServiceId\":\"\"}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+
+        settings.HasLegacyAiProviderConfiguration("openrouter").Should().BeFalse();
+        settings.OpenRouterApiKey = "legacy-key-retained-for-recovery";
+        settings.HasLegacyAiProviderConfiguration("openrouter").Should().BeTrue();
     }
 
     [Fact]

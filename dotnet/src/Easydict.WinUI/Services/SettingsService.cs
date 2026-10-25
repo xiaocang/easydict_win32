@@ -95,6 +95,7 @@ public sealed class SettingsService
     private readonly HashSet<string> _aiProfileSecretsCouldNotDecrypt = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _legacyAiSettingsBaseline = new(StringComparer.Ordinal);
     private bool _aiProfilesCanPersist = true;
+    private bool _aiProfilesExplicitlyManaged;
 
     private const string AiServiceProfilesKey = "AiServiceProfiles";
     private const string AiServiceProfilesSchemaVersionKey = "AiServiceProfilesSchemaVersion";
@@ -266,6 +267,9 @@ public sealed class SettingsService
 
     /// <summary>Non-null when stored profile data is malformed or from a newer schema.</summary>
     public string? AiServiceProfilesLoadError { get; private set; }
+
+    /// <summary>True when a valid persisted profile collection explicitly owns the AI registry.</summary>
+    public bool AiServiceProfilesAreAuthoritative { get; private set; }
 
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
@@ -1173,6 +1177,8 @@ public sealed class SettingsService
                 }
 
                 AiServiceProfiles = profiles;
+                AiServiceProfilesAreAuthoritative = true;
+                _aiProfilesExplicitlyManaged = true;
                 foreach (var profile in profiles)
                 {
                     if (!AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
@@ -1281,6 +1287,26 @@ public sealed class SettingsService
         }
 
         return profiles;
+    }
+
+    internal bool HasLegacyAiProviderConfiguration(string providerType)
+    {
+        if (!AiProviderCatalog.TryGet(providerType, out var provider)) return false;
+        foreach (var field in provider.Fields)
+        {
+            var value = GetLegacyAiSettingValue(field.LegacySettingName);
+            if (field.IsSecret
+                ? !string.IsNullOrWhiteSpace(value)
+                : !string.Equals(value, field.DefaultValue, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        var explicitlyEnabled = provider.LegacyEnabledSettingName is not null
+            && bool.TryParse(GetLegacyAiSettingValue(provider.LegacyEnabledSettingName), out var enabled)
+            && enabled;
+        return explicitlyEnabled || IsLegacyAiServiceReferenced(provider.LegacyServiceId);
     }
 
     private string GetLegacyAiSettingValue(string settingName)
@@ -1535,6 +1561,8 @@ public sealed class SettingsService
             throw new ArgumentException("Unknown AI provider type.", nameof(providerType));
         }
 
+        _aiProfilesExplicitlyManaged = true;
+        AiServiceProfilesAreAuthoritative = true;
         var profileId = Guid.NewGuid().ToString("N");
         var profile = new AiServiceProfile
         {
@@ -1552,7 +1580,7 @@ public sealed class SettingsService
         return profile;
     }
 
-    public bool RemoveAiServiceProfile(string profileId)
+    public bool RemoveAiServiceProfile(string profileId, string? replacementServiceId = null)
     {
         var index = AiServiceProfiles.FindIndex(profile => profile.ProfileId == profileId);
         if (index < 0)
@@ -1560,6 +1588,14 @@ public sealed class SettingsService
             return false;
         }
 
+        var removedProfile = AiServiceProfiles[index];
+        _aiProfilesExplicitlyManaged = true;
+        AiServiceProfilesAreAuthoritative = true;
+        replacementServiceId = AiServiceProfiles.FirstOrDefault(candidate =>
+            candidate.ServiceId == replacementServiceId
+            && candidate.ProfileId != profileId
+            && candidate.ProviderType == removedProfile.ProviderType)?.ServiceId;
+        RedirectOrRemoveAiProfileReferences(removedProfile.ServiceId, replacementServiceId);
         AiServiceProfiles.RemoveAt(index);
         _aiProfileSecrets.Remove(profileId);
         foreach (var provider in AiProviderCatalog.All)
@@ -1570,6 +1606,72 @@ public sealed class SettingsService
             }
         }
         return true;
+    }
+
+    private void RedirectOrRemoveAiProfileReferences(string removedServiceId, string? replacementServiceId)
+    {
+        RedirectOrRemoveInList(MiniWindowEnabledServices, removedServiceId, replacementServiceId);
+        RedirectOrRemoveInList(MainWindowEnabledServices, removedServiceId, replacementServiceId);
+        RedirectOrRemoveInList(FixedWindowEnabledServices, removedServiceId, replacementServiceId);
+        RedirectOrRemoveDictionaryKey(MiniWindowServiceEnabledQuery, removedServiceId, replacementServiceId);
+        RedirectOrRemoveDictionaryKey(MainWindowServiceEnabledQuery, removedServiceId, replacementServiceId);
+        RedirectOrRemoveDictionaryKey(FixedWindowServiceEnabledQuery, removedServiceId, replacementServiceId);
+        ServiceTestStatus.Remove(removedServiceId);
+
+        if (string.Equals(HoverWordLookupServiceId, removedServiceId, StringComparison.Ordinal))
+        {
+            HoverWordLookupServiceId = replacementServiceId ?? string.Empty;
+        }
+        if (string.Equals(VisionLayoutServiceId, removedServiceId, StringComparison.Ordinal))
+        {
+            VisionLayoutServiceId = replacementServiceId ?? string.Empty;
+        }
+
+        if (replacementServiceId is null)
+        {
+            TextActions.RemoveAll(action => string.Equals(action.ServiceId, removedServiceId, StringComparison.Ordinal));
+        }
+        else
+        {
+            for (var index = 0; index < TextActions.Count; index++)
+            {
+                var action = TextActions[index];
+                if (string.Equals(action.ServiceId, removedServiceId, StringComparison.Ordinal))
+                {
+                    TextActions[index] = action with { ServiceId = replacementServiceId };
+                }
+            }
+        }
+    }
+
+    internal void RedirectLegacyAiServiceReferences(string providerType, string replacementServiceId)
+    {
+        if (!AiProviderCatalog.TryGet(providerType, out var provider)) return;
+        RedirectOrRemoveAiProfileReferences(provider.LegacyServiceId, replacementServiceId);
+    }
+
+    private static void RedirectOrRemoveInList(List<string> values, string removed, string? replacement)
+    {
+        if (replacement is null)
+        {
+            RemoveFromList(values, removed);
+        }
+        else
+        {
+            ReplaceInList(values, removed, replacement);
+        }
+    }
+
+    private static void RedirectOrRemoveDictionaryKey(
+        Dictionary<string, bool> values,
+        string removed,
+        string? replacement)
+    {
+        if (!values.Remove(removed, out var removedValue) || replacement is null)
+        {
+            return;
+        }
+        values.TryAdd(replacement, removedValue);
     }
 
     public AiServiceProfile UpdateAiServiceProfileConfiguration(
@@ -1596,6 +1698,8 @@ public sealed class SettingsService
 
         var updated = current.CopyWithConfiguration(
             configuration.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
+        _aiProfilesExplicitlyManaged = true;
+        AiServiceProfilesAreAuthoritative = true;
         AiServiceProfiles[index] = updated;
         return updated;
     }
@@ -1615,6 +1719,8 @@ public sealed class SettingsService
         if (!string.Equals(profile.Name, normalizedName, StringComparison.Ordinal)
             || profile.IsEnabled != isEnabled)
         {
+            _aiProfilesExplicitlyManaged = true;
+            AiServiceProfilesAreAuthoritative = true;
             profile.ConfigurationRevision = checked(profile.ConfigurationRevision + 1);
             profile.Name = normalizedName;
             profile.IsEnabled = isEnabled;
@@ -1640,6 +1746,8 @@ public sealed class SettingsService
         }
 
         _aiProfileSecretsCouldNotDecrypt.Remove(secretKey);
+        _aiProfilesExplicitlyManaged = true;
+        AiServiceProfilesAreAuthoritative = true;
         SetLoadedAiProfileSecret(profileId, fieldId, value);
     }
 
@@ -2456,6 +2564,13 @@ public sealed class SettingsService
             return;
         }
 
+        // Do not turn an untouched legacy installation with no AI profiles into
+        // an explicitly empty allowlist when an unrelated setting is saved.
+        if (AiServiceProfiles.Count == 0 && !_aiProfilesExplicitlyManaged)
+        {
+            return;
+        }
+
         if (!ValidateAiServiceProfiles(AiServiceProfiles, out var validationError))
         {
             _aiProfilesCanPersist = false;
@@ -2465,6 +2580,7 @@ public sealed class SettingsService
 
         _settings[AiServiceProfilesSchemaVersionKey] = CurrentAiServiceProfilesSchemaVersion;
         _settings[AiServiceProfilesKey] = AiServiceProfiles;
+        AiServiceProfilesAreAuthoritative = true;
 
         var activeSecretKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var profile in AiServiceProfiles)

@@ -608,7 +608,16 @@ public sealed class TranslationManagerService : IDisposable
         foreach (var provider in AiProviderCatalog.All)
         {
             var hasProfilesForProvider = _settings.AiServiceProfiles.Any(profile => profile.ProviderType == provider.Id);
-            if (!hasProfilesForProvider || profiledServiceIds.Contains(provider.LegacyServiceId))
+            if (profiledServiceIds.Contains(provider.LegacyServiceId))
+            {
+                continue;
+            }
+
+            // Keep unconfigured legacy service entries available to selectors. A provider
+            // with old credentials/options but no profile is stale compatibility state (for
+            // example after its last profile was deleted), so do not revive that service.
+            if (!hasProfilesForProvider
+                && !_settings.HasLegacyAiProviderConfiguration(provider.Id))
             {
                 continue;
             }

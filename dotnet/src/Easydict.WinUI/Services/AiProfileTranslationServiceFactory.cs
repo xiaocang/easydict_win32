@@ -24,7 +24,24 @@ internal static class AiProfileTranslationServiceFactory
             throw new InvalidOperationException($"Unknown AI provider type '{profile.ProviderType}'.");
         }
 
-        var inner = CreateConfiguredProvider(provider, profile, settings, httpClient);
+        return Create(profile, fieldId => settings.GetAiServiceProfileSecret(profile.ProfileId, fieldId), httpClient);
+    }
+
+    internal static ITranslationService Create(
+        AiServiceProfile profile,
+        Func<string, string?> getSecret,
+        HttpClient httpClient)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(getSecret);
+        ArgumentNullException.ThrowIfNull(httpClient);
+
+        if (!AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
+        {
+            throw new InvalidOperationException($"Unknown AI profile provider '{profile.ProviderType}'.");
+        }
+
+        var inner = CreateConfiguredProvider(provider, profile, getSecret, httpClient);
         if (provider.SupportsModelListing && inner is IModelCatalogProvider catalog)
         {
             return new ProfiledModelCatalogTranslationService(
@@ -73,7 +90,7 @@ internal static class AiProfileTranslationServiceFactory
     private static ITranslationService CreateConfiguredProvider(
         AiProviderDefinition provider,
         AiServiceProfile profile,
-        SettingsService settings,
+        Func<string, string?> getSecret,
         HttpClient httpClient)
     {
         string Value(string id)
@@ -84,7 +101,7 @@ internal static class AiProfileTranslationServiceFactory
                 : field?.DefaultValue ?? string.Empty;
         }
 
-        string? Secret(string id) => settings.GetAiServiceProfileSecret(profile.ProfileId, id);
+        string? Secret(string id) => getSecret(id);
 
         switch (provider.Id)
         {

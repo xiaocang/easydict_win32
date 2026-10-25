@@ -1240,6 +1240,7 @@ public sealed class SettingsService
         var profiles = new List<AiServiceProfile>();
         foreach (var provider in AiProviderCatalog.All)
         {
+            if (!provider.HasLegacyConfiguration) continue;
             var configuration = new Dictionary<string, string>(StringComparer.Ordinal);
             var secrets = new Dictionary<string, string?>(StringComparer.Ordinal);
             var hasNonDefaultConfiguration = false;
@@ -1292,6 +1293,7 @@ public sealed class SettingsService
     internal bool HasLegacyAiProviderConfiguration(string providerType)
     {
         if (!AiProviderCatalog.TryGet(providerType, out var provider)) return false;
+        if (!provider.HasLegacyConfiguration) return false;
         foreach (var field in provider.Fields)
         {
             var value = GetLegacyAiSettingValue(field.LegacySettingName);
@@ -1311,6 +1313,11 @@ public sealed class SettingsService
 
     private string GetLegacyAiSettingValue(string settingName)
     {
+        if (string.IsNullOrWhiteSpace(settingName))
+        {
+            return string.Empty;
+        }
+
         var property = GetType().GetProperty(settingName);
         if (property is null)
         {
@@ -1332,6 +1339,7 @@ public sealed class SettingsService
 
         foreach (var provider in AiProviderCatalog.All)
         {
+            if (!provider.HasLegacyConfiguration) continue;
             var changedFields = provider.Fields
                 .Where(field => HasLegacyAiSettingChanged(field.LegacySettingName))
                 .ToArray();
@@ -1422,6 +1430,7 @@ public sealed class SettingsService
         _legacyAiSettingsBaseline.Clear();
         foreach (var provider in AiProviderCatalog.All)
         {
+            if (!provider.HasLegacyConfiguration) continue;
             foreach (var field in provider.Fields)
             {
                 _legacyAiSettingsBaseline[field.LegacySettingName] = GetLegacyAiSettingValue(field.LegacySettingName);
@@ -1435,8 +1444,9 @@ public sealed class SettingsService
     }
 
     private bool HasLegacyAiSettingChanged(string settingName)
-        => !_legacyAiSettingsBaseline.TryGetValue(settingName, out var baseline)
-            || !string.Equals(GetLegacyAiSettingValue(settingName), baseline, StringComparison.Ordinal);
+        => !string.IsNullOrWhiteSpace(settingName)
+            && (!_legacyAiSettingsBaseline.TryGetValue(settingName, out var baseline)
+                || !string.Equals(GetLegacyAiSettingValue(settingName), baseline, StringComparison.Ordinal));
 
     private bool IsLegacyAiServiceReferenced(string serviceId)
     {
@@ -1554,11 +1564,27 @@ public sealed class SettingsService
                 ? value
                 : null;
 
-    public AiServiceProfile AddAiServiceProfile(string providerType, string? name = null)
+    public AiServiceProfile AddAiServiceProfile(
+        string providerType,
+        string? name = null,
+        bool isAutoConnected = false,
+        IReadOnlySet<string>? excludedProfileIds = null)
     {
         if (!AiProviderCatalog.TryGet(providerType, out var provider))
         {
             throw new ArgumentException("Unknown AI provider type.", nameof(providerType));
+        }
+
+        if (isAutoConnected)
+        {
+            var existingAutoProfile = AiServiceProfiles.FirstOrDefault(profile =>
+                profile.IsAutoConnected
+                && profile.ProviderType == provider.Id
+                && !(excludedProfileIds?.Contains(profile.ProfileId) ?? false));
+            if (existingAutoProfile is not null)
+            {
+                return existingAutoProfile;
+            }
         }
 
         _aiProfilesExplicitlyManaged = true;
@@ -1571,6 +1597,7 @@ public sealed class SettingsService
             ProviderType = provider.Id,
             Name = string.IsNullOrWhiteSpace(name) ? provider.DisplayName : name.Trim(),
             IsEnabled = true,
+            IsAutoConnected = isAutoConnected,
             Configuration = provider.Fields
                 .Where(field => !field.IsSecret)
                 .ToDictionary(field => field.Id, field => field.DefaultValue, StringComparer.Ordinal)

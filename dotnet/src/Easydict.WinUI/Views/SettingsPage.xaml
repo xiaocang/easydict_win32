@@ -385,6 +385,8 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Spacing="3">
                                         <TextBlock x:Name="AiProfilesTitleText"
@@ -403,8 +405,21 @@
                                               Width="190"
                                               VerticalAlignment="Center"
                                               AutomationProperties.AutomationId="AiProfileProviderPicker"/>
-                                    <Button x:Name="AiProfileAddButton"
+                                    <Button x:Name="AiProfileConnectMagpieButton"
                                             Grid.Column="2"
+                                            Content="Connect Magpie"
+                                            VerticalAlignment="Center"
+                                            Click="OnConnectMagpieClick"
+                                            AutomationProperties.AutomationId="ConnectMagpieButton"/>
+                                    <Button x:Name="AiProfileCancelMagpieButton"
+                                            Grid.Column="3"
+                                            Content="Cancel"
+                                            VerticalAlignment="Center"
+                                            Click="OnCancelMagpieDiscoveryClick"
+                                            Visibility="Collapsed"
+                                            AutomationProperties.AutomationId="CancelMagpieDiscoveryButton"/>
+                                    <Button x:Name="AiProfileAddButton"
+                                            Grid.Column="4"
                                             Content="Add profile"
                                             VerticalAlignment="Center"
                                             Click="OnAddAiProfileClick"

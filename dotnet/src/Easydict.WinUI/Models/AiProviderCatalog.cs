@@ -23,9 +23,10 @@ public sealed record AiProviderDefinition(
     string? LegacyEnabledSettingName,
     bool SupportsStreaming,
     bool SupportsCorrection,
-    bool SupportsModelListing)
+    bool SupportsModelListing,
+    bool HasLegacyConfiguration = true)
 {
-    public bool RequiresApiKey => Id != "custom-openai" && Fields.Any(item => item.IsSecret);
+    public bool RequiresApiKey => Id is not ("custom-openai" or "magpie") && Fields.Any(item => item.IsSecret);
     public bool RequiresModel => Fields.Any(item => item.Id == "model");
     public IReadOnlyList<AiProviderFieldDefinition> SecretFields => Fields.Where(item => item.IsSecret).ToArray();
 }
@@ -68,6 +69,11 @@ public static class AiProviderCatalog
             Field("endpoint", nameof(SettingsService.CustomOpenAIEndpoint), ""),
             Secret("apiKey", nameof(SettingsService.CustomOpenAIApiKey)),
             Field("model", nameof(SettingsService.CustomOpenAIModel), "gpt-3.5-turbo")),
+        Provider("magpie", "magpie", "Magpie", true, true, true,
+            Field("endpoint", "", "http://127.0.0.1:3425/v1/chat/completions"),
+            Field("allowRemote", "", "false"),
+            Secret("apiKey", ""),
+            Field("model", "", "")) with { HasLegacyConfiguration = false },
         Provider("openrouter", "openrouter", "OpenRouter", true, true, true,
             Secret("apiKey", nameof(SettingsService.OpenRouterApiKey)),
             Field("model", nameof(SettingsService.OpenRouterModel), "openrouter/free")),

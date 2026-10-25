@@ -256,6 +256,7 @@ public sealed partial class SettingsPage : Page
     private readonly UISettings _uiSettings = new();
     private AiProfileDraft? _selectedAiProfileDraft;
     private CancellationTokenSource? _aiProfileActionCts;
+    private CancellationTokenSource? _magpieDiscoveryCts;
     private bool _isBuildingAiProfileEditor;
 
     private readonly ObservableCollection<SettingsTabItem> _settingsTabs =
@@ -289,7 +290,8 @@ public sealed partial class SettingsPage : Page
             bool isEnabled,
             Dictionary<string, string> configuration,
             bool isNew,
-            ImageSource iconSource)
+            ImageSource iconSource,
+            bool isAutoConnected = false)
         {
             DraftKey = draftKey;
             ProfileId = profileId;
@@ -303,6 +305,7 @@ public sealed partial class SettingsPage : Page
             BaseIsEnabled = isEnabled;
             BaseConfiguration = new Dictionary<string, string>(configuration, StringComparer.Ordinal);
             IsNew = isNew;
+            IsAutoConnected = isAutoConnected;
             IconSource = iconSource;
         }
 
@@ -314,6 +317,7 @@ public sealed partial class SettingsPage : Page
         public string ProviderDisplayName => $"{Provider.DisplayName} · {AiProfileText(IsEnabled ? "AiProfileEnabled" : "AiProfileDisabled", IsEnabled ? "Enabled" : "Disabled")}";
         public ImageSource IconSource { get; }
         public bool IsNew { get; }
+        public bool IsAutoConnected { get; set; }
         public string BaseName { get; }
         public bool BaseIsEnabled { get; }
         public Dictionary<string, string> BaseConfiguration { get; }
@@ -608,6 +612,8 @@ public sealed partial class SettingsPage : Page
         AiProfilesTitleText.Text = AiProfileText("AiProfilesTitle", "AI profiles");
         AiProfilesSubtitleText.Text = AiProfileText("AiProfilesSubtitle", "Choose a provider, then configure each account in its own profile.");
         AiProfileAddButton.Content = AiProfileText("AiProfileAdd", "Add profile");
+        AiProfileConnectMagpieButton.Content = AiProfileText("AiProfileConnectMagpie", "Connect Magpie");
+        AiProfileCancelMagpieButton.Content = AiProfileText("AiProfileCancelAction", "Cancel");
         AiProfileProviderComboBox.PlaceholderText = AiProfileText("AiProfileSelectProvider", "Select provider");
         AiProfileNameBox.Header = AiProfileText("AiProfileName", "Profile name");
         AiProfileEnabledToggle.Header = AiProfileText("AiProfileEnabled", "Enabled");
@@ -652,7 +658,8 @@ public sealed partial class SettingsPage : Page
             profile.IsEnabled,
             new Dictionary<string, string>(profile.Configuration, StringComparer.Ordinal),
             isNew: false,
-            CreateAiProviderIcon(provider));
+            CreateAiProviderIcon(provider),
+            profile.IsAutoConnected);
         return draft;
     }
 
@@ -692,6 +699,7 @@ public sealed partial class SettingsPage : Page
             "kimi" => "Kimi",
             "github" => ServiceIconAssetResolver.GitHubOnLightIconName,
             "custom-openai" => "CustomOpenAI",
+            "magpie" => "CustomOpenAI",
             "openrouter" => "OpenRouter",
             "orcarouter" => "OrcaRouter",
             "gemini" => "Gemini",
@@ -757,6 +765,258 @@ public sealed partial class SettingsPage : Page
         RefreshAiProfileListLabels();
         AiProfileListView.SelectedItem = draft;
         MarkAiProfileEditorChanged();
+    }
+
+    private async void OnConnectMagpieClick(object sender, RoutedEventArgs e)
+    {
+        if (_magpieDiscoveryCts is not null) return;
+        UpdateAiProfileListLabelsAndDirtyState();
+        var source = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+        _magpieDiscoveryCts = source;
+        AiProfileConnectMagpieButton.IsEnabled = false;
+        AiProfileConnectMagpieButton.Content = AiProfileText("AiProfileMagpieConnecting", "Connecting…");
+        AiProfileCancelMagpieButton.Visibility = Visibility.Visible;
+        try
+        {
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var httpClient = handle.Manager.SharedHttpClient;
+            var autoDraft = _aiProfileDrafts.FirstOrDefault(draft =>
+                draft.ProviderType == "magpie"
+                && draft.IsAutoConnected
+                && (draft.ProfileId is null || !_deletedAiProfileIds.Contains(draft.ProfileId)));
+            var savedAutoProfile = _settings.AiServiceProfiles.FirstOrDefault(profile =>
+                profile.ProviderType == "magpie"
+                && profile.IsAutoConnected
+                && _deletedAiProfileIds.Contains(profile.ProfileId));
+            var priorConfiguration = autoDraft?.Configuration ?? savedAutoProfile?.Configuration;
+            var priorEndpoint = priorConfiguration?.GetValueOrDefault("endpoint");
+            var baseAddress = GetMagpieBaseAddress(priorEndpoint) ?? MagpieGatewayDiscoveryService.DefaultBaseAddress;
+            var allowRemote = string.Equals(priorConfiguration?.GetValueOrDefault("allowRemote"), "true", StringComparison.OrdinalIgnoreCase);
+            string? remoteKey = autoDraft is not null
+                ? autoDraft.ClearedSecretFields.Contains("apiKey")
+                    ? null
+                    : autoDraft.SecretEdits.GetValueOrDefault("apiKey")
+                        ?? (autoDraft.ProfileId is null ? null : _settings.GetAiServiceProfileSecret(autoDraft.ProfileId, "apiKey"))
+                : savedAutoProfile is null
+                    ? null
+                    : _settings.GetAiServiceProfileSecret(savedAutoProfile.ProfileId, "apiKey");
+            var result = await MagpieGatewayDiscoveryService.DiscoverAsync(
+                httpClient, baseAddress, remoteKey, allowRemote, source.Token);
+
+            if (!result.IsSuccess && result.Status is not (MagpieDiscoveryStatus.Cancelled or MagpieDiscoveryStatus.NoModels))
+            {
+                var overrideOptions = await ShowMagpieManualOverrideAsync(source.Token, baseAddress, allowRemote);
+                if (overrideOptions is null)
+                {
+                    result = new(MagpieDiscoveryStatus.Cancelled);
+                }
+                else
+                {
+                    baseAddress = overrideOptions.BaseAddress;
+                    remoteKey = overrideOptions.ApiKey;
+                    result = await MagpieGatewayDiscoveryService.DiscoverAsync(
+                        httpClient, baseAddress, remoteKey, overrideOptions.AllowRemote, source.Token);
+                }
+            }
+
+            if (source.IsCancellationRequested || !ReferenceEquals(_magpieDiscoveryCts, source)) return;
+            if (!result.IsSuccess)
+            {
+                if (result.Status != MagpieDiscoveryStatus.Cancelled)
+                {
+                    await ShowMagpieInfoAsync(GetMagpieDiscoveryMessage(result));
+                }
+                return;
+            }
+
+            string? previouslyConfiguredModel = autoDraft is not null
+                && autoDraft.Configuration.TryGetValue("model", out var storedModel)
+                    ? storedModel
+                    : savedAutoProfile?.Configuration.GetValueOrDefault("model");
+            var hasPreviouslyConfiguredModel = !string.IsNullOrWhiteSpace(previouslyConfiguredModel);
+            var existingModel = hasPreviouslyConfiguredModel
+                ? result.Models!.FirstOrDefault(model => string.Equals(model.Id, previouslyConfiguredModel, StringComparison.Ordinal))?.Id
+                : null;
+            string? selectedModel = existingModel
+                ?? (hasPreviouslyConfiguredModel
+                    ? await ShowMagpieModelPickerAsync(result.Models!, source.Token)
+                    : result.Models!.Count == 1
+                        ? result.Models[0].Id
+                        : await ShowMagpieModelPickerAsync(result.Models!, source.Token));
+            if (selectedModel is null) return;
+            if (string.IsNullOrWhiteSpace(selectedModel))
+            {
+                if (!source.IsCancellationRequested) await ShowMagpieInfoAsync(AiProfileText("AiProfileMagpieModelRequired", "Choose a model to finish connecting Magpie."));
+                return;
+            }
+            if (source.IsCancellationRequested || !ReferenceEquals(_magpieDiscoveryCts, source)) return;
+
+            if (!AiProviderCatalog.TryGet("magpie", out var provider)) return;
+            var draft = autoDraft;
+            if (draft is null)
+            {
+                draft = CreateNewAiProfileDraft(provider);
+                draft.IsAutoConnected = true;
+                _aiProfileDrafts.Add(draft);
+            }
+
+            draft.Configuration["endpoint"] = new Uri(result.BaseAddress!, "v1/chat/completions").AbsoluteUri;
+            draft.Configuration["allowRemote"] = MagpieGatewayDiscoveryService.IsLoopbackAddress(baseAddress) ? "false" : "true";
+            draft.Configuration["model"] = selectedModel;
+            draft.SecretEdits["apiKey"] = MagpieGatewayDiscoveryService.ApiKeyForProfile(baseAddress, remoteKey);
+            draft.ClearedSecretFields.Remove("apiKey");
+            RefreshAiProfileListLabels();
+            AiProfileListView.SelectedItem = draft;
+            if (ReferenceEquals(_selectedAiProfileDraft, draft))
+            {
+                if (_aiProfileFieldControls.TryGetValue("endpoint", out var endpointControl) && endpointControl is TextBox endpointBox)
+                    endpointBox.Text = draft.Configuration["endpoint"];
+                if (_aiProfileFieldControls.TryGetValue("model", out var modelControl) && modelControl is TextBox modelBox)
+                    modelBox.Text = selectedModel;
+                if (_aiProfileFieldControls.TryGetValue("allowRemote", out var remoteControl) && remoteControl is ToggleSwitch remoteToggle)
+                    remoteToggle.IsOn = draft.Configuration["allowRemote"] == "true";
+                MarkAiProfileEditorChanged();
+            }
+            AiProfileActionStatusText.Text = AiProfileText("AiProfileMagpieSaveHint", "Magpie is ready. Save settings to apply this connection.");
+        }
+        catch (OperationCanceledException)
+        {
+            if (ReferenceEquals(_magpieDiscoveryCts, source))
+                AiProfileActionStatusText.Text = AiProfileText("Cancelled", "Canceled.");
+        }
+        catch (Exception ex)
+        {
+            if (!source.IsCancellationRequested) await ShowMagpieInfoAsync(ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(_magpieDiscoveryCts, source))
+            {
+                _magpieDiscoveryCts = null;
+                AiProfileConnectMagpieButton.IsEnabled = true;
+                AiProfileConnectMagpieButton.Content = AiProfileText("AiProfileConnectMagpie", "Connect Magpie");
+                AiProfileCancelMagpieButton.Visibility = Visibility.Collapsed;
+            }
+            source.Dispose();
+        }
+    }
+
+    private static string? GetMagpieBaseAddress(string? endpoint)
+    {
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return null;
+        }
+
+        return new UriBuilder(uri) { Path = "/", Query = "", Fragment = "", UserName = "", Password = "" }.Uri.AbsoluteUri.TrimEnd('/');
+    }
+
+    private sealed record MagpieManualOverride(string BaseAddress, string ApiKey, bool AllowRemote);
+
+    private async Task<MagpieManualOverride?> ShowMagpieManualOverrideAsync(
+        CancellationToken cancellationToken,
+        string initialAddress,
+        bool initialAllowRemote)
+    {
+        var addressBox = new TextBox
+        {
+            Header = AiProfileText("AiProfileMagpieAddress", "Gateway address"),
+            Text = initialAddress
+        };
+        AutomationProperties.SetName(addressBox, "Magpie gateway address");
+        var allowRemoteBox = new CheckBox
+        {
+            Content = AiProfileText("AiProfileMagpieAllowRemote", "Allow remote gateway (HTTPS only)"),
+            IsChecked = initialAllowRemote
+        };
+        AutomationProperties.SetName(allowRemoteBox, "Allow remote Magpie gateway");
+        var apiKeyBox = new PasswordBox
+        {
+            Header = AiProfileText("AiProfileMagpieRemoteKey", "Remote gateway key")
+        };
+        AutomationProperties.SetName(apiKeyBox, "Remote Magpie gateway key");
+        var content = new StackPanel { Spacing = 10 };
+        content.Children.Add(new TextBlock
+        {
+            Text = AiProfileText("AiProfileMagpieNotFound", "Magpie was not found at the local address. Enter another gateway address if needed."),
+            TextWrapping = TextWrapping.Wrap
+        });
+        content.Children.Add(addressBox);
+        content.Children.Add(allowRemoteBox);
+        content.Children.Add(apiKeyBox);
+        var dialog = new ContentDialog
+        {
+            Title = AiProfileText("AiProfileConnectMagpie", "Connect Magpie"),
+            Content = content,
+            PrimaryButtonText = AiProfileText("OK", "Connect"),
+            CloseButtonText = AiProfileText("Cancel", "Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot
+        };
+        using var registration = cancellationToken.Register(() =>
+            DispatcherQueue.TryEnqueue(() => { try { dialog.Hide(); } catch (COMException) { } }));
+        if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary || cancellationToken.IsCancellationRequested)
+            return null;
+        return new(addressBox.Text?.Trim() ?? "", apiKeyBox.Password, allowRemoteBox.IsChecked == true);
+    }
+
+    private async Task<string?> ShowMagpieModelPickerAsync(IReadOnlyList<ModelCatalogEntry> models, CancellationToken cancellationToken)
+    {
+        var picker = new ComboBox
+        {
+            MinWidth = 360,
+            DisplayMemberPath = nameof(ModelCatalogEntry.DisplayLabel)
+        };
+        AutomationProperties.SetName(picker, "Magpie model");
+        foreach (var model in models)
+            picker.Items.Add(new ComboBoxItem { Content = model.DisplayLabel, Tag = model.Id });
+        if (picker.Items.Count == 1) picker.SelectedIndex = 0;
+        var dialog = new ContentDialog
+        {
+            Title = AiProfileText("AiProfileModelPickerTitle", "Select a model"),
+            Content = picker,
+            PrimaryButtonText = AiProfileText("OK", "OK"),
+            CloseButtonText = AiProfileText("Cancel", "Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot
+        };
+        using var registration = cancellationToken.Register(() =>
+            DispatcherQueue.TryEnqueue(() => { try { dialog.Hide(); } catch (COMException) { } }));
+        if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary || cancellationToken.IsCancellationRequested)
+            return null;
+        return (picker.SelectedItem as ComboBoxItem)?.Tag as string ?? string.Empty;
+    }
+
+    private async Task ShowMagpieInfoAsync(string message)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = AiProfileText("ConnectMagpieTitle", "Magpie connection"),
+            Content = message,
+            CloseButtonText = AiProfileText("OK", "OK"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot
+        };
+        await ShowDialogAsync(dialog);
+    }
+
+    private string GetMagpieDiscoveryMessage(MagpieDiscoveryResult result) => result.Status switch
+    {
+        MagpieDiscoveryStatus.NotReachable => AiProfileText("AiProfileMagpieNotRunning", "Magpie could not be reached. Start Magpie or enter another gateway address."),
+        MagpieDiscoveryStatus.WrongServer => AiProfileText("AiProfileMagpieWrongServer", "The address responded, but it is not a Magpie gateway."),
+        MagpieDiscoveryStatus.Unauthorized => AiProfileText("AiProfileMagpieUnauthorized", "The gateway rejected the key. Check the authorized gateway key."),
+        MagpieDiscoveryStatus.NoModels => AiProfileText("AiProfileMagpieNoModels", "Magpie returned no available models."),
+        MagpieDiscoveryStatus.Timeout => AiProfileText("AiProfileMagpieTimeout", "Magpie discovery timed out."),
+        MagpieDiscoveryStatus.InvalidAddress => result.Detail ?? AiProfileText("AiProfileMagpieInvalidAddress", "Check the gateway address and remote access options."),
+        MagpieDiscoveryStatus.RequestFailed => result.Detail ?? AiProfileText("AiProfileMagpieFailed", "Magpie discovery failed."),
+        _ => AiProfileText("AiProfileMagpieFailed", "Magpie discovery failed.")
+    };
+
+    private void OnCancelMagpieDiscoveryClick(object sender, RoutedEventArgs e)
+    {
+        try { _magpieDiscoveryCts?.Cancel(); }
+        catch (ObjectDisposedException) { }
     }
 
     private void OnAiProfileSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -878,7 +1138,7 @@ public sealed partial class SettingsPage : Page
             _aiProfileFieldControls[field.Id] = combo;
             row.Children.Add(combo);
         }
-        else if (field.Id == "signedInViaSso")
+        else if (field.Id is "signedInViaSso" or "allowRemote")
         {
             var toggle = new ToggleSwitch
             {
@@ -987,6 +1247,8 @@ public sealed partial class SettingsPage : Page
     {
         try { _aiProfileActionCts?.Cancel(); }
         catch (ObjectDisposedException) { }
+        try { _magpieDiscoveryCts?.Cancel(); }
+        catch (ObjectDisposedException) { }
     }
 
     private async void OnDeleteAiProfileClick(object sender, RoutedEventArgs e)
@@ -1093,6 +1355,27 @@ public sealed partial class SettingsPage : Page
                     return false;
                 }
             }
+
+            if (draft.ProviderType == "magpie"
+                && draft.Configuration.TryGetValue("endpoint", out var magpieEndpoint)
+                && !MagpieGatewayDiscoveryService.IsLoopbackAddress(magpieEndpoint))
+            {
+                var allowRemote = draft.Configuration.GetValueOrDefault("allowRemote", "false");
+                var remoteKey = draft.SecretEdits.TryGetValue("apiKey", out var editedKey)
+                    ? editedKey
+                    : draft.ClearedSecretFields.Contains("apiKey")
+                        ? string.Empty
+                        : draft.IsNew ? string.Empty : _settings.GetAiServiceProfileSecret(draft.ProfileId!, "apiKey");
+                if (!Uri.TryCreate(magpieEndpoint, UriKind.Absolute, out var remoteUri)
+                    || remoteUri.Scheme != Uri.UriSchemeHttps
+                    || !string.Equals(allowRemote, "true", StringComparison.OrdinalIgnoreCase)
+                    || string.IsNullOrWhiteSpace(remoteKey)
+                    || string.Equals(remoteKey, MagpieGatewayDiscoveryService.LocalAttributionKey, StringComparison.Ordinal))
+                {
+                    error = AiProfileText("AiProfileMagpieRemoteRequired", "Remote Magpie profiles require explicit opt-in, HTTPS, and an authorized gateway key.");
+                    return false;
+                }
+            }
         }
         return true;
     }
@@ -1110,7 +1393,8 @@ public sealed partial class SettingsPage : Page
             new Dictionary<string, string>(draft.SecretEdits, StringComparer.Ordinal),
             new HashSet<string>(draft.ClearedSecretFields, StringComparer.Ordinal),
             draft.IsNew,
-            AiProfileDraftHasChanges(draft))).ToArray();
+            AiProfileDraftHasChanges(draft),
+            draft.IsAutoConnected)).ToArray();
         var result = AiServiceProfileDraftSaver.Save(_settings, submissions, _deletedAiProfileIds.ToArray());
 
         foreach (var draft in _aiProfileDrafts)
@@ -1253,6 +1537,7 @@ public sealed partial class SettingsPage : Page
             ProviderType = draft.ProviderType,
             Name = string.IsNullOrWhiteSpace(draft.Name) ? draft.ProviderDisplayName : draft.Name.Trim(),
             IsEnabled = true,
+            IsAutoConnected = draft.IsAutoConnected,
             ConfigurationRevision = 0,
             Configuration = new Dictionary<string, string>(draft.Configuration, StringComparer.Ordinal)
         };
@@ -1373,7 +1658,8 @@ public sealed partial class SettingsPage : Page
                 var currentItem = picker.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
                     string.Equals(item.Tag as string, currentModel, StringComparison.Ordinal));
                 if (currentItem is not null) picker.SelectedItem = currentItem;
-                picker.Text = currentModel;
+                if (draft.ProviderType != "magpie" || currentItem is not null)
+                    picker.Text = currentModel;
             }
             var dialog = new ContentDialog
             {
@@ -1392,11 +1678,16 @@ public sealed partial class SettingsPage : Page
                 EndAiProfileAction(draft, source);
                 return;
             }
+            if (response != ContentDialogResult.Primary)
+            {
+                EndAiProfileAction(draft, source, AiProfileText("Cancelled", "Canceled."));
+                return;
+            }
             if (response == ContentDialogResult.Primary)
             {
                 var selectedModel = picker.SelectedItem is ComboBoxItem selected
                     ? selected.Tag as string
-                    : picker.Text?.Trim();
+                    : draft.ProviderType == "magpie" ? null : picker.Text?.Trim();
                 if (!string.IsNullOrWhiteSpace(selectedModel))
                 {
                     draft.Configuration["model"] = selectedModel;
@@ -1406,6 +1697,11 @@ public sealed partial class SettingsPage : Page
                     }
                     RefreshAiProfileListLabels();
                     MarkAiProfileEditorChanged();
+                }
+                else if (draft.ProviderType == "magpie")
+                {
+                    EndAiProfileAction(draft, source, AiProfileText("AiProfileMagpieModelRemoved", "The previously selected model is no longer available. Choose a current Magpie model."));
+                    return;
                 }
             }
             EndAiProfileAction(draft, source, string.Format(
@@ -7191,6 +7487,7 @@ public sealed partial class SettingsPage : Page
             "github" => new GitHubModelsService(httpClient),
             "gemini" => new GeminiService(httpClient),
             "custom-openai" => new CustomOpenAIService(httpClient),
+            "magpie" => new MagpieService(httpClient),
             "openrouter" => new OpenRouterService(httpClient),
             "orcarouter" => new OrcaRouterService(httpClient),
             "doubao" => new DoubaoService(httpClient),

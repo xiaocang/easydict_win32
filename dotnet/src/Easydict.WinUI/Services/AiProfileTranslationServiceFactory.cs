@@ -161,6 +161,16 @@ internal static class AiProfileTranslationServiceFactory
                 service.Configure(Value("endpoint"), Secret("apiKey"), Value("model"));
                 return service;
             }
+            case "magpie":
+            {
+                var service = new MagpieService(httpClient);
+                service.Configure(
+                    Value("endpoint"),
+                    Secret("apiKey"),
+                    Value("model"),
+                    string.Equals(Value("allowRemote"), "true", StringComparison.OrdinalIgnoreCase));
+                return service;
+            }
             case "openrouter":
             {
                 var service = new OpenRouterService(httpClient);

@@ -208,6 +208,31 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void MagpieAutoConnectedProfile_MarkerAndConfigurationSurviveSaveAndReload()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        var profile = settings.AddAiServiceProfile("magpie", "Magpie", isAutoConnected: true);
+        settings.AddAiServiceProfile("magpie", "Duplicate", isAutoConnected: true).ProfileId.Should().Be(profile.ProfileId);
+        settings.AiServiceProfiles.Where(candidate => candidate.ProviderType == "magpie").Should().ContainSingle();
+        settings.UpdateAiServiceProfileConfiguration(profile.ProfileId, new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["endpoint"] = "http://127.0.0.1:4545/v1/chat/completions",
+            ["model"] = "provider/model"
+        });
+        settings.SetAiServiceProfileSecret(profile.ProfileId, "apiKey", "magpie-easydict");
+        settings.Save();
+
+        var reloaded = CreateIsolatedSettingsService(testDirectory.Path);
+        var restored = reloaded.AiServiceProfiles.Where(candidate => candidate.ProviderType == "magpie").Should().ContainSingle().Subject;
+        restored.ProfileId.Should().Be(profile.ProfileId);
+        restored.IsAutoConnected.Should().BeTrue();
+        restored.Configuration["model"].Should().Be("provider/model");
+        reloaded.GetAiServiceProfileSecret(restored.ProfileId, "apiKey").Should().Be("magpie-easydict");
+    }
+
+    [Fact]
     public void AiProfiles_DeletingProfileRedirectsReferencesOrRemovesThemWhenNoReplacementExists()
     {
         using var testDirectory = new TemporaryDirectory();
@@ -397,6 +422,61 @@ public class SettingsServiceTests
         reloaded.MiniWindowEnabledServices.Should().Contain(replacement.ServiceId).And.NotContain(deleted.ServiceId);
         reloaded.TextActions.Should().ContainSingle(action => action.Id == "draft-delete-action")
             .Which.ServiceId.Should().Be(replacement.ServiceId);
+    }
+
+    [Fact]
+    public void AiProfileDraftSaver_DeleteThenReconnectCreatesOneSavedAutoProfileAndRedirectsReferences()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{\"VisionLayoutServiceId\":\"\"}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        var deleted = settings.AddAiServiceProfile("magpie", "Old gateway", isAutoConnected: true);
+        settings.UpdateAiServiceProfileConfiguration(deleted.ProfileId, new Dictionary<string, string>
+        {
+            ["endpoint"] = "https://old-gateway.example/v1/chat/completions",
+            ["allowRemote"] = "true",
+            ["model"] = "old/model"
+        });
+        settings.SetAiServiceProfileSecret(deleted.ProfileId, "apiKey", "old-authorized-key");
+        settings.HoverWordLookupServiceId = deleted.ServiceId;
+        settings.Save();
+
+        var reconnectedDraft = new AiServiceProfileDraftSubmission(
+            "reconnected-magpie",
+            null,
+            null,
+            "magpie",
+            "New gateway",
+            true,
+            new Dictionary<string, string>
+            {
+                ["endpoint"] = "https://new-gateway.example/v1/chat/completions",
+                ["allowRemote"] = "true",
+                ["model"] = "new/model"
+            },
+            new Dictionary<string, string> { ["apiKey"] = "new-authorized-key" },
+            new HashSet<string>(StringComparer.Ordinal),
+            IsNew: true,
+            HasChanges: true,
+            IsAutoConnected: true);
+
+        var result = AiServiceProfileDraftSaver.Save(settings, [reconnectedDraft], [deleted.ProfileId]);
+        var created = result.ProfilesByDraftKey["reconnected-magpie"];
+        created.ProfileId.Should().NotBe(deleted.ProfileId);
+        settings.AiServiceProfiles.Should().ContainSingle(profile => profile.ProfileId == created.ProfileId);
+        settings.HoverWordLookupServiceId.Should().Be(created.ServiceId);
+        settings.GetAiServiceProfileSecret(created.ProfileId, "apiKey").Should().Be("new-authorized-key");
+        settings.Save();
+
+        var reloaded = CreateIsolatedSettingsService(testDirectory.Path);
+        reloaded.AiServiceProfiles.Should().ContainSingle(profile =>
+            profile.ProfileId == created.ProfileId
+            && profile.IsAutoConnected
+            && profile.Configuration["endpoint"] == "https://new-gateway.example/v1/chat/completions"
+            && profile.Configuration["model"] == "new/model");
+        reloaded.GetAiServiceProfileSecret(created.ProfileId, "apiKey").Should().Be("new-authorized-key");
+        reloaded.HoverWordLookupServiceId.Should().Be(created.ServiceId);
+        reloaded.AiServiceProfiles.Single().ServiceId.Should().Be(reloaded.HoverWordLookupServiceId);
     }
 
     [Fact]

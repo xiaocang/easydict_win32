@@ -1759,4 +1759,23 @@
   <data name="AiProfileFieldExecutablePath" xml:space="preserve"><value>Executable path (optional)</value></data>
   <data name="AiProfileFieldReasoningEffort" xml:space="preserve"><value>Reasoning effort</value></data>
   <data name="AiProfileTestInput" xml:space="preserve"><value>Hello. Please translate this sentence into Chinese.</value></data>
+  <data name="AiProfileConnectMagpie" xml:space="preserve"><value>Connect Magpie</value></data>
+  <data name="AiProfileMagpieConnecting" xml:space="preserve"><value>Connecting…</value></data>
+  <data name="AiProfileMagpieAddress" xml:space="preserve"><value>Gateway address</value></data>
+  <data name="AiProfileMagpieAllowRemote" xml:space="preserve"><value>Allow remote gateway (HTTPS only)</value></data>
+  <data name="AiProfileMagpieRemoteKey" xml:space="preserve"><value>Remote gateway key</value></data>
+  <data name="AiProfileMagpieNotFound" xml:space="preserve"><value>Magpie was not found at the local address. Enter another gateway address if needed.</value></data>
+  <data name="AiProfileMagpieModelRequired" xml:space="preserve"><value>Choose a model to finish connecting Magpie.</value></data>
+  <data name="AiProfileMagpieSaveHint" xml:space="preserve"><value>Magpie is ready. Save settings to apply this connection.</value></data>
+  <data name="ConnectMagpieTitle" xml:space="preserve"><value>Magpie connection</value></data>
+  <data name="AiProfileMagpieNotRunning" xml:space="preserve"><value>Magpie could not be reached. Start Magpie or enter another gateway address.</value></data>
+  <data name="AiProfileMagpieWrongServer" xml:space="preserve"><value>The address responded, but it is not a Magpie gateway.</value></data>
+  <data name="AiProfileMagpieUnauthorized" xml:space="preserve"><value>The gateway rejected the key. Check the authorized gateway key.</value></data>
+  <data name="AiProfileMagpieNoModels" xml:space="preserve"><value>Magpie returned no available models.</value></data>
+  <data name="AiProfileMagpieTimeout" xml:space="preserve"><value>Magpie discovery timed out.</value></data>
+  <data name="AiProfileMagpieInvalidAddress" xml:space="preserve"><value>Check the gateway address and remote access options.</value></data>
+  <data name="AiProfileMagpieFailed" xml:space="preserve"><value>Magpie discovery failed.</value></data>
+  <data name="AiProfileMagpieModelRemoved" xml:space="preserve"><value>The previously selected model is no longer available. Choose a current Magpie model.</value></data>
+  <data name="AiProfileFieldAllowRemote" xml:space="preserve"><value>Allow remote Magpie gateway</value></data>
+  <data name="AiProfileMagpieRemoteRequired" xml:space="preserve"><value>Remote Magpie profiles require explicit opt-in, HTTPS, and an authorized gateway key.</value></data>
 </root>

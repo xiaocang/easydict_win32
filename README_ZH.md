@@ -92,6 +92,8 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **语法纠错模式** - AI 驱动的语法纠错，高亮错误并提供修正文本及解释说明
 
+- **AI 服务配置与 Magpie** - 在「设置 → AI 服务配置」中按配置档管理 AI 服务：先选择服务类型，再为每份配置分别设置端点、模型和受保护的 API Key；同一种服务可以保存多份配置。旧版 AI 设置会自动迁移，并保留已保存的凭据和服务选择。点击「连接 Magpie」会发现本机默认网关 http://127.0.0.1:3425、列出当前模型供选择并生成配置；若 Magpie 使用其他地址，可在手动连接对话框中填写。选择模型后保存配置。远程网关必须主动启用、使用 HTTPS 并提供已授权的 Key。保存前连接仅为草稿。词典服务和 Local AI 引擎管理仍保持独立。
+
 - **长文档翻译** - 支持 PDF、纯文本和 Markdown 文档翻译，具备 ML 版面检测、公式保护、并行处理、双语输出和翻译缓存功能
 
 - **词典模式** - 单词释义、音标和例句由 Google 词典提供。Linguee 当前不可用，因为其上游示例 API 域名已无法解析。
@@ -258,12 +260,15 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OpenRouter | OpenAI API | — | OpenAI 兼容，缺少 API Key |
 | OrcaRouter | OpenAI API | ✅ | 测试覆盖：流式翻译、非流式翻译和实时模型目录（免费模型优先） |
 | 自定义 OpenAI | OpenAI API | — | OpenAI 兼容，用户自定义端点 |
+| Magpie | OpenAI 兼容网关 | ✅ | 32 项定向离线检查及隔离合成网关界面验收；未调用真实网关或模型 |
 | Claude Code | 本地 CLI（stream-json） | — | 需要本地已登录的 `claude` CLI |
 | Codex | 本地 CLI（JSONL） | — | 需要本地已登录的 `codex` CLI |
 
 > 标记为 **OpenAI API** 的服务均继承自 `BaseOpenAIService`，共享相同的 OpenAI 兼容实现，因此未测试的服务预期行为一致。
 
 <p align="right"><a href="#目录">回到顶部</a></p>
+
+Magpie 验收使用本机合成网关；尚未验证真实 Magpie 安装/模型，也未覆盖所有 Windows DPI 和缩放组合。
 
 ## 支持项目
 

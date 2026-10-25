@@ -22,6 +22,8 @@ public sealed class AiServiceProfile
     public string ProviderType { get; init; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;
+    /// <summary>Marks the profile managed by one-click Magpie connection.</summary>
+    public bool IsAutoConnected { get; set; }
     public int ConfigurationRevision { get; set; }
 
     /// <summary>Provider-specific non-secret options, encoded as invariant strings.</summary>
@@ -43,6 +45,7 @@ public sealed class AiServiceProfile
             ProviderType = ProviderType,
             Name = name ?? Name,
             IsEnabled = isEnabled ?? IsEnabled,
+            IsAutoConnected = IsAutoConnected,
             ConfigurationRevision = checked(ConfigurationRevision + 1),
             Configuration = new Dictionary<string, string>(configuration, StringComparer.Ordinal),
             ExtensionData = ExtensionData is null ? null : new Dictionary<string, JsonElement>(ExtensionData, StringComparer.Ordinal)

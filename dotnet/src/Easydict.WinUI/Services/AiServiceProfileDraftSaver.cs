@@ -14,7 +14,8 @@ internal sealed record AiServiceProfileDraftSubmission(
     IReadOnlyDictionary<string, string> SecretEdits,
     IReadOnlySet<string> ClearedSecretFields,
     bool IsNew,
-    bool HasChanges);
+    bool HasChanges,
+    bool IsAutoConnected = false);
 
 internal sealed record AiProfileServiceReferenceChange(string FromServiceId, string? ToServiceId);
 
@@ -40,16 +41,19 @@ internal static class AiServiceProfileDraftSaver
         var initialProviderTypes = settings.AiServiceProfiles
             .Select(profile => profile.ProviderType)
             .ToHashSet(StringComparer.Ordinal);
+        var deletedIds = deletedProfileIds.ToHashSet(StringComparer.Ordinal);
         var profilesByDraftKey = new Dictionary<string, AiServiceProfile>(StringComparer.Ordinal);
         foreach (var draft in drafts.Where(draft => draft.IsNew))
         {
-            var created = settings.AddAiServiceProfile(draft.ProviderType, draft.Name.Trim());
+            var created = settings.AddAiServiceProfile(
+                draft.ProviderType, draft.Name.Trim(), draft.IsAutoConnected, deletedIds);
             profilesByDraftKey.Add(draft.DraftKey, created);
         }
 
         var referenceChanges = new List<AiProfileServiceReferenceChange>();
         foreach (var group in drafts.Where(draft => draft.IsNew)
             .Where(draft => !initialProviderTypes.Contains(draft.ProviderType))
+            .Where(draft => AiProviderCatalog.TryGet(draft.ProviderType, out var provider) && provider.HasLegacyConfiguration)
             .GroupBy(draft => draft.ProviderType, StringComparer.Ordinal))
         {
             var firstProfile = profilesByDraftKey[group.First().DraftKey];

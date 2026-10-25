@@ -1759,4 +1759,23 @@
   <data name="AiProfileFieldExecutablePath" xml:space="preserve"><value>可执行文件路径（可选）</value></data>
   <data name="AiProfileFieldReasoningEffort" xml:space="preserve"><value>推理强度</value></data>
   <data name="AiProfileTestInput" xml:space="preserve"><value>Hello. Please translate this sentence into Chinese.</value></data>
+  <data name="AiProfileConnectMagpie" xml:space="preserve"><value>连接 Magpie</value></data>
+  <data name="AiProfileMagpieConnecting" xml:space="preserve"><value>正在连接…</value></data>
+  <data name="AiProfileMagpieAddress" xml:space="preserve"><value>网关地址</value></data>
+  <data name="AiProfileMagpieAllowRemote" xml:space="preserve"><value>允许远程网关（仅 HTTPS）</value></data>
+  <data name="AiProfileMagpieRemoteKey" xml:space="preserve"><value>远程网关密钥</value></data>
+  <data name="AiProfileMagpieNotFound" xml:space="preserve"><value>本机地址未找到 Magpie。如有需要，请输入其他网关地址。</value></data>
+  <data name="AiProfileMagpieModelRequired" xml:space="preserve"><value>请选择模型以完成 Magpie 连接。</value></data>
+  <data name="AiProfileMagpieSaveHint" xml:space="preserve"><value>Magpie 已就绪。保存设置后连接才会生效。</value></data>
+  <data name="ConnectMagpieTitle" xml:space="preserve"><value>Magpie 连接</value></data>
+  <data name="AiProfileMagpieNotRunning" xml:space="preserve"><value>无法连接 Magpie。请启动 Magpie，或输入其他网关地址。</value></data>
+  <data name="AiProfileMagpieWrongServer" xml:space="preserve"><value>此地址有响应，但不是 Magpie 网关。</value></data>
+  <data name="AiProfileMagpieUnauthorized" xml:space="preserve"><value>网关拒绝了密钥，请检查授权密钥。</value></data>
+  <data name="AiProfileMagpieNoModels" xml:space="preserve"><value>Magpie 没有返回可用模型。</value></data>
+  <data name="AiProfileMagpieTimeout" xml:space="preserve"><value>Magpie 探测超时。</value></data>
+  <data name="AiProfileMagpieInvalidAddress" xml:space="preserve"><value>请检查网关地址和远程访问选项。</value></data>
+  <data name="AiProfileMagpieFailed" xml:space="preserve"><value>Magpie 探测失败。</value></data>
+  <data name="AiProfileMagpieModelRemoved" xml:space="preserve"><value>之前选择的模型已不可用，请选择当前 Magpie 模型。</value></data>
+  <data name="AiProfileFieldAllowRemote" xml:space="preserve"><value>允许远程 Magpie 网关</value></data>
+  <data name="AiProfileMagpieRemoteRequired" xml:space="preserve"><value>远程 Magpie 配置必须明确启用远程访问、使用 HTTPS 并填写有效的网关密钥。</value></data>
 </root>

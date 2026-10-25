@@ -92,6 +92,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
 
+- **AI Provider Profiles and Magpie** - Configure AI services as profiles under Settings → AI profiles. Add a provider type, then give each profile its own endpoint, model and protected API key; multiple profiles of the same provider are supported. Existing AI settings migrate automatically, preserving saved credentials and selections. Use **Connect Magpie** to discover the local gateway at http://127.0.0.1:3425, choose one of its current models, and save the profile. If Magpie uses another address, enter it in the manual connection dialog. Remote gateways require explicit opt-in, HTTPS and an authorized key. The connection remains a draft until saved. Dictionary providers and Local AI engine management remain separate.
+
 - **Long Document Translation** - Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache
 
 - **Dictionary Mode** - Word definitions, phonetics, and example sentences powered by Google Dict. Linguee is currently unavailable because its upstream sample API no longer resolves.
@@ -258,12 +260,15 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OpenRouter | OpenAI API | — | OpenAI-compatible, missing API key |
 | OrcaRouter | OpenAI API | ✅ | Integration coverage: streaming translation, non-streaming translation, and live model catalog (free models first) |
 | Custom OpenAI | OpenAI API | — | OpenAI-compatible, user-defined endpoint |
+| Magpie | OpenAI-compatible gateway | ✅ | 32 focused offline checks and isolated synthetic-gateway UI review; no real gateway or model call |
 | Claude Code | Local CLI (stream-json) | — | Requires local `claude` CLI signed in |
 | Codex | Local CLI (JSONL) | — | Requires local `codex` CLI signed in |
 
 > Services marked **OpenAI API** extend `BaseOpenAIService` and share the same OpenAI-compatible implementation, so untested ones are expected to work similarly.
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
+Magpie review used a synthetic local gateway. Real Magpie installations/models and the full range of Windows DPI/scaling setups have not been verified.
 
 ## Support the Project
 

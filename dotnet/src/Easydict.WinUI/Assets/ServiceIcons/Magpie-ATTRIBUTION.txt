@@ -1,0 +1,6 @@
+Magpie service icon
+
+Source project: https://github.com/yetone/magpie
+Source SVG: build/icon/magpie-small.svg
+Windows PNG variants: build/windows/icon-100.png, icon-125.png, icon-150.png, icon-175.png, icon-200.png
+License: MIT; see Magpie-LICENSE.txt (copyright (c) 2026 yetone).

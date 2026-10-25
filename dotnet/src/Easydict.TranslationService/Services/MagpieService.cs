@@ -16,7 +16,7 @@ public sealed class MagpieService : BaseOpenAIService, IModelCatalogProvider
     public override string ServiceId => "magpie";
     public override string DisplayName => "Magpie";
     public override bool RequiresApiKey => false;
-    public override bool IsConfigured => Uri.TryCreate(_endpoint, UriKind.Absolute, out _) && !string.IsNullOrWhiteSpace(_model);
+    public override bool IsConfigured => IsHttpEndpoint(_endpoint) && !string.IsNullOrWhiteSpace(_model);
     public override IReadOnlyList<Language> SupportedLanguages => OpenAILanguages;
     public override string Endpoint => _endpoint;
     public override string ApiKey => _apiKey;
@@ -61,6 +61,43 @@ public sealed class MagpieService : BaseOpenAIService, IModelCatalogProvider
             yield return chunk;
         }
     }
+
+    protected override void ValidateRequest(TranslationRequest request)
+    {
+        ValidateMagpieConfiguration();
+        base.ValidateRequest(request);
+    }
+
+    protected override void ValidateConfiguration()
+    {
+        ValidateMagpieConfiguration();
+        base.ValidateConfiguration();
+    }
+
+    private void ValidateMagpieConfiguration()
+    {
+        if (!IsHttpEndpoint(_endpoint))
+        {
+            throw new TranslationException("Magpie gateway endpoint must use HTTP or HTTPS.")
+            {
+                ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                ServiceId = ServiceId
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(_model))
+        {
+            throw new TranslationException("Choose a model for this Magpie profile before translating.")
+            {
+                ErrorCode = TranslationErrorCode.InvalidModel,
+                ServiceId = ServiceId
+            };
+        }
+    }
+
+    private static bool IsHttpEndpoint(string endpoint)
+        => Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     private void ValidateGatewayAccess()
     {

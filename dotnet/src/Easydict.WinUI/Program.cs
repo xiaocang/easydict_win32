@@ -48,7 +48,18 @@ public static class Program
         // Repair registration early so future easydict:// launches are reliable.
         if (!EasydictConditions.IsPackaged)
         {
+#if WINUI_TEST
+            var popButtonPreview = string.Equals(
+                Environment.GetEnvironmentVariable("EASYDICT_UIA_POPBUTTON_TRANSPARENCY_PREVIEW"),
+                "1",
+                StringComparison.Ordinal);
+            if (!popButtonPreview)
+            {
+#endif
             ProtocolRegistrationService.EnsureRegistered();
+#if WINUI_TEST
+            }
+#endif
 
             // WinAppSDK has two mutually exclusive unpackaged deployment models:
             // self-contained portable builds load the local runtime DLLs through
@@ -109,10 +120,21 @@ public static class Program
         // The transient --ocr-translate signaler normally exits above after signaling the
         // running instance. If the primary is still starting and has not created the named
         // event yet, the activation is redirected and the primary replays the OCR intent.
+#if WINUI_TEST
+        var popButtonTransparencyPreview = string.Equals(
+            Environment.GetEnvironmentVariable("EASYDICT_UIA_POPBUTTON_TRANSPARENCY_PREVIEW"),
+            "1",
+            StringComparison.Ordinal);
+        if (!popButtonTransparencyPreview && !TryClaimPrimaryInstance())
+        {
+            return; // This activation was redirected to the already-running instance.
+        }
+#else
         if (!TryClaimPrimaryInstance())
         {
             return; // This activation was redirected to the already-running instance.
         }
+#endif
 
         // Replicates the auto-generated Main suppressed by DISABLE_XAML_GENERATED_MAIN.
         WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -149,7 +171,13 @@ public static class Program
             // Each EXE launch in UI automation owns its process and window.
             // Reusing the desktop-wide key can redirect to an earlier test's
             // instance and leave the new process waiting without a main HWND.
-            if (Guid.TryParse(Environment.GetEnvironmentVariable("EASYDICT_UIA_INSTANCE_ID"), out var testInstanceId))
+            var popButtonPreview = string.Equals(
+                Environment.GetEnvironmentVariable("EASYDICT_UIA_POPBUTTON_TRANSPARENCY_PREVIEW"),
+                "1",
+                StringComparison.Ordinal);
+            if (popButtonPreview)
+                instanceKey += "-POP-TRANSPARENCY-PREVIEW";
+            else if (Guid.TryParse(Environment.GetEnvironmentVariable("EASYDICT_UIA_INSTANCE_ID"), out var testInstanceId))
                 instanceKey += $"-UIA-{testInstanceId:N}";
 #endif
             var primary = AppInstance.FindOrRegisterForKey(instanceKey);

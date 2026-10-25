@@ -1722,7 +1722,7 @@
   <data name="AiProfilesTitle" xml:space="preserve"><value>AI 服务配置</value></data>
   <data name="AiProfilesSubtitle" xml:space="preserve"><value>选择服务类型，为每个账户单独配置档案。</value></data>
   <data name="AiProfileAdd" xml:space="preserve"><value>添加配置</value></data>
-  <data name="AiProfileSelectProvider" xml:space="preserve"><value>选择服务</value></data>
+  <data name="AiProfileSelectProvider" xml:space="preserve"><value>选择 AI 服务提供商</value></data>
   <data name="AiProfileNone" xml:space="preserve"><value>未设置</value></data>
   <data name="AiProfileName" xml:space="preserve"><value>配置名称</value></data>
   <data name="AiProfileEnabled" xml:space="preserve"><value>启用</value></data>
@@ -1778,4 +1778,7 @@
   <data name="AiProfileMagpieModelRemoved" xml:space="preserve"><value>之前选择的模型已不可用，请选择当前 Magpie 模型。</value></data>
   <data name="AiProfileFieldAllowRemote" xml:space="preserve"><value>允许远程 Magpie 网关</value></data>
   <data name="AiProfileMagpieRemoteRequired" xml:space="preserve"><value>远程 Magpie 配置必须明确启用远程访问、使用 HTTPS 并填写有效的网关密钥。</value></data>
+  <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>连接本机 Magpie 时使用 EasyDict 本地识别密钥，无需上游 AI 服务商密钥。连接远程网关时，需要填写该网关授权的密钥。</value></data>
+  <data name="AiProfileMagpieModelHelp" xml:space="preserve"><value>连接 Magpie 或点击“刷新模型”会读取其 /v1/models 列表。选择模型并保存设置后即可使用。</value></data>
+  <data name="Help" xml:space="preserve"><value>帮助</value></data>
 </root>

@@ -18,6 +18,42 @@ namespace Easydict.WinUI.Tests.Services;
 public sealed class AiProfileTranslationServiceFactoryTests
 {
     [Fact]
+    public async Task SavedLocalMagpieProfileUsesItsModelWithoutAnUpstreamProviderKey()
+    {
+        var profile = new AiServiceProfile
+        {
+            ProfileId = Guid.NewGuid().ToString("N"),
+            ServiceId = $"ai-profile:{Guid.NewGuid():N}",
+            ProviderType = "magpie",
+            Name = "Local Magpie",
+            Configuration = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["endpoint"] = "http://127.0.0.1:4545/v1/chat/completions",
+                ["model"] = "openai/gpt-6-luna",
+                ["allowRemote"] = "false"
+            }
+        };
+
+        using var handler = new RecordingHandler();
+        using var client = new HttpClient(handler);
+        var service = AiProfileTranslationServiceFactory.Create(profile, _ => null, client);
+        var chunks = await ReadAllAsync((IStreamTranslationService)service, new TranslationRequest
+        {
+            Text = "fixture input",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese,
+            BypassCache = true
+        });
+
+        service.IsConfigured.Should().BeTrue();
+        handler.Requests.Should().ContainSingle(request =>
+            request.Endpoint == "http://127.0.0.1:4545/v1/chat/completions"
+            && request.Model == "openai/gpt-6-luna"
+            && request.ApiKey == null);
+        chunks.Should().Contain("openai/gpt-6-luna-result");
+    }
+
+    [Fact]
     public async Task SameProviderProfilesUseIndependentEndpointKeyModelAndIdentity()
     {
         using var directory = new TemporaryDirectory();

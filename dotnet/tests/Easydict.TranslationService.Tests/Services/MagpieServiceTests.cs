@@ -98,6 +98,49 @@ public sealed class MagpieServiceTests
         chunks.Should().Contain("translated");
     }
 
+    [Fact]
+    public async Task LocalGateway_DoesNotRequireAnUpstreamProviderKeyWhenModelIsSaved()
+    {
+        var handler = new MockHttpMessageHandler();
+        using var client = new HttpClient(handler);
+        var service = new MagpieService(client);
+        service.Configure("http://127.0.0.1:4545/v1/chat/completions", "magpie-easydict", "local/model");
+        handler.EnqueueStreamingResponse(["""{"choices":[{"delta":{"content":"translated"}}]}"""]);
+
+        service.RequiresApiKey.Should().BeFalse();
+        service.IsConfigured.Should().BeTrue();
+        var result = await service.TranslateAsync(new TranslationRequest
+        {
+            Text = "source",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        });
+
+        result.TranslatedText.Should().Be("translated");
+        handler.LastRequest!.Headers.Authorization!.Parameter.Should().Be("magpie-easydict");
+        handler.LastRequestBody.Should().Contain("\"model\":\"local/model\"");
+    }
+
+    [Fact]
+    public async Task MissingModel_ReturnsAccurateInvalidModelErrorWithoutRequest()
+    {
+        var handler = new MockHttpMessageHandler();
+        using var client = new HttpClient(handler);
+        var service = new MagpieService(client);
+        service.Configure("http://127.0.0.1:4545/v1/chat/completions", null, " ");
+
+        var error = await Assert.ThrowsAsync<TranslationException>(() => service.TranslateAsync(new TranslationRequest
+        {
+            Text = "source",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        }));
+
+        error.ErrorCode.Should().Be(TranslationErrorCode.InvalidModel);
+        error.Message.Should().Contain("Choose a model");
+        handler.LastRequest.Should().BeNull();
+    }
+
     private static async Task ConsumeAsync(IAsyncEnumerable<string> stream)
     {
         await foreach (var _ in stream) { }

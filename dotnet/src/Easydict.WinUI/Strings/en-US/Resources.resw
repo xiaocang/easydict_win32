@@ -1722,7 +1722,7 @@
   <data name="AiProfilesTitle" xml:space="preserve"><value>AI profiles</value></data>
   <data name="AiProfilesSubtitle" xml:space="preserve"><value>Choose a provider, then configure each account in its own profile.</value></data>
   <data name="AiProfileAdd" xml:space="preserve"><value>Add profile</value></data>
-  <data name="AiProfileSelectProvider" xml:space="preserve"><value>Select provider</value></data>
+  <data name="AiProfileSelectProvider" xml:space="preserve"><value>Select AI provider</value></data>
   <data name="AiProfileNone" xml:space="preserve"><value>Not set</value></data>
   <data name="AiProfileName" xml:space="preserve"><value>Profile name</value></data>
   <data name="AiProfileEnabled" xml:space="preserve"><value>Enabled</value></data>
@@ -1778,4 +1778,7 @@
   <data name="AiProfileMagpieModelRemoved" xml:space="preserve"><value>The previously selected model is no longer available. Choose a current Magpie model.</value></data>
   <data name="AiProfileFieldAllowRemote" xml:space="preserve"><value>Allow remote Magpie gateway</value></data>
   <data name="AiProfileMagpieRemoteRequired" xml:space="preserve"><value>Remote Magpie profiles require explicit opt-in, HTTPS, and an authorized gateway key.</value></data>
+  <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>A local Magpie gateway uses EasyDict's local attribution key; no upstream provider key is needed. A remote gateway requires its authorized gateway key.</value></data>
+  <data name="AiProfileMagpieModelHelp" xml:space="preserve"><value>Connect Magpie or Refresh models to load its /v1/models list. Choose a model and save settings.</value></data>
+  <data name="Help" xml:space="preserve"><value>Help</value></data>
 </root>

@@ -252,6 +252,16 @@ namespace Easydict.WinUI
                 }
             }
 
+#if WINUI_TEST
+            // The preview needs the initialized AppWindow to size the checkerboard host.
+            // Run it after ConfigureWindow, but before tray/hotkey/services are started.
+            if (Easydict.WinUI.Views.PopButtonTransparencyPreview.TryLaunch(_window, _appWindow))
+            {
+                CrashDiagnostics.Log("[OnLaunched] Pop-button transparency preview started; normal services were not initialized.");
+                return;
+            }
+#endif
+
             // Set window icon for unpackaged scenarios
             if (_appWindow != null)
             {
@@ -1601,6 +1611,7 @@ namespace Easydict.WinUI
         public static void ApplyTrayIcon()
         {
             Instance._trayIconService?.RefreshThemeIcon();
+            Instance._popButtonService?.RefreshTrayIcon();
         }
 
         /// <summary>
@@ -1622,6 +1633,7 @@ namespace Easydict.WinUI
             ApplyMainWindowTitleBarChrome(theme, elementTheme);
             WindowIconService.SetWindowIcon(Instance._appWindow);
             Instance._trayIconService?.RefreshThemeIcon();
+            Instance._popButtonService?.RefreshTrayIcon();
 
             if (Instance._window?.Content is Frame frame)
             {
@@ -1802,6 +1814,7 @@ namespace Easydict.WinUI
             _systemThemeRefreshQueued = 0;
             // Taskbar theme changes must apply even with an explicit app theme.
             _trayIconService?.RefreshThemeIcon();
+            _popButtonService?.RefreshTrayIcon();
 
             if (!IsSystemTheme(SettingsService.Instance.AppTheme))
             {

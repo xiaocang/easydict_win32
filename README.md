@@ -31,6 +31,7 @@
 - [Installation](#installation)
 - [Tech Stack](#tech-stack)
 - [Translation Service Integration Tests](#translation-service-integration-tests)
+- [Windows Selection Pop-up Acceptance](#windows-selection-pop-up-acceptance)
 - [Comparison with macOS Version](#comparison-with-macos-version)
 - [Support the Project](#support-the-project)
 - [License](#license)
@@ -79,7 +80,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
 
-- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window. The pop-up is a strip: next to the translate icon it shows your configured text actions
+- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window. The pop-up is a strip: next to the translate icon it shows your configured text actions. Its surface is transparent and frameless, leaving only the floating icons visible over the app.
 
 - **Text Actions** - Run the selected or entered text through one specific service, or send it to Google, Bing, GitHub, Wikipedia, Baidu or your own URL template. Available from the Actions menu in every window. Selection search buttons are off by default and can be enabled under Settings → Plugins → Text Actions. Clicking a service icon queries only that service and grays out the others.
 
@@ -269,6 +270,12 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
 Magpie review used a synthetic local gateway. Real Magpie installations/models and the full range of Windows DPI/scaling setups have not been verified.
+
+## Windows Selection Pop-up Acceptance
+
+An isolated checkerboard preview confirmed that the floating strip has no visible background or outer frame, the main icon and an additional action both receive clicks, and showing the strip leaves the foreground window unchanged. The preview actions only update a counter; they do not translate text or open a URL.
+
+This acceptance covers the isolated native window only. End-to-end global text selection, every monitor/DPI/theme combination, and requests to a real Magpie gateway or model have not been verified. See [the detailed acceptance record](WINDOWS_POPUP_ACCEPTANCE.md).
 
 ## Support the Project
 

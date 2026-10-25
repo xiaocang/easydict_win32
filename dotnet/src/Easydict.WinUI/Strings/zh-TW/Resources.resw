@@ -1722,7 +1722,7 @@
   <data name="AiProfilesTitle" xml:space="preserve"><value>AI 服務設定</value></data>
   <data name="AiProfilesSubtitle" xml:space="preserve"><value>選擇服務類型，為每個帳戶建立獨立設定檔。</value></data>
   <data name="AiProfileAdd" xml:space="preserve"><value>新增設定檔</value></data>
-  <data name="AiProfileSelectProvider" xml:space="preserve"><value>選擇服務</value></data>
+  <data name="AiProfileSelectProvider" xml:space="preserve"><value>選擇 AI 服務提供者</value></data>
   <data name="AiProfileNone" xml:space="preserve"><value>未設定</value></data>
   <data name="AiProfileName" xml:space="preserve"><value>設定檔名稱</value></data>
   <data name="AiProfileEnabled" xml:space="preserve"><value>已啟用</value></data>
@@ -1759,4 +1759,7 @@
   <data name="AiProfileFieldExecutablePath" xml:space="preserve"><value>執行檔路徑（選填）</value></data>
   <data name="AiProfileFieldReasoningEffort" xml:space="preserve"><value>推理強度</value></data>
   <data name="AiProfileTestInput" xml:space="preserve"><value>Hello. Please translate this sentence into Chinese.</value></data>
+  <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>連線本機 Magpie 時使用 EasyDict 本機識別金鑰，不需要上游 AI 服務商金鑰。連線遠端閘道時，必須填寫該閘道授權的金鑰。</value></data>
+  <data name="AiProfileMagpieModelHelp" xml:space="preserve"><value>連線 Magpie 或按一下「重新整理模型」會讀取其 /v1/models 清單。選擇模型並儲存設定後即可使用。</value></data>
+  <data name="Help" xml:space="preserve"><value>說明</value></data>
 </root>

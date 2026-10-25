@@ -9,12 +9,9 @@
     Title="">
 
     <Grid x:Name="RootGrid"
-          Background="{ThemeResource PopButtonBackgroundBrush}"
-          CornerRadius="{ThemeResource EasydictCardCornerRadius}"
-          BorderBrush="{ThemeResource PopButtonBorderBrush}"
-          BorderThickness="1"
+          Background="Transparent"
           Padding="0"
-          Opacity="0.75">
+          Opacity="1">
 
         <!-- Action strip: native translate button, then (optionally) a divider and configured text actions.
              Plugin actions carry a corner mark so third-party buttons are visually distinct. -->
@@ -29,9 +26,9 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Background="Transparent"
-                    BorderBrush="{ThemeResource PopButtonBorderBrush}"
-                    BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
-                    CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                    BorderBrush="Transparent"
+                    BorderThickness="0"
+                    CornerRadius="0"
                     Click="OnTranslateButtonClick"
                     PointerEntered="OnTranslateButtonPointerEntered"
                     PointerExited="OnTranslateButtonPointerExited"
@@ -39,10 +36,12 @@
                     PointerReleased="OnTranslateButtonPointerReleased"
                     PointerCanceled="OnTranslateButtonPointerCanceled"
                     PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
-                <FontIcon x:Name="ModeIcon"
-                          Glyph="&#xE8C1;"
-                          FontSize="14"
-                          Foreground="{ThemeResource PopButtonForegroundBrush}" />
+                <Image x:Name="TrayIconImage"
+                       Width="19"
+                       Height="19"
+                       Stretch="Uniform"
+                       IsHitTestVisible="False"
+                       AutomationProperties.AccessibilityView="Raw" />
             </Button>
 
             <Rectangle x:Name="ActionsDivider"

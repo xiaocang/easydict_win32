@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Easydict.WinUI.Models;
 using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
@@ -52,10 +53,82 @@ internal static class ServiceIconAssetResolver
 
     public static string GetIconName(string iconName, ElementTheme theme)
     {
-        return IsGitHubIcon(iconName) && theme != ElementTheme.Dark
+        var assetName = ResolveProviderIconName(iconName);
+        return IsGitHubIcon(assetName) && theme != ElementTheme.Dark
             ? GitHubOnLightIconName
-            : iconName;
+            : assetName;
     }
+
+    internal static string ResolveProviderIconName(string serviceId)
+    {
+        IReadOnlyList<AiServiceProfile> profiles;
+        if (serviceId.StartsWith("ai-profile:", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                profiles = SettingsService.Instance.AiServiceProfiles;
+            }
+            catch
+            {
+                // Keep icon resolution non-fatal during startup or after a profile has been removed.
+                profiles = Array.Empty<AiServiceProfile>();
+            }
+            return ResolveProviderIconName(serviceId, profiles);
+        }
+
+        return ResolveNonProfileProviderIconName(serviceId);
+    }
+
+    internal static string ResolveProviderIconName(string serviceId, IEnumerable<AiServiceProfile> savedProfiles)
+    {
+        if (serviceId.StartsWith("ai-profile:", StringComparison.OrdinalIgnoreCase))
+        {
+            var profileId = serviceId["ai-profile:".Length..];
+            var profile = savedProfiles.FirstOrDefault(candidate =>
+                string.Equals(candidate.ProfileId, profileId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(candidate.ServiceId, serviceId, StringComparison.OrdinalIgnoreCase));
+            if (profile is not null && AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
+                return ProviderIconName(provider.Id);
+            return serviceId;
+        }
+
+        return ResolveNonProfileProviderIconName(serviceId);
+    }
+
+    private static string ResolveNonProfileProviderIconName(string serviceId)
+    {
+        if (AiProviderCatalog.All.FirstOrDefault(provider =>
+                string.Equals(provider.Id, serviceId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(provider.LegacyServiceId, serviceId, StringComparison.OrdinalIgnoreCase)) is { } provider)
+        {
+            return ProviderIconName(provider.Id);
+        }
+
+        if (string.Equals(serviceId, "custom_openai", StringComparison.OrdinalIgnoreCase))
+            return "CustomOpenAI";
+
+        return serviceId;
+    }
+
+    private static string ProviderIconName(string providerId) => providerId switch
+    {
+        "openai" => "OpenAI",
+        "ollama" => "Ollama",
+        "deepseek" => "DeepSeek",
+        "groq" => "Groq",
+        "zhipu" => "Zhipu",
+        "kimi" => "Kimi",
+        "github" => "GitHub",
+        "custom-openai" => "CustomOpenAI",
+        "magpie" => "Magpie",
+        "openrouter" => "OpenRouter",
+        "orcarouter" => "OrcaRouter",
+        "gemini" => "Gemini",
+        "doubao" => "Doubao",
+        "claude-code" => "claude-code",
+        "codex" => "codex",
+        _ => providerId
+    };
 
     private static bool IsGitHubIcon(string iconName)
     {

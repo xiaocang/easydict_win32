@@ -480,6 +480,65 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void AiProfileDraftSaver_ConnectedManualMagpieProfileDoesNotMergeIntoExistingAutoProfile()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(testDirectory.Path, "settings.json"), "{\"VisionLayoutServiceId\":\"\"}");
+        var settings = CreateIsolatedSettingsService(testDirectory.Path);
+        var autoProfile = settings.AddAiServiceProfile("magpie", "Magpie Auto", isAutoConnected: true);
+        settings.UpdateAiServiceProfileConfiguration(autoProfile.ProfileId, new Dictionary<string, string>
+        {
+            ["endpoint"] = "http://127.0.0.1:3425/v1/chat/completions",
+            ["allowRemote"] = "false",
+            ["model"] = "auto/model-a"
+        });
+        settings.SetAiServiceProfileSecret(autoProfile.ProfileId, "apiKey", "auto-key-a");
+        settings.Save();
+
+        var secondProfileDraft = new AiServiceProfileDraftSubmission(
+            "manual-magpie-b",
+            null,
+            null,
+            "magpie",
+            "Magpie Work",
+            true,
+            new Dictionary<string, string>
+            {
+                ["endpoint"] = "https://gateway.example/v1/chat/completions",
+                ["allowRemote"] = "true",
+                ["model"] = "work/model-b"
+            },
+            new Dictionary<string, string> { ["apiKey"] = "work-key-b" },
+            new HashSet<string>(StringComparer.Ordinal),
+            IsNew: true,
+            HasChanges: true,
+            IsAutoConnected: false);
+
+        var result = AiServiceProfileDraftSaver.Save(settings, [secondProfileDraft], []);
+        var created = result.ProfilesByDraftKey["manual-magpie-b"];
+        created.ProfileId.Should().NotBe(autoProfile.ProfileId);
+        settings.AiServiceProfiles.Should().HaveCount(2);
+        settings.GetAiServiceProfileSecret(autoProfile.ProfileId, "apiKey").Should().Be("auto-key-a");
+        settings.GetAiServiceProfileSecret(created.ProfileId, "apiKey").Should().Be("work-key-b");
+        settings.Save();
+
+        var reloaded = CreateIsolatedSettingsService(testDirectory.Path);
+        reloaded.AiServiceProfiles.Should().HaveCount(2);
+        reloaded.AiServiceProfiles.Should().ContainSingle(profile =>
+            profile.ProfileId == autoProfile.ProfileId
+            && profile.IsAutoConnected
+            && profile.Configuration["model"] == "auto/model-a");
+        reloaded.AiServiceProfiles.Should().ContainSingle(profile =>
+            profile.ProfileId == created.ProfileId
+            && !profile.IsAutoConnected
+            && profile.Name == "Magpie Work"
+            && profile.Configuration["endpoint"] == "https://gateway.example/v1/chat/completions"
+            && profile.Configuration["model"] == "work/model-b");
+        reloaded.GetAiServiceProfileSecret(autoProfile.ProfileId, "apiKey").Should().Be("auto-key-a");
+        reloaded.GetAiServiceProfileSecret(created.ProfileId, "apiKey").Should().Be("work-key-b");
+    }
+
+    [Fact]
     public void AiProfiles_UnmanagedEmptyRegistryDoesNotDisableLegacyProviderDiscoveryOnSave()
     {
         using var testDirectory = new TemporaryDirectory();

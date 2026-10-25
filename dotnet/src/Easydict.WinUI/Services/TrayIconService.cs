@@ -266,14 +266,20 @@ public sealed class TrayIconService : IDisposable
     /// <summary>
     /// Set a tooltip on a MenuFlyoutItem so the full text is visible on hover.
     /// </summary>
-    private static void SetTip(MenuFlyoutItem item) =>
+    private static void SetTip(MenuFlyoutItem item)
+    {
+        item.HorizontalContentAlignment = HorizontalAlignment.Left;
         ToolTipService.SetToolTip(item, item.Text);
+    }
 
     /// <summary>
     /// Set a tooltip on a MenuFlyoutSubItem so the full text is visible on hover.
     /// </summary>
-    private static void SetTip(MenuFlyoutSubItem item) =>
+    private static void SetTip(MenuFlyoutSubItem item)
+    {
+        item.HorizontalContentAlignment = HorizontalAlignment.Left;
         ToolTipService.SetToolTip(item, item.Text);
+    }
 
     private MenuFlyout CreateContextMenu()
     {

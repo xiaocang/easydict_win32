@@ -970,7 +970,8 @@ public sealed class TranslationManager : IDisposable
             or TranslationErrorCode.UnsupportedLanguage
             or TranslationErrorCode.TextTooLong
             or TranslationErrorCode.InvalidModel
-            or TranslationErrorCode.LocalModelNeedsPreparation;
+            or TranslationErrorCode.LocalModelNeedsPreparation
+            or TranslationErrorCode.ServiceDisabled;
     }
 
     private static string GetCacheKey(TranslationRequest request, string serviceId, ITranslationService? service)

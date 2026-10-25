@@ -1,6 +1,9 @@
 extern alias LongDocWorker;
 
+using System.Reflection;
 using Easydict.SidecarClient.Protocol;
+using Easydict.TranslationService;
+using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using FluentAssertions;
 using Xunit;
@@ -78,5 +81,106 @@ public sealed class LongDocWorkerTranslationManagerFactoryTests
 
         manager.Services["ollama"].Should().BeOfType<OllamaService>()
             .Which.PromptStyle.Should().Be(Easydict.TranslationService.Models.OllamaPromptStyle.Concise);
+    }
+
+    [Fact]
+    public void Build_RegistersProfileUnderItsRuntimeIdentityAndReplacesLegacyService()
+    {
+        using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot
+        {
+            OpenAIApiKey = "stale-legacy-key",
+            OpenAIModel = "stale-legacy-model",
+            AiServiceProfiles =
+            [
+                new AiServiceProfileSnapshot
+                {
+                    ProfileId = "longdoc-openai-work",
+                    ServiceId = "ai-profile:longdoc-openai-work",
+                    ProviderType = "openai",
+                    LegacyServiceId = "openai",
+                    Name = "Work account",
+                    IsEnabled = true,
+                    ConfigurationRevision = 3,
+                    Configuration = new Dictionary<string, string>
+                    {
+                        ["endpoint"] = "https://worker.invalid/v1/chat/completions",
+                        ["model"] = "worker-model",
+                        ["temperature"] = "0.4",
+                        ["apiFormat"] = "ChatCompletions"
+                    },
+                    Secrets = new Dictionary<string, string> { ["apiKey"] = "profile-secret" },
+                    SupportsStreaming = true,
+                    SupportsCorrection = true
+                }
+            ]
+        });
+
+        manager.Services.Should().ContainKey("ai-profile:longdoc-openai-work");
+        manager.Services.Should().NotContainKey("openai");
+        var profileService = manager.Services["ai-profile:longdoc-openai-work"];
+        profileService.DisplayName.Should().Be("Work account");
+        profileService.Should().BeAssignableTo<IStreamTranslationService>();
+        profileService.Should().BeAssignableTo<IGrammarCorrectionService>();
+        profileService.Should().BeAssignableTo<ICacheKeyDiscriminatorProvider>()
+            .Which.CacheKeyDiscriminator.Should().Contain("longdoc-openai-work:3");
+        var innerService = typeof(ProfiledTranslationService)
+            .GetField("InnerService", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(profileService)
+            .Should().BeOfType<OpenAIService>().Which;
+        innerService.ApiKey.Should().Be("profile-secret");
+        innerService.Endpoint.Should().Be("https://worker.invalid/v1/chat/completions");
+        innerService.Model.Should().Be("worker-model");
+    }
+
+    [Fact]
+    public async Task Build_EmptyProfileSnapshotRemovesLegacyAiButKeepsNonAiAndLocalAi()
+    {
+        using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot
+        {
+            OpenAIApiKey = "stale-legacy-key",
+            AiServiceProfiles = []
+        });
+
+        manager.Services.Should().NotContainKey("openai");
+        manager.Services.Should().ContainKey("deepl");
+        manager.Services.Should().ContainKey("windows-local-ai");
+        var error = await Assert.ThrowsAsync<TranslationException>(() => manager.TranslateAsync(
+            new TranslationRequest { Text = "hello", ToLanguage = Language.SimplifiedChinese },
+            serviceId: "openai"));
+        error.Message.Should().Contain("Unknown service: openai");
+    }
+
+    [Fact]
+    public async Task Build_MissingProviderInProfileSnapshotCannotFallBackToLegacyAiId()
+    {
+        using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot
+        {
+            OpenAIApiKey = "stale-legacy-key",
+            AiServiceProfiles =
+            [
+                new AiServiceProfileSnapshot
+                {
+                    ProfileId = "codex-work",
+                    ServiceId = "ai-profile:codex-work",
+                    ProviderType = "codex",
+                    LegacyServiceId = "codex",
+                    Name = "Codex work",
+                    IsEnabled = true,
+                    Configuration = new Dictionary<string, string>(),
+                    Secrets = new Dictionary<string, string>(),
+                    SupportsStreaming = true,
+                    SupportsCorrection = true
+                }
+            ]
+        });
+
+        manager.Services.Should().ContainKey("ai-profile:codex-work");
+        manager.Services.Should().NotContainKey("openai");
+        manager.Services.Should().ContainKey("deepl");
+        manager.Services.Should().ContainKey("windows-local-ai");
+        var error = await Assert.ThrowsAsync<TranslationException>(() => manager.TranslateAsync(
+            new TranslationRequest { Text = "hello", ToLanguage = Language.SimplifiedChinese },
+            serviceId: "openai"));
+        error.Message.Should().Contain("Unknown service: openai");
     }
 }

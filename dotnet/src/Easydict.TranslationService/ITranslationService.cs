@@ -109,6 +109,9 @@ public enum TranslationErrorCode
     /// Distinct from <see cref="NetworkError"/>: the fix is in the proxy settings, not the
     /// service, and retrying only delays the message the user needs to see.
     /// </summary>
-    ProxyError
+    ProxyError,
+
+    /// <summary>The selected AI profile is disabled and must not issue provider requests.</summary>
+    ServiceDisabled
 }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Easydict.TranslationService;
@@ -90,11 +91,30 @@ public sealed class SettingsService
     private Dictionary<string, object?> _settings = new();
     private volatile bool _needsRegionDetection;
     private readonly HashSet<string> _sensitiveSettingsPendingMigration = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, string?>> _aiProfileSecrets = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _aiProfileSecretsCouldNotDecrypt = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _legacyAiSettingsBaseline = new(StringComparer.Ordinal);
+    private bool _aiProfilesCanPersist = true;
+
+    private const string AiServiceProfilesKey = "AiServiceProfiles";
+    private const string AiServiceProfilesSchemaVersionKey = "AiServiceProfilesSchemaVersion";
+    private const int CurrentAiServiceProfilesSchemaVersion = 1;
+    private const string AiProfileSecretKeyPrefix = "AiProfileSecret:";
 
 
     private SettingsService()
+        : this(ResolveSettingsDirectory())
     {
-        var easydictPath = ResolveSettingsDirectory();
+    }
+
+    internal SettingsService(string settingsDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(settingsDirectory))
+        {
+            throw new ArgumentException("A settings directory is required.", nameof(settingsDirectory));
+        }
+
+        var easydictPath = Path.GetFullPath(settingsDirectory);
         Directory.CreateDirectory(easydictPath);
         _settingsFilePath = Path.Combine(easydictPath, "settings.json");
 
@@ -240,6 +260,12 @@ public sealed class SettingsService
     public bool CodexEnabled { get; set; } = false;
     public string CodexModel { get; set; } = CodexCliService.DefaultModel;
     public string CodexReasoningEffort { get; set; } = CodexCliService.DefaultReasoningEffort;
+
+    /// <summary>Standalone AI provider profiles. Local AI engine choices remain separate.</summary>
+    public List<AiServiceProfile> AiServiceProfiles { get; private set; } = [];
+
+    /// <summary>Non-null when stored profile data is malformed or from a newer schema.</summary>
+    public string? AiServiceProfilesLoadError { get; private set; }
 
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
@@ -1113,7 +1139,508 @@ public sealed class SettingsService
         LongDocMaxConcurrency = GetValue(nameof(LongDocMaxConcurrency), 4);
         LongDocEnableDocumentContextPass = GetValue(nameof(LongDocEnableDocumentContextPass), true);
 
+        CaptureLegacyAiSettingsBaseline();
+        LoadAiServiceProfiles();
         MigrateSensitiveSettingsIfNeeded();
+    }
+
+    private void LoadAiServiceProfiles()
+    {
+        var hasProfiles = _settings.ContainsKey(AiServiceProfilesKey);
+        var hasVersion = _settings.ContainsKey(AiServiceProfilesSchemaVersionKey);
+        if (hasProfiles || hasVersion)
+        {
+            try
+            {
+                if (!hasProfiles || !hasVersion
+                    || !TryGetStoredInt(AiServiceProfilesSchemaVersionKey, out var version)
+                    || version != CurrentAiServiceProfilesSchemaVersion
+                    || !_settings.TryGetValue(AiServiceProfilesKey, out var rawProfiles)
+                    || rawProfiles is not JsonElement { ValueKind: JsonValueKind.Array } profileArray)
+                {
+                    throw new InvalidDataException("AI profile schema header or collection is invalid or unsupported.");
+                }
+
+                var profiles = JsonSerializer.Deserialize<List<AiServiceProfile>>(profileArray.GetRawText());
+                if (profiles is null)
+                {
+                    throw new InvalidDataException("AI profile collection is null.");
+                }
+
+                if (!ValidateAiServiceProfiles(profiles, out var validationError))
+                {
+                    throw new InvalidDataException(validationError ?? "AI profile collection is invalid.");
+                }
+
+                AiServiceProfiles = profiles;
+                foreach (var profile in profiles)
+                {
+                    if (!AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
+                    {
+                        throw new InvalidDataException($"Unknown AI provider type '{profile.ProviderType}'.");
+                    }
+
+                    foreach (var secret in provider.SecretFields)
+                    {
+                        var key = AiProfileSecretKey(profile.ProfileId, secret.Id);
+                        var value = GetSensitiveSetting(key, out var decryptFailed);
+                        if (decryptFailed)
+                        {
+                            _aiProfileSecretsCouldNotDecrypt.Add(key);
+                            continue;
+                        }
+
+                        if (value is not null)
+                        {
+                            SetLoadedAiProfileSecret(profile.ProfileId, secret.Id, value);
+                        }
+                    }
+                }
+
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Keep the original JSON value in _settings. SaveCore intentionally skips the
+                // profile keys while this flag is false, so a normal settings save cannot erase
+                // malformed or newer-version data.
+                _aiProfilesCanPersist = false;
+                AiServiceProfilesLoadError = ex.Message;
+                AiServiceProfiles = [];
+                _aiProfileSecrets.Clear();
+                Debug.WriteLine($"[SettingsService] AI profiles were not loaded: {ex.Message}");
+                return;
+            }
+        }
+
+        AiServiceProfiles = BuildLegacyAiServiceProfiles();
+        if (AiServiceProfiles.Count > 0)
+        {
+            try
+            {
+                // Legacy values remain in place for recovery. Persist a profile snapshot and
+                // separately protected credentials before the first profile-aware runtime uses it.
+                SaveCore(preserveUnmigratedSensitiveSettings: true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SettingsService] AI profile migration will retry on the next save: {ex.Message}");
+            }
+        }
+    }
+
+    private List<AiServiceProfile> BuildLegacyAiServiceProfiles()
+    {
+        var profiles = new List<AiServiceProfile>();
+        foreach (var provider in AiProviderCatalog.All)
+        {
+            var configuration = new Dictionary<string, string>(StringComparer.Ordinal);
+            var secrets = new Dictionary<string, string?>(StringComparer.Ordinal);
+            var hasNonDefaultConfiguration = false;
+
+            foreach (var field in provider.Fields)
+            {
+                var value = GetLegacyAiSettingValue(field.LegacySettingName);
+                if (field.IsSecret)
+                {
+                    secrets[field.Id] = value;
+                    hasNonDefaultConfiguration |= !string.IsNullOrWhiteSpace(value);
+                }
+                else
+                {
+                    configuration[field.Id] = value;
+                    hasNonDefaultConfiguration |= !string.Equals(value, field.DefaultValue, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            var hasEnabledToggle = provider.LegacyEnabledSettingName is not null;
+            var enabled = !hasEnabledToggle
+                || bool.TryParse(GetLegacyAiSettingValue(provider.LegacyEnabledSettingName!), out var legacyEnabled) && legacyEnabled;
+            var hasLegacyReference = IsLegacyAiServiceReferenced(provider.LegacyServiceId);
+            var explicitlyEnabled = hasEnabledToggle && enabled;
+            if (!hasNonDefaultConfiguration && !explicitlyEnabled && !hasLegacyReference)
+            {
+                continue;
+            }
+
+            var profileId = $"legacy-{provider.Id}";
+            profiles.Add(new AiServiceProfile
+            {
+                ProfileId = profileId,
+                ServiceId = provider.LegacyServiceId,
+                ProviderType = provider.Id,
+                Name = provider.DisplayName,
+                IsEnabled = enabled,
+                Configuration = configuration
+            });
+
+            if (secrets.Values.Any(value => !string.IsNullOrEmpty(value)))
+            {
+                _aiProfileSecrets[profileId] = secrets;
+            }
+        }
+
+        return profiles;
+    }
+
+    private string GetLegacyAiSettingValue(string settingName)
+    {
+        var property = GetType().GetProperty(settingName);
+        if (property is null)
+        {
+            throw new InvalidOperationException($"Missing legacy AI setting '{settingName}'.");
+        }
+
+        var value = property.GetValue(this);
+        return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    private void SyncLegacyAiProfilesFromSettings()
+    {
+        // While unknown/corrupt profile data is present, avoid changing the profile collection:
+        // SaveCore will preserve the raw JSON and continue saving ordinary settings.
+        if (AiServiceProfilesLoadError is not null)
+        {
+            return;
+        }
+
+        foreach (var provider in AiProviderCatalog.All)
+        {
+            var changedFields = provider.Fields
+                .Where(field => HasLegacyAiSettingChanged(field.LegacySettingName))
+                .ToArray();
+            var enabledChanged = provider.LegacyEnabledSettingName is not null
+                && HasLegacyAiSettingChanged(provider.LegacyEnabledSettingName);
+            if (changedFields.Length == 0 && !enabledChanged)
+            {
+                continue;
+            }
+
+            var profile = AiServiceProfiles.FirstOrDefault(candidate =>
+                candidate.ProviderType == provider.Id && candidate.ServiceId == provider.LegacyServiceId);
+            if (profile is null)
+            {
+                var configuration = new Dictionary<string, string>(StringComparer.Ordinal);
+                var secrets = new Dictionary<string, string?>(StringComparer.Ordinal);
+                foreach (var field in provider.Fields)
+                {
+                    var value = GetLegacyAiSettingValue(field.LegacySettingName);
+                    if (field.IsSecret)
+                    {
+                        secrets[field.Id] = value;
+                    }
+                    else
+                    {
+                        configuration[field.Id] = value;
+                    }
+                }
+
+                var enabled = provider.LegacyEnabledSettingName is null
+                    || bool.TryParse(GetLegacyAiSettingValue(provider.LegacyEnabledSettingName), out var legacyEnabled) && legacyEnabled;
+                var profileId = $"legacy-{provider.Id}";
+                profile = new AiServiceProfile
+                {
+                    ProfileId = profileId,
+                    ServiceId = provider.LegacyServiceId,
+                    ProviderType = provider.Id,
+                    Name = provider.DisplayName,
+                    IsEnabled = enabled,
+                    Configuration = configuration
+                };
+                AiServiceProfiles.Add(profile);
+                if (secrets.Values.Any(value => !string.IsNullOrEmpty(value)))
+                {
+                    _aiProfileSecrets[profileId] = secrets;
+                }
+            }
+
+            var updatedConfiguration = new Dictionary<string, string>(profile.Configuration, StringComparer.Ordinal);
+            var configurationChanged = false;
+            foreach (var field in changedFields)
+            {
+                var value = GetLegacyAiSettingValue(field.LegacySettingName);
+                if (field.IsSecret)
+                {
+                    if (!string.Equals(GetAiServiceProfileSecret(profile.ProfileId, field.Id) ?? string.Empty, value, StringComparison.Ordinal))
+                    {
+                        SetAiServiceProfileSecret(profile.ProfileId, field.Id, value);
+                    }
+                }
+                else if (!updatedConfiguration.TryGetValue(field.Id, out var currentValue)
+                    || !string.Equals(currentValue, value, StringComparison.Ordinal))
+                {
+                    updatedConfiguration[field.Id] = value;
+                    configurationChanged = true;
+                }
+            }
+
+            if (configurationChanged)
+            {
+                profile = UpdateAiServiceProfileConfiguration(profile.ProfileId, updatedConfiguration);
+            }
+
+            if (enabledChanged && provider.LegacyEnabledSettingName is not null)
+            {
+                var enabled = bool.TryParse(GetLegacyAiSettingValue(provider.LegacyEnabledSettingName), out var legacyEnabled)
+                    && legacyEnabled;
+                if (profile.IsEnabled != enabled)
+                {
+                    UpdateAiServiceProfileDetails(profile.ProfileId, profile.Name, enabled);
+                }
+            }
+        }
+    }
+
+    private void CaptureLegacyAiSettingsBaseline()
+    {
+        _legacyAiSettingsBaseline.Clear();
+        foreach (var provider in AiProviderCatalog.All)
+        {
+            foreach (var field in provider.Fields)
+            {
+                _legacyAiSettingsBaseline[field.LegacySettingName] = GetLegacyAiSettingValue(field.LegacySettingName);
+            }
+
+            if (provider.LegacyEnabledSettingName is { } enabledSetting)
+            {
+                _legacyAiSettingsBaseline[enabledSetting] = GetLegacyAiSettingValue(enabledSetting);
+            }
+        }
+    }
+
+    private bool HasLegacyAiSettingChanged(string settingName)
+        => !_legacyAiSettingsBaseline.TryGetValue(settingName, out var baseline)
+            || !string.Equals(GetLegacyAiSettingValue(settingName), baseline, StringComparison.Ordinal);
+
+    private bool IsLegacyAiServiceReferenced(string serviceId)
+    {
+        return MiniWindowEnabledServices.Contains(serviceId, StringComparer.Ordinal)
+            || MainWindowEnabledServices.Contains(serviceId, StringComparer.Ordinal)
+            || FixedWindowEnabledServices.Contains(serviceId, StringComparer.Ordinal)
+            || MainWindowServiceEnabledQuery.ContainsKey(serviceId)
+            || MiniWindowServiceEnabledQuery.ContainsKey(serviceId)
+            || FixedWindowServiceEnabledQuery.ContainsKey(serviceId)
+            || ServiceTestStatus.ContainsKey(serviceId)
+            || string.Equals(HoverWordLookupServiceId, serviceId, StringComparison.Ordinal)
+            || string.Equals(VisionLayoutServiceId, serviceId, StringComparison.Ordinal)
+            || TextActions.Any(action => string.Equals(action.ServiceId, serviceId, StringComparison.Ordinal));
+    }
+
+    private static bool ValidateAiServiceProfiles(IReadOnlyList<AiServiceProfile?> profiles, out string? error)
+    {
+        var profileIds = new HashSet<string>(StringComparer.Ordinal);
+        var serviceIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var profile in profiles)
+        {
+            if (profile is null
+                || string.IsNullOrWhiteSpace(profile.ProfileId)
+                || string.IsNullOrWhiteSpace(profile.ServiceId)
+                || string.IsNullOrWhiteSpace(profile.ProviderType)
+                || string.IsNullOrWhiteSpace(profile.Name)
+                || profile.ConfigurationRevision < 0
+                || profile.Configuration is null
+                || profile.Configuration.Any(pair => pair.Key is null || pair.Value is null))
+            {
+                error = "AI profile entry is missing a required identity or has invalid configuration.";
+                return false;
+            }
+
+            if (!AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
+            {
+                error = $"Unknown AI provider type '{profile.ProviderType}'.";
+                return false;
+            }
+
+            if (profile.ServiceId != provider.LegacyServiceId
+                && profile.ServiceId != $"ai-profile:{profile.ProfileId}")
+            {
+                error = $"AI profile '{profile.ProfileId}' has an invalid runtime service identity.";
+                return false;
+            }
+
+            if (profile.ExtensionData is { Count: > 0 })
+            {
+                error = $"AI profile '{profile.ProfileId}' contains fields this app version does not understand.";
+                return false;
+            }
+
+            var allowedConfigurationFields = provider.Fields
+                .Where(field => !field.IsSecret)
+                .Select(field => field.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            if (profile.Configuration.Keys.Any(key => !allowedConfigurationFields.Contains(key)))
+            {
+                error = $"AI profile '{profile.ProfileId}' contains an unknown or secret configuration field.";
+                return false;
+            }
+
+            if (!profileIds.Add(profile.ProfileId) || !serviceIds.Add(profile.ServiceId))
+            {
+                error = "AI profile IDs and runtime service IDs must be unique.";
+                return false;
+            }
+        }
+
+        error = null;
+        return true;
+    }
+
+    private bool TryGetStoredInt(string key, out int value)
+    {
+        value = default;
+        if (!_settings.TryGetValue(key, out var raw))
+        {
+            return false;
+        }
+
+        if (raw is JsonElement { ValueKind: JsonValueKind.Number } element)
+        {
+            return element.TryGetInt32(out value);
+        }
+
+        if (raw is int integer)
+        {
+            value = integer;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string AiProfileSecretKey(string profileId, string fieldId)
+        => $"{AiProfileSecretKeyPrefix}{profileId}:{fieldId}";
+
+    private void SetLoadedAiProfileSecret(string profileId, string fieldId, string? value)
+    {
+        if (!_aiProfileSecrets.TryGetValue(profileId, out var secrets))
+        {
+            secrets = new Dictionary<string, string?>(StringComparer.Ordinal);
+            _aiProfileSecrets.Add(profileId, secrets);
+        }
+
+        secrets[fieldId] = value;
+    }
+
+    /// <summary>Read an AI profile credential from the protected local settings store.</summary>
+    public string? GetAiServiceProfileSecret(string profileId, string fieldId)
+        => _aiProfileSecrets.TryGetValue(profileId, out var secrets)
+            && secrets.TryGetValue(fieldId, out var value)
+                ? value
+                : null;
+
+    public AiServiceProfile AddAiServiceProfile(string providerType, string? name = null)
+    {
+        if (!AiProviderCatalog.TryGet(providerType, out var provider))
+        {
+            throw new ArgumentException("Unknown AI provider type.", nameof(providerType));
+        }
+
+        var profileId = Guid.NewGuid().ToString("N");
+        var profile = new AiServiceProfile
+        {
+            ProfileId = profileId,
+            ServiceId = $"ai-profile:{profileId}",
+            ProviderType = provider.Id,
+            Name = string.IsNullOrWhiteSpace(name) ? provider.DisplayName : name.Trim(),
+            IsEnabled = true,
+            Configuration = provider.Fields
+                .Where(field => !field.IsSecret)
+                .ToDictionary(field => field.Id, field => field.DefaultValue, StringComparer.Ordinal)
+        };
+
+        AiServiceProfiles.Add(profile);
+        return profile;
+    }
+
+    public bool RemoveAiServiceProfile(string profileId)
+    {
+        var index = AiServiceProfiles.FindIndex(profile => profile.ProfileId == profileId);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        AiServiceProfiles.RemoveAt(index);
+        _aiProfileSecrets.Remove(profileId);
+        foreach (var provider in AiProviderCatalog.All)
+        {
+            foreach (var secret in provider.SecretFields)
+            {
+                _aiProfileSecretsCouldNotDecrypt.Remove(AiProfileSecretKey(profileId, secret.Id));
+            }
+        }
+        return true;
+    }
+
+    public AiServiceProfile UpdateAiServiceProfileConfiguration(
+        string profileId,
+        IReadOnlyDictionary<string, string> configuration)
+    {
+        var index = AiServiceProfiles.FindIndex(profile => profile.ProfileId == profileId);
+        if (index < 0)
+        {
+            throw new ArgumentException("AI profile was not found.", nameof(profileId));
+        }
+
+        var current = AiServiceProfiles[index];
+        if (!AiProviderCatalog.TryGet(current.ProviderType, out var provider))
+        {
+            throw new InvalidOperationException($"Unknown AI provider type '{current.ProviderType}'.");
+        }
+
+        var allowedFields = provider.Fields.Where(field => !field.IsSecret).Select(field => field.Id).ToHashSet(StringComparer.Ordinal);
+        if (configuration.Keys.Any(key => !allowedFields.Contains(key)))
+        {
+            throw new ArgumentException("Configuration contains a field not supported by this provider.", nameof(configuration));
+        }
+
+        var updated = current.CopyWithConfiguration(
+            configuration.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
+        AiServiceProfiles[index] = updated;
+        return updated;
+    }
+
+    public void UpdateAiServiceProfileDetails(string profileId, string name, bool isEnabled)
+    {
+        var index = AiServiceProfiles.FindIndex(profile => profile.ProfileId == profileId);
+        if (index < 0)
+        {
+            throw new ArgumentException("AI profile was not found.", nameof(profileId));
+        }
+
+        var profile = AiServiceProfiles[index];
+        var normalizedName = string.IsNullOrWhiteSpace(name)
+            ? throw new ArgumentException("A profile name is required.", nameof(name))
+            : name.Trim();
+        if (!string.Equals(profile.Name, normalizedName, StringComparison.Ordinal)
+            || profile.IsEnabled != isEnabled)
+        {
+            profile.ConfigurationRevision = checked(profile.ConfigurationRevision + 1);
+            profile.Name = normalizedName;
+            profile.IsEnabled = isEnabled;
+        }
+    }
+
+    /// <summary>Update a profile credential in memory. The caller persists it through Save().</summary>
+    public void SetAiServiceProfileSecret(string profileId, string fieldId, string? value)
+    {
+        var profile = AiServiceProfiles.FirstOrDefault(candidate => candidate.ProfileId == profileId)
+            ?? throw new ArgumentException("AI profile was not found.", nameof(profileId));
+        if (!AiProviderCatalog.TryGet(profile.ProviderType, out var provider)
+            || !provider.SecretFields.Any(field => field.Id == fieldId))
+        {
+            throw new ArgumentException("The requested field is not a secret for this provider.", nameof(fieldId));
+        }
+
+        var secretKey = AiProfileSecretKey(profileId, fieldId);
+        if (_aiProfileSecretsCouldNotDecrypt.Contains(secretKey)
+            || !string.Equals(GetAiServiceProfileSecret(profileId, fieldId), value, StringComparison.Ordinal))
+        {
+            profile.ConfigurationRevision = checked(profile.ConfigurationRevision + 1);
+        }
+
+        _aiProfileSecretsCouldNotDecrypt.Remove(secretKey);
+        SetLoadedAiProfileSecret(profileId, fieldId, value);
     }
 
     private void NormalizeDeepLModeSettings()
@@ -1142,6 +1669,7 @@ public sealed class SettingsService
     {
         NormalizeDeepLModeSettings();
         RemoveRuntimeOnlyWorkerIsolationSettings();
+        SyncLegacyAiProfilesFromSettings();
 
         _settings[nameof(SourceLanguage)] = SourceLanguage;
 
@@ -1241,6 +1769,8 @@ public sealed class SettingsService
         _settings[nameof(CodexEnabled)] = CodexEnabled;
         _settings[nameof(CodexModel)] = CodexModel;
         _settings[nameof(CodexReasoningEffort)] = CodexReasoningEffort;
+
+        PersistAiServiceProfiles(preserveUnmigratedSensitiveSettings);
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(TrayIconId)] = TrayIconCatalog.Normalize(TrayIconId);
@@ -1384,12 +1914,14 @@ public sealed class SettingsService
             if (SettingsFileHasSameContent(json))
             {
                 _sensitiveSettingsPendingMigration.Clear();
+                CaptureLegacyAiSettingsBaseline();
                 System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings unchanged; save skipped for: {_settingsFilePath}");
                 return;
             }
 
             File.WriteAllText(_settingsFilePath, json);
             _sensitiveSettingsPendingMigration.Clear();
+            CaptureLegacyAiSettingsBaseline();
 
             // Verify the file was written successfully
             System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings saved successfully to: {_settingsFilePath}");
@@ -1861,12 +2393,15 @@ public sealed class SettingsService
     }
 
     private string? GetSensitiveSetting(string key)
+        => GetSensitiveSetting(key, out _);
+
+    private string? GetSensitiveSetting(string key, out bool decryptFailed)
     {
         var storedValue = GetValue<string?>(key, null);
         var plaintext = LocalCredentialProtector.UnprotectOrReturnPlaintext(
             storedValue,
             out var needsMigration,
-            out var decryptFailed);
+            out decryptFailed);
         if (needsMigration)
         {
             _sensitiveSettingsPendingMigration.Add(key);
@@ -1912,6 +2447,72 @@ public sealed class SettingsService
         }
 
         _settings[key] = ProtectSensitiveSetting(plaintext);
+    }
+
+    private void PersistAiServiceProfiles(bool preserveUnmigratedSensitiveSettings)
+    {
+        if (!_aiProfilesCanPersist)
+        {
+            return;
+        }
+
+        if (!ValidateAiServiceProfiles(AiServiceProfiles, out var validationError))
+        {
+            _aiProfilesCanPersist = false;
+            AiServiceProfilesLoadError = validationError;
+            return;
+        }
+
+        _settings[AiServiceProfilesSchemaVersionKey] = CurrentAiServiceProfilesSchemaVersion;
+        _settings[AiServiceProfilesKey] = AiServiceProfiles;
+
+        var activeSecretKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var profile in AiServiceProfiles)
+        {
+            if (!AiProviderCatalog.TryGet(profile.ProviderType, out var provider))
+            {
+                throw new InvalidOperationException($"Unknown AI provider type '{profile.ProviderType}'.");
+            }
+
+            foreach (var secret in provider.SecretFields)
+            {
+                var key = AiProfileSecretKey(profile.ProfileId, secret.Id);
+                if (_aiProfileSecretsCouldNotDecrypt.Contains(key)
+                    && (!_aiProfileSecrets.TryGetValue(profile.ProfileId, out var loadedSecrets)
+                        || !loadedSecrets.ContainsKey(secret.Id)))
+                {
+                    // Preserve the opaque protected value byte-for-byte until the user explicitly
+                    // supplies or clears this credential through SetAiServiceProfileSecret.
+                    activeSecretKeys.Add(key);
+                    continue;
+                }
+
+                if (!_aiProfileSecrets.TryGetValue(profile.ProfileId, out var secrets)
+                    || !secrets.TryGetValue(secret.Id, out var plaintext))
+                {
+                    if (_settings.ContainsKey(key))
+                    {
+                        SaveSensitiveSetting(key, null, preserveUnmigratedSensitiveSettings);
+                        activeSecretKeys.Add(key);
+                    }
+
+                    continue;
+                }
+
+                SaveSensitiveSetting(key, plaintext, preserveUnmigratedSensitiveSettings);
+                activeSecretKeys.Add(key);
+            }
+        }
+
+        foreach (var staleKey in _settings.Keys
+            .Where(key => key.StartsWith(AiProfileSecretKeyPrefix, StringComparison.Ordinal)
+                && !activeSecretKeys.Contains(key))
+            .ToList())
+        {
+            _settings.Remove(staleKey);
+            _sensitiveSettingsPendingMigration.Remove(staleKey);
+            _aiProfileSecretsCouldNotDecrypt.Remove(staleKey);
+        }
     }
 
     private bool TryGetStoredSensitiveSetting(string key, out string storedValue)

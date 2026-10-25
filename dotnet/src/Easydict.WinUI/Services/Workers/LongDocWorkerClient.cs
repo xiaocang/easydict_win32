@@ -59,7 +59,7 @@ internal sealed class LongDocWorkerClient : IDisposable
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LongDocWorkerClient));
 
-        var snapshot = WorkerSpawner.BuildSnapshot(_settings);
+        var snapshot = WorkerSpawner.BuildSnapshot(_settings, includeAiServiceProfiles: true);
         var client = await _spawner.StartAndConfigureAsync(
             WorkerKinds.LongDoc, WorkerSubdir, WorkerExeName, snapshot, cancellationToken).ConfigureAwait(false);
         _activeClient = client;

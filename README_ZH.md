@@ -38,11 +38,7 @@
 
 ## 简介
 
-这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版本，原版是一款 macOS 翻译词典应用。本项目使用 **Vibe Coding** — AI 辅助编程，将 Swift/SwiftUI 代码库迁移到 .NET + WinUI 3。
-
-Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS NPU 的 Copilot+ PC 上，翻译通过 Phi Silica 在设备端运行，快速且私密。普通 Windows PC 支持 Foundry Local，OpenVINO NLLB-200 作为离线兜底 — 所有 Windows 设备上的标准翻译服务仍然完全可用。
-
-虽然功能尚未完全对齐 macOS 版本，但此移植版填补了 Windows 用户对便捷翻译工具的需求，支持全局快捷键和多种翻译服务。
+Easydict for Windows 将翻译、词典查询和文本工具整合在一起，并提供快捷键与灵活的窗口模式。
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
@@ -75,91 +71,103 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 ## 功能
 
-- **Copilot+ PC 增强型本地 AI 翻译** - Windows Local AI 在设备端运行：搭载 40+ TOPS NPU 的 Copilot+ PC 上通过 Phi Silica 进行 NPU 加速翻译，普通 Windows PC 上使用 Foundry Local，OpenVINO NLLB-200 作为离线兜底。自动模式会选择最佳可用提供方；所有 Windows 设备上的标准云端翻译服务仍然完全可用。
+- <img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Microsoft.scale-100.png" alt="Microsoft Copilot+" title="Microsoft Copilot+" width="16" height="16"> **Copilot+ PC 与本地 AI** — 在 Copilot+ PC 上使用 NPU 加速翻译，其他 Windows 电脑可使用 Foundry Local。
 
-- **OCR 截图翻译** - 类似 Snipaste 的截图体验：按 `Ctrl+Alt+S` 截取屏幕区域，自动检测窗口或拖拽选择区域，然后 OCR 识别文字并翻译。使用 Windows OCR API，支持配置识别语言。还支持静默 OCR（`Ctrl+Alt+Shift+S`），将识别文字复制到剪贴板而不翻译。
+- **OCR 截图翻译**
+  - `Ctrl+Alt+S` — 截取屏幕区域，识别文字并翻译。
+  - `Ctrl+Alt+Shift+S` — 识别文字并复制到剪贴板，不进行翻译。
 
-- **划词翻译** - 在任意应用中选中文本（拖拽、双击或三击），点击浮动翻译按钮即可在迷你窗口中翻译。浮动按钮是一条按钮条：翻译图标之后会显示你配置的文本动作。我们优化了悬浮图标，与系统托盘保持一致。
+- **划词翻译** — 在任意应用中选中文本，再点击浮动按钮即可翻译。
 
-- **文本动作** - 对选中或输入的文本执行某一个指定服务，或把它发送到 Google、Bing、GitHub、维基百科、百度，以及你自定义的 URL 模板。可在任意窗口的"动作"菜单中使用。划词搜索按钮默认关闭，可在设置 → 插件 → 文本动作中开启。点击服务图标时只查询对应服务，其余服务灰显。
+- **文本动作** — 在任意窗口中将选中文本发送到翻译或搜索服务。
 
-- **Bob 插件兼容** - 导入 Bob 生态的 `.bobplugin` 翻译插件并作为翻译服务使用。插件运行在内嵌的 JavaScript 引擎中，采用手动查询，可按插件开启缓存和重试。每个已安装的插件都有划词按钮，可在插件页配置。普通翻译不调用插件服务，其卡片保持灰显。插件结果始终带有"Bob 插件"徽章。
+- **Bump plugin**
 
-- **实验室** - 新功能先放在「设置 → 实验室」中，稳定后移入正式设置标签页。字典自动补全保留在「常规」中。
+- **实验室** — 新功能请从 Settings -> Labs 开始体验。
 
-- **悬浮取词** - 默认关闭，可在托盘菜单或「设置 → 实验室」中启用。持续按住 `Ctrl` 至少 50ms（触发键可配置，也可不按键），并将鼠标停在任意单词上，即可在指针旁弹出小窗显示单词、音标和释义。通过 UI 自动化读取文本，无法读取时自动回退到 OCR。优先使用选定的取词服务，请求失败、超时或无释义时，依次回退到后续已启用的服务
-  - 展开悬浮取词下的「高级设置」，可调整取词延迟（10–600 ms，默认 350 ms）、取词服务和 OCR 回退，保存后生效。延迟控制开始取词前的鼠标停留时间，文字提取和翻译另需耗时。悬浮取词不受划词翻译的排除应用列表限制。
+- **悬浮取词** — 按住 `Ctrl` 至少 50 毫秒，再将鼠标悬停在单词上即可查询释义。
 
-- **语法纠错模式** - AI 驱动的语法纠错，高亮错误并提供修正文本及解释说明
+- **语法纠错模式**
 
-- **AI 服务配置与 Magpie** - 支持按配置档管理 AI 服务，同一种服务可保存多份配置；新增 Magpie 一键接入。
+- **AI 服务配置与** <img src="screenshot/mocktail-mark.svg" alt="Mocktail" title="Mocktail" width="16" height="16"> **Mocktail**
 
-- **长文档翻译** - 支持 PDF、纯文本和 Markdown 文档翻译，具备 ML 版面检测、公式保护、并行处理、双语输出和翻译缓存功能
+- **长文档翻译** — 支持 PDF、纯文本和 Markdown 文档翻译，具备版面检测、公式保护、并行处理、双语输出和翻译缓存。
 
-- **词典模式** - 单词释义、音标和例句由 Google 词典提供。Linguee 当前不可用，因为其上游示例 API 域名已无法解析。
+- **词典模式** — 查询单词释义、音标和例句。
 
-- **MDX 词典** - 导入 MDict (.mdx) 词典文件，支持离线查词和丰富的 HTML 渲染
+- **MDX 词典** — 导入 MDict (`.mdx`) 词典文件，离线查词。
+
+- **Direction Mode**
+
+- **MDX Direction**
 
 - **全局快捷键**
-  - `Ctrl+Alt+T` - 显示/隐藏主窗口
-  - `Ctrl+Alt+D` - 翻译剪贴板内容
-  - `Ctrl+Alt+M` - 显示/隐藏迷你窗口（自动复制选中文本并翻译）
-  - `Ctrl+Alt+F` - 显示/隐藏固定窗口
-  - `Ctrl+Alt+S` - OCR 截图翻译
-  - `Ctrl+Alt+Shift+S` - 静默 OCR（复制识别文字到剪贴板）
-  - `Ctrl+Alt+Shift+M` - 切换迷你窗口可见性
-  - `Ctrl+Alt+Shift+F` - 切换固定窗口可见性
+  - `Ctrl+Alt+T` — 显示/隐藏主窗口
+  - `Ctrl+Alt+D` — 翻译剪贴板内容
+  - `Ctrl+Alt+M` — 显示/隐藏迷你窗口
+  - `Ctrl+Alt+F` — 显示/隐藏固定窗口
+  - `Ctrl+Alt+S` — OCR 截图翻译
+  - `Ctrl+Alt+Shift+S` — 静默 OCR（复制识别文字到剪贴板）
+  - `Ctrl+Alt+Shift+M` — 切换迷你窗口可见性
+  - `Ctrl+Alt+Shift+F` — 切换固定窗口可见性
 
-- **多种窗口模式**
-  - 主窗口 - 完整翻译界面
-  - 迷你窗口 - 紧凑浮动窗口
-  - 固定窗口 - 常驻翻译窗口
+- **多窗口模式**
+  - 主窗口、迷你窗口和固定窗口
 
-- **LLM 流式翻译** - 实时显示翻译结果
+- **流式翻译** — 实时查看翻译结果。
 
-- **系统托盘** - 最小化到托盘，后台运行
+- **深色主题**
 
-- **剪贴板监听** - 自动翻译复制的文本
+- **TTS** — 朗读原文和译文。
 
-- **右键菜单 OCR** - 右键点击任意文件或桌面空白处 → 选择"OCR Translate"即可截图识别翻译
+- **多语言界面** — 支持 15 种界面语言。
 
-- **深色/浅色主题** - 跟随系统主题
+- **40+ 语种** — 选择源语言和目标语言列表中显示的语种。
 
-- **TTS（文字转语音）** - 使用 Windows Speech Synthesis 朗读原文和译文
+- **HTTP 代理支持**
 
-- **多语言界面** - 支持 15 种语言的本地化界面，包括英语、中文（简体/繁体）、日语、韩语、法语、德语、西班牙语、葡萄牙语、意大利语、俄语、阿拉伯语、泰语、越南语和印尼语
+- **高 DPI 支持**
 
-- **40+ 语种支持** - 在设置中自定义可用语种，从 40 多种语言中选择显示在源语言/目标语言选择器中的语种，涵盖东亚、欧洲、中东、南亚和东南亚语言
+- **多组翻译服务**
 
-- **HTTP 代理支持** - 配置代理服务器，可选本地地址及中国大陆服务绕过代理
+<table>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/google_web.scale-100.png" alt="Google 翻译和 Google 词典" title="Google 翻译和 Google 词典" width="24" height="24"><br>Google 翻译<br>Google 词典</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Bing.scale-100.png" alt="必应翻译" title="必应翻译" width="24" height="24"><br>必应</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepL.scale-100.png" alt="DeepL" title="DeepL" width="24" height="24"><br>DeepL</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Youdao.scale-100.png" alt="有道" title="有道" width="24" height="24"><br>有道</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenAI.scale-100.png" alt="OpenAI" title="OpenAI" width="24" height="24"><br>OpenAI</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Gemini.scale-100.png" alt="Gemini" title="Gemini" width="24" height="24"><br>Gemini</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepSeek.scale-100.png" alt="DeepSeek" title="DeepSeek" width="24" height="24"><br>DeepSeek</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Groq.scale-100.png" alt="Groq" title="Groq" width="24" height="24"><br>Groq</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Zhipu.scale-100.png" alt="智谱 AI" title="智谱 AI" width="24" height="24"><br>智谱 AI</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Kimi.scale-100.png" alt="Kimi" title="Kimi" width="24" height="24"><br>Kimi</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/GitHub.scale-100.png" alt="GitHub Models" title="GitHub Models" width="24" height="24"><br>GitHub Models</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Doubao.scale-100.png" alt="豆包" title="豆包" width="24" height="24"><br>豆包</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Volcano.scale-100.png" alt="火山翻译" title="火山翻译" width="24" height="24"><br>火山翻译</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Caiyun.scale-100.png" alt="彩云小译" title="彩云小译" width="24" height="24"><br>彩云小译</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/NiuTrans.scale-100.png" alt="小牛翻译" title="小牛翻译" width="24" height="24"><br>小牛翻译</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Linguee.scale-100.png" alt="Linguee（暂不可用）" title="Linguee（暂不可用）" width="24" height="24"><br>Linguee*</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Ollama.scale-100.png" alt="Ollama" title="Ollama" width="24" height="24"><br>Ollama</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/windows-local-ai.scale-100.png" alt="Windows Local AI" title="Windows Local AI" width="24" height="24"><br>Windows Local AI</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenRouter.scale-100.png" alt="OpenRouter" title="OpenRouter" width="24" height="24"><br>OpenRouter</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OrcaRouter.scale-100.png" alt="OrcaRouter" title="OrcaRouter" width="24" height="24"><br>OrcaRouter</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-100.png" alt="Magpie" title="Magpie" width="24" height="24"><br>Magpie</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/CustomOpenAI.scale-100.png" alt="自定义 OpenAI 兼容服务" title="自定义 OpenAI 兼容服务" width="24" height="24"><br>自定义 OpenAI</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/claude-code.scale-100.png" alt="Claude Code" title="Claude Code" width="24" height="24"><br>Claude Code</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/codex.scale-100.png" alt="Codex" title="Codex" width="24" height="24"><br>Codex</td>
+  </tr>
+</table>
 
-- **高 DPI 支持** - Per-Monitor V2 DPI 感知
+*Linguee 当前暂不可用。*
 
-- **多种翻译服务**（23 种可用服务；Linguee 当前不可用）
-  - Google 翻译（免费，无需 API Key）
-  - Google 词典（丰富词典：音标、释义、例句）
-  - 必应翻译（免费，无需 API Key）
-  - DeepL（支持 Free/Pro API，支持繁体中文）
-  - 有道翻译（Web + OpenAPI）
-  - OpenAI（GPT-4o、GPT-4o-mini 等）
-  - Gemini（Google AI，包括 Gemini 2.5 模型）
-  - DeepSeek（深度求索）
-  - Groq（快速 LLM 推理）
-  - 智谱 AI（GLM 模型）
-  - Kimi（月之暗面 Moonshot AI）
-  - GitHub Models（免费）
-  - 豆包（字节跳动翻译专用模型）
-  - 火山翻译（字节跳动）
-  - 彩云小译（支持繁体中文）
-  - 小牛翻译（450+ 语种，支持繁体中文）
-  - Linguee 词典（当前不可用；上游示例 API 已离线，默认禁用）
-  - Ollama（本地 LLM，默认：llama3.2；可选标准、简洁或自定义翻译提示词）
-  - Windows Local AI（Copilot+ PC 上使用 Phi Silica，OpenVINO 回退）
-  - OpenRouter（统一网关，可访问 400+ 模型，提供免费模型）
-  - OrcaRouter（OpenAI 兼容网关，API 基础地址为 `https://api.orcarouter.ai/v1`，提供免费模型；支持一键「使用 OrcaRouter 登录」，通过 PKCE 在应用内直接获取 API 密钥） [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
-  - 自定义 OpenAI 兼容服务
-  - Claude Code（本地智能体 CLI，复用 Claude 订阅 — 无需 API Key）
-  - Codex（本地智能体 CLI，复用 ChatGPT 订阅 — 无需 API Key）
+<p align="center"><a href="https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6"><img src="https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb" alt="Powered by OrcaRouter" title="Powered by OrcaRouter"></a></p>
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

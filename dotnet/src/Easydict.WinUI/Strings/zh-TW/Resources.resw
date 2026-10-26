@@ -1722,7 +1722,7 @@
   <data name="AiProfilesTitle" xml:space="preserve"><value>AI 服務設定</value></data>
   <data name="AiProfilesSubtitle" xml:space="preserve"><value>選擇服務類型，為每個帳戶建立獨立設定檔。</value></data>
   <data name="AiProfileAdd" xml:space="preserve"><value>新增設定檔</value></data>
-  <data name="AiProfileSelectProvider" xml:space="preserve"><value>選擇 AI 服務提供者</value></data>
+  <data name="AiProfileSelectProvider" xml:space="preserve"><value>新增 AI 服務提供者</value></data>
   <data name="AiProfileNone" xml:space="preserve"><value>未設定</value></data>
   <data name="AiProfileName" xml:space="preserve"><value>設定檔名稱</value></data>
   <data name="AiProfileEnabled" xml:space="preserve"><value>已啟用</value></data>

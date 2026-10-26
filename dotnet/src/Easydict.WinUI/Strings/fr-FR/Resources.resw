@@ -1722,7 +1722,7 @@
   <data name="AiProfilesTitle" xml:space="preserve"><value>AI profiles</value></data>
   <data name="AiProfilesSubtitle" xml:space="preserve"><value>Choose a provider, then configure each account in its own profile.</value></data>
   <data name="AiProfileAdd" xml:space="preserve"><value>Add profile</value></data>
-  <data name="AiProfileSelectProvider" xml:space="preserve"><value>Select AI provider</value></data>
+  <data name="AiProfileSelectProvider" xml:space="preserve"><value>Add AI Provider</value></data>
   <data name="AiProfileNone" xml:space="preserve"><value>Not set</value></data>
   <data name="AiProfileName" xml:space="preserve"><value>Profile name</value></data>
   <data name="AiProfileEnabled" xml:space="preserve"><value>Enabled</value></data>

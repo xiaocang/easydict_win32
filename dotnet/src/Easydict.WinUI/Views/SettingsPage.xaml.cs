@@ -656,11 +656,9 @@ public sealed partial class SettingsPage : Page
 
         var card = new Border
         {
-            Padding = new Thickness(12),
-            CornerRadius = new CornerRadius(10),
-            Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 250, 250, 250)),
-            BorderBrush = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 217, 217, 217)),
-            BorderThickness = new Thickness(1),
+            Padding = new Thickness(0, 4, 0, 4),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
         var cardContent = new StackPanel { Spacing = 10 };
@@ -755,7 +753,7 @@ public sealed partial class SettingsPage : Page
         AiProfileCommitPendingButton.Content = AiProfileText("AiProfileAdd", "Add profile");
         AiProfileConnectMagpieButton.Content = AiProfileText("AiProfileConnectMagpie", "Connect Magpie");
         AiProfileCancelMagpieButton.Content = AiProfileText("AiProfileCancelAction", "Cancel");
-        AiProfileProviderComboBox.PlaceholderText = AiProfileText("AiProfileSelectProvider", "Select AI provider");
+        AiProfileProviderComboBox.PlaceholderText = AiProfileText("AiProfileSelectProvider", "Add AI Provider");
         AiProfileNameBox.Header = AiProfileText("AiProfileName", "Profile name");
         AiProfileEnabledToggle.Header = AiProfileText("AiProfileEnabled", "Enabled");
         AiProfileDeleteButton.Content = new SymbolIcon(Symbol.Delete)

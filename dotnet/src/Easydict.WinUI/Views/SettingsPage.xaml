@@ -373,7 +373,14 @@
                                    FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
-                        <StackPanel x:Name="AiProfilesEditorCard" Spacing="14">
+                        <Border x:Name="AiProfilesEditorCard"
+                                Padding="16"
+                                CornerRadius="12"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                AutomationProperties.AutomationId="AiProfilesContainer">
+                            <StackPanel Spacing="14">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -410,11 +417,9 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                Visibility="Collapsed"/>
                                 <Border x:Name="AiProfilePendingCard"
-                                        Padding="12"
-                                        CornerRadius="10"
-                                        Background="#FFFAFAFA"
-                                        BorderBrush="#FFD9D9D9"
-                                        BorderThickness="1"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
                                         Visibility="Collapsed">
                                     <StackPanel Spacing="10">
                                         <Grid ColumnSpacing="8">
@@ -440,7 +445,7 @@
                                         <ContentControl x:Name="AiProfilePendingEditorHost" Visibility="Collapsed"/>
                                     </StackPanel>
                                 </Border>
-                                <StackPanel x:Name="AiProfileCardsPanel" Spacing="10"/>
+                                <StackPanel x:Name="AiProfileCardsPanel" Spacing="4"/>
                                 <StackPanel x:Name="AiProfileEditorParking" Visibility="Collapsed">
                                     <ScrollViewer x:Name="AiProfileEditorScrollViewer"
                                                   MaxHeight="600"
@@ -520,7 +525,8 @@
                                         </StackPanel>
                                     </ScrollViewer>
                                 </StackPanel>
-                        </StackPanel>
+                            </StackPanel>
+                        </Border>
 
                         <!-- DeepL -->
                         <Expander AutomationProperties.AutomationId="DeepLServiceExpander"

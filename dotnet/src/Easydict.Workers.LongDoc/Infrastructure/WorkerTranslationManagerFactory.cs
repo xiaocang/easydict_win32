@@ -23,7 +23,7 @@ internal static class WorkerTranslationManagerFactory
     private static readonly string[] ProfileManagedAiServiceIds =
     [
         "openai", "ollama", "deepseek", "groq", "zhipu", "kimi", "github",
-        "custom-openai", "openrouter", "orcarouter", "gemini", "doubao",
+        "custom-openai", "magpie", "openrouter", "orcarouter", "gemini", "doubao",
         "claude-code", "codex"
     ];
 
@@ -269,6 +269,16 @@ internal static class WorkerTranslationManagerFactory
             {
                 var service = new CustomOpenAIService(httpClient);
                 service.Configure(Value("endpoint"), Secret("apiKey"), Value("model", "gpt-3.5-turbo"));
+                return service;
+            }
+            case "magpie":
+            {
+                var service = new MagpieService(httpClient);
+                service.Configure(
+                    Value("endpoint", "http://127.0.0.1:3425/v1/chat/completions"),
+                    Secret("apiKey"),
+                    Value("model"),
+                    string.Equals(Value("allowRemote"), "true", StringComparison.OrdinalIgnoreCase));
                 return service;
             }
             case "openrouter":

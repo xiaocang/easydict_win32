@@ -133,6 +133,57 @@ public sealed class LongDocWorkerTranslationManagerFactoryTests
     }
 
     [Fact]
+    public void Build_RegistersEnabledAndDisabledMagpieProfilesWithoutBreakingOtherServices()
+    {
+        using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot
+        {
+            AiServiceProfiles =
+            [
+                new AiServiceProfileSnapshot
+                {
+                    ProfileId = "longdoc-magpie-local",
+                    ServiceId = "ai-profile:longdoc-magpie-local",
+                    ProviderType = "magpie",
+                    LegacyServiceId = "magpie",
+                    Name = "Local Magpie",
+                    IsEnabled = true,
+                    ConfigurationRevision = 1,
+                    Configuration = new Dictionary<string, string>
+                    {
+                        ["endpoint"] = "http://127.0.0.1:4545/v1/chat/completions",
+                        ["model"] = "openai/gpt-6-luna",
+                        ["allowRemote"] = "false"
+                    },
+                    Secrets = new Dictionary<string, string>(),
+                    SupportsStreaming = true,
+                    SupportsCorrection = true
+                },
+                new AiServiceProfileSnapshot
+                {
+                    ProfileId = "longdoc-magpie-disabled",
+                    ServiceId = "ai-profile:longdoc-magpie-disabled",
+                    ProviderType = "magpie",
+                    LegacyServiceId = "magpie",
+                    Name = "Disabled Magpie",
+                    IsEnabled = false,
+                    Configuration = new Dictionary<string, string>(),
+                    Secrets = new Dictionary<string, string>(),
+                    SupportsStreaming = true,
+                    SupportsCorrection = true
+                }
+            ]
+        });
+
+        manager.Services.Should().ContainKey("ai-profile:longdoc-magpie-local");
+        manager.Services.Should().ContainKey("ai-profile:longdoc-magpie-disabled");
+        manager.Services.Should().NotContainKey("magpie");
+        manager.Services.Should().ContainKey("deepl");
+        manager.Services["ai-profile:longdoc-magpie-local"].DisplayName.Should().Be("Local Magpie");
+        manager.Services["ai-profile:longdoc-magpie-local"].IsConfigured.Should().BeTrue();
+        manager.Services["ai-profile:longdoc-magpie-disabled"].IsConfigured.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Build_EmptyProfileSnapshotRemovesLegacyAiButKeepsNonAiAndLocalAi()
     {
         using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot

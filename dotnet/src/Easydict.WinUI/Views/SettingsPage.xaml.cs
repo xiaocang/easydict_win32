@@ -325,6 +325,7 @@ public sealed partial class SettingsPage : Page
         public ImageSource IconSource { get; }
         public bool IsNew { get; }
         public bool IsAutoConnected { get; set; }
+        public bool AgentCliRiskAcknowledged { get; set; }
         public string BaseName { get; }
         public bool BaseIsEnabled { get; }
         public Dictionary<string, string> BaseConfiguration { get; }
@@ -807,6 +808,7 @@ public sealed partial class SettingsPage : Page
             isNew: false,
             CreateAiProviderIcon(provider),
             profile.IsAutoConnected);
+        draft.AgentCliRiskAcknowledged = provider.RequiresAgentCliAcknowledgment && profile.IsEnabled;
         return draft;
     }
 
@@ -827,7 +829,7 @@ public sealed partial class SettingsPage : Page
             null,
             provider,
             name,
-            isEnabled: true,
+            isEnabled: provider.NewProfilesEnabledByDefault,
             provider.Fields.Where(field => !field.IsSecret)
                 .ToDictionary(field => field.Id, field => field.DefaultValue, StringComparer.Ordinal),
             isNew: true,
@@ -1761,11 +1763,33 @@ public sealed partial class SettingsPage : Page
             MarkAiProfileEditorChanged();
     }
 
-    private void OnAiProfileEnabledToggled(object sender, RoutedEventArgs e)
+    private async void OnAiProfileEnabledToggled(object sender, RoutedEventArgs e)
     {
-        if (_isBuildingAiProfileEditor || _selectedAiProfileDraft is null) return;
-        _selectedAiProfileDraft.IsEnabled = AiProfileEnabledToggle.IsOn;
-        if (!ReferenceEquals(_selectedAiProfileDraft, _pendingAiProfileDraft))
+        if (_isBuildingAiProfileEditor || _selectedAiProfileDraft is not { } draft) return;
+
+        var enable = AiProfileEnabledToggle.IsOn;
+        if (draft.Provider.RequiresAgentCliAcknowledgment)
+        {
+            if (enable && !draft.AgentCliRiskAcknowledged)
+            {
+                if (!await ConfirmAgentCliRiskAsync())
+                {
+                    _isBuildingAiProfileEditor = true;
+                    try { AiProfileEnabledToggle.IsOn = false; }
+                    finally { _isBuildingAiProfileEditor = false; }
+                    return;
+                }
+
+                draft.AgentCliRiskAcknowledged = true;
+            }
+            else if (!enable)
+            {
+                draft.AgentCliRiskAcknowledged = false;
+            }
+        }
+
+        draft.IsEnabled = enable;
+        if (!ReferenceEquals(draft, _pendingAiProfileDraft))
             MarkAiProfileEditorChanged();
     }
 
@@ -2152,6 +2176,12 @@ public sealed partial class SettingsPage : Page
     {
         var draft = _selectedAiProfileDraft;
         if (draft is null) return;
+        if (draft.Provider.RequiresAgentCliAcknowledgment && !draft.AgentCliRiskAcknowledged)
+        {
+            if (!await ConfirmAgentCliRiskAsync()) return;
+            draft.AgentCliRiskAcknowledged = true;
+        }
+
         UpdateAiProfileListLabelsAndDirtyState();
         var source = BeginAiProfileAction(draft, AiProfileText("AiProfileTesting", "Testing…"));
         try
@@ -8945,19 +8975,7 @@ public sealed partial class SettingsPage : Page
             : _settings.CodexEnabled;
         if (alreadyEnabled) return;
 
-        var loc = LocalizationService.Instance;
-        var dialog = new ContentDialog
-        {
-            Title = loc.GetString("AgentCliRiskTitle"),
-            Content = loc.GetString("AgentCliRiskMessage"),
-            PrimaryButtonText = loc.GetString("AgentCliRiskConfirm"),
-            CloseButtonText = loc.GetString("Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = this.XamlRoot
-        };
-
-        var result = await ShowDialogAsync(dialog);
-        if (result != ContentDialogResult.Primary)
+        if (!await ConfirmAgentCliRiskAsync())
         {
             // Reverting IsOn re-fires Toggled; the suppress flag skips the
             // dialog while OnSettingChanged still recomputes the dirty state.
@@ -8971,6 +8989,21 @@ public sealed partial class SettingsPage : Page
                 _suppressAgentCliToggleDialog = false;
             }
         }
+    }
+
+    private async Task<bool> ConfirmAgentCliRiskAsync()
+    {
+        var loc = LocalizationService.Instance;
+        var dialog = new ContentDialog
+        {
+            Title = loc.GetString("AgentCliRiskTitle"),
+            Content = loc.GetString("AgentCliRiskMessage"),
+            PrimaryButtonText = loc.GetString("AgentCliRiskConfirm"),
+            CloseButtonText = loc.GetString("Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = this.XamlRoot
+        };
+        return await ShowDialogAsync(dialog) == ContentDialogResult.Primary;
     }
 
     #region Layout Detection

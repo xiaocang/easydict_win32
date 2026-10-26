@@ -29,6 +29,8 @@ public sealed record AiProviderDefinition(
 {
     public bool RequiresApiKey => Id is not ("custom-openai" or "magpie") && Fields.Any(item => item.IsSecret);
     public bool RequiresModel => Fields.Any(item => item.Id == "model");
+    public bool RequiresAgentCliAcknowledgment => Id is "claude-code" or "codex";
+    public bool NewProfilesEnabledByDefault => !RequiresAgentCliAcknowledgment;
     public IReadOnlyList<AiProviderFieldDefinition> SecretFields => Fields.Where(item => item.IsSecret).ToArray();
 }
 

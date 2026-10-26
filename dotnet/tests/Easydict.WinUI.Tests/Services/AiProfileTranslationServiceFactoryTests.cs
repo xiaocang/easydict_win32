@@ -17,6 +17,17 @@ namespace Easydict.WinUI.Tests.Services;
 [Collection("SettingsService")]
 public sealed class AiProfileTranslationServiceFactoryTests
 {
+    [Theory]
+    [InlineData("claude-code")]
+    [InlineData("codex")]
+    public void AgentCliProvidersRequireAcknowledgmentAndStartDisabled(string providerType)
+    {
+        var provider = AiProviderCatalog.All.Single(item => item.Id == providerType);
+
+        provider.RequiresAgentCliAcknowledgment.Should().BeTrue();
+        provider.NewProfilesEnabledByDefault.Should().BeFalse();
+    }
+
     [Fact]
     public async Task SavedLocalMagpieProfileUsesItsModelWithoutAnUpstreamProviderKey()
     {

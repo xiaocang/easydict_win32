@@ -49,6 +49,23 @@ public sealed class WorkerProtocolSerializationTests
             ProxyUri = "http://localhost:7890",
             FoundryLocalEndpoint = "http://localhost:5000",
             LocalAIProvider = LocalAiProviderModes.Auto,
+            AiServiceProfiles =
+            [
+                new AiServiceProfileSnapshot
+                {
+                    ProfileId = "profile-fixture",
+                    ServiceId = "ai-profile:profile-fixture",
+                    ProviderType = "openai",
+                    LegacyServiceId = "openai",
+                    Name = "Fixture profile",
+                    IsEnabled = true,
+                    ConfigurationRevision = 2,
+                    Configuration = new Dictionary<string, string> { ["model"] = "profile-model" },
+                    Secrets = new Dictionary<string, string> { ["apiKey"] = "synthetic-profile-key" },
+                    SupportsStreaming = true,
+                    SupportsCorrection = true
+                }
+            ]
         };
         var configure = new ConfigureParams { Settings = snapshot };
 
@@ -61,6 +78,12 @@ public sealed class WorkerProtocolSerializationTests
         back.Settings.OpenAITemperature.Should().Be(0.3f);
         back.Settings.ProxyEnabled.Should().BeTrue();
         back.Settings.LocalAIProvider.Should().Be(LocalAiProviderModes.Auto);
+        var profile = back.Settings.AiServiceProfiles.Should().ContainSingle().Subject;
+        profile.ProfileId.Should().Be("profile-fixture");
+        profile.ServiceId.Should().Be("ai-profile:profile-fixture");
+        profile.LegacyServiceId.Should().Be("openai");
+        profile.Configuration["model"].Should().Be("profile-model");
+        profile.Secrets["apiKey"].Should().Be("synthetic-profile-key");
 
         // Sensitive values still appear as plaintext in the wire format — by design,
         // since this only crosses the anonymous stdin pipe between host and worker.

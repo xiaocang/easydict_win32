@@ -361,6 +361,12 @@ public sealed class PopButtonService : IDisposable
         _appliedActionsSignature = null;
     }
 
+    /// <summary>Refresh the floating icon when the tray choice or taskbar color scheme changes.</summary>
+    public void RefreshTrayIcon()
+    {
+        _dispatcherQueue.TryEnqueue(() => _popWindow?.RefreshTrayIcon());
+    }
+
     internal static string? GetForegroundProcessName()
     {
         try

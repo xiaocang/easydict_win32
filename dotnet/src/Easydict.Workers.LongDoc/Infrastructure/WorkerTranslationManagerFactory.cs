@@ -1,6 +1,7 @@
 using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Services;
+using Easydict.TranslationService.Services.AgentCli;
 
 namespace Easydict.Workers.LongDoc.Infrastructure;
 
@@ -16,6 +17,16 @@ namespace Easydict.Workers.LongDoc.Infrastructure;
 /// </summary>
 internal static class WorkerTranslationManagerFactory
 {
+    // A non-null profile snapshot is authoritative for all standalone AI services.
+    // Keep this list aligned with the profile provider catalog. Local AI is a separate
+    // worker engine and ordinary translation services must remain registered.
+    private static readonly string[] ProfileManagedAiServiceIds =
+    [
+        "openai", "ollama", "deepseek", "groq", "zhipu", "kimi", "github",
+        "custom-openai", "magpie", "openrouter", "orcarouter", "gemini", "doubao",
+        "claude-code", "codex"
+    ];
+
     /// <summary>
     /// Build and configure a TranslationManager from the snapshot. Caller owns
     /// disposal — TranslationManager implements IDisposable.
@@ -138,8 +149,184 @@ internal static class WorkerTranslationManagerFactory
             }
         });
 
+        ConfigureAiProfiles(manager, snapshot);
+
         return manager;
     }
+
+    private static void ConfigureAiProfiles(TranslationManager manager, SettingsSnapshot snapshot)
+    {
+        if (snapshot.AiServiceProfiles is null)
+        {
+            // Older hosts and snapshots produced while profile settings are malformed continue
+            // using the legacy settings contract above.
+            return;
+        }
+
+        // A profile snapshot is a complete allowlist, not a partial override. Remove
+        // every legacy AI registration first so deleted or absent profiles cannot be
+        // reached through stale legacy IDs/configuration from the same snapshot.
+        foreach (var serviceId in ProfileManagedAiServiceIds)
+        {
+            manager.UnregisterService(serviceId);
+        }
+
+        foreach (var profile in snapshot.AiServiceProfiles)
+        {
+            var inner = CreateProfileProvider(profile, manager.SharedHttpClient);
+            ITranslationService service = inner;
+            if (profile.SupportsStreaming && inner is IStreamTranslationService stream)
+            {
+                service = profile.SupportsCorrection && inner is IGrammarCorrectionService grammar
+                    ? new ProfiledStreamingGrammarTranslationService(
+                        stream,
+                        grammar,
+                        profile.ServiceId,
+                        profile.Name,
+                        profile.ProfileId,
+                        profile.ConfigurationRevision,
+                        profile.IsEnabled)
+                    : new ProfiledStreamingTranslationService(
+                        stream,
+                        profile.ServiceId,
+                        profile.Name,
+                        profile.ProfileId,
+                        profile.ConfigurationRevision,
+                        profile.IsEnabled);
+            }
+            else
+            {
+                service = new ProfiledTranslationService(
+                    inner,
+                    profile.ServiceId,
+                    profile.Name,
+                    profile.ProfileId,
+                    profile.ConfigurationRevision,
+                    profile.IsEnabled);
+            }
+
+            manager.RegisterService(service);
+        }
+    }
+
+    private static ITranslationService CreateProfileProvider(AiServiceProfileSnapshot profile, HttpClient httpClient)
+    {
+        string Value(string id, string fallback = "")
+            => profile.Configuration.TryGetValue(id, out var value) ? value : fallback;
+        string Secret(string id)
+            => profile.Secrets.TryGetValue(id, out var value) ? value : string.Empty;
+
+        switch (profile.ProviderType)
+        {
+            case "openai":
+            {
+                var service = new OpenAIService(httpClient);
+                service.Configure(Secret("apiKey"), Value("endpoint", OpenAIService.DefaultEndpoint),
+                    Value("model", OpenAIService.DefaultModel), ParseDouble(Value("temperature", "0.3"), 0.3),
+                    ParseOpenAIApiFormat(Value("apiFormat", "Auto")));
+                return service;
+            }
+            case "ollama":
+            {
+                var service = new OllamaService(httpClient);
+                service.Configure(Value("endpoint", "http://localhost:11434/v1/chat/completions"), Value("model", "llama3.2"));
+                service.ConfigurePrompt(
+                    Easydict.TranslationService.Models.OllamaPromptStyleParser.Parse(Value("promptStyle", "Standard")),
+                    Value("customPrompt"));
+                return service;
+            }
+            case "deepseek":
+            {
+                var service = new DeepSeekService(httpClient);
+                service.Configure(Secret("apiKey"), model: Value("model", "deepseek-chat"));
+                return service;
+            }
+            case "groq":
+            {
+                var service = new GroqService(httpClient);
+                service.Configure(Secret("apiKey"), model: Value("model", "llama-3.3-70b-versatile"));
+                return service;
+            }
+            case "zhipu":
+            {
+                var service = new ZhipuService(httpClient);
+                service.Configure(Secret("apiKey"), model: Value("model", "glm-4.5-flash"));
+                return service;
+            }
+            case "kimi":
+            {
+                var service = new KimiService(httpClient);
+                service.Configure(Secret("apiKey"), model: Value("model", "kimi-k2-turbo-preview"));
+                return service;
+            }
+            case "github":
+            {
+                var service = new GitHubModelsService(httpClient);
+                service.Configure(Secret("token"), model: Value("model", "gpt-4.1"));
+                return service;
+            }
+            case "custom-openai":
+            {
+                var service = new CustomOpenAIService(httpClient);
+                service.Configure(Value("endpoint"), Secret("apiKey"), Value("model", "gpt-3.5-turbo"));
+                return service;
+            }
+            case "magpie":
+            {
+                var service = new MagpieService(httpClient);
+                service.Configure(
+                    Value("endpoint", "http://127.0.0.1:3425/v1/chat/completions"),
+                    Secret("apiKey"),
+                    Value("model"),
+                    string.Equals(Value("allowRemote"), "true", StringComparison.OrdinalIgnoreCase));
+                return service;
+            }
+            case "openrouter":
+            {
+                var service = new OpenRouterService(httpClient);
+                service.Configure(Secret("apiKey"), model: Value("model", "openrouter/free"));
+                return service;
+            }
+            case "orcarouter":
+            {
+                var service = new OrcaRouterService(httpClient);
+                service.Configure(Secret("apiKey"), model: Value("model", "orcarouter/free"));
+                return service;
+            }
+            case "gemini":
+            {
+                var service = new GeminiService(httpClient);
+                service.Configure(Secret("apiKey"), Value("model", "gemini-2.5-flash"));
+                return service;
+            }
+            case "doubao":
+            {
+                var service = new DoubaoService(httpClient);
+                service.Configure(Secret("apiKey"), Value("endpoint", "https://ark.cn-beijing.volces.com/api/v3/responses"),
+                    Value("model", "doubao-seed-translation-250915"));
+                return service;
+            }
+            case "claude-code":
+            {
+                var service = new ClaudeCodeService(httpClient);
+                service.Configure(profile.IsEnabled, Value("model", ClaudeCodeService.DefaultModel), Value("executablePath"));
+                return service;
+            }
+            case "codex":
+            {
+                var service = new CodexCliService(httpClient);
+                service.Configure(profile.IsEnabled, Value("model", CodexCliService.DefaultModel),
+                    Value("reasoningEffort", CodexCliService.DefaultReasoningEffort));
+                return service;
+            }
+            default:
+                throw new InvalidOperationException($"Unknown AI profile provider '{profile.ProviderType}'.");
+        }
+    }
+
+    private static double ParseDouble(string value, double fallback)
+        => double.TryParse(value, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : fallback;
 
     private static void ConfigureIfPresent(TranslationManager manager, string serviceId, Action<ITranslationService> configure)
     {

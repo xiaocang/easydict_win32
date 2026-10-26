@@ -1,13 +1,12 @@
 using Easydict.WinUI.Services;
 using FluentAssertions;
-using System.Reflection;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
 
 /// <summary>
 /// Persistence tests for the hover word lookup settings, using isolated SettingsService
-/// instances (private constructor + EASYDICT_SETTINGS_DIR) so the singleton is untouched.
+/// instances using an explicit temporary directory so the singleton and process environment stay untouched.
 /// </summary>
 [Trait("Category", "WinUI")]
 [Collection("SettingsService")]
@@ -112,25 +111,7 @@ public class SettingsServiceHoverWordLookupTests
     }
 
     private static SettingsService CreateIsolatedSettingsService(string directory)
-    {
-        var previousSettingsDirectory = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
-        try
-        {
-            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", directory);
-            var constructor = typeof(SettingsService).GetConstructor(
-                BindingFlags.Instance | BindingFlags.NonPublic,
-                binder: null,
-                Type.EmptyTypes,
-                modifiers: null);
-
-            constructor.Should().NotBeNull();
-            return (SettingsService)constructor!.Invoke(null);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previousSettingsDirectory);
-        }
-    }
+        => new(directory);
 
     private sealed class TemporaryDirectory : IDisposable
     {

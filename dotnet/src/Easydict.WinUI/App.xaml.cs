@@ -252,6 +252,16 @@ namespace Easydict.WinUI
                 }
             }
 
+#if WINUI_TEST
+            // The preview needs the initialized AppWindow to size the checkerboard host.
+            // Run it after ConfigureWindow, but before tray/hotkey/services are started.
+            if (Easydict.WinUI.Views.PopButtonTransparencyPreview.TryLaunch(_window, _appWindow))
+            {
+                CrashDiagnostics.Log("[OnLaunched] Pop-button transparency preview started; normal services were not initialized.");
+                return;
+            }
+#endif
+
             // Set window icon for unpackaged scenarios
             if (_appWindow != null)
             {
@@ -332,7 +342,6 @@ namespace Easydict.WinUI
                 // the memory gate and raises an already-visible background window.
                 _trayIconService.OnShowWindowRequested += ShowAndActivateWindow;
                 _trayIconService.OnBrowserSupportAction += OnBrowserSupportAction;
-                _trayIconService.OnHoverWordLookupToggled += OnTrayHoverWordLookupToggled;
                 _trayIconService.Initialize();
             }
             catch (Exception ex)
@@ -1524,8 +1533,6 @@ namespace Easydict.WinUI
         {
             var app = Instance;
             var settings = SettingsService.Instance;
-            app._trayIconService?.SetHoverWordLookupChecked(settings.HoverWordLookupEnabled);
-
             if (IsMouseSelectionTranslateDisabledForDebug())
             {
                 app._hoverWordLookupService?.ApplyOptions(HoverLookupOptions.Disabled);
@@ -1536,16 +1543,16 @@ namespace Easydict.WinUI
             app.UpdateMouseHookInstallation();
         }
 
-        /// <summary>
-        /// Tray menu "Hover word lookup" toggle: persist the setting and apply it.
-        /// </summary>
-        private void OnTrayHoverWordLookupToggled(bool enabled)
+#if WINUI_TEST
+        /// <summary>Test-only setting hook used by hover lookup UI automation.</summary>
+        private void ApplyHoverWordLookupForTest(bool enabled)
         {
             var settings = SettingsService.Instance;
             settings.HoverWordLookupEnabled = enabled;
             settings.Save();
             ApplyHoverWordLookup();
         }
+#endif
 
         /// <summary>
         /// Install the global mouse/keyboard hooks when mouse selection translate or hover word
@@ -1601,6 +1608,7 @@ namespace Easydict.WinUI
         public static void ApplyTrayIcon()
         {
             Instance._trayIconService?.RefreshThemeIcon();
+            Instance._popButtonService?.RefreshTrayIcon();
         }
 
         /// <summary>
@@ -1622,6 +1630,7 @@ namespace Easydict.WinUI
             ApplyMainWindowTitleBarChrome(theme, elementTheme);
             WindowIconService.SetWindowIcon(Instance._appWindow);
             Instance._trayIconService?.RefreshThemeIcon();
+            Instance._popButtonService?.RefreshTrayIcon();
 
             if (Instance._window?.Content is Frame frame)
             {
@@ -1726,7 +1735,7 @@ namespace Easydict.WinUI
                 {
 #if WINUI_TEST
                     case 0x8000 + 205 when wParam is 0 or 1:
-                        OnTrayHoverWordLookupToggled(wParam == 1);
+                        ApplyHoverWordLookupForTest(wParam == 1);
                         return 1;
                     case 0x8000 + 203 when wParam >= 0 && wParam <= 10 && _hoverWordLookupService is not null:
                         return HoverLookupLayoutTestHost.Show(_hoverWordLookupService.GetWindowForLayoutTest(), (int)wParam);
@@ -1802,6 +1811,7 @@ namespace Easydict.WinUI
             _systemThemeRefreshQueued = 0;
             // Taskbar theme changes must apply even with an explicit app theme.
             _trayIconService?.RefreshThemeIcon();
+            _popButtonService?.RefreshTrayIcon();
 
             if (!IsSystemTheme(SettingsService.Instance.AppTheme))
             {

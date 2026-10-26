@@ -150,9 +150,11 @@ public static class OpenAiCompatibleModelCatalog
             return null;
         }
 
-        string? name = item.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String
-            ? nameElement.GetString()
-            : null;
+        string? name = item.TryGetProperty("display_name", out var displayNameElement) && displayNameElement.ValueKind == JsonValueKind.String
+            ? displayNameElement.GetString()
+            : item.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String
+                ? nameElement.GetString()
+                : null;
 
         long? contextLength = TryGetLong(item, "context_length");
         if (contextLength is null &&

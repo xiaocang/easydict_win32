@@ -19,6 +19,16 @@ namespace Easydict.SidecarClient.Protocol;
 /// </summary>
 public sealed class SettingsSnapshot
 {
+    /// <summary>
+    /// AI profile runtime snapshots for the long-document worker. Secrets are decrypted by the
+    /// host and travel only through the worker's private configure pipe; callers for other worker
+    /// kinds leave this null so profile credentials are not sent to OCR/local-AI workers.
+    /// Null means use the legacy settings contract; an empty list means profiles are authoritative
+    /// and no standalone AI profiles are configured.
+    /// </summary>
+    [JsonPropertyName("aiServiceProfiles")]
+    public IReadOnlyList<AiServiceProfileSnapshot>? AiServiceProfiles { get; init; }
+
     // ── Cloud LLM provider credentials (long-doc worker) ────────────────────
 
     [JsonPropertyName("openAIApiKey")]
@@ -207,4 +217,41 @@ public sealed class SettingsSnapshot
     /// </summary>
     [JsonPropertyName("cacheDir")]
     public string? CacheDir { get; init; }
+}
+
+/// <summary>Decrypted, per-request AI profile data sent only to the long-document worker.</summary>
+public sealed class AiServiceProfileSnapshot
+{
+    [JsonPropertyName("profileId")]
+    public string ProfileId { get; init; } = string.Empty;
+
+    [JsonPropertyName("serviceId")]
+    public string ServiceId { get; init; } = string.Empty;
+
+    [JsonPropertyName("providerType")]
+    public string ProviderType { get; init; } = string.Empty;
+
+    [JsonPropertyName("legacyServiceId")]
+    public string LegacyServiceId { get; init; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; init; } = string.Empty;
+
+    [JsonPropertyName("isEnabled")]
+    public bool IsEnabled { get; init; }
+
+    [JsonPropertyName("configurationRevision")]
+    public int ConfigurationRevision { get; init; }
+
+    [JsonPropertyName("configuration")]
+    public Dictionary<string, string> Configuration { get; init; } = new(StringComparer.Ordinal);
+
+    [JsonPropertyName("secrets")]
+    public Dictionary<string, string> Secrets { get; init; } = new(StringComparer.Ordinal);
+
+    [JsonPropertyName("supportsStreaming")]
+    public bool SupportsStreaming { get; init; }
+
+    [JsonPropertyName("supportsCorrection")]
+    public bool SupportsCorrection { get; init; }
 }

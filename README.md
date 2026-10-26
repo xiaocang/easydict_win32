@@ -79,7 +79,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
 
-- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window. The pop-up is a strip: next to the translate icon it shows your configured text actions
+- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window. The pop-up is a strip: next to the translate icon it shows your configured text actions. We refined the floating icons to stay consistent with the system tray.
 
 - **Text Actions** - Run the selected or entered text through one specific service, or send it to Google, Bing, GitHub, Wikipedia, Baidu or your own URL template. Available from the Actions menu in every window. Selection search buttons are off by default and can be enabled under Settings → Plugins → Text Actions. Clicking a service icon queries only that service and grays out the others.
 
@@ -91,6 +91,8 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Expand **Advanced settings** under Hover Word Lookup to adjust the hover delay (10–600 ms, default 350 ms), lookup service, and OCR fallback. Save to apply. The delay controls pointer dwell before lookup starts; extraction and translation take additional time. Hover lookup works independently of the excluded-app list for mouse selection translation.
 
 - **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
+
+- **AI Provider Profiles and Magpie** - Manage AI services as profiles, with multiple profiles per provider; Magpie is supported as a one-click connect.
 
 - **Long Document Translation** - Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache
 
@@ -258,6 +260,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OpenRouter | OpenAI API | — | OpenAI-compatible, missing API key |
 | OrcaRouter | OpenAI API | ✅ | Integration coverage: streaming translation, non-streaming translation, and live model catalog (free models first) |
 | Custom OpenAI | OpenAI API | — | OpenAI-compatible, user-defined endpoint |
+| Magpie | OpenAI-compatible gateway | ✅ | 32 focused offline checks and isolated synthetic-gateway UI review; no real gateway or model call |
 | Claude Code | Local CLI (stream-json) | — | Requires local `claude` CLI signed in |
 | Codex | Local CLI (JSONL) | — | Requires local `codex` CLI signed in |
 

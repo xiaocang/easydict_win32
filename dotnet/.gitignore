@@ -48,6 +48,7 @@ src/Easydict.WinUI/Assets/ServiceIcons/*.scale-*.png
 !src/Easydict.WinUI/Assets/ServiceIcons/Kimi.scale-*.png
 !src/Easydict.WinUI/Assets/ServiceIcons/OpenRouter.scale-*.png
 !src/Easydict.WinUI/Assets/ServiceIcons/OrcaRouter.scale-*.png
+!src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-*.png
 
 temp_*/
 test-extracted/

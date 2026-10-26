@@ -44,6 +44,17 @@ public class OpenAiCompatibleModelCatalogTests
     }
 
     [Fact]
+    public void Parse_PrefersDisplayNameAndPreservesMagpieModelId()
+    {
+        var result = OpenAiCompatibleModelCatalog.Parse(
+            """{"data":[{"id":"openai/gpt-6-luna","display_name":"GPT 6 Luna","name":"legacy name"}]}""");
+
+        result.Should().ContainSingle();
+        result[0].Id.Should().Be("openai/gpt-6-luna");
+        result[0].Name.Should().Be("GPT 6 Luna");
+    }
+
+    [Fact]
     public void Parse_DetectsFreeFromZeroPricing_AsString()
     {
         var json = """

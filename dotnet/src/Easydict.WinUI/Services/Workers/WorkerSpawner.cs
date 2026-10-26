@@ -3,6 +3,7 @@ using System.Text.Json;
 using Easydict.SidecarClient;
 using Easydict.SidecarClient.Protocol;
 using Easydict.OpenVINO.Services;
+using Easydict.WinUI.Models;
 
 namespace Easydict.WinUI.Services.Workers;
 
@@ -221,10 +222,34 @@ internal sealed class WorkerSpawner
     /// decrypted secrets here (DPAPI/AES happens in-process before crossing
     /// the pipe).
     /// </summary>
-    public static SettingsSnapshot BuildSnapshot(SettingsService settings)
+    public static SettingsSnapshot BuildSnapshot(SettingsService settings, bool includeAiServiceProfiles = false)
     {
         return new SettingsSnapshot
         {
+            AiServiceProfiles = includeAiServiceProfiles && settings.AiServiceProfilesLoadError is null
+                ? settings.AiServiceProfiles.Select(profile =>
+                {
+                    AiProviderCatalog.TryGet(profile.ProviderType, out var provider);
+                    return new AiServiceProfileSnapshot
+                    {
+                        ProfileId = profile.ProfileId,
+                        ServiceId = profile.ServiceId,
+                        ProviderType = profile.ProviderType,
+                        LegacyServiceId = provider.LegacyServiceId,
+                        Name = profile.Name,
+                        IsEnabled = profile.IsEnabled,
+                        ConfigurationRevision = profile.ConfigurationRevision,
+                        Configuration = new Dictionary<string, string>(profile.Configuration, StringComparer.Ordinal),
+                        Secrets = provider.SecretFields
+                            .Select(field => (field.Id, Value: settings.GetAiServiceProfileSecret(profile.ProfileId, field.Id)))
+                            .Where(item => item.Value is not null)
+                            .ToDictionary(item => item.Id, item => item.Value!, StringComparer.Ordinal),
+                        SupportsStreaming = provider.SupportsStreaming,
+                        SupportsCorrection = provider.SupportsCorrection
+                    };
+                }).ToArray()
+                : null,
+
             // Cloud LLM provider credentials — pass everything configured; the worker
             // only uses the keys whose service the host selects via translate_document.
             OpenAIApiKey = settings.OpenAIApiKey,

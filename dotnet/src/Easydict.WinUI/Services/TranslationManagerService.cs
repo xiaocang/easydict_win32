@@ -8,6 +8,7 @@ using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Services;
 using Easydict.TranslationService.Services.AgentCli;
 using Easydict.WindowsAI.Services;
+using Easydict.WinUI.Models;
 
 namespace Easydict.WinUI.Services;
 
@@ -55,6 +56,7 @@ public sealed class TranslationManagerService : IDisposable
     // because the manager they were registered on may still have active handles (an in-flight
     // call). Disposed together with that manager - see DisposeManagerAndPendingBob.
     private readonly Dictionary<TranslationManager, (List<BobTranslationService> Services, HttpClient? HttpClient)> _pendingBobDisposal = new();
+    private readonly Dictionary<string, ITranslationService?> _aiProfilePreviousServices = new(StringComparer.Ordinal);
 
     private PhiSilicaTranslationService? _phiSilicaService;
     private FoundryLocalService? _foundryLocalService;
@@ -302,6 +304,8 @@ public sealed class TranslationManagerService : IDisposable
     /// </summary>
     private void ConfigureServices()
     {
+        RestoreAiProfileServices();
+
         // Configure Bing Translate (use China host if international services are disabled)
         _translationManager.ConfigureService("bing", service =>
         {
@@ -564,10 +568,84 @@ public sealed class TranslationManagerService : IDisposable
             }
         });
 
+        ConfigureAiProfileServices();
+
         RegisterImportedMdxServices();
         RegisterBobPluginServices();
 
         Debug.WriteLine("[TranslationManagerService] Services configured");
+    }
+
+    private void RestoreAiProfileServices()
+    {
+        foreach (var (serviceId, previousService) in _aiProfilePreviousServices)
+        {
+            if (previousService is null)
+            {
+                _translationManager.UnregisterService(serviceId);
+            }
+            else
+            {
+                _translationManager.RegisterService(previousService);
+            }
+        }
+
+        _aiProfilePreviousServices.Clear();
+    }
+
+    private void ConfigureAiProfileServices()
+    {
+        // An invalid collection is kept verbatim by SettingsService. In that case, retain the
+        // legacy-configured services above so the app stays usable while the data is recovered.
+        if (_settings.AiServiceProfilesLoadError is not null)
+        {
+            return;
+        }
+
+        var profiledServiceIds = _settings.AiServiceProfiles
+            .Select(profile => profile.ServiceId)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var provider in AiProviderCatalog.All)
+        {
+            var hasProfilesForProvider = _settings.AiServiceProfiles.Any(profile => profile.ProviderType == provider.Id);
+            if (profiledServiceIds.Contains(provider.LegacyServiceId))
+            {
+                continue;
+            }
+
+            // Keep unconfigured legacy service entries available to selectors. A provider
+            // with old credentials/options but no profile is stale compatibility state (for
+            // example after its last profile was deleted), so do not revive that service.
+            if (!hasProfilesForProvider
+                && !_settings.HasLegacyAiProviderConfiguration(provider.Id))
+            {
+                continue;
+            }
+
+            _aiProfilePreviousServices.TryAdd(
+                provider.LegacyServiceId,
+                _translationManager.Services.TryGetValue(provider.LegacyServiceId, out var previous) ? previous : null);
+            _translationManager.UnregisterService(provider.LegacyServiceId);
+        }
+
+        foreach (var profile in _settings.AiServiceProfiles)
+        {
+            try
+            {
+                _aiProfilePreviousServices.TryAdd(
+                    profile.ServiceId,
+                    _translationManager.Services.TryGetValue(profile.ServiceId, out var previous) ? previous : null);
+                var profiledService = AiProfileTranslationServiceFactory.Create(
+                    profile,
+                    _settings,
+                    _translationManager.SharedHttpClient);
+                _translationManager.RegisterService(profiledService);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TranslationManagerService] Could not register AI profile '{profile.ProfileId}': {ex.Message}");
+            }
+        }
     }
 
     private LocalAITranslationService CreateLocalAITranslationService()
@@ -930,6 +1008,7 @@ public sealed class TranslationManagerService : IDisposable
 
             oldManager = _translationManager;
             _translationManager = new TranslationManager(options);
+            _aiProfilePreviousServices.Clear();
             _foundryLocalService = null;
             // Unhook the wrapper's StatusChanged subscriptions before dropping
             // the reference, otherwise the inner providers keep the old wrapper

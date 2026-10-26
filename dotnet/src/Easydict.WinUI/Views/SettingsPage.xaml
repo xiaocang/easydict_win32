@@ -373,6 +373,161 @@
                                    FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
+                        <Border x:Name="AiProfilesEditorCard"
+                                Padding="16"
+                                CornerRadius="12"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                AutomationProperties.AutomationId="AiProfilesContainer">
+                            <StackPanel Spacing="14">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3">
+                                        <TextBlock x:Name="AiProfilesTitleText"
+                                                   Text="AI profiles"
+                                                   FontSize="17"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        <TextBlock x:Name="AiProfilesSubtitleText"
+                                                   Text="Choose a provider, then configure each account in its own profile."
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="AiProfileProviderComboBox"
+                                              Grid.Column="1"
+                                              Width="190"
+                                              VerticalAlignment="Center"
+                                              SelectionChanged="OnAiProfileProviderSelectionChanged"
+                                              AutomationProperties.AutomationId="AiProfileProviderPicker"/>
+                                </Grid>
+                                <ListView x:Name="AiProfileListView"
+                                          SelectionMode="Single"
+                                          SelectionChanged="OnAiProfileSelectionChanged"
+                                          AutomationProperties.AutomationId="AiProfileSelectionState"
+                                          Visibility="Collapsed"/>
+                                <TextBlock x:Name="AiProfileEmptyStateText"
+                                               Text="Select a profile or add one to configure an AI service."
+                                               Margin="0,8"
+                                               TextWrapping="Wrap"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               Visibility="Collapsed"/>
+                                <Border x:Name="AiProfilePendingCard"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Visibility="Collapsed">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Image x:Name="AiProfilePendingIcon" Width="20" Height="20" Stretch="Uniform"/>
+                                            <TextBlock x:Name="AiProfilePendingTitle"
+                                                       VerticalAlignment="Center"
+                                                       FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                            <Button x:Name="AiProfileDismissPendingButton"
+                                                    Grid.Column="1"
+                                                    Content="&#xE711;"
+                                                    FontFamily="Segoe MDL2 Assets"
+                                                    AutomationProperties.Name="Dismiss provider selection"
+                                                    Click="OnDismissPendingAiProfileClick"
+                                                    ToolTipService.ToolTip="Dismiss"
+                                                    VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <ContentControl x:Name="AiProfilePendingEditorHost" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel x:Name="AiProfileCardsPanel" Spacing="4"/>
+                                <StackPanel x:Name="AiProfileEditorParking" Visibility="Collapsed">
+                                    <ScrollViewer x:Name="AiProfileEditorScrollViewer"
+                                                  MaxHeight="600"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="AiProfileEditorPanel" Spacing="12">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="AiProfileNameBox"
+                                                         Header="Profile name"
+                                                         TextChanged="OnAiProfileNameChanged"
+                                                         AutomationProperties.AutomationId="AiProfileName"/>
+                                            </Grid>
+                                            <ToggleSwitch x:Name="AiProfileEnabledToggle"
+                                                          Header="Enabled"
+                                                          Toggled="OnAiProfileEnabledToggled"
+                                                          AutomationProperties.AutomationId="AiProfileEnabled"/>
+                                            <TextBlock x:Name="AiProfileEditorHintText"
+                                                       Text="Changes take effect when you save settings."
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            <StackPanel x:Name="AiProfileFieldsPanel" Spacing="10"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Button x:Name="AiProfileCommitPendingButton"
+                                                        Content="Add profile"
+                                                        Click="OnAddAiProfileClick"
+                                                        AutomationProperties.AutomationId="AddAiProfileButton"
+                                                        Visibility="Collapsed"/>
+                                                <Button x:Name="AiProfileConnectMagpieButton"
+                                                        Content="Connect Magpie"
+                                                        Click="OnConnectMagpieClick"
+                                                        AutomationProperties.AutomationId="ConnectMagpieButton"
+                                                        Visibility="Collapsed"/>
+                                                <Button x:Name="AiProfileCancelMagpieButton"
+                                                        Content="Cancel"
+                                                        Click="OnCancelMagpieDiscoveryClick"
+                                                        Visibility="Collapsed"
+                                                        AutomationProperties.AutomationId="CancelMagpieDiscoveryButton"/>
+                                                <Button x:Name="AiProfileTestButton"
+                                                        Content="Test"
+                                                        Click="OnTestAiProfileClick"
+                                                        AutomationProperties.AutomationId="TestAiProfileButton"/>
+                                                <Button x:Name="AiProfileRefreshModelsButton"
+                                                        Content="Refresh models"
+                                                        Click="OnRefreshAiProfileModelsClick"
+                                                        AutomationProperties.AutomationId="RefreshAiProfileModelsButton"
+                                                        Visibility="Collapsed"/>
+                                                <Button x:Name="AiProfileCancelActionButton"
+                                                        Content="Cancel"
+                                                        Click="OnCancelAiProfileActionClick"
+                                                        AutomationProperties.AutomationId="CancelAiProfileActionButton"
+                                                        Visibility="Collapsed"/>
+                                                <ProgressRing x:Name="AiProfileActionProgressRing"
+                                                              Width="18"
+                                                              Height="18"
+                                                              IsActive="False"
+                                                              Visibility="Collapsed"/>
+                                                <TextBlock x:Name="AiProfileActionStatusText"
+                                                           VerticalAlignment="Center"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            </StackPanel>
+                                            <Button x:Name="AiProfileDeleteButton"
+                                                    Content="&#xE74D;"
+                                                    Foreground="#FFCC3333"
+                                                    FontFamily="Segoe MDL2 Assets"
+                                                    FontSize="16"
+                                                    AutomationProperties.Name="Delete profile"
+                                                    HorizontalAlignment="Left"
+                                                    Click="OnDeleteAiProfileClick"
+                                                    AutomationProperties.AutomationId="DeleteAiProfileButton"
+                                                    Visibility="Collapsed"/>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <!-- DeepL -->
                         <Expander AutomationProperties.AutomationId="DeepLServiceExpander"
                                 HorizontalAlignment="Stretch"
@@ -2218,7 +2373,6 @@
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="Auto"/>
                                                             <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
                                                         <CheckBox
                                                             FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
@@ -2290,7 +2444,6 @@
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock x:Name="MiniWindowHeaderText"
                                                        Text="Mini Window"

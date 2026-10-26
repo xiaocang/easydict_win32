@@ -21,6 +21,34 @@
 - Every monitor arrangement, DPI/scaling value, and Windows theme.
 - Requests to a real Magpie gateway or model.
 
+## Follow-up: hover and icon size review
+
+- **Review date:** 2026-10-26 UTC
+- **Candidate:** `artifacts/ui-review-o4y-hover-icon/Easydict.WinUI.exe`
+- **SHA-256 of `Easydict.WinUI.dll`:** `80CC4AC6757C71B45238EE3C3E5C9589D938CB0214C66F4E849AAA5AEBB652CD`
+
+### Passed in the isolated checkerboard preview
+
+- Main and additional-action buttons showed no backing plate or frame during hover, after pointer exit, or after click release.
+- The main icon was increased from 19 DIP to 25 DIP; no clipping was observed during its float animation.
+- Main-icon and `preview-web` action counters each incremented once.
+- Pressed-state background and border resources are transparent in source, but a held-press frame was not captured independently.
+- The isolated preview closed normally.
+
+### 中文：悬停与图标尺寸复核
+
+- **复核日期：** 2026-10-26 UTC
+- **候选版本：** `artifacts/ui-review-o4y-hover-icon/Easydict.WinUI.exe`
+- **`Easydict.WinUI.dll` SHA-256：** `80CC4AC6757C71B45238EE3C3E5C9589D938CB0214C66F4E849AAA5AEBB652CD`
+
+#### 隔离棋盘预览已通过
+
+- 主按钮和附加动作按钮在悬停、移出恢复及点击释放后都没有底板或边框。
+- 主图标从 19 DIP 增至 25 DIP；浮动动画中未观察到图标裁切。
+- 主图标和 `preview-web` 附加动作的点击计数均为 1。
+- 源码中的按下态背景与边框资源已设为透明，但没有单独捕获持续按住时的画面。
+- 隔离预览已正常关闭。
+
 ## 中文
 
 - **复核日期：** 2026-10-25 UTC

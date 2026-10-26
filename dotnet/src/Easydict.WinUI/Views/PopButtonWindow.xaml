@@ -36,9 +36,18 @@
                     PointerReleased="OnTranslateButtonPointerReleased"
                     PointerCanceled="OnTranslateButtonPointerCanceled"
                     PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
+                <!-- The default WinUI Button template replaces Background and BorderBrush
+                     on PointerOver/Pressed. Keep these state brushes transparent so the
+                     underlying application remains visible during interaction. -->
+                <Button.Resources>
+                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                </Button.Resources>
                 <Image x:Name="TrayIconImage"
-                       Width="19"
-                       Height="19"
+                       Width="25"
+                       Height="25"
                        Stretch="Uniform"
                        IsHitTestVisible="False"
                        AutomationProperties.AccessibilityView="Raw" />

@@ -435,12 +435,24 @@ public sealed partial class PopButtonWindow : Window
             Tag = action,
             Content = CreateActionContent(entry, theme)
         };
+        ApplyTransparentInteractionBrushes(button);
         ToolTipService.SetToolTip(button, tooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, $"PopButtonAction_{action.Id}");
         button.Click += OnActionButtonClick;
         AttachInteractionHandlers(button);
         return button;
+    }
+
+    private static void ApplyTransparentInteractionBrushes(Button button)
+    {
+        // The default WinUI Button template switches to themed fill/stroke brushes during
+        // PointerOver and Pressed; a transparent Background alone does not override them.
+        var transparent = new SolidColorBrush(Colors.Transparent);
+        button.Resources["ButtonBackgroundPointerOver"] = transparent;
+        button.Resources["ButtonBackgroundPressed"] = transparent;
+        button.Resources["ButtonBorderBrushPointerOver"] = transparent;
+        button.Resources["ButtonBorderBrushPressed"] = transparent;
     }
 
     private FrameworkElement CreateActionContent(PresentedTextAction entry, ElementTheme theme)
@@ -654,7 +666,7 @@ public sealed partial class PopButtonWindow : Window
             try
             {
                 _trayIconVisual = ElementCompositionPreview.GetElementVisual(TrayIconImage);
-                _trayIconVisual.CenterPoint = new Vector3(9.5f, 9.5f, 0);
+                _trayIconVisual.CenterPoint = new Vector3(12.5f, 12.5f, 0);
             }
             catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
             {

@@ -38,7 +38,7 @@
 
 ## 简介
 
-Easydict for Windows 将翻译、词典查询和文本工具整合在一起，并提供快捷键与灵活的窗口模式。
+这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版，原版是一款 macOS 翻译词典应用。Easydict for Windows 将翻译、词典查询和文本工具整合在一起，并提供快捷键与灵活的窗口模式。
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
@@ -81,7 +81,7 @@ Easydict for Windows 将翻译、词典查询和文本工具整合在一起，�
 
 - **文本动作** — 在任意窗口中将选中文本发送到翻译或搜索服务。
 
-- **Bump plugin**
+- **Bob 插件兼容** — 安装 `.bobplugin`，并将 Bob 生态中的翻译插件作为翻译服务使用。
 
 - **实验室** — 新功能请从 Settings -> Labs 开始体验。
 
@@ -89,7 +89,7 @@ Easydict for Windows 将翻译、词典查询和文本工具整合在一起，�
 
 - **语法纠错模式**
 
-- **AI 服务配置与** <img src="screenshot/mocktail-mark.svg" alt="Mocktail" title="Mocktail" width="16" height="16"> **Mocktail**
+- **AI 服务配置与** <img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-100.png" alt="Magpie" title="Magpie" width="16" height="16"> **Magpie**
 
 - **长文档翻译** — 支持 PDF、纯文本和 Markdown 文档翻译，具备版面检测、公式保护、并行处理、双语输出和翻译缓存。
 
@@ -99,7 +99,6 @@ Easydict for Windows 将翻译、词典查询和文本工具整合在一起，�
 
 - **Direction Mode**
 
-- **MDX Direction**
 
 - **全局快捷键**
   - `Ctrl+Alt+T` — 显示/隐藏主窗口
@@ -157,7 +156,7 @@ Easydict for Windows 将翻译、词典查询和文本工具整合在一起，�
   </tr>
   <tr>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenRouter.scale-100.png" alt="OpenRouter" title="OpenRouter" width="24" height="24"><br>OpenRouter</td>
-    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OrcaRouter.scale-100.png" alt="OrcaRouter" title="OrcaRouter" width="24" height="24"><br>OrcaRouter</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OrcaRouter.scale-100.png" alt="OrcaRouter" title="OrcaRouter" width="24" height="24"><br>OrcaRouter<br><a href="https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6"><img src="https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb" alt="Powered by OrcaRouter" title="Powered by OrcaRouter" height="16"></a></td>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-100.png" alt="Magpie" title="Magpie" width="24" height="24"><br>Magpie</td>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/CustomOpenAI.scale-100.png" alt="自定义 OpenAI 兼容服务" title="自定义 OpenAI 兼容服务" width="24" height="24"><br>自定义 OpenAI</td>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/claude-code.scale-100.png" alt="Claude Code" title="Claude Code" width="24" height="24"><br>Claude Code</td>
@@ -166,8 +165,6 @@ Easydict for Windows 将翻译、词典查询和文本工具整合在一起，�
 </table>
 
 *Linguee 当前暂不可用。*
-
-<p align="center"><a href="https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6"><img src="https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb" alt="Powered by OrcaRouter" title="Powered by OrcaRouter"></a></p>
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

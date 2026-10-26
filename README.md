@@ -38,7 +38,7 @@
 
 ## Introduction
 
-Easydict for Windows brings translation, dictionary lookup, and text tools together with quick keyboard shortcuts and flexible windows.
+This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. Easydict for Windows brings translation, dictionary lookup, and text tools together with quick keyboard shortcuts and flexible windows.
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
@@ -81,7 +81,7 @@ Easydict for Windows brings translation, dictionary lookup, and text tools toget
 
 - **Text Action** — Send selected text to a translation or search service from any window.
 
-- **Bump plugin**
+- **Bob plugin compatibility** — Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services.
 
 - **Labs** — New feature, start in Settings -> Labs.
 
@@ -89,7 +89,7 @@ Easydict for Windows brings translation, dictionary lookup, and text tools toget
 
 - **Grammar Correction Mode**
 
-- **AI Provider Profiles and** <img src="screenshot/mocktail-mark.svg" alt="Mocktail" title="Mocktail" width="16" height="16"> **Mocktail**
+- **AI Provider Profiles and** <img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-100.png" alt="Magpie" title="Magpie" width="16" height="16"> **Magpie**
 
 - **Long Document Translation** - Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache
 
@@ -99,7 +99,6 @@ Easydict for Windows brings translation, dictionary lookup, and text tools toget
 
 - **Direction Mode**
 
-- **MDX Direction**
 
 - **Global Hotkeys**
   - `Ctrl+Alt+T` - Show/hide main window
@@ -159,7 +158,7 @@ Easydict for Windows brings translation, dictionary lookup, and text tools toget
   </tr>
   <tr>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenRouter.scale-100.png" alt="OpenRouter" title="OpenRouter" width="24" height="24"><br>OpenRouter</td>
-    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OrcaRouter.scale-100.png" alt="OrcaRouter" title="OrcaRouter" width="24" height="24"><br>OrcaRouter</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OrcaRouter.scale-100.png" alt="OrcaRouter" title="OrcaRouter" width="24" height="24"><br>OrcaRouter<br><a href="https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6"><img src="https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb" alt="Powered by OrcaRouter" title="Powered by OrcaRouter" height="16"></a></td>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-100.png" alt="Magpie" title="Magpie" width="24" height="24"><br>Magpie</td>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/CustomOpenAI.scale-100.png" alt="Custom OpenAI-compatible" title="Custom OpenAI-compatible" width="24" height="24"><br>Custom OpenAI</td>
     <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/claude-code.scale-100.png" alt="Claude Code" title="Claude Code" width="24" height="24"><br>Claude Code</td>
@@ -168,8 +167,6 @@ Easydict for Windows brings translation, dictionary lookup, and text tools toget
 </table>
 
 *Linguee is currently unavailable.*
-
-<p align="center"><a href="https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6"><img src="https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb" alt="Powered by OrcaRouter" title="Powered by OrcaRouter"></a></p>
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 

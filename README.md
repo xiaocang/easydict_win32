@@ -38,11 +38,7 @@
 
 ## Introduction
 
-This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. The project was developed using **Vibe Coding** - AI-assisted programming to migrate the Swift/SwiftUI codebase to .NET + WinUI 3.
-
-Easydict supports **Copilot+ PC enhanced local AI translation**: on supported Copilot+ PCs with a 40+ TOPS NPU, translations run on-device via Phi Silica for fast, private output. Foundry Local is supported on regular Windows PCs, with OpenVINO NLLB-200 as an offline fallback — standard translation services remain fully available on every Windows device.
-
-While the feature set is not yet complete compared to the macOS version, this port fills the gap for Windows users who want a convenient translation tool with global hotkey support and multiple translation services.
+This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. Easydict for Windows brings translation, dictionary lookup, and text tools together with quick keyboard shortcuts and flexible windows.
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
@@ -75,30 +71,34 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 ## Features
 
-- **Copilot+ PC Enhanced Local AI Translation** - Windows Local AI runs on-device with NPU acceleration via Phi Silica on supported Copilot+ PCs (40+ TOPS), Foundry Local on regular Windows PCs, or OpenVINO NLLB-200 as an offline fallback. Auto mode picks the best available provider; standard cloud translation services remain fully available everywhere.
+- <img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Microsoft.scale-100.png" alt="Microsoft Copilot+" title="Microsoft Copilot+" width="16" height="16"> **Copilot+ PC and local AI** — NPU-accelerated translation on Copilot+ PCs, with Foundry Local available on other Windows PCs.
 
-- **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
+- **OCR Screenshot Translate**
+  - `Ctrl+Alt+S` — Capture a screen region, recognize the text, and translate it.
+  - `Ctrl+Alt+Shift+S` — Recognize the text and copy it to the clipboard without translating.
 
-- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window. The pop-up is a strip: next to the translate icon it shows your configured text actions. We refined the floating icons to stay consistent with the system tray.
+- **Mouse Selection** — Select text in any app, then click the floating button to translate it.
 
-- **Text Actions** - Run the selected or entered text through one specific service, or send it to Google, Bing, GitHub, Wikipedia, Baidu or your own URL template. Available from the Actions menu in every window. Selection search buttons are off by default and can be enabled under Settings → Plugins → Text Actions. Clicking a service icon queries only that service and grays out the others.
+- **Text Action** — Send selected text to a translation or search service from any window.
 
-- **Bob Plugin Compatibility** - Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services. Plugins run in an embedded JavaScript engine with manual queries and optional caching and retries. Each installed plugin gets a selection button, configurable from the Plugins page. Ordinary translation leaves plugin services inactive and grayed out. Plugin results always carry a "Bob plugin" badge.
+- **Bob plugin compatibility** — Install `.bobplugin` translation plugins from the Bob ecosystem and use them as translation services.
 
-- **Labs** - New features start in Settings → Labs and move to the main settings tabs once stable. Custom dictionary input suggestions remain in General.
+- **Labs** — New feature, start in Settings -> Labs.
 
-- **Hover Word Lookup** - Disabled by default; enable it from the tray menu or Settings → Labs. Hold `Ctrl` for at least 50 ms (configurable key, or no key at all) and rest the pointer on any word to see a small popup with the word, its phonetics and meaning. Reads text via UI Automation with an OCR fallback for apps that expose no text. Tries the preferred lookup service first, then falls back through enabled services if a request fails, times out or returns no meaning
-  - Expand **Advanced settings** under Hover Word Lookup to adjust the hover delay (10–600 ms, default 350 ms), lookup service, and OCR fallback. Save to apply. The delay controls pointer dwell before lookup starts; extraction and translation take additional time. Hover lookup works independently of the excluded-app list for mouse selection translation.
+- **Hover Word Lookup** — Hold `Ctrl` for at least 50 ms, then hover over a word to look it up.
 
-- **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
+- **Grammar Correction Mode**
 
-- **AI Provider Profiles and Magpie** - Manage AI services as profiles, with multiple profiles per provider; Magpie is supported as a one-click connect.
+- **AI Provider Profiles and** <img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-100.png" alt="Magpie" title="Magpie" width="16" height="16"> **Magpie**
 
 - **Long Document Translation** - Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache
 
-- **Dictionary Mode** - Word definitions, phonetics, and example sentences powered by Google Dict. Linguee is currently unavailable because its upstream sample API no longer resolves.
+- **Dictionary Mode** — Look up word definitions, phonetics, and examples.
 
-- **MDX Dictionary** - Import MDict (.mdx) dictionary files for offline word lookups with rich HTML rendering
+- **MDX Dictionary** — Import MDict (`.mdx`) dictionaries for offline lookup.
+
+- **Direction Mode**
+
 
 - **Global Hotkeys**
   - `Ctrl+Alt+T` - Show/hide main window
@@ -110,56 +110,63 @@ While the feature set is not yet complete compared to the macOS version, this po
   - `Ctrl+Alt+Shift+M` - Toggle mini window visibility
   - `Ctrl+Alt+Shift+F` - Toggle fixed window visibility
 
-- **Multiple Window Modes**
+- **Multiple Window Mode**
   - Main Window - Full translation interface
   - Mini Window - Compact floating window
   - Fixed Window - Persistent translation window
 
-- **LLM Streaming Translation** - Real-time display of translation results
+- **Streaming Translation** — See results as they arrive.
 
-- **System Tray** - Minimize to tray, run in background
+- **Dark Mode Theme**
 
-- **Clipboard Monitoring** - Auto-translate copied text
+- **TTS** — Read the source and translated text aloud.
 
-- **Shell Context Menu** - Right-click any file or desktop background → "OCR Translate" to instantly capture and translate text on screen
+- **Multi-language UI** — Use the interface in 15 languages.
 
-- **Dark/Light Theme** - Follows system theme
+- **40+ Languages** — Choose which languages appear in the source and target lists.
 
-- **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis
+- **HTTP Proxy Support**
 
-- **Multi-language UI** - Localized interface in 15 languages including English, Chinese (Simplified/Traditional), Japanese, Korean, French, German, Spanish, Portuguese, Italian, Russian, Arabic, Thai, Vietnamese, and Indonesian
+- **High DPI Support**
 
-- **40+ Languages** - Customizable language selection in Settings — choose which languages appear in source/target pickers from 40+ options spanning East Asian, European, Middle Eastern, South Asian, and Southeast Asian languages
+- **Multi-pair Translation Services**
 
-- **HTTP Proxy Support** - Configure proxy server, optionally bypassing it for localhost and for services hosted in mainland China
+<table>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/google_web.scale-100.png" alt="Google Translate and Google Dictionary" title="Google Translate and Google Dictionary" width="24" height="24"><br>Google Translate<br>Google Dictionary</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Bing.scale-100.png" alt="Bing Translate" title="Bing Translate" width="24" height="24"><br>Bing</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepL.scale-100.png" alt="DeepL" title="DeepL" width="24" height="24"><br>DeepL</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Youdao.scale-100.png" alt="Youdao" title="Youdao" width="24" height="24"><br>Youdao</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenAI.scale-100.png" alt="OpenAI" title="OpenAI" width="24" height="24"><br>OpenAI</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Gemini.scale-100.png" alt="Gemini" title="Gemini" width="24" height="24"><br>Gemini</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepSeek.scale-100.png" alt="DeepSeek" title="DeepSeek" width="24" height="24"><br>DeepSeek</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Groq.scale-100.png" alt="Groq" title="Groq" width="24" height="24"><br>Groq</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Zhipu.scale-100.png" alt="Zhipu AI" title="Zhipu AI" width="24" height="24"><br>Zhipu AI</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Kimi.scale-100.png" alt="Kimi" title="Kimi" width="24" height="24"><br>Kimi</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/GitHub.scale-100.png" alt="GitHub Models" title="GitHub Models" width="24" height="24"><br>GitHub Models</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Doubao.scale-100.png" alt="Doubao" title="Doubao" width="24" height="24"><br>Doubao</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Volcano.scale-100.png" alt="Volcano Engine" title="Volcano Engine" width="24" height="24"><br>Volcano Engine</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Caiyun.scale-100.png" alt="Caiyun" title="Caiyun" width="24" height="24"><br>Caiyun</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/NiuTrans.scale-100.png" alt="NiuTrans" title="NiuTrans" width="24" height="24"><br>NiuTrans</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Linguee.scale-100.png" alt="Linguee (currently unavailable)" title="Linguee (currently unavailable)" width="24" height="24"><br>Linguee*</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Ollama.scale-100.png" alt="Ollama" title="Ollama" width="24" height="24"><br>Ollama</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/windows-local-ai.scale-100.png" alt="Windows Local AI" title="Windows Local AI" width="24" height="24"><br>Windows Local AI</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenRouter.scale-100.png" alt="OpenRouter" title="OpenRouter" width="24" height="24"><br>OpenRouter</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OrcaRouter.scale-100.png" alt="OrcaRouter" title="OrcaRouter" width="24" height="24"><br>OrcaRouter<br><a href="https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6"><img src="https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb" alt="Powered by OrcaRouter" title="Powered by OrcaRouter" height="16"></a></td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Magpie.scale-100.png" alt="Magpie" title="Magpie" width="24" height="24"><br>Magpie</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/CustomOpenAI.scale-100.png" alt="Custom OpenAI-compatible" title="Custom OpenAI-compatible" width="24" height="24"><br>Custom OpenAI</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/claude-code.scale-100.png" alt="Claude Code" title="Claude Code" width="24" height="24"><br>Claude Code</td>
+    <td align="center"><img src="dotnet/src/Easydict.WinUI/Assets/ServiceIcons/codex.scale-100.png" alt="Codex" title="Codex" width="24" height="24"><br>Codex</td>
+  </tr>
+</table>
 
-- **High DPI Support** - Per-Monitor V2 DPI awareness
-
-- **Multiple Translation Services** (23 available services; Linguee currently unavailable)
-  - Google Translate (free, no API key required)
-  - Google Dict (rich dictionary: phonetics, definitions, examples)
-  - Bing Translate (free, no API key required)
-  - DeepL (supports Free/Pro API, Traditional Chinese supported)
-  - Youdao (Web + OpenAPI)
-  - OpenAI (GPT-4o, GPT-4o-mini, etc.)
-  - Gemini (Google AI, including Gemini 2.5 models)
-  - DeepSeek
-  - Groq (fast LLM inference)
-  - Zhipu AI (GLM models)
-  - Kimi (Moonshot AI)
-  - GitHub Models (free)
-  - Doubao (ByteDance translation-specialized model)
-  - Volcano Engine (火山翻译, ByteDance)
-  - Caiyun (彩云小译, Traditional Chinese supported)
-  - NiuTrans (小牛翻译, 450+ languages, Traditional Chinese supported)
-  - Linguee Dictionary (currently unavailable; upstream sample API is offline and disabled by default)
-  - Ollama (local LLM, default: llama3.2; standard, concise or custom translation prompt)
-  - Windows Local AI (Phi Silica on Copilot+ PCs, OpenVINO fallback)
-  - OpenRouter (unified gateway to 400+ models, free models available)
-  - OrcaRouter (OpenAI-compatible gateway at `https://api.orcarouter.ai/v1`, free models available; one-click **Sign in with OrcaRouter** obtains an API key via PKCE without leaving the app) [![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a42265f998f62828c4d6)
-  - Custom OpenAI-compatible services
-  - Claude Code (local agent CLI, uses your Claude subscription — no API key)
-  - Codex (local agent CLI, uses your ChatGPT subscription — no API key)
+*Linguee is currently unavailable.*
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 

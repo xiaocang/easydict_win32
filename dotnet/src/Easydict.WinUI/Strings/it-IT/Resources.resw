@@ -1781,4 +1781,33 @@
   <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>A local Magpie gateway uses EasyDict's local attribution key; no upstream provider key is needed. A remote gateway requires its authorized gateway key.</value></data>
   <data name="AiProfileMagpieModelHelp" xml:space="preserve"><value>Connect Magpie or Refresh models to load its /v1/models list. Choose a model and save settings.</value></data>
   <data name="Help" xml:space="preserve"><value>Help</value></data>
+  <data name="AnkiAdd" xml:space="preserve"><value>Add to Anki</value></data>
+  <data name="AnkiAddress" xml:space="preserve"><value>AnkiConnect address</value></data>
+  <data name="AnkiConnect" xml:space="preserve"><value>Connect and load options</value></data>
+  <data name="AnkiDeck" xml:space="preserve"><value>Deck</value></data>
+  <data name="AnkiModel" xml:space="preserve"><value>Note type</value></data>
+  <data name="AnkiInstructions" xml:space="preserve"><value>Start Anki with the AnkiConnect add-on. Connect, choose a deck and note type, then review the fields before adding.</value></data>
+  <data name="AnkiTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}. The preview shows the values sent to Anki.</value></data>
+  <data name="AnkiAddButton" xml:space="preserve"><value>Add</value></data>
+  <data name="AnkiCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="AnkiPreview" xml:space="preserve"><value>Preview: </value></data>
+  <data name="AnkiNoFields" xml:space="preserve"><value>This note type has no fields.</value></data>
+  <data name="AnkiConnecting" xml:space="preserve"><value>Connecting…</value></data>
+  <data name="AnkiInvalidAddress" xml:space="preserve"><value>Enter a valid HTTP or HTTPS address.</value></data>
+  <data name="AnkiVersion" xml:space="preserve"><value>AnkiConnect version 6 or newer is required.</value></data>
+  <data name="AnkiNoOptions" xml:space="preserve"><value>No decks or note types were found in Anki.</value></data>
+  <data name="AnkiAdded" xml:space="preserve"><value>Note added to Anki.</value></data>
+  <data name="AnkiClose" xml:space="preserve"><value>Close</value></data>
+  <data name="AnkiCheckAfterError" xml:space="preserve"><value>If the connection was interrupted, check Anki before retrying: the note may already have been added.</value></data>
+  <data name="AnkiEnabled" xml:space="preserve"><value>AnkiConnect</value></data>
+  <data name="AnkiQuickAdd" xml:space="preserve"><value>Quick add (skip preview)</value></data>
+  <data name="AnkiConfigure" xml:space="preserve"><value>Configure Anki</value></data>
+  <data name="AnkiTargetPolicy" xml:space="preserve"><value>Deck and note type</value></data>
+  <data name="AnkiUseDefault" xml:space="preserve"><value>Always use defaults</value></data>
+  <data name="AnkiUseLast" xml:space="preserve"><value>Remember last used</value></data>
+  <data name="AnkiSave" xml:space="preserve"><value>Save</value></data>
+  <data name="AnkiSettingsInstructions" xml:space="preserve"><value>Start Anki with the AnkiConnect add-on, then connect and configure your fields.</value></data>
+  <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
+  <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
+  <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
 </root>

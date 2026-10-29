@@ -110,7 +110,8 @@
                         <FontIcon x:Name="FavoriteIcon" Glyph="&#xE734;" FontSize="12"/>
                     </Button>
                         <Button x:Name="SavedMoreButton" Width="32" Height="32" Padding="0">
-                            <Button.Flyout><MenuFlyout>
+                            <Button.Flyout><MenuFlyout Opening="OnSavedMenuOpening">
+                                <MenuFlyoutItem x:Name="AnkiMenuItem" Click="OnAddToAnki"/>
                                 <MenuFlyoutItem x:Name="SavedCopySourceMenuItem" Click="OnCopySavedSource"/>
                                 <MenuFlyoutItem x:Name="SavedCollapseMenuItem" Click="OnCollapseClicked"/>
                             </MenuFlyout></Button.Flyout>

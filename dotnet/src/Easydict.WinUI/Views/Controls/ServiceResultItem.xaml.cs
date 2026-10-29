@@ -1964,7 +1964,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         PlayButton.Width = PlayButton.Height = 32;
         FavoriteButton.Width = FavoriteButton.Height = 32;
         SavedMoreButton.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        AnkiMenuItem.Visibility = SettingsService.Instance.AnkiEnabled && _serviceResult?.Result is { ResultKind: TranslationResultKind.Success } ? Visibility.Visible : Visibility.Collapsed;
         var loc = LocalizationService.Instance;
+        AnkiMenuItem.Text = loc.GetStringOrDefault("AnkiAdd", "Add to Anki");
         SavedCopySourceMenuItem.Text = loc.GetStringOrDefault("SavedItemsCopySource", "Copy source");
         SavedCollapseMenuItem.Text = loc.GetStringOrDefault("SavedItemsCollapseResult", "Collapse result");
         ToolTipService.SetToolTip(HeaderCopyButton, loc.GetStringOrDefault("Copy", "Copy"));
@@ -1973,6 +1975,24 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         PlayButton.Visibility = hasResult && _serviceResult?.Result?.ResultKind == TranslationResultKind.Success
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private bool _ankiBusy;
+
+    private void OnSavedMenuOpening(object sender, object e)
+    {
+        AnkiMenuItem.Visibility = SettingsService.Instance.AnkiEnabled && _serviceResult?.Result is { ResultKind: TranslationResultKind.Success }
+            ? Visibility.Visible : Visibility.Collapsed;
+        AnkiMenuItem.IsEnabled = !_ankiBusy;
+    }
+
+    private async void OnAddToAnki(object sender, RoutedEventArgs e)
+    {
+        if (_ankiBusy || !SettingsService.Instance.AnkiEnabled || _serviceResult?.Result is not { ResultKind: TranslationResultKind.Success } result || XamlRoot is null)
+            return;
+        _ankiBusy = true;
+        try { await AnkiConnectDialog.ShowAsync(XamlRoot, result); }
+        finally { _ankiBusy = false; }
     }
 
     private void OnCopySavedSource(object sender, RoutedEventArgs e)

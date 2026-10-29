@@ -35,6 +35,13 @@ public sealed partial class MouseHookService : IDisposable
     /// </summary>
     public const int MinDragDistance = 10;
 
+    private delegate void WinEventProc(IntPtr hook, uint eventType, IntPtr hwnd, int objectId, int childId, uint threadId, uint eventTime);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc callback, uint processId, uint threadId, uint flags);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool UnhookWinEvent(IntPtr hook);
+
     private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -64,6 +71,9 @@ public sealed partial class MouseHookService : IDisposable
 
     [LibraryImport("user32.dll")]
     private static partial uint GetDoubleClickTime();
+
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr GetForegroundWindow();
 
     private const uint GA_ROOT = 2; // Get root window
 
@@ -100,6 +110,14 @@ public sealed partial class MouseHookService : IDisposable
     private LowLevelKeyboardProc? _keyboardHookProc;
     private bool _isDisposed;
     private bool _firstCallbackLogged;
+    internal Func<IntPtr> ForegroundWindowProvider { get; set; } = GetForegroundWindow;
+    private IntPtr _foregroundHook;
+    private WinEventProc? _foregroundCallback;
+    private long _foregroundGeneration;
+    private long _gestureGeneration;
+    private long _previousClickGeneration;
+    private IntPtr _gestureWindow;
+    private IntPtr _previousClickWindow;
 
     /// <summary>
     /// Handles of our own popup windows (pop button, hover lookup popup). Left clicks that land
@@ -206,6 +224,15 @@ public sealed partial class MouseHookService : IDisposable
     /// </summary>
     public event Action<POINT>? OnDragSelectionEnd;
 
+    public readonly record struct SelectionGesture(POINT Point, IntPtr SourceWindow, int SettleWaitMs, long ForegroundGeneration);
+
+    internal bool IsGestureSourceCurrent(SelectionGesture gesture)
+        => gesture.SourceWindow != IntPtr.Zero && gesture.SourceWindow == ForegroundWindowProvider()
+           && gesture.ForegroundGeneration == Interlocked.Read(ref _foregroundGeneration);
+
+    internal void RecordForegroundChange() => Interlocked.Increment(ref _foregroundGeneration);
+    public event Action<SelectionGesture>? OnSelectionGesture;
+
     /// <summary>
     /// Fired when a double/triple-click selection settles. Parameters are the screen
     /// coordinate of the last click and how long the settle wait actually took.
@@ -259,6 +286,12 @@ public sealed partial class MouseHookService : IDisposable
     /// </summary>
     public bool Install()
     {
+        if (_foregroundHook == IntPtr.Zero)
+        {
+            _foregroundCallback = (_, _, _, _, _, _, _) => RecordForegroundChange();
+            _foregroundHook = SetWinEventHook(3, 3, IntPtr.Zero, _foregroundCallback, 0, 0, 0);
+            if (_foregroundHook == IntPtr.Zero) return false;
+        }
         // Cache the system double-click time to avoid P/Invoke on every click.
         _cachedDoubleClickTime = GetDoubleClickTime();
 
@@ -303,6 +336,13 @@ public sealed partial class MouseHookService : IDisposable
     /// </summary>
     public void Uninstall()
     {
+        if (_foregroundHook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_foregroundHook);
+            _foregroundHook = IntPtr.Zero;
+            _foregroundCallback = null;
+            RecordForegroundChange();
+        }
         if (_mouseHookId != IntPtr.Zero)
         {
             UnhookWindowsHookEx(_mouseHookId);
@@ -385,6 +425,8 @@ public sealed partial class MouseHookService : IDisposable
         switch (message)
         {
             case WM_LBUTTONDOWN:
+                _gestureWindow = ForegroundWindowProvider();
+                _gestureGeneration = Interlocked.Read(ref _foregroundGeneration);
                 // Only do the expensive WindowFromPoint + GetAncestor calls when one of our
                 // popup windows is actually registered (i.e. has been shown at least once).
                 // Before that, every click would pay two P/Invoke calls for nothing.
@@ -418,10 +460,14 @@ public sealed partial class MouseHookService : IDisposable
 
             case WM_LBUTTONUP:
                 var result = Detector.OnLeftButtonUp(pt);
+                var sourceWindow = _gestureWindow;
+                var sourceGeneration = _gestureGeneration;
+                var sourceStillForeground = IsGestureSourceCurrent(new SelectionGesture(pt, sourceWindow, 0, sourceGeneration));
                 if (result.IsDragSelection)
                 {
                     // Drag selection — cancel any pending multi-click
                     ClickDetector.Reset();
+                    _previousClickWindow = IntPtr.Zero;
                     CancelMultiClickTimer();
                     if (!IsCurrentAppExcludedSafely())
                     {
@@ -430,6 +476,8 @@ public sealed partial class MouseHookService : IDisposable
                             "MouseHookService.OnDragSelectionEnd",
                             OnDragSelectionEnd,
                             pt);
+                        if (sourceStillForeground)
+                            NativeCallbackGuard.Invoke("MouseHookService.OnSelectionGesture", OnSelectionGesture, new SelectionGesture(pt, sourceWindow, 0, sourceGeneration));
                     }
                 }
                 else
@@ -438,12 +486,16 @@ public sealed partial class MouseHookService : IDisposable
                     // Use cached double-click time; fall back to P/Invoke if Install() wasn't called
                     // (e.g. unit tests calling ProcessMouseMessage directly).
                     var dct = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
+                    if (!sourceStillForeground || _previousClickWindow != sourceWindow || _previousClickGeneration != sourceGeneration)
+                        ClickDetector.Reset();
+                    _previousClickWindow = sourceStillForeground ? sourceWindow : IntPtr.Zero;
+                    _previousClickGeneration = sourceGeneration;
                     var clickResult = ClickDetector.OnClick(pt, Environment.TickCount64, dct);
                     if (clickResult.ClickCount >= 2 && !IsCurrentAppExcludedSafely())
                     {
                         // Start/restart a short timer to allow for additional clicks
                         // (e.g. triple-click after double-click)
-                        StartMultiClickTimer(pt, clickResult.ClickCount);
+                        StartMultiClickTimer(pt, clickResult.ClickCount, sourceStillForeground ? sourceWindow : IntPtr.Zero, sourceGeneration);
                     }
                 }
                 break;
@@ -498,7 +550,7 @@ public sealed partial class MouseHookService : IDisposable
 
     private CancellationTokenSource? _multiClickCts;
 
-    private void StartMultiClickTimer(POINT pt, int clickCount)
+    private void StartMultiClickTimer(POINT pt, int clickCount, IntPtr sourceWindow, long sourceGeneration)
     {
         CancelMultiClickTimer();
 
@@ -524,6 +576,9 @@ public sealed partial class MouseHookService : IDisposable
                         OnMultiClickSelectionEnd,
                         pt,
                         settleWaitMs);
+                    var gesture = new SelectionGesture(pt, sourceWindow, settleWaitMs, sourceGeneration);
+                    if (IsGestureSourceCurrent(gesture))
+                        NativeCallbackGuard.Invoke("MouseHookService.OnSelectionGesture", OnSelectionGesture, gesture);
                 }
             }
             catch (OperationCanceledException)

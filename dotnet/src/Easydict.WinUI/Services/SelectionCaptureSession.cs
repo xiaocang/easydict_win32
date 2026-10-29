@@ -4,13 +4,15 @@ namespace Easydict.WinUI.Services;
 internal sealed class SelectionCaptureSession(
     nint sourceWindow,
     Func<nint> getForegroundWindow,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken,
+    Func<bool>? sourceStillValid = null)
 {
     internal nint SourceWindow => sourceWindow;
     internal CancellationToken CancellationToken => cancellationToken;
 
     private bool IsValid => !cancellationToken.IsCancellationRequested
-        && sourceWindow != 0 && getForegroundWindow() == sourceWindow;
+        && sourceWindow != 0 && getForegroundWindow() == sourceWindow
+        && (sourceStillValid?.Invoke() ?? true);
 
     // Synchronous UIA calls cannot be interrupted and may outlive their awaiter.
     // Discard stale reads without throwing from the background worker; the awaiting
@@ -25,7 +27,7 @@ internal sealed class SelectionCaptureSession(
     internal void ThrowIfInvalid()
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (sourceWindow == 0 || getForegroundWindow() != sourceWindow)
+        if (!IsValid)
             throw new OperationCanceledException("Selection source is no longer foreground.", cancellationToken);
     }
 

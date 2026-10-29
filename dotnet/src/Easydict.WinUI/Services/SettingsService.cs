@@ -326,6 +326,8 @@ public sealed class SettingsService
     /// When the foreground app matches any name in this list, the pop button is suppressed.
     /// </summary>
     public List<string> MouseSelectionExcludedApps { get; set; } = ["code"];
+    public List<string> MouseSelectionGameExcludedApps { get; set; } = DefaultGameExclusions.Create();
+    public List<string> MouseSelectionCopyAllowedApps { get; set; } = [];
 
     /// <summary>
     /// Lower bound for <see cref="MouseSelectionPopDelayMs"/>: as close to instant as is useful.
@@ -422,12 +424,15 @@ public sealed class SettingsService
     /// Checks if a process name is in the mouse selection excluded apps list.
     /// </summary>
     public bool IsMouseSelectionExcluded(string? processName)
-    {
-        if (string.IsNullOrEmpty(processName) || MouseSelectionExcludedApps.Count == 0)
-            return false;
-        return MouseSelectionExcludedApps.Exists(
+        => ContainsProcess(MouseSelectionExcludedApps, processName)
+            || ContainsProcess(MouseSelectionGameExcludedApps, processName);
+
+    public bool IsMouseCopyAllowed(string? processName)
+        => ContainsProcess(MouseSelectionCopyAllowedApps, processName);
+
+    private static bool ContainsProcess(List<string> apps, string? processName)
+        => !string.IsNullOrWhiteSpace(processName) && apps.Exists(
             app => string.Equals(app.Trim(), processName, StringComparison.OrdinalIgnoreCase));
-    }
 
     /// <summary>
     /// Register "OCR 截图翻译" in the Windows Shell context menu (File Explorer / Desktop).
@@ -975,7 +980,9 @@ public sealed class SettingsService
         UseLocalAiWorker = ResolveWorkerIsolationSetting(nameof(UseLocalAiWorker), DisableLocalAiWorkerEnvironmentVariable);
         UseOcrWorker = ResolveWorkerIsolationSetting(nameof(UseOcrWorker), DisableOcrWorkerEnvironmentVariable);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
-        MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
+        MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"], preserveEmpty: true);
+        MouseSelectionGameExcludedApps = GetStringList(nameof(MouseSelectionGameExcludedApps), DefaultGameExclusions.Create(), preserveEmpty: true);
+        MouseSelectionCopyAllowedApps = GetStringList(nameof(MouseSelectionCopyAllowedApps), [], preserveEmpty: true);
         HoverWordLookupEnabled = GetValue(nameof(HoverWordLookupEnabled), false);
         HoverWordLookupModifier = Models.HoverLookupModifierExtensions
             .Parse(GetValue(nameof(HoverWordLookupModifier), "Ctrl"))
@@ -1916,6 +1923,8 @@ public sealed class SettingsService
         _settings[nameof(HistoryRetentionDays)] = HistoryRetentionDays;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
+        _settings[nameof(MouseSelectionGameExcludedApps)] = MouseSelectionGameExcludedApps;
+        _settings[nameof(MouseSelectionCopyAllowedApps)] = MouseSelectionCopyAllowedApps;
         _settings[nameof(HoverWordLookupEnabled)] = HoverWordLookupEnabled;
         _settings[nameof(HoverWordLookupModifier)] = HoverWordLookupModifier;
         _settings[nameof(HoverWordLookupUseOcrFallback)] = HoverWordLookupUseOcrFallback;
@@ -2701,7 +2710,7 @@ public sealed class SettingsService
         }
     }
 
-    private List<string> GetStringList(string key, List<string> defaultValue)
+    private List<string> GetStringList(string key, List<string> defaultValue, bool preserveEmpty = false)
     {
         if (_settings.TryGetValue(key, out var value) && value != null)
         {
@@ -2717,7 +2726,7 @@ public sealed class SettingsService
                             list.Add(item.GetString()!);
                         }
                     }
-                    return list.Count > 0 ? list : defaultValue;
+                    return preserveEmpty || list.Count > 0 ? list : defaultValue;
                 }
 
                 if (value is List<string> stringList)

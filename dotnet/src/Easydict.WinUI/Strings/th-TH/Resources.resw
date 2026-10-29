@@ -1330,6 +1330,10 @@
   <data name="ExcludedApps" xml:space="preserve"><value>แอปที่ยกเว้น</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>ชื่อโปรเซสที่ต้องการยกเว้นจากการแปลเมื่อเลือกข้อความ คั่นด้วยเครื่องหมายจุลภาค ตัวอย่าง: "code" สำหรับ VS Code</value></data>
+  <data name="GameExcludedApps" xml:space="preserve"><value>Excluded games</value></data>
+  <data name="GameExcludedAppsDescription" xml:space="preserve"><value>Default game process names, separated by commas without .exe. Edit or clear this list to change exclusions.</value></data>
+  <data name="CopyAllowedApps" xml:space="preserve"><value>Allow simulated copy</value></data>
+  <data name="CopyAllowedAppsDescription" xml:space="preserve"><value>Process names, separated by commas without .exe. When direct selection reading fails, these apps may receive Ctrl+C. Exclusions and known terminal protection take priority. VS Code cannot be enabled here because its terminal shares the process.</value></data>
   <data name="HoverWordLookup" xml:space="preserve"><value>ค้นหาคำเมื่อชี้เมาส์</value></data>
   <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(กดปุ่มเรียกใช้ค้างไว้แล้วชี้ไปที่คำ)</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>ปุ่มเรียกใช้</value></data>

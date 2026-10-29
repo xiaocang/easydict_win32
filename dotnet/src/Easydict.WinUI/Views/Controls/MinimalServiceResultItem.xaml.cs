@@ -189,11 +189,13 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         SavedActionBar.Visibility = hasSavedResult || _favoriteVisible ? Visibility.Visible : Visibility.Collapsed;
         PlayButton.Visibility = hasSavedResult && _serviceResult?.Result is not null ? Visibility.Visible : Visibility.Collapsed;
         SavedMoreButton.Visibility = hasSavedResult ? Visibility.Visible : Visibility.Collapsed;
+        AnkiMenuItem.Visibility = SettingsService.Instance.AnkiEnabled && _serviceResult?.Result is { ResultKind: TranslationResultKind.Success } ? Visibility.Visible : Visibility.Collapsed;
         if (hasSavedResult)
         {
             HeaderBar.Padding = new Thickness(12, 4, 8, 4);
             ContentArea.Padding = new Thickness(SettingsService.Instance.CompactMode ? 8 : 12);
             var loc = LocalizationService.Instance;
+            AnkiMenuItem.Text = loc.GetStringOrDefault("AnkiAdd", "Add to Anki");
             SavedCopySourceMenuItem.Text = loc.GetStringOrDefault("SavedItemsCopySource", "Copy source");
             SavedCollapseMenuItem.Text = loc.GetStringOrDefault("SavedItemsCollapseResult", "Collapse result");
             ToolTipService.SetToolTip(CopyButton, loc.GetStringOrDefault("Copy", "Copy"));
@@ -361,6 +363,24 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     private void OnCopyClicked(object sender, RoutedEventArgs e) => CopySavedText(
         _serviceResult?.IsGrammarMode == true ? _serviceResult.GrammarResult?.CorrectedText : _serviceResult?.Result?.TranslatedText);
+
+    private bool _ankiBusy;
+
+    private void OnSavedMenuOpening(object sender, object e)
+    {
+        AnkiMenuItem.Visibility = SettingsService.Instance.AnkiEnabled && _serviceResult?.Result is { ResultKind: TranslationResultKind.Success }
+            ? Visibility.Visible : Visibility.Collapsed;
+        AnkiMenuItem.IsEnabled = !_ankiBusy;
+    }
+
+    private async void OnAddToAnki(object sender, RoutedEventArgs e)
+    {
+        if (_ankiBusy || !SettingsService.Instance.AnkiEnabled || _serviceResult?.Result is not { ResultKind: TranslationResultKind.Success } result || XamlRoot is null)
+            return;
+        _ankiBusy = true;
+        try { await AnkiConnectDialog.ShowAsync(XamlRoot, result); }
+        finally { _ankiBusy = false; }
+    }
 
     private void OnCopySavedSource(object sender, RoutedEventArgs e) => CopySavedText(
         _serviceResult?.IsGrammarMode == true ? _serviceResult.GrammarResult?.OriginalText : _serviceResult?.Result?.OriginalText);

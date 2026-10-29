@@ -98,27 +98,21 @@ public sealed class PopButtonService : IDisposable
         MiniWindowService.Instance.QueryModeChanged += OnMiniWindowModeChanged;
     }
 
-    /// <summary>
-    /// Called when a drag-select gesture ends.
-    /// Waits briefly, then checks for selected text and shows the pop button.
-    /// </summary>
-    public void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
-        => BeginSelectionCapture(mouseScreenPoint, isMultiClick: false, settleWaitMs: 0);
+    /// <summary>Capture a settled drag or multi-click gesture from its original window.</summary>
+    public void OnSelectionGesture(MouseHookService.SelectionGesture gesture)
+        => BeginSelectionCapture(gesture);
 
-    /// <summary>
-    /// Called when a double/triple-click selection settles, with the settle wait the hook
-    /// already spent. Anything left of the user's pop delay is all this path waits further,
-    /// so the setting stays an upper bound on the whole wait rather than only part of it.
-    /// </summary>
-    public void OnMultiClickSelectionEnd(MouseHookService.POINT mouseScreenPoint, int settleWaitMs)
-        => BeginSelectionCapture(mouseScreenPoint, isMultiClick: true, settleWaitMs);
-
-    private async void BeginSelectionCapture(
-        MouseHookService.POINT mouseScreenPoint, bool isMultiClick, int settleWaitMs)
+    private async void BeginSelectionCapture(MouseHookService.SelectionGesture gesture)
     {
+        var mouseScreenPoint = gesture.Point;
+        var sourceWindow = gesture.SourceWindow;
+        var settleWaitMs = gesture.SettleWaitMs;
+        var isMultiClick = settleWaitMs > 0;
+        bool SourceStillValid() => _mouseHookService?.IsGestureSourceCurrent(gesture) == true;
         if (!_isEnabled || _isDisposed || ScreenCaptureService.IsCaptureInProgress) return;
 
         // Check if the foreground app is excluded BEFORE any delay or clipboard access
+        if (!SourceStillValid()) return;
         var processName = GetForegroundProcessName();
         if (SettingsService.Instance.IsMouseSelectionExcluded(processName))
         {
@@ -149,7 +143,7 @@ public sealed class PopButtonService : IDisposable
             }
 
             // Get the selected text using the existing TextSelectionService
-            var text = await TextSelectionService.GetSelectedTextAsync(ct);
+            var text = await TextSelectionService.GetSelectedTextForMouseAsync(sourceWindow, ct, SourceStillValid);
 
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -163,7 +157,7 @@ public sealed class PopButtonService : IDisposable
             // Show the pop button on the UI thread
             _dispatcherQueue.TryEnqueue(() =>
             {
-                if (_isDisposed || ct.IsCancellationRequested) return;
+                if (_isDisposed || ct.IsCancellationRequested || !SourceStillValid()) return;
 
                 EnsureWindowCreated();
                 ApplyConfiguredActions();

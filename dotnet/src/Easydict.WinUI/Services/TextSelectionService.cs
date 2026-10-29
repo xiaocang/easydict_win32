@@ -266,8 +266,14 @@ public static class TextSelectionService
     }
 
     internal static Task<string?> GetSelectedTextAsync(nint sourceWindow, CancellationToken cancellationToken)
+        => CaptureAsync(sourceWindow, cancellationToken, automaticMouse: false);
+
+    internal static Task<string?> GetSelectedTextForMouseAsync(nint sourceWindow, CancellationToken cancellationToken, Func<bool> sourceStillValid)
+        => CaptureAsync(sourceWindow, cancellationToken, automaticMouse: true, sourceStillValid);
+
+    private static Task<string?> CaptureAsync(nint sourceWindow, CancellationToken cancellationToken, bool automaticMouse, Func<bool>? sourceStillValid = null)
     {
-        var session = new SelectionCaptureSession(sourceWindow, GetForegroundWindow, cancellationToken);
+        var session = new SelectionCaptureSession(sourceWindow, GetForegroundWindow, cancellationToken, sourceStillValid);
         return SelectionCaptureGate.Shared.RunAsync(async () =>
         {
             session.ThrowIfInvalid();
@@ -279,13 +285,13 @@ public static class TextSelectionService
                 session.ThrowIfInvalid();
             }
 #endif
-            var text = await GetSelectedTextCoreAsync(session);
+            var text = await GetSelectedTextCoreAsync(session, automaticMouse);
             session.ThrowIfInvalid();
             return text;
         }, cancellationToken);
     }
 
-    private static async Task<string?> GetSelectedTextCoreAsync(SelectionCaptureSession session)
+    private static async Task<string?> GetSelectedTextCoreAsync(SelectionCaptureSession session, bool automaticMouse)
     {
         var cancellationToken = session.CancellationToken;
         // Identify the foreground process once to avoid redundant P/Invoke + Process.GetProcessById
@@ -330,7 +336,7 @@ public static class TextSelectionService
         ClipWaitResult? capturedClipOutcome = null;
 
         // For Electron apps, use clipboard method first since UIA doesn't work reliably
-        if (isElectron)
+        if (isElectron && !automaticMouse)
         {
             Debug.WriteLine("[TextSelectionService] Detected Electron app, using clipboard method");
             clipboardAlreadyAttempted = true;
@@ -411,6 +417,9 @@ public static class TextSelectionService
             return null;
         }
 
+        if (automaticMouse && !CanUseAutomaticClipboard(processName))
+            return null;
+
         if (clipboardAlreadyAttempted)
         {
             Debug.WriteLine("[TextSelectionService] Clipboard already attempted, skipping fallback to avoid double Ctrl+C");
@@ -422,7 +431,7 @@ public static class TextSelectionService
         }
 
         Debug.WriteLine("[TextSelectionService] UIA returned no text, falling back to clipboard method");
-        var (fallbackText, fallbackOutcome) = await GetSelectedTextViaClipboardAsync(session, false);
+        var (fallbackText, fallbackOutcome) = await GetSelectedTextViaClipboardAsync(session, automaticMouse && isElectron, automaticMouse ? processName : null, processId);
         if (!string.IsNullOrWhiteSpace(fallbackText))
         {
             Debug.WriteLine($"[TextSelectionService] Got {fallbackText.Length} chars via clipboard fallback");
@@ -549,14 +558,24 @@ public static class TextSelectionService
         return normalized.Trim('_', '.');
     }
 
-    /// <summary>
-    /// Gets selected text using clipboard method (Ctrl+C).
-    /// Saves and restores original clipboard content.
-    /// Returns the text (or null) plus the underlying ClipWait outcome so callers
-    /// can distinguish a benign timeout from a non-text payload (e.g. video frame).
-    /// </summary>
+    // Code hosts an integrated terminal in the same process, so opt-in alone is
+    // insufficient to distinguish an editor from a terminal receiving Ctrl+C.
+    internal static bool CanUseAutomaticClipboard(string? processName)
+        => CanUseAutomaticClipboard(processName, SettingsService.Instance);
+
+    internal static bool CanUseAutomaticClipboard(string? processName, SettingsService settings)
+    {
+        return !string.IsNullOrWhiteSpace(processName)
+            && !IsTerminalProcessName(processName)
+            && !string.Equals(processName, "code", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(processName, "code - insiders", StringComparison.OrdinalIgnoreCase)
+            && !settings.IsMouseSelectionExcluded(processName)
+            && settings.IsMouseCopyAllowed(processName);
+    }
+
+    /// <summary>Copy the selection and restore the clipboard after the bounded wait.</summary>
     private static async Task<(string? text, ClipWaitResult outcome)> GetSelectedTextViaClipboardAsync(
-        SelectionCaptureSession session, bool isElectronApp = false)
+        SelectionCaptureSession session, bool isElectronApp = false, string? mouseProcessName = null, uint sourceProcessId = 0)
     {
         const int pollIntervalMs = 30;
         var timeoutMs = isElectronApp ? 1200 : 450;
@@ -588,6 +607,11 @@ public static class TextSelectionService
                 await RunOnDispatcherAsync(dispatcherQueue, () =>
                 {
                     session.ThrowIfInvalid();
+                    if (mouseProcessName != null &&
+                        (!CanUseAutomaticClipboard(mouseProcessName) ||
+                         GetWindowThreadProcessId(session.SourceWindow, out var currentProcessId) == 0 ||
+                         currentProcessId != sourceProcessId))
+                        throw new OperationCanceledException("Automatic copy is no longer allowed");
                     ctrlCSent = true;
                     SendCtrlC();
                 }, cancellationToken);

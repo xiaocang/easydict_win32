@@ -27,6 +27,39 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void MouseSelectionLists_DefaultsCanBeRemovedAndStayRemoved()
+    {
+        using var directory = new TemporaryDirectory();
+        var settings = CreateIsolatedSettingsService(directory.Path);
+        settings.MouseSelectionGameExcludedApps.Should().Contain("cs2");
+        settings.MouseSelectionCopyAllowedApps.Should().BeEmpty();
+        settings.MouseSelectionGameExcludedApps.Clear();
+        settings.MouseSelectionExcludedApps.Clear();
+        settings.MouseSelectionCopyAllowedApps.Add("Example");
+        settings.Save();
+        var reloaded = CreateIsolatedSettingsService(directory.Path);
+        reloaded.MouseSelectionGameExcludedApps.Should().BeEmpty();
+        reloaded.MouseSelectionExcludedApps.Should().BeEmpty();
+        reloaded.IsMouseCopyAllowed("example").Should().BeTrue();
+    }
+
+    [Fact]
+    public void AutomaticCopy_RequiresPermissionAndHonoursBothExclusionsAndTerminals()
+    {
+        using var directory = new TemporaryDirectory();
+        var settings = CreateIsolatedSettingsService(directory.Path);
+        TextSelectionService.CanUseAutomaticClipboard("unknown", settings).Should().BeFalse();
+        settings.MouseSelectionCopyAllowedApps.AddRange(["unknown", "cs2", "notepad", "WindowsTerminal", "code"]);
+        TextSelectionService.CanUseAutomaticClipboard("UNKNOWN", settings).Should().BeTrue();
+        TextSelectionService.CanUseAutomaticClipboard("cs2", settings).Should().BeFalse();
+        settings.MouseSelectionExcludedApps.Add("notepad");
+        TextSelectionService.CanUseAutomaticClipboard("NOTEPAD", settings).Should().BeFalse();
+        TextSelectionService.CanUseAutomaticClipboard("WindowsTerminal", settings).Should().BeFalse();
+        TextSelectionService.CanUseAutomaticClipboard("code", settings).Should().BeFalse();
+        TextSelectionService.CanUseAutomaticClipboard(null, settings).Should().BeFalse();
+    }
+
+    [Fact]
     public void HistorySettings_DefaultClampAndRoundTripUseIsolatedStorage()
     {
         using var testDirectory = new TemporaryDirectory();

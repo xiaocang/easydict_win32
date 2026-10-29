@@ -1330,6 +1330,10 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Aplikasi dikecualikan</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Nama proses yang dikecualikan dari terjemahan pilihan mouse, dipisahkan dengan koma. Contoh: "code" untuk VS Code.</value></data>
+  <data name="GameExcludedApps" xml:space="preserve"><value>Excluded games</value></data>
+  <data name="GameExcludedAppsDescription" xml:space="preserve"><value>Default game process names, separated by commas without .exe. Edit or clear this list to change exclusions.</value></data>
+  <data name="CopyAllowedApps" xml:space="preserve"><value>Allow simulated copy</value></data>
+  <data name="CopyAllowedAppsDescription" xml:space="preserve"><value>Process names, separated by commas without .exe. When direct selection reading fails, these apps may receive Ctrl+C. Exclusions and known terminal protection take priority. VS Code cannot be enabled here because its terminal shares the process.</value></data>
   <data name="HoverWordLookup" xml:space="preserve"><value>Cari kata saat mengarahkan kursor</value></data>
   <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(tahan tombol pemicu lalu arahkan ke sebuah kata)</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>Tombol pemicu</value></data>

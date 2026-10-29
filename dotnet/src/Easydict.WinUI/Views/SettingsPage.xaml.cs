@@ -3874,6 +3874,10 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.Header = loc.GetString("ExcludedApps");
         MouseSelectionExcludedAppsBox.PlaceholderText = loc.GetString("ExcludedAppsPlaceholder");
         MouseSelectionExcludedAppsDescriptionText.Text = loc.GetString("ExcludedAppsDescription");
+        MouseSelectionGameExcludedAppsBox.Header = loc.GetString("GameExcludedApps");
+        MouseSelectionGameExcludedAppsDescriptionText.Text = loc.GetString("GameExcludedAppsDescription");
+        MouseSelectionCopyAllowedAppsBox.Header = loc.GetString("CopyAllowedApps");
+        MouseSelectionCopyAllowedAppsDescriptionText.Text = loc.GetString("CopyAllowedAppsDescription");
         HoverWordLookupToggle.Header = loc.GetString("HoverWordLookup");
         HoverWordLookupModifierLabel.Text = loc.GetString("HoverWordLookupModifier");
         HoverWordLookupTriggerDescriptionRun.Text = " " + loc.GetString("HoverWordLookupTriggerDescription");
@@ -4547,6 +4551,8 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled += OnSettingChanged;
         MouseSelectionTranslateToggle.Toggled += OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
+        MouseSelectionGameExcludedAppsBox.TextChanged += OnSettingChanged;
+        MouseSelectionCopyAllowedAppsBox.TextChanged += OnSettingChanged;
         HoverWordLookupToggle.Toggled += OnSettingChanged;
         _settings.HoverWordLookupEnabledChanged += OnHoverWordLookupEnabledChanged;
         HoverWordLookupToggle.Toggled += OnHoverWordLookupToggled;
@@ -4681,6 +4687,8 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled -= OnSettingChanged;
         MouseSelectionTranslateToggle.Toggled -= OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged -= OnSettingChanged;
+        MouseSelectionGameExcludedAppsBox.TextChanged -= OnSettingChanged;
+        MouseSelectionCopyAllowedAppsBox.TextChanged -= OnSettingChanged;
         HoverWordLookupToggle.Toggled -= OnSettingChanged;
         _settings.HoverWordLookupEnabledChanged -= OnHoverWordLookupEnabledChanged;
         HoverWordLookupToggle.Toggled -= OnHoverWordLookupToggled;
@@ -5151,6 +5159,8 @@ public sealed partial class SettingsPage : Page
             || ClipboardMonitorToggle.IsOn != _settings.ClipboardMonitoring
             || MouseSelectionTranslateToggle.IsOn != _settings.MouseSelectionTranslate
             || !SameSequence(GetCommaSeparatedValues(MouseSelectionExcludedAppsBox.Text), _settings.MouseSelectionExcludedApps)
+            || !SameSequence(GetCommaSeparatedValues(MouseSelectionGameExcludedAppsBox.Text), _settings.MouseSelectionGameExcludedApps)
+            || !SameSequence(GetCommaSeparatedValues(MouseSelectionCopyAllowedAppsBox.Text), _settings.MouseSelectionCopyAllowedApps)
             || AlwaysOnTopToggle.IsOn != _settings.AlwaysOnTop
             || (_launchAtStartupUserEdited && LaunchAtStartupToggle.IsOn != _settings.LaunchAtStartup)
             || !SameDouble(TtsSpeedSlider.Value, _settings.TtsSpeed)
@@ -5485,6 +5495,8 @@ public sealed partial class SettingsPage : Page
             HistoryRetentionDaysBox.Value = _settings.HistoryRetentionDays;
             HistoryRetentionDaysBox.IsEnabled = _settings.HistoryEnabled;
             MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
+            MouseSelectionGameExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionGameExcludedApps);
+            MouseSelectionCopyAllowedAppsBox.Text = string.Join(", ", _settings.MouseSelectionCopyAllowedApps);
             MouseSelectionOptionsPanel.Visibility = _settings.MouseSelectionTranslate
                 ? Visibility.Visible : Visibility.Collapsed;
             AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
@@ -7062,6 +7074,8 @@ public sealed partial class SettingsPage : Page
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(s => s.Length > 0)
             .ToList();
+        _settings.MouseSelectionGameExcludedApps = GetCommaSeparatedValues(MouseSelectionGameExcludedAppsBox.Text).ToList();
+        _settings.MouseSelectionCopyAllowedApps = GetCommaSeparatedValues(MouseSelectionCopyAllowedAppsBox.Text).ToList();
         _settings.TrayIconId = SelectedTrayIconId;
         _settings.HoverWordLookupEnabled = HoverWordLookupToggle.IsOn;
         _settings.HoverWordLookupModifier = GetTagComboValue(HoverWordLookupModifierCombo, "Ctrl");

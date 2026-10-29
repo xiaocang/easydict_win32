@@ -163,6 +163,28 @@ public class MouseHookServiceTests
     // --- ProcessMouseMessage integration ---
 
     [Fact]
+    public void SelectionGesture_DoesNotDispatchAfterForegroundSwitch()
+    {
+        using var service = new MouseHookService();
+        nint foreground = 1;
+        service.ForegroundWindowProvider = () => foreground;
+        var events = new List<MouseHookService.SelectionGesture>();
+        service.OnSelectionGesture += events.Add;
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0200, Pt(200, 100));
+        foreground = 2;
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+        events.Should().BeEmpty();
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0200, Pt(200, 100));
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+        events.Should().ContainSingle().Which.SourceWindow.Should().Be(2);
+        var captured = events[0];
+        service.RecordForegroundChange();
+        service.IsGestureSourceCurrent(captured).Should().BeFalse();
+    }
+
+    [Fact]
     public void ProcessMouseMessage_DragSequence_FiresEvent()
     {
         using var service = new MouseHookService();

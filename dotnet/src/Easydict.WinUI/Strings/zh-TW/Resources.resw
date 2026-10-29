@@ -1330,6 +1330,10 @@
   <data name="ExcludedApps" xml:space="preserve"><value>排除應用</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除劃詞翻譯的程序名稱，用逗號分隔。範例："code" 代表 VS Code。</value></data>
+  <data name="GameExcludedApps" xml:space="preserve"><value>排除的遊戲</value></data>
+  <data name="GameExcludedAppsDescription" xml:space="preserve"><value>預設遊戲程序名稱，以逗號分隔，無須 .exe。可編輯或清空名單。</value></data>
+  <data name="CopyAllowedApps" xml:space="preserve"><value>允許模擬複製的應用程式</value></data>
+  <data name="CopyAllowedAppsDescription" xml:space="preserve"><value>程序名稱以逗號分隔，無須 .exe。直接讀取選取範圍失敗時，這些應用程式可能收到 Ctrl+C。排除名單及已知終端機保護優先。VS Code 與內建終端機共用程序，因此無法在此啟用。</value></data>
   <data name="HoverWordLookup" xml:space="preserve"><value>懸浮取詞</value></data>
   <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>（按住觸發鍵並將滑鼠停在單字上）</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>取詞方式</value></data>

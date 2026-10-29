@@ -27,6 +27,36 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void AnkiSettings_RoundTripInIsolatedStorage()
+    {
+        using var directory = new TemporaryDirectory();
+        var settings = CreateIsolatedSettingsService(directory.Path);
+        settings.AnkiEnabled.Should().BeFalse();
+        settings.AnkiQuickAdd.Should().BeFalse();
+        settings.AnkiRememberLast.Should().BeFalse();
+        settings.AnkiEnabled = true;
+        settings.AnkiQuickAdd = true;
+        settings.AnkiRememberLast = true;
+        settings.AnkiLastDeck = "Last deck";
+        settings.AnkiLastModel = "Last model";
+        settings.AnkiEndpoint = "http://127.0.0.1:8765/";
+        settings.AnkiDeck = "Vocabulary";
+        settings.AnkiModel = "Basic";
+        settings.AnkiFieldTemplates = "{\"Basic\":{\"Front\":\"{Word}\"}}";
+        settings.Save();
+        var reloaded = CreateIsolatedSettingsService(directory.Path);
+        reloaded.AnkiEnabled.Should().BeTrue();
+        reloaded.AnkiQuickAdd.Should().BeTrue();
+        reloaded.AnkiRememberLast.Should().BeTrue();
+        reloaded.AnkiLastDeck.Should().Be("Last deck");
+        reloaded.AnkiLastModel.Should().Be("Last model");
+        reloaded.AnkiDeck.Should().Be("Vocabulary");
+        reloaded.AnkiModel.Should().Be("Basic");
+        reloaded.AnkiEndpoint.Should().Be("http://127.0.0.1:8765/");
+        reloaded.AnkiFieldTemplates.Should().Be(settings.AnkiFieldTemplates);
+    }
+
+    [Fact]
     public void HistorySettings_DefaultClampAndRoundTripUseIsolatedStorage()
     {
         using var testDirectory = new TemporaryDirectory();

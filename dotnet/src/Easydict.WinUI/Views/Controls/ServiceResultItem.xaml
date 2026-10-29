@@ -418,7 +418,8 @@
                         </Button>
 
                         <Button x:Name="SavedMoreButton" Width="32" Height="32" Padding="0" Visibility="Collapsed">
-                            <Button.Flyout><MenuFlyout>
+                            <Button.Flyout><MenuFlyout Opening="OnSavedMenuOpening">
+                                <MenuFlyoutItem x:Name="AnkiMenuItem" Click="OnAddToAnki"/>
                                 <MenuFlyoutItem x:Name="SavedCopySourceMenuItem" Click="OnCopySavedSource"/>
                                 <MenuFlyoutItem x:Name="SavedCollapseMenuItem" Click="OnSavedCollapseClicked"/>
                             </MenuFlyout></Button.Flyout>

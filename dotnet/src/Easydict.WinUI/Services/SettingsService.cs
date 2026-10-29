@@ -134,6 +134,17 @@ public sealed class SettingsService
         return Path.Combine(appDataPath, "Easydict");
     }
 
+    // AnkiConnect settings (field templates are stored per note type).
+    public bool AnkiEnabled { get; set; }
+    public bool AnkiQuickAdd { get; set; }
+    public bool AnkiRememberLast { get; set; }
+    public string AnkiLastDeck { get; set; } = "";
+    public string AnkiLastModel { get; set; } = "";
+    public string AnkiEndpoint { get; set; } = "http://127.0.0.1:8765/";
+    public string AnkiDeck { get; set; } = "";
+    public string AnkiModel { get; set; } = "";
+    public string AnkiFieldTemplates { get; set; } = "{}";
+
     // Translation settings
     public string SourceLanguage { get; set; } = "auto";
 
@@ -846,6 +857,15 @@ public sealed class SettingsService
             _settings = new();
         }
 
+        AnkiEnabled = GetValue(nameof(AnkiEnabled), false);
+        AnkiQuickAdd = GetValue(nameof(AnkiQuickAdd), false);
+        AnkiRememberLast = GetValue(nameof(AnkiRememberLast), false);
+        AnkiLastDeck = GetValue(nameof(AnkiLastDeck), "");
+        AnkiLastModel = GetValue(nameof(AnkiLastModel), "");
+        AnkiEndpoint = GetValue(nameof(AnkiEndpoint), "http://127.0.0.1:8765/");
+        AnkiDeck = GetValue(nameof(AnkiDeck), "");
+        AnkiModel = GetValue(nameof(AnkiModel), "");
+        AnkiFieldTemplates = GetValue(nameof(AnkiFieldTemplates), "{}");
         SourceLanguage = GetValue(nameof(SourceLanguage), "auto");
 
         // Load language preferences
@@ -1806,6 +1826,15 @@ public sealed class SettingsService
         RemoveRuntimeOnlyWorkerIsolationSettings();
         SyncLegacyAiProfilesFromSettings();
 
+        _settings[nameof(AnkiEnabled)] = AnkiEnabled;
+        _settings[nameof(AnkiQuickAdd)] = AnkiQuickAdd;
+        _settings[nameof(AnkiRememberLast)] = AnkiRememberLast;
+        _settings[nameof(AnkiLastDeck)] = AnkiLastDeck;
+        _settings[nameof(AnkiLastModel)] = AnkiLastModel;
+        _settings[nameof(AnkiEndpoint)] = AnkiEndpoint;
+        _settings[nameof(AnkiDeck)] = AnkiDeck;
+        _settings[nameof(AnkiModel)] = AnkiModel;
+        _settings[nameof(AnkiFieldTemplates)] = AnkiFieldTemplates;
         _settings[nameof(SourceLanguage)] = SourceLanguage;
 
         // Save language preferences

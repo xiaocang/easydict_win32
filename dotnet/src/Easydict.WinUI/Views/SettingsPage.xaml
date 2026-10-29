@@ -2937,6 +2937,29 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="12">
+                                <controls:FluentSettingRow>
+                                    <TextBlock Text="{Binding Header, ElementName=AnkiEnabledToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center"/>
+                                    <ToggleSwitch x:Name="AnkiEnabledToggle" AutomationProperties.AutomationId="AnkiEnabledToggle" Header="AnkiConnect">
+                                        <ToggleSwitch.HeaderTemplate><DataTemplate><Grid Height="0"/></DataTemplate></ToggleSwitch.HeaderTemplate>
+                                    </ToggleSwitch>
+                                </controls:FluentSettingRow>
+                                <StackPanel x:Name="AnkiOptionsPanel" Spacing="10" Margin="44,0,0,0" Visibility="Collapsed">
+                                    <Button x:Name="AnkiConfigureButton" AutomationProperties.AutomationId="AnkiConfigureButton" Content="Configure Anki" Click="OnAnkiConfigureClicked"/>
+                                    <controls:FluentSettingRow>
+                                        <TextBlock Text="{Binding Header, ElementName=AnkiQuickAddToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center"/>
+                                        <ToggleSwitch x:Name="AnkiQuickAddToggle" AutomationProperties.AutomationId="AnkiQuickAddToggle" Header="Quick add (skip preview)">
+                                            <ToggleSwitch.HeaderTemplate><DataTemplate><Grid Height="0"/></DataTemplate></ToggleSwitch.HeaderTemplate>
+                                        </ToggleSwitch>
+                                    </controls:FluentSettingRow>
+                                    <ComboBox x:Name="AnkiTargetPolicyCombo" AutomationProperties.AutomationId="AnkiTargetPolicyCombo" Header="Deck and note type" HorizontalAlignment="Left">
+                                        <ComboBoxItem x:Name="AnkiUseDefaultItem" Tag="Default" Content="Always use defaults"/>
+                                        <ComboBoxItem x:Name="AnkiUseLastItem" Tag="Last" Content="Remember last used"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="12">
                                 <!-- Hover word lookup (悬浮取词) -->
                                 <controls:FluentSettingRow>
 <TextBlock Text="{Binding Header, ElementName=HoverWordLookupToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>

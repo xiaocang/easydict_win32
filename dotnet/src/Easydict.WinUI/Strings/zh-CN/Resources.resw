@@ -1781,4 +1781,33 @@
   <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>连接本机 Magpie 时使用 EasyDict 本地识别密钥，无需上游 AI 服务商密钥。连接远程网关时，需要填写该网关授权的密钥。</value></data>
   <data name="AiProfileMagpieModelHelp" xml:space="preserve"><value>连接 Magpie 或点击“刷新模型”会读取其 /v1/models 列表。选择模型并保存设置后即可使用。</value></data>
   <data name="Help" xml:space="preserve"><value>帮助</value></data>
+  <data name="AnkiAdd" xml:space="preserve"><value>添加到 Anki</value></data>
+  <data name="AnkiAddress" xml:space="preserve"><value>AnkiConnect 地址</value></data>
+  <data name="AnkiConnect" xml:space="preserve"><value>连接并加载选项</value></data>
+  <data name="AnkiDeck" xml:space="preserve"><value>牌组</value></data>
+  <data name="AnkiModel" xml:space="preserve"><value>笔记类型</value></data>
+  <data name="AnkiInstructions" xml:space="preserve"><value>请启动 Anki 并安装 AnkiConnect 插件。连接后选择牌组和笔记类型，检查字段后再添加。</value></data>
+  <data name="AnkiTemplates" xml:space="preserve"><value>字段模板支持 {Word}、{Phonetic}、{Definition}、{Translation}。预览显示将发送给 Anki 的内容。</value></data>
+  <data name="AnkiAddButton" xml:space="preserve"><value>添加</value></data>
+  <data name="AnkiCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="AnkiPreview" xml:space="preserve"><value>预览：</value></data>
+  <data name="AnkiNoFields" xml:space="preserve"><value>此笔记类型没有字段。</value></data>
+  <data name="AnkiConnecting" xml:space="preserve"><value>正在连接…</value></data>
+  <data name="AnkiInvalidAddress" xml:space="preserve"><value>请输入有效的 HTTP 或 HTTPS 地址。</value></data>
+  <data name="AnkiVersion" xml:space="preserve"><value>需要 AnkiConnect 版本 6 或更高。</value></data>
+  <data name="AnkiNoOptions" xml:space="preserve"><value>未在 Anki 中找到牌组或笔记类型。</value></data>
+  <data name="AnkiAdded" xml:space="preserve"><value>已添加到 Anki。</value></data>
+  <data name="AnkiClose" xml:space="preserve"><value>关闭</value></data>
+  <data name="AnkiCheckAfterError" xml:space="preserve"><value>如果连接中断，请重试前先检查 Anki：笔记可能已经添加。</value></data>
+  <data name="AnkiEnabled" xml:space="preserve"><value>AnkiConnect</value></data>
+  <data name="AnkiQuickAdd" xml:space="preserve"><value>快速添加（跳过预览）</value></data>
+  <data name="AnkiConfigure" xml:space="preserve"><value>配置 Anki</value></data>
+  <data name="AnkiTargetPolicy" xml:space="preserve"><value>牌组和笔记类型</value></data>
+  <data name="AnkiUseDefault" xml:space="preserve"><value>始终使用默认值</value></data>
+  <data name="AnkiUseLast" xml:space="preserve"><value>记住上次使用的值</value></data>
+  <data name="AnkiSave" xml:space="preserve"><value>保存</value></data>
+  <data name="AnkiSettingsInstructions" xml:space="preserve"><value>请启动 Anki 并安装 AnkiConnect 插件，然后连接并配置字段。</value></data>
+  <data name="AnkiSettingsTemplates" xml:space="preserve"><value>字段模板支持 {Word}、{Phonetic}、{Definition}、{Translation}。</value></data>
+  <data name="AnkiConfigureFirst" xml:space="preserve"><value>请先在设置 → Labs 中配置 Anki。</value></data>
+  <data name="AnkiTargetMissing" xml:space="preserve"><value>所选牌组或笔记类型不可用，请选择其他目标。</value></data>
 </root>

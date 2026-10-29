@@ -1781,4 +1781,33 @@
   <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>連線本機 Magpie 時使用 EasyDict 本機識別金鑰，不需要上游 AI 服務商金鑰。連線遠端閘道時，必須填寫該閘道授權的金鑰。</value></data>
   <data name="AiProfileMagpieModelHelp" xml:space="preserve"><value>連線 Magpie 或按一下「重新整理模型」會讀取其 /v1/models 清單。選擇模型並儲存設定後即可使用。</value></data>
   <data name="Help" xml:space="preserve"><value>說明</value></data>
+  <data name="AnkiAdd" xml:space="preserve"><value>新增至 Anki</value></data>
+  <data name="AnkiAddress" xml:space="preserve"><value>AnkiConnect 位址</value></data>
+  <data name="AnkiConnect" xml:space="preserve"><value>連線並載入選項</value></data>
+  <data name="AnkiDeck" xml:space="preserve"><value>牌組</value></data>
+  <data name="AnkiModel" xml:space="preserve"><value>筆記類型</value></data>
+  <data name="AnkiInstructions" xml:space="preserve"><value>請啟動 Anki 並安裝 AnkiConnect 外掛程式。連線後選擇牌組和筆記類型，檢查欄位後再新增。</value></data>
+  <data name="AnkiTemplates" xml:space="preserve"><value>欄位範本支援 {Word}、{Phonetic}、{Definition}、{Translation}。預覽顯示將傳送給 Anki 的內容。</value></data>
+  <data name="AnkiAddButton" xml:space="preserve"><value>新增</value></data>
+  <data name="AnkiCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="AnkiPreview" xml:space="preserve"><value>預覽：</value></data>
+  <data name="AnkiNoFields" xml:space="preserve"><value>此筆記類型沒有欄位。</value></data>
+  <data name="AnkiConnecting" xml:space="preserve"><value>正在連線…</value></data>
+  <data name="AnkiInvalidAddress" xml:space="preserve"><value>請輸入有效的 HTTP 或 HTTPS 位址。</value></data>
+  <data name="AnkiVersion" xml:space="preserve"><value>需要 AnkiConnect 版本 6 或更新版本。</value></data>
+  <data name="AnkiNoOptions" xml:space="preserve"><value>在 Anki 中找不到牌組或筆記類型。</value></data>
+  <data name="AnkiAdded" xml:space="preserve"><value>已新增至 Anki。</value></data>
+  <data name="AnkiClose" xml:space="preserve"><value>關閉</value></data>
+  <data name="AnkiCheckAfterError" xml:space="preserve"><value>如果連線中斷，請在重試前先檢查 Anki：筆記可能已經新增。</value></data>
+  <data name="AnkiEnabled" xml:space="preserve"><value>AnkiConnect</value></data>
+  <data name="AnkiQuickAdd" xml:space="preserve"><value>快速新增（跳過預覽）</value></data>
+  <data name="AnkiConfigure" xml:space="preserve"><value>設定 Anki</value></data>
+  <data name="AnkiTargetPolicy" xml:space="preserve"><value>牌組和筆記類型</value></data>
+  <data name="AnkiUseDefault" xml:space="preserve"><value>一律使用預設值</value></data>
+  <data name="AnkiUseLast" xml:space="preserve"><value>記住上次使用的值</value></data>
+  <data name="AnkiSave" xml:space="preserve"><value>儲存</value></data>
+  <data name="AnkiSettingsInstructions" xml:space="preserve"><value>請啟動 Anki 並安裝 AnkiConnect 外掛程式，然後連線並設定欄位。</value></data>
+  <data name="AnkiSettingsTemplates" xml:space="preserve"><value>欄位範本支援 {Word}、{Phonetic}、{Definition}、{Translation}。</value></data>
+  <data name="AnkiConfigureFirst" xml:space="preserve"><value>請先在設定 → Labs 中設定 Anki。</value></data>
+  <data name="AnkiTargetMissing" xml:space="preserve"><value>所選牌組或筆記類型無法使用，請選擇其他目標。</value></data>
 </root>

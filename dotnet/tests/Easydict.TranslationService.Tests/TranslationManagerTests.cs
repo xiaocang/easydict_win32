@@ -229,6 +229,63 @@ public class TranslationManagerTests : IDisposable
         _manager.Dispose();
     }
 
+    [Fact]
+    public async Task TranslateAsync_PublishesTranslationBeforePhoneticLookupCompletes()
+    {
+        var lookup = new DelayedPhoneticService();
+        _manager.RegisterService(lookup);
+        _manager.RegisterService(new TestTranslationService("progressive", "Progressive"));
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+        var published = new TaskCompletionSource<TranslationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var task = _manager.TranslateAsync(request, serviceId: "progressive",
+            onTranslationReady: result => published.TrySetResult(result));
+        try
+        {
+            var preliminary = await published.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            preliminary.TranslatedText.Should().Be("Translated: hello");
+            await lookup.Started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            task.IsCompleted.Should().BeFalse("phonetic lookup is still pending");
+        }
+        finally
+        {
+            lookup.Release.TrySetResult(true);
+        }
+
+        var final = await task.WaitAsync(TimeSpan.FromSeconds(3));
+        final.TranslatedText.Should().Be("Translated: hello");
+        final.WordResult!.Phonetics.Should().ContainSingle();
+    }
+
+    private sealed class DelayedPhoneticService : ITranslationService
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public string ServiceId => "youdao";
+        public string DisplayName => "Youdao";
+        public bool RequiresApiKey => false;
+        public bool IsConfigured => true;
+        public IReadOnlyList<Language> SupportedLanguages => new[] { Language.English, Language.SimplifiedChinese };
+        public bool SupportsLanguagePair(Language from, Language to) => true;
+        public Task<Language> DetectLanguageAsync(string text, CancellationToken cancellationToken = default) => Task.FromResult(Language.Auto);
+        public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult(true);
+            await Release.Task.WaitAsync(cancellationToken);
+            return new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = "你好",
+                TargetLanguage = request.ToLanguage,
+                WordResult = new WordResult { Phonetics = new[] { new Phonetic { Text = "həˈləʊ", Accent = "UK" } } }
+            };
+        }
+    }
+
     /// <summary>
     /// Simple test implementation of ITranslationService for testing.
     /// </summary>

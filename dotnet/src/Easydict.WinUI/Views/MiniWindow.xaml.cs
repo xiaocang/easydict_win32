@@ -1373,7 +1373,17 @@ public sealed partial class MiniWindow : Window
                         // Run on thread pool to avoid blocking UI thread with
                         // HTTP response processing, JSON parsing, and retry logic
                         var result = await Task.Run(
-                            () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
+                            () => manager.TranslateAsync(request, ct, serviceResult.ServiceId,
+                                onTranslationReady: preliminary => DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    if (_isClosing || ct.IsCancellationRequested) return;
+                                    serviceResult.Result = preliminary;
+                                    serviceResult.IsLoading = false;
+                                    serviceResult.ApplyAutoCollapseLogic();
+                                    UpdatePhoneticDeduplication();
+                                    ReorderResultsPanel();
+                                    RequestResize();
+                                })));
                         snapshotDraft?.TryAddTranslation(
                             serviceResult.ServiceId,
                             serviceResult.ServiceDisplayName,
@@ -1382,7 +1392,7 @@ public sealed partial class MiniWindow : Window
 
                         DispatcherQueue.TryEnqueue(() =>
                         {
-                            if (_isClosing) return;
+                            if (_isClosing || ct.IsCancellationRequested) return;
                             serviceResult.Result = result;
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
@@ -1932,25 +1942,18 @@ public sealed partial class MiniWindow : Window
             };
         }
 
-        // Enrich with phonetics from Youdao if missing (for word queries).
-        // Run on thread pool to avoid blocking UI thread; honors the service's execution policy.
-        try
-        {
-            result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct, serviceResult.ServiceId));
-        }
-        catch
-        {
-            // Best-effort: continue with original result if enrichment fails
-        }
+        // Publish the completed translation before optional phonetic enrichment.
+        // Keep this captured value stable while enrichment runs in the background.
+        var initialResult = result;
         snapshotDraft?.TryAddTranslation(
             serviceResult.ServiceId,
             serviceResult.ServiceDisplayName,
             displayOrder,
-            result);
+            initialResult);
 
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (_isClosing) return;
+            if (_isClosing || ct.IsCancellationRequested) return;
             // Drop any pending streaming snapshot before flipping IsStreaming →
             // false; otherwise a coalescer tick scheduled after this lambda could
             // overwrite the committed result with stale streaming text.
@@ -1958,15 +1961,15 @@ public sealed partial class MiniWindow : Window
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.StreamingText = "";
-            serviceResult.Result = result;
+            serviceResult.Result = initialResult;
             serviceResult.ApplyAutoCollapseLogic();
             UpdatePhoneticDeduplication();
             ReorderResultsPanel();
 
-            if (result.ResultKind == TranslationResultKind.Success &&
+            if (initialResult.ResultKind == TranslationResultKind.Success &&
                 !_hasAutoPlayedCurrentQuery && SettingsService.Instance.AutoPlayTranslation)
             {
-                var targetText = result.TranslatedText;
+                var targetText = initialResult.TranslatedText;
                 if (!string.IsNullOrEmpty(targetText))
                 {
                     _hasAutoPlayedCurrentQuery = true;
@@ -1978,6 +1981,28 @@ public sealed partial class MiniWindow : Window
             // RequestResize() enqueues to next tick so ServiceResultItem.UpdateUI() completes first
             RequestResize();
         });
+
+        // Enrichment is best-effort and must never hide or delay the translation.
+        try
+        {
+            var enriched = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(initialResult, request, ct, serviceResult.ServiceId));
+            if (!ct.IsCancellationRequested && !ReferenceEquals(enriched, initialResult))
+            {
+                snapshotDraft?.TryAddTranslation(serviceResult.ServiceId, serviceResult.ServiceDisplayName, displayOrder, enriched);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_isClosing || ct.IsCancellationRequested || !ReferenceEquals(serviceResult.Result, initialResult)) return;
+                    serviceResult.Result = enriched;
+                    UpdatePhoneticDeduplication();
+                    RequestResize();
+                });
+                result = enriched;
+            }
+        }
+        catch
+        {
+            // Keep the already displayed translation when enrichment fails.
+        }
 
         return result;
     }

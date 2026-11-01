@@ -295,7 +295,8 @@ public sealed class TranslationManager : IDisposable
     public async Task<TranslationResult> TranslateAsync(
         TranslationRequest request,
         CancellationToken cancellationToken = default,
-        string? serviceId = null)
+        string? serviceId = null,
+        Action<TranslationResult>? onTranslationReady = null)
     {
         serviceId ??= _defaultServiceId;
 
@@ -324,6 +325,11 @@ public sealed class TranslationManager : IDisposable
         var result = await TranslateWithRetryAsync(
             service, request, cancellationToken,
             maxRetries: policy.AllowHostRetry ? DefaultMaxRetries : 0);
+
+        // The translation is usable before optional phonetic enrichment completes.
+        // Callers that support progressive rendering can publish it immediately.
+        cancellationToken.ThrowIfCancellationRequested();
+        onTranslationReady?.Invoke(result);
 
         // Enrich phonetics if missing (word queries with an English side, either direction)
         if (policy.AllowPhoneticEnrichment)

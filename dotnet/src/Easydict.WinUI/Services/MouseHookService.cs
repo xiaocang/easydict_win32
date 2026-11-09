@@ -111,6 +111,8 @@ public sealed partial class MouseHookService : IDisposable
     private bool _isDisposed;
     private bool _firstCallbackLogged;
     internal Func<IntPtr> ForegroundWindowProvider { get; set; } = GetForegroundWindow;
+    internal Func<POINT, IntPtr> WindowFromPointProvider { get; set; } = WindowFromPoint;
+    internal Func<IntPtr, IntPtr> RootWindowProvider { get; set; } = static hwnd => GetAncestor(hwnd, GA_ROOT);
     private IntPtr _foregroundHook;
     private WinEventProc? _foregroundCallback;
     private long _foregroundGeneration;
@@ -118,6 +120,7 @@ public sealed partial class MouseHookService : IDisposable
     private long _previousClickGeneration;
     private IntPtr _gestureWindow;
     private IntPtr _previousClickWindow;
+    private IntPtr _pendingActivationWindow;
 
     /// <summary>
     /// Handles of our own popup windows (pop button, hover lookup popup). Left clicks that land
@@ -230,7 +233,16 @@ public sealed partial class MouseHookService : IDisposable
         => gesture.SourceWindow != IntPtr.Zero && gesture.SourceWindow == ForegroundWindowProvider()
            && gesture.ForegroundGeneration == Interlocked.Read(ref _foregroundGeneration);
 
-    internal void RecordForegroundChange() => Interlocked.Increment(ref _foregroundGeneration);
+    internal void RecordForegroundChange(IntPtr foregroundWindow = default)
+    {
+        // A click can activate its target after the low-level mouse hook runs. Its
+        // first foreground notification belongs to the gesture, even if queued until
+        // after mouse-up or a second click, and must not invalidate the source token.
+        var expectedActivation = foregroundWindow != IntPtr.Zero && foregroundWindow == _pendingActivationWindow;
+        _pendingActivationWindow = IntPtr.Zero;
+        if (!expectedActivation)
+            Interlocked.Increment(ref _foregroundGeneration);
+    }
     public event Action<SelectionGesture>? OnSelectionGesture;
 
     /// <summary>
@@ -288,7 +300,7 @@ public sealed partial class MouseHookService : IDisposable
     {
         if (_foregroundHook == IntPtr.Zero)
         {
-            _foregroundCallback = (_, _, _, _, _, _, _) => RecordForegroundChange();
+            _foregroundCallback = (_, _, hwnd, _, _, _, _) => RecordForegroundChange(hwnd);
             _foregroundHook = SetWinEventHook(3, 3, IntPtr.Zero, _foregroundCallback, 0, 0, 0);
             if (_foregroundHook == IntPtr.Zero) return false;
         }
@@ -425,15 +437,16 @@ public sealed partial class MouseHookService : IDisposable
         switch (message)
         {
             case WM_LBUTTONDOWN:
-                _gestureWindow = ForegroundWindowProvider();
+                var windowAtPoint = WindowFromPointProvider(pt);
+                var rootWindow = windowAtPoint != IntPtr.Zero ? RootWindowProvider(windowAtPoint) : IntPtr.Zero;
+                _gestureWindow = rootWindow;
                 _gestureGeneration = Interlocked.Read(ref _foregroundGeneration);
-                // Only do the expensive WindowFromPoint + GetAncestor calls when one of our
-                // popup windows is actually registered (i.e. has been shown at least once).
-                // Before that, every click would pay two P/Invoke calls for nothing.
+                // Preserve a queued activation notification across clicks on the same
+                // window. Any other foreground notification consumes this allowance.
+                _pendingActivationWindow = rootWindow != ForegroundWindowProvider() || _pendingActivationWindow == rootWindow
+                    ? rootWindow : IntPtr.Zero;
                 if (_ownedWindowHandles.Count > 0)
                 {
-                    var windowAtPoint = WindowFromPoint(pt);
-                    var rootWindow = windowAtPoint != IntPtr.Zero ? GetAncestor(windowAtPoint, GA_ROOT) : IntPtr.Zero;
                     bool isOwnedWindowClick = IsOwnedWindow(rootWindow) || IsOwnedWindow(windowAtPoint);
 
                     if (!isOwnedWindowClick)

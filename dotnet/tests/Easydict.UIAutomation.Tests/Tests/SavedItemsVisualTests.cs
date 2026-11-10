@@ -756,7 +756,8 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
     private static bool IsUiaTransitionError(Exception error) => error switch
     {
         System.Runtime.InteropServices.COMException com => com.HResult is
-            unchecked((int)0x8000FFFF) or unchecked((int)0x80131505) or unchecked((int)0x80040201),
+            unchecked((int)0x8000FFFF) or unchecked((int)0x80131505) or unchecked((int)0x80040201)
+            or unchecked((int)0x800705B4), // UIA provider call timed out during a transient tree transition.
         TimeoutException { InnerException: System.Runtime.InteropServices.COMException com } =>
             com.HResult == unchecked((int)0x80131505),
         _ => false

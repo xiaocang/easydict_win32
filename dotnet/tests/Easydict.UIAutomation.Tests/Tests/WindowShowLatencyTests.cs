@@ -36,7 +36,7 @@ public sealed class WindowShowLatencyTests : IDisposable
             SelectSourceText(source);
             var sourceHwnd = GetForegroundWindow();
             var timer = Stopwatch.StartNew();
-            SendShowHotkey(fixedWindow);
+            SendRegisteredShowHotkey(fixedWindow);
             var hwnd = WaitForSecondaryWindow();
             var visibleMs = timer.ElapsedMilliseconds;
             visibleMs.Should().BeLessThan(2500, "the window must be visible before the simulated capture completes");
@@ -49,7 +49,7 @@ public sealed class WindowShowLatencyTests : IDisposable
             WaitUntil(() => input.Text == source.TextContent, TimeSpan.FromSeconds(5));
             input.Text.Should().Be(source.TextContent);
             _output.WriteLine($"{(fixedWindow ? "Fixed" : "Mini")} mainVisible={mainVisible} attempt={attempt}: visible={visibleMs}ms, ready={timer.ElapsedMilliseconds}ms (includes 3000ms test delay)");
-            SendShowHotkey(fixedWindow);
+            SendRegisteredShowHotkey(fixedWindow);
             WaitUntil(() => !IsWindowVisible(hwnd), TimeSpan.FromSeconds(3)).Should().BeTrue();
         }
     }
@@ -168,6 +168,16 @@ public sealed class WindowShowLatencyTests : IDisposable
         // Exercise the real WM_HOTKEY handler without sending the shortcut to another
         // installed Easydict instance that may own the same global key combination.
         => PostMessage(_mainHwnd, 0x0312, fixedWindow ? 4 : 3, 0).Should().BeTrue();
+
+    private static void SendRegisteredShowHotkey(bool fixedWindow)
+    {
+        // Use the registered Ctrl+Alt shortcut so Windows applies the same foreground
+        // input authorization as a user hotkey; UITestHelper releases every key in finally.
+        UITestHelper.SendHotkey(
+            VirtualKeyShort.CONTROL,
+            VirtualKeyShort.ALT,
+            fixedWindow ? VirtualKeyShort.KEY_F : VirtualKeyShort.KEY_M);
+    }
 
     private static bool WaitUntil(Func<bool> condition, TimeSpan timeout)
     {

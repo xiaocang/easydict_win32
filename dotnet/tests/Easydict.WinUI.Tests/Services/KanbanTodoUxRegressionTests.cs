@@ -427,12 +427,8 @@ public class KanbanTodoUxRegressionTests
         textSelectionServiceCode.Should().Contain("return string.Empty;",
             "self-window hotkeys should return immediately instead of falling through the nullable selection path");
 
-        foregroundHelperCode.Should().Contain("keybd_event(VkMenu, 0, KeyeventfExtendedkey, UIntPtr.Zero)",
-            "foreground raising should prime the OS foreground-input context before SetForegroundWindow runs");
-        foregroundHelperCode.Should().Contain("keybd_event(VkMenu, 0, KeyeventfExtendedkey | KeyeventfKeyup, UIntPtr.Zero)",
-            "the helper should release the synthetic ALT key immediately after priming foreground activation");
         foregroundHelperCode.Should().Contain("SetForegroundWindow(targetHwnd)",
-            "the helper should still use a direct Win32 foreground activation call after priming input context");
+            "the helper should use the native foreground activation API for the target window");
         foregroundHelperCode.Should().Contain("AllowSetForegroundWindow(GetCurrentProcessId())",
             "the helper should expose a way to preserve foreground activation permission while WM_HOTKEY is still active");
         hotkeyServiceCode.Should().Contain("ForegroundWindowHelper.AllowCurrentProcessToSetForeground(\"Hotkey\")",

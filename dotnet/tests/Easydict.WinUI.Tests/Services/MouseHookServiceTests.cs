@@ -16,6 +16,13 @@ public class MouseHookServiceTests
 
     private static POINT Pt(int x, int y) => new() { x = x, y = y };
 
+    private static MouseHookService CreateService() => new()
+    {
+        ForegroundWindowProvider = () => 1,
+        WindowFromPointProvider = _ => 1,
+        RootWindowProvider = hwnd => hwnd
+    };
+
     // --- Drag selection detection ---
 
     [Fact]
@@ -161,6 +168,164 @@ public class MouseHookServiceTests
     }
 
     // --- ProcessMouseMessage integration ---
+
+    [Fact]
+    public void SelectionGesture_DoesNotDispatchAfterForegroundSwitch()
+    {
+        using var service = CreateService();
+        nint foreground = 1;
+        service.ForegroundWindowProvider = () => foreground;
+        service.WindowFromPointProvider = _ => foreground;
+        var events = new List<MouseHookService.SelectionGesture>();
+        service.OnSelectionGesture += events.Add;
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0200, Pt(200, 100));
+        foreground = 2;
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+        events.Should().BeEmpty();
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0200, Pt(200, 100));
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+        events.Should().ContainSingle().Which.SourceWindow.Should().Be(2);
+        var captured = events[0];
+        service.RecordForegroundChange();
+        service.IsGestureSourceCurrent(captured).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SelectionGesture_DragActivatesClickedWindow_PreservesSource(bool notificationAfterMouseUp)
+    {
+        using var service = CreateService();
+        nint foreground = 1;
+        service.ForegroundWindowProvider = () => foreground;
+        // The child under the click belongs to the top-level window that activates.
+        service.WindowFromPointProvider = _ => 20;
+        service.RootWindowProvider = hwnd => hwnd == 20 ? 2 : 0;
+        var events = new List<SelectionGesture>();
+        service.OnSelectionGesture += events.Add;
+
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        foreground = 2;
+        if (!notificationAfterMouseUp) service.RecordForegroundChange(foreground);
+        service.ProcessMouseMessage(0x0200, Pt(200, 100));
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+        if (notificationAfterMouseUp) service.RecordForegroundChange(foreground);
+
+        var gesture = events.Should().ContainSingle().Which;
+        gesture.SourceWindow.Should().Be(2);
+        gesture.Point.x.Should().Be(200);
+        service.IsGestureSourceCurrent(gesture).Should().BeTrue();
+
+        // Only the expected activation is allowed; another notification invalidates it.
+        service.RecordForegroundChange(foreground);
+        service.IsGestureSourceCurrent(gesture).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task SelectionGesture_DoubleClickActivatesClickedWindow_PreservesFirstClick(int notificationAfterClicks)
+    {
+        using var service = CreateService();
+        nint foreground = 1;
+        service.ForegroundWindowProvider = () => foreground;
+        service.WindowFromPointProvider = _ => 2;
+        var fired = new TaskCompletionSource<SelectionGesture>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.OnSelectionGesture += gesture => fired.TrySetResult(gesture);
+
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        foreground = 2;
+        if (notificationAfterClicks == 0) service.RecordForegroundChange(foreground);
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+        if (notificationAfterClicks == 1) service.RecordForegroundChange(foreground);
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+        if (notificationAfterClicks == 2) service.RecordForegroundChange(foreground);
+
+        service.ClickDetector.ClickCount.Should().Be(2);
+        var gesture = await fired.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        if (notificationAfterClicks == 3) service.RecordForegroundChange(foreground);
+        gesture.SourceWindow.Should().Be(2);
+        gesture.SettleWaitMs.Should().BePositive();
+        service.IsGestureSourceCurrent(gesture).Should().BeTrue();
+
+        foreground = 3;
+        service.RecordForegroundChange(foreground);
+        foreground = 2;
+        service.RecordForegroundChange(foreground);
+        service.IsGestureSourceCurrent(gesture).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SelectionGesture_UnrelatedSwitchBeforeMouseUp_DoesNotReviveOnTargetActivation(bool activateTargetFirst)
+    {
+        using var service = CreateService();
+        nint foreground = 1;
+        service.ForegroundWindowProvider = () => foreground;
+        service.WindowFromPointProvider = _ => 2;
+        var events = new List<SelectionGesture>();
+        service.OnSelectionGesture += events.Add;
+
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        if (activateTargetFirst)
+        {
+            foreground = 2;
+            service.RecordForegroundChange(foreground);
+        }
+        foreground = 3;
+        service.RecordForegroundChange(foreground);
+        foreground = 2;
+        service.RecordForegroundChange(foreground);
+        service.ProcessMouseMessage(0x0200, Pt(200, 100));
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+
+        events.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void SelectionGesture_ClickedWindowNeverActivates_DoesNotCaptureForeground(int clickedWindow)
+    {
+        using var service = CreateService();
+        service.WindowFromPointProvider = _ => clickedWindow;
+        var events = new List<SelectionGesture>();
+        service.OnSelectionGesture += events.Add;
+
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0200, Pt(200, 100));
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+
+        events.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SelectionGesture_ClicksActivateDifferentWindows_DoNotCombineAsDoubleClick()
+    {
+        using var service = CreateService();
+        nint foreground = 1;
+        nint clickedWindow = 2;
+        service.ForegroundWindowProvider = () => foreground;
+        service.WindowFromPointProvider = _ => clickedWindow;
+
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        foreground = 2;
+        service.RecordForegroundChange(foreground);
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+        clickedWindow = 3;
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        foreground = 3;
+        service.RecordForegroundChange(foreground);
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+
+        service.ClickDetector.ClickCount.Should().Be(1);
+    }
 
     [Fact]
     public void ProcessMouseMessage_DragSequence_FiresEvent()
@@ -350,7 +515,7 @@ public class MouseHookServiceTests
     [Fact]
     public void ProcessMouseMessage_DoubleClick_FiresSelectionEvent()
     {
-        using var service = new MouseHookService();
+        using var service = CreateService();
         int fireCount = 0;
         service.OnMultiClickSelectionEnd += (_, _) => fireCount++;
 
@@ -370,7 +535,7 @@ public class MouseHookServiceTests
     [Fact]
     public async Task ProcessMouseMessage_DoubleClick_FiresMultiClickEventWithItsSettleWait()
     {
-        using var service = new MouseHookService();
+        using var service = CreateService();
         var fired = new TaskCompletionSource<(POINT Point, int SettleWaitMs)>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         service.OnMultiClickSelectionEnd += (pt, settleWaitMs) => fired.TrySetResult((pt, settleWaitMs));

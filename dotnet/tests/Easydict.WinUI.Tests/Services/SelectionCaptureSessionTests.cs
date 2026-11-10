@@ -19,6 +19,18 @@ public class SelectionCaptureSessionTests
     }
 
     [Fact]
+    public void ObservedForegroundChange_InvalidatesEvenAfterReturningToSource()
+    {
+        var sourceStillValid = true;
+        var session = new SelectionCaptureSession(123, () => 123, CancellationToken.None, () => sourceStillValid);
+        session.ThrowIfInvalid();
+        sourceStillValid = false;
+        Action check = session.ThrowIfInvalid;
+        check.Should().Throw<OperationCanceledException>();
+        session.ReadIfValid(() => "stale selection").Should().BeNull();
+    }
+
+    [Fact]
     public void Cancellation_InvalidatesUnchangedSource()
     {
         using var cancellation = new CancellationTokenSource();

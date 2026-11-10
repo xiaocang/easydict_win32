@@ -7,21 +7,11 @@ namespace Easydict.WinUI.Services;
 
 internal static class ForegroundWindowHelper
 {
-    private const byte VkMenu = 0x12;
-    private const uint KeyeventfExtendedkey = 0x0001;
-    private const uint KeyeventfKeyup = 0x0002;
-
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool AllowSetForegroundWindow(uint dwProcessId);
@@ -44,10 +34,10 @@ internal static class ForegroundWindowHelper
             return false;
         }
 
-        var foregroundHwnd = GetForegroundWindow();
-        if (foregroundHwnd != targetHwnd)
+        if (GetForegroundWindow() == targetHwnd)
         {
-            PrimeForegroundActivationContext(owner);
+            Debug.WriteLine($"[{owner}] Window is already in the foreground");
+            return true;
         }
 
         var foregroundSet = SetForegroundWindow(targetHwnd);
@@ -55,18 +45,4 @@ internal static class ForegroundWindowHelper
         return foregroundSet;
     }
 
-    private static void PrimeForegroundActivationContext(string owner)
-    {
-        if (!ShouldPrimeForegroundActivation(GetAsyncKeyState(VkMenu)))
-        {
-            Debug.WriteLine($"[{owner}] Skipped foreground priming because ALT is physically held");
-            return;
-        }
-
-        keybd_event(VkMenu, 0, KeyeventfExtendedkey, UIntPtr.Zero);
-        keybd_event(VkMenu, 0, KeyeventfExtendedkey | KeyeventfKeyup, UIntPtr.Zero);
-        Debug.WriteLine($"[{owner}] Primed foreground activation with keybd_event(VK_MENU)");
-    }
-
-    internal static bool ShouldPrimeForegroundActivation(short altKeyState) => altKeyState >= 0;
 }

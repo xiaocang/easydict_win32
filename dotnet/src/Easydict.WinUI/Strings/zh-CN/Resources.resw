@@ -1330,6 +1330,10 @@
   <data name="ExcludedApps" xml:space="preserve"><value>排除应用</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除划词翻译的进程名称，用逗号分隔。示例："code" 代表 VS Code。</value></data>
+  <data name="GameExcludedApps" xml:space="preserve"><value>排除的游戏</value></data>
+  <data name="GameExcludedAppsDescription" xml:space="preserve"><value>默认游戏进程名，用逗号分隔，无需 .exe。可编辑或清空名单。</value></data>
+  <data name="CopyAllowedApps" xml:space="preserve"><value>允许模拟复制的应用</value></data>
+  <data name="CopyAllowedAppsDescription" xml:space="preserve"><value>进程名用逗号分隔，无需 .exe。直接读取选区失败时，这些应用可能收到 Ctrl+C。排除名单和已知终端保护优先。VS Code 与内置终端共用进程，此处无法启用。</value></data>
   <data name="HoverWordLookup" xml:space="preserve"><value>悬浮取词</value></data>
   <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>（按住触发键并将鼠标停在单词上）</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>取词方式</value></data>

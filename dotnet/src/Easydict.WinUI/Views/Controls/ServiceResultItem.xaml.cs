@@ -526,6 +526,13 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyServiceChromeForCurrentTheme(force: true);
+
+        // ServiceResult can be assigned before this control is attached to the visual tree.
+        // Defer WebView2 initialization until Loaded, then re-check the current result/state.
+        if (_serviceResult is { IsExpanded: true, Result.RawHtml.Length: > 0 })
+        {
+            UpdateUI();
+        }
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -758,7 +765,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 else
                 {
                     ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush, scheduleWebViewRelease: false);
-                    if (_serviceResult.IsExpanded)
+                    if (_serviceResult.IsExpanded && IsLoaded)
                         _ = RenderHtmlDefinitionAsync(_serviceResult.Result.RawHtml, _serviceResult.ServiceId);
                 }
                 ActionButtons.Visibility = Visibility.Visible;

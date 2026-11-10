@@ -1330,6 +1330,10 @@
   <data name="ExcludedApps" xml:space="preserve"><value>التطبيقات المستثناة</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>أسماء العمليات المراد استثناؤها من ترجمة تحديد الماوس، مفصولة بفواصل. مثال: "code" لـ VS Code.</value></data>
+  <data name="GameExcludedApps" xml:space="preserve"><value>Excluded games</value></data>
+  <data name="GameExcludedAppsDescription" xml:space="preserve"><value>Default game process names, separated by commas without .exe. Edit or clear this list to change exclusions.</value></data>
+  <data name="CopyAllowedApps" xml:space="preserve"><value>Allow simulated copy</value></data>
+  <data name="CopyAllowedAppsDescription" xml:space="preserve"><value>Process names, separated by commas without .exe. When direct selection reading fails, these apps may receive Ctrl+C. Exclusions and known terminal protection take priority. VS Code cannot be enabled here because its terminal shares the process.</value></data>
   <data name="HoverWordLookup" xml:space="preserve"><value>البحث عن الكلمة عند التمرير</value></data>
   <data name="HoverWordLookupTriggerDescription" xml:space="preserve"><value>(اضغط مطولاً على مفتاح التشغيل وأشر إلى كلمة)</value></data>
   <data name="HoverWordLookupModifier" xml:space="preserve"><value>مفتاح التشغيل</value></data>

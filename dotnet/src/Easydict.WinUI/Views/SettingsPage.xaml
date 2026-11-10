@@ -3335,6 +3335,10 @@
                                                TextWrapping="Wrap"
                                                MaxWidth="350"
                                                HorizontalAlignment="Left"/>
+                                    <TextBox x:Name="MouseSelectionGameExcludedAppsBox" Header="Excluded games" MaxWidth="350" MaxHeight="120" HorizontalAlignment="Left" TextWrapping="Wrap" AcceptsReturn="False"/>
+                                    <TextBlock x:Name="MouseSelectionGameExcludedAppsDescriptionText" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="350" HorizontalAlignment="Left"/>
+                                    <TextBox x:Name="MouseSelectionCopyAllowedAppsBox" Header="Allow simulated copy" MaxWidth="350" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="MouseSelectionCopyAllowedAppsDescriptionText" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="350" HorizontalAlignment="Left"/>
                                 </StackPanel>
                                 <controls:FluentSettingRow>
 <TextBlock Text="{Binding Header, ElementName=AlwaysOnTopToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>

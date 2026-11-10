@@ -1802,6 +1802,7 @@
   <data name="AnkiNoOptions" xml:space="preserve"><value>未在 Anki 中找到牌组或笔记类型。</value></data>
   <data name="AnkiAdded" xml:space="preserve"><value>已添加到 Anki。</value></data>
   <data name="AnkiClose" xml:space="preserve"><value>关闭</value></data>
+  <data name="AnkiConnectionRefused" xml:space="preserve"><value>连接被拒绝。请确认 Anki 已启动并已安装 AnkiConnect 插件，然后重试。</value></data>
   <data name="AnkiCheckAfterError" xml:space="preserve"><value>如果连接中断，请重试前先检查 Anki：笔记可能已经添加。</value></data>
   <data name="AnkiEnabled" xml:space="preserve"><value>AnkiConnect</value></data>
   <data name="AnkiQuickAdd" xml:space="preserve"><value>快速添加（跳过预览）</value></data>

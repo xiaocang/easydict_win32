@@ -1802,6 +1802,7 @@
   <data name="AnkiNoOptions" xml:space="preserve"><value>在 Anki 中找不到牌組或筆記類型。</value></data>
   <data name="AnkiAdded" xml:space="preserve"><value>已新增至 Anki。</value></data>
   <data name="AnkiClose" xml:space="preserve"><value>關閉</value></data>
+  <data name="AnkiConnectionRefused" xml:space="preserve"><value>連線遭拒。請確認 Anki 已啟動並已安裝 AnkiConnect 外掛，然後再試一次。</value></data>
   <data name="AnkiCheckAfterError" xml:space="preserve"><value>如果連線中斷，請在重試前先檢查 Anki：筆記可能已經新增。</value></data>
   <data name="AnkiEnabled" xml:space="preserve"><value>AnkiConnect</value></data>
   <data name="AnkiQuickAdd" xml:space="preserve"><value>快速新增（跳過預覽）</value></data>

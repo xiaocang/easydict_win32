@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FlaUI.Core.Definitions;
@@ -43,6 +45,21 @@ public sealed class AnkiSettingsTests
             Wait(window, "AnkiConfigureButton");
             window.SetForeground();
             ScreenshotHelper.CaptureWindow(window, "anki_labs_settings");
+            Invoke(Wait(window, "AnkiConfigureButton"));
+            var options = window.FindFirstDescendant(cf => cf.ByAutomationId("AnkiConnectionOptions"));
+            (options is null || options.IsOffscreen).Should().BeTrue("options are hidden until connection succeeds");
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var unusedPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            Wait(window, "AnkiEndpoint").AsTextBox().Text = $"http://127.0.0.1:{unusedPort}/";
+            Invoke(Wait(window, "AnkiConnectButton"));
+            var hint = Retry.WhileNull(() => window.FindFirstDescendant(cf => cf.ByName("连接被拒绝。请确认 Anki 已启动并已安装 AnkiConnect 插件，然后重试。 https://ankiweb.net/shared/info/2055492159")), TimeSpan.FromSeconds(15)).Result;
+            hint.Should().NotBeNull();
+            options = window.FindFirstDescendant(cf => cf.ByAutomationId("AnkiConnectionOptions"));
+            (options is null || options.IsOffscreen).Should().BeTrue("failed connections must not show options");
+            window.FindFirstDescendant(cf => cf.ByName("https://ankiweb.net/shared/info/2055492159")).Should().NotBeNull();
+            Invoke(Retry.WhileNull(() => window.FindFirstDescendant(cf => cf.ByName("取消").And(cf.ByControlType(ControlType.Button))), TimeSpan.FromSeconds(10)).Result!);
             if (Environment.GetEnvironmentVariable("EASYDICT_TEST_ANKI") == "1")
             {
                 Invoke(Wait(window, "AnkiConfigureButton"));

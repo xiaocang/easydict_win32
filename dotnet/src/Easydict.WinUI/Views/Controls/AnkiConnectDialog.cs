@@ -1,8 +1,10 @@
+using System.Net.Sockets;
 using System.Text.Json;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services.AnkiConnect;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 
 namespace Easydict.WinUI.Views.Controls;
 
@@ -10,7 +12,54 @@ namespace Easydict.WinUI.Views.Controls;
 internal static class AnkiConnectDialog
 {
     private static readonly HttpClient Http = new();
+    private static readonly Uri AnkiConnectGuideUri = new("https://ankiweb.net/shared/info/2055492159");
     private static string L(string key, string fallback) => LocalizationService.Instance.GetStringOrDefault(key, fallback);
+
+    private static bool IsConnectionRefused(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SocketException socket && socket.SocketErrorCode == SocketError.ConnectionRefused)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static TextBlock CreateConnectionRefusedHint()
+    {
+        var hint = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(hint, "AnkiConnectionRefusedHint");
+        hint.Inlines.Add(new Run
+        {
+            Text = L("AnkiConnectionRefused", "Anki refused the connection. Make sure Anki is running and the AnkiConnect add-on is installed.") + " ",
+        });
+        var link = new Hyperlink { NavigateUri = AnkiConnectGuideUri };
+        link.Inlines.Add(new Run { Text = AnkiConnectGuideUri.AbsoluteUri });
+        hint.Inlines.Add(link);
+        return hint;
+    }
+
+    private static void ShowFailure(TextBlock status, TextBlock refusedHint, Exception exception, bool noteMayExist)
+    {
+        if (IsConnectionRefused(exception))
+        {
+            status.Text = "";
+            refusedHint.Visibility = Visibility.Visible;
+            return;
+        }
+
+        refusedHint.Visibility = Visibility.Collapsed;
+        status.Text = noteMayExist
+            ? exception.Message + "\n" + L("AnkiCheckAfterError", "If the connection was interrupted, check Anki before retrying: the note may already have been added.")
+            : exception.Message;
+    }
 
     public static async Task ShowSettingsAsync(XamlRoot root)
     {
@@ -20,16 +69,23 @@ internal static class AnkiConnectDialog
         var decks = new ComboBox { Header = L("AnkiDeck", "Deck"), HorizontalAlignment = HorizontalAlignment.Stretch };
         var models = new ComboBox { Header = L("AnkiModel", "Note type"), HorizontalAlignment = HorizontalAlignment.Stretch };
         var fieldPanel = new StackPanel { Spacing = 8 };
+        var options = new StackPanel { Spacing = 10, Visibility = Visibility.Collapsed };
+        options.Children.Add(decks);
+        options.Children.Add(models);
+        options.Children.Add(new TextBlock { Text = L("AnkiSettingsTemplates", "Field templates: {Word}, {Phonetic}, {Definition}, {Translation}."), TextWrapping = TextWrapping.Wrap });
+        options.Children.Add(fieldPanel);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(options, "AnkiConnectionOptions");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(endpoint, "AnkiEndpoint");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(connect, "AnkiConnectButton");
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var refusedHint = CreateConnectionRefusedHint();
         var body = new StackPanel { Spacing = 10, MinWidth = 300 };
         body.Children.Add(new TextBlock { Text = L("AnkiSettingsInstructions", "Start Anki with the AnkiConnect add-on, then connect and configure your fields."), TextWrapping = TextWrapping.Wrap });
         body.Children.Add(endpoint);
         body.Children.Add(connect);
-        body.Children.Add(decks);
-        body.Children.Add(models);
-        body.Children.Add(new TextBlock { Text = L("AnkiSettingsTemplates", "Field templates: {Word}, {Phonetic}, {Definition}, {Translation}."), TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(fieldPanel);
+        body.Children.Add(options);
         body.Children.Add(status);
+        body.Children.Add(refusedHint);
         var dialog = new ContentDialog
         {
             XamlRoot = root,
@@ -51,7 +107,11 @@ internal static class AnkiConnectDialog
         dialog.Closing += (_, args) => { if (adding) args.Cancel = true; };
         var generation = 0;
         dialog.Closed += (_, _) => { closed = true; generation++; };
-        endpoint.TextChanged += (_, _) => { client = null; generation++; dialog.IsPrimaryButtonEnabled = false; fieldPanel.Children.Clear(); fields.Clear(); };
+        endpoint.TextChanged += (_, _) =>
+        {
+            client = null; generation++; dialog.IsPrimaryButtonEnabled = false; fieldPanel.Children.Clear(); fields.Clear();
+            options.Visibility = Visibility.Collapsed; refusedHint.Visibility = Visibility.Collapsed; status.Text = "";
+        };
 
         async Task LoadFieldsAsync()
         {
@@ -71,9 +131,11 @@ internal static class AnkiConnectDialog
                     fieldPanel.Children.Add(input); fields[name] = input;
                 }
                 status.Text = names.Count == 0 ? L("AnkiNoFields", "This note type has no fields.") : "";
+                refusedHint.Visibility = Visibility.Collapsed;
+                options.Visibility = Visibility.Visible;
                 dialog.IsPrimaryButtonEnabled = names.Count > 0 && decks.SelectedItem is string;
             }
-            catch (Exception ex) { if (!closed && current == generation) status.Text = ex.Message; }
+            catch (Exception ex) { if (!closed && current == generation) ShowFailure(status, refusedHint, ex, noteMayExist: false); }
         }
         models.SelectionChanged += async (_, _) => { if (!loading) await LoadFieldsAsync(); };
         decks.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = client is not null && fields.Count > 0 && decks.SelectedItem is string;
@@ -81,6 +143,7 @@ internal static class AnkiConnectDialog
         {
             var current = ++generation;
             client = null; fields.Clear(); fieldPanel.Children.Clear(); dialog.IsPrimaryButtonEnabled = false;
+            options.Visibility = Visibility.Collapsed; refusedHint.Visibility = Visibility.Collapsed;
             connect.IsEnabled = false; status.Text = L("AnkiConnecting", "Connecting…");
             try
             {
@@ -99,7 +162,7 @@ internal static class AnkiConnectDialog
                 status.Text = modelNames.Count == 0 || deckNames.Count == 0 ? L("AnkiNoOptions", "No decks or note types were found in Anki.") : "";
                 await LoadFieldsAsync();
             }
-            catch (Exception ex) { if (!closed && current == generation) status.Text = ex.Message; }
+            catch (Exception ex) { if (!closed && current == generation) ShowFailure(status, refusedHint, ex, noteMayExist: false); }
             finally { if (!closed) { loading = false; connect.IsEnabled = true; } }
         };
         dialog.PrimaryButtonClick += (_, args) =>
@@ -151,10 +214,18 @@ internal static class AnkiConnectDialog
             settings.AnkiFieldTemplates = JsonSerializer.Serialize(templates); settings.Save();
         }
 
-        async Task ShowMessageAsync(string message)
+        async Task ShowMessageAsync(object message)
         {
             await new ContentDialog { XamlRoot = root, Title = L("AnkiAdd", "Add to Anki"), Content = message,
                 CloseButtonText = L("AnkiClose", "Close") }.ShowAsync();
+        }
+
+        object FailureMessage(Exception ex)
+        {
+            if (!IsConnectionRefused(ex)) return ex.Message + "\n" + L("AnkiCheckAfterError", "If the connection was interrupted, check Anki before retrying: the note may already have been added.");
+            var hint = CreateConnectionRefusedHint();
+            hint.Visibility = Visibility.Visible;
+            return hint;
         }
 
         if (!configured)
@@ -165,7 +236,7 @@ internal static class AnkiConnectDialog
         if (settings.AnkiQuickAdd)
         {
             try { await AddAsync(deck, model, templates[model]); await ShowMessageAsync(L("AnkiAdded", "Note added to Anki.")); }
-            catch (Exception ex) { await ShowMessageAsync(ex.Message + "\n" + L("AnkiCheckAfterError", "If the connection was interrupted, check Anki before retrying: the note may already have been added.")); }
+            catch (Exception ex) { await ShowMessageAsync(FailureMessage(ex)); }
             return;
         }
 
@@ -173,8 +244,9 @@ internal static class AnkiConnectDialog
         var models = new ComboBox { Header = L("AnkiModel", "Note type"), HorizontalAlignment = HorizontalAlignment.Stretch };
         var preview = new StackPanel { Spacing = 8 };
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = L("AnkiConnecting", "Connecting…") };
+        var refusedHint = CreateConnectionRefusedHint();
         var panel = new StackPanel { Spacing = 8, MinWidth = 260 };
-        panel.Children.Add(decks); panel.Children.Add(models); panel.Children.Add(preview); panel.Children.Add(status);
+        panel.Children.Add(decks); panel.Children.Add(models); panel.Children.Add(preview); panel.Children.Add(status); panel.Children.Add(refusedHint);
         var dialog = new ContentDialog
         {
             XamlRoot = root, Title = L("AnkiAdd", "Add to Anki"),
@@ -207,9 +279,10 @@ internal static class AnkiConnectDialog
                 }
                 selectedMapping = mapping;
                 status.Text = mapping.Count == 0 ? L("AnkiNoFields", "This note type has no fields.") : "";
+                refusedHint.Visibility = Visibility.Collapsed;
                 dialog.IsPrimaryButtonEnabled = mapping.Count > 0 && decks.SelectedItem is string;
             }
-            catch (Exception ex) { if (!closed && current == generation) status.Text = ex.Message; }
+            catch (Exception ex) { if (!closed && current == generation) ShowFailure(status, refusedHint, ex, noteMayExist: false); }
         }
         models.SelectionChanged += async (_, _) => { if (!loading) await LoadPreviewAsync(); };
         decks.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = selectedMapping is { Count: > 0 } && decks.SelectedItem is string;
@@ -228,7 +301,7 @@ internal static class AnkiConnectDialog
                     : decks.SelectedItem is null || models.SelectedItem is null ? L("AnkiTargetMissing", "The selected deck or note type is unavailable. Choose an available target.") : "";
                 await LoadPreviewAsync();
             }
-            catch (Exception ex) { if (!closed) status.Text = ex.Message; }
+            catch (Exception ex) { if (!closed) ShowFailure(status, refusedHint, ex, noteMayExist: false); }
         };
         dialog.PrimaryButtonClick += async (_, args) =>
         {
@@ -241,7 +314,7 @@ internal static class AnkiConnectDialog
                 await AddAsync(selectedDeck, selectedModel, selectedMapping);
                 args.Cancel = false;
             }
-            catch (Exception ex) { status.Text = ex.Message + "\n" + L("AnkiCheckAfterError", "If the connection was interrupted, check Anki before retrying: the note may already have been added."); }
+            catch (Exception ex) { ShowFailure(status, refusedHint, ex, noteMayExist: true); }
             finally { adding = false; decks.IsEnabled = models.IsEnabled = true; dialog.IsPrimaryButtonEnabled = selectedMapping is { Count: > 0 } && decks.SelectedItem is string; deferral.Complete(); }
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await ShowMessageAsync(L("AnkiAdded", "Note added to Anki."));

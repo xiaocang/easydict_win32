@@ -1810,12 +1810,12 @@
   <data name="AnkiTargetPolicy" xml:space="preserve"><value>牌組和筆記類型</value></data>
   <data name="AnkiUseDefault" xml:space="preserve"><value>一律使用預設值</value></data>
   <data name="AnkiUseLast" xml:space="preserve"><value>記住上次使用的值</value></data>
+  <data name="AnkiPreferredAction" xml:space="preserve"><value>偏好按鈕</value></data>
+  <data name="AnkiPreferredFavorite" xml:space="preserve"><value>收藏</value></data>
+  <data name="AnkiPreferredAnki" xml:space="preserve"><value>新增至 Anki</value></data>
   <data name="AnkiSave" xml:space="preserve"><value>儲存</value></data>
   <data name="AnkiSettingsInstructions" xml:space="preserve"><value>請啟動 Anki 並安裝 AnkiConnect 外掛程式，然後連線並設定欄位。</value></data>
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>欄位範本支援 {Word}、{Phonetic}、{Definition}、{Translation}。</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>請先在設定 → Labs 中設定 Anki。</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>所選牌組或筆記類型無法使用，請選擇其他目標。</value></data>
-  <data name="AnkiPreferredAction" xml:space="preserve"><value>偏好按鈕</value></data>
-  <data name="AnkiPreferredFavorite" xml:space="preserve"><value>收藏</value></data>
-  <data name="AnkiPreferredAnki" xml:space="preserve"><value>新增至 Anki</value></data>
 </root>

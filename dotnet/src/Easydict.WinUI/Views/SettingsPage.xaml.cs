@@ -3914,6 +3914,9 @@ public sealed partial class SettingsPage : Page
         AnkiEnabledToggle.Header = loc.GetStringOrDefault("AnkiEnabled", "AnkiConnect");
         AnkiQuickAddToggle.Header = loc.GetStringOrDefault("AnkiQuickAdd", "Quick add (skip preview)");
         AnkiConfigureButton.Content = loc.GetStringOrDefault("AnkiConfigure", "Configure Anki");
+        AnkiPreferredActionCombo.Header = loc.GetStringOrDefault("AnkiPreferredAction", "Preferred button");
+        AnkiPreferredFavoriteItem.Content = loc.GetStringOrDefault("AnkiPreferredFavorite", "Favorite");
+        AnkiPreferredAnkiItem.Content = loc.GetStringOrDefault("AnkiPreferredAnki", "Add to Anki");
         AnkiTargetPolicyCombo.Header = loc.GetStringOrDefault("AnkiTargetPolicy", "Deck and note type");
         AnkiUseDefaultItem.Content = loc.GetStringOrDefault("AnkiUseDefault", "Always use defaults");
         AnkiUseLastItem.Content = loc.GetStringOrDefault("AnkiUseLast", "Remember last used");
@@ -4564,6 +4567,7 @@ public sealed partial class SettingsPage : Page
         AnkiEnabledToggle.Toggled += OnSettingChanged;
         AnkiEnabledToggle.Toggled += OnAnkiEnabledToggled;
         AnkiQuickAddToggle.Toggled += OnSettingChanged;
+        AnkiPreferredActionCombo.SelectionChanged += OnSettingChanged;
         AnkiTargetPolicyCombo.SelectionChanged += OnSettingChanged;
         HoverWordLookupToggle.Toggled += OnSettingChanged;
         _settings.HoverWordLookupEnabledChanged += OnHoverWordLookupEnabledChanged;
@@ -4704,6 +4708,7 @@ public sealed partial class SettingsPage : Page
         AnkiEnabledToggle.Toggled -= OnSettingChanged;
         AnkiEnabledToggle.Toggled -= OnAnkiEnabledToggled;
         AnkiQuickAddToggle.Toggled -= OnSettingChanged;
+        AnkiPreferredActionCombo.SelectionChanged -= OnSettingChanged;
         AnkiTargetPolicyCombo.SelectionChanged -= OnSettingChanged;
         HoverWordLookupToggle.Toggled -= OnSettingChanged;
         _settings.HoverWordLookupEnabledChanged -= OnHoverWordLookupEnabledChanged;
@@ -5197,6 +5202,7 @@ public sealed partial class SettingsPage : Page
     {
         return AnkiEnabledToggle.IsOn != _settings.AnkiEnabled
             || AnkiQuickAddToggle.IsOn != _settings.AnkiQuickAdd
+            || !SameSetting(GetSelectedTag(AnkiPreferredActionCombo) ?? SettingsService.AnkiPreferredFavorite, _settings.AnkiPreferredAction)
             || (GetSelectedTag(AnkiTargetPolicyCombo) == "Last") != _settings.AnkiRememberLast
             || !SameSetting(SelectedTrayIconId, TrayIconCatalog.Normalize(_settings.TrayIconId))
             || HoverWordLookupToggle.IsOn != _settings.HoverWordLookupEnabled
@@ -5542,6 +5548,7 @@ public sealed partial class SettingsPage : Page
         {
             AnkiEnabledToggle.IsOn = _settings.AnkiEnabled;
             AnkiQuickAddToggle.IsOn = _settings.AnkiQuickAdd;
+            SelectComboByTag(AnkiPreferredActionCombo, _settings.AnkiPreferredAction);
             SelectComboByTag(AnkiTargetPolicyCombo, _settings.AnkiRememberLast ? "Last" : "Default");
             AnkiOptionsPanel.Visibility = _settings.AnkiEnabled ? Visibility.Visible : Visibility.Collapsed;
             SelectTrayIconOption(_settings.TrayIconId);
@@ -7102,6 +7109,7 @@ public sealed partial class SettingsPage : Page
         _settings.TrayIconId = SelectedTrayIconId;
         _settings.AnkiEnabled = AnkiEnabledToggle.IsOn;
         _settings.AnkiQuickAdd = AnkiQuickAddToggle.IsOn;
+        _settings.AnkiPreferredAction = SettingsService.NormalizeAnkiPreferredAction(GetSelectedTag(AnkiPreferredActionCombo));
         _settings.AnkiRememberLast = GetSelectedTag(AnkiTargetPolicyCombo) == "Last";
         _settings.HoverWordLookupEnabled = HoverWordLookupToggle.IsOn;
         _settings.HoverWordLookupModifier = GetTagComboValue(HoverWordLookupModifierCombo, "Ctrl");

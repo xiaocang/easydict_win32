@@ -1810,6 +1810,9 @@
   <data name="AnkiTargetPolicy" xml:space="preserve"><value>Deck and note type</value></data>
   <data name="AnkiUseDefault" xml:space="preserve"><value>Always use defaults</value></data>
   <data name="AnkiUseLast" xml:space="preserve"><value>Remember last used</value></data>
+  <data name="AnkiPreferredAction" xml:space="preserve"><value>Preferred button</value></data>
+  <data name="AnkiPreferredFavorite" xml:space="preserve"><value>Favorite</value></data>
+  <data name="AnkiPreferredAnki" xml:space="preserve"><value>Add to Anki</value></data>
   <data name="AnkiSave" xml:space="preserve"><value>Save</value></data>
   <data name="AnkiSettingsInstructions" xml:space="preserve"><value>Start Anki with the AnkiConnect add-on, then connect and configure your fields.</value></data>
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>

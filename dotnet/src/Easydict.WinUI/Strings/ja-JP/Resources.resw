@@ -1815,4 +1815,7 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="AnkiPreferredAction" xml:space="preserve"><value>Preferred button</value></data>
+  <data name="AnkiPreferredFavorite" xml:space="preserve"><value>Favorite</value></data>
+  <data name="AnkiPreferredAnki" xml:space="preserve"><value>Add to Anki</value></data>
 </root>

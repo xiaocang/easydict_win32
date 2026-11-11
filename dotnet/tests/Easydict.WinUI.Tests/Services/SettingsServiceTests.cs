@@ -67,9 +67,13 @@ public class SettingsServiceTests
         settings.AnkiEnabled.Should().BeFalse();
         settings.AnkiQuickAdd.Should().BeFalse();
         settings.AnkiRememberLast.Should().BeFalse();
+        settings.AnkiPreferredAction.Should().Be(SettingsService.AnkiPreferredFavorite);
+        settings.PreferAnkiButton.Should().BeFalse();
         settings.AnkiEnabled = true;
         settings.AnkiQuickAdd = true;
         settings.AnkiRememberLast = true;
+        settings.AnkiPreferredAction = "anki";
+        settings.PreferAnkiButton.Should().BeTrue();
         settings.AnkiLastDeck = "Last deck";
         settings.AnkiLastModel = "Last model";
         settings.AnkiEndpoint = "http://127.0.0.1:8765/";
@@ -81,6 +85,11 @@ public class SettingsServiceTests
         reloaded.AnkiEnabled.Should().BeTrue();
         reloaded.AnkiQuickAdd.Should().BeTrue();
         reloaded.AnkiRememberLast.Should().BeTrue();
+        reloaded.AnkiPreferredAction.Should().Be(SettingsService.AnkiPreferredAnki);
+        reloaded.PreferAnkiButton.Should().BeTrue();
+        reloaded.AnkiEnabled = false;
+        reloaded.PreferAnkiButton.Should().BeFalse();
+        SettingsService.NormalizeAnkiPreferredAction("nope").Should().Be(SettingsService.AnkiPreferredFavorite);
         reloaded.AnkiLastDeck.Should().Be("Last deck");
         reloaded.AnkiLastModel.Should().Be("Last model");
         reloaded.AnkiDeck.Should().Be("Vocabulary");

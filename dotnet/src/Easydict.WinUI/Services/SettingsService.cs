@@ -134,10 +134,27 @@ public sealed class SettingsService
         return Path.Combine(appDataPath, "Easydict");
     }
 
+    public const string AnkiPreferredFavorite = "Favorite";
+    public const string AnkiPreferredAnki = "Anki";
+
     // AnkiConnect settings (field templates are stored per note type).
     public bool AnkiEnabled { get; set; }
     public bool AnkiQuickAdd { get; set; }
     public bool AnkiRememberLast { get; set; }
+    private string _ankiPreferredAction = AnkiPreferredFavorite;
+
+    public string AnkiPreferredAction
+    {
+        get => _ankiPreferredAction;
+        set => _ankiPreferredAction = NormalizeAnkiPreferredAction(value);
+    }
+
+    public bool PreferAnkiButton => AnkiEnabled && AnkiPreferredAction == AnkiPreferredAnki;
+
+    public static string NormalizeAnkiPreferredAction(string? value) =>
+        string.Equals(value, AnkiPreferredAnki, StringComparison.OrdinalIgnoreCase)
+            ? AnkiPreferredAnki
+            : AnkiPreferredFavorite;
     public string AnkiLastDeck { get; set; } = "";
     public string AnkiLastModel { get; set; } = "";
     public string AnkiEndpoint { get; set; } = "http://127.0.0.1:8765/";
@@ -865,6 +882,7 @@ public sealed class SettingsService
         AnkiEnabled = GetValue(nameof(AnkiEnabled), false);
         AnkiQuickAdd = GetValue(nameof(AnkiQuickAdd), false);
         AnkiRememberLast = GetValue(nameof(AnkiRememberLast), false);
+        AnkiPreferredAction = NormalizeAnkiPreferredAction(GetValue(nameof(AnkiPreferredAction), AnkiPreferredFavorite));
         AnkiLastDeck = GetValue(nameof(AnkiLastDeck), "");
         AnkiLastModel = GetValue(nameof(AnkiLastModel), "");
         AnkiEndpoint = GetValue(nameof(AnkiEndpoint), "http://127.0.0.1:8765/");
@@ -1836,6 +1854,8 @@ public sealed class SettingsService
         _settings[nameof(AnkiEnabled)] = AnkiEnabled;
         _settings[nameof(AnkiQuickAdd)] = AnkiQuickAdd;
         _settings[nameof(AnkiRememberLast)] = AnkiRememberLast;
+        AnkiPreferredAction = NormalizeAnkiPreferredAction(AnkiPreferredAction);
+        _settings[nameof(AnkiPreferredAction)] = AnkiPreferredAction;
         _settings[nameof(AnkiLastDeck)] = AnkiLastDeck;
         _settings[nameof(AnkiLastModel)] = AnkiLastModel;
         _settings[nameof(AnkiEndpoint)] = AnkiEndpoint;

@@ -73,12 +73,15 @@ public sealed class AnkiSettingsTests
                 Invoke(ByName("保存"));
             }
             quick.Toggle();
+            Wait(window, "AnkiPreferredActionCombo").AsComboBox().Select(1);
             Invoke(Wait(window, "SaveButton"));
             Retry.WhileFalse(() =>
             {
                 using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "settings.json")));
                 return json.RootElement.TryGetProperty("AnkiEnabled", out var enabled) && enabled.GetBoolean()
-                    && json.RootElement.TryGetProperty("AnkiQuickAdd", out var fast) && fast.GetBoolean();
+                    && json.RootElement.TryGetProperty("AnkiQuickAdd", out var fast) && fast.GetBoolean()
+                    && json.RootElement.TryGetProperty("AnkiPreferredAction", out var preferred)
+                    && preferred.GetString() == "Anki";
             }, TimeSpan.FromSeconds(10)).Result.Should().BeTrue();
         }
         finally { Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previous); }

@@ -279,28 +279,49 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     private void OnFavoriteClicked(object sender, RoutedEventArgs e)
     {
         System.Diagnostics.Debug.WriteLine($"[MinimalServiceResultItem] Favorite click: provider={_serviceResult?.ServiceId}, enabled={FavoriteButton.IsEnabled}, subscribed={FavoriteRequested is not null}");
-        if (_serviceResult is not null && FavoriteButton.IsEnabled)
+        if (_serviceResult is not null && HasFavoriteAction())
             FavoriteRequested?.Invoke(this, _serviceResult);
     }
 
-    private void UpdateFavoriteButton()
+    private void UpdateFavoriteButton() => ApplySaveActionLayout();
+
+    private bool HasFavoriteAction()
     {
-        SavedActionBar.Visibility = _favoriteVisible || (_serviceResult?.HasSuccessfulResult == true)
-            ? Visibility.Visible : Visibility.Collapsed;
         var hasSuccessfulText = _serviceResult?.IsGrammarMode == true
             ? !string.IsNullOrWhiteSpace(_serviceResult.GrammarResult?.CorrectedText)
             : _serviceResult?.Result is { ResultKind: TranslationResultKind.Success, TranslatedText.Length: > 0 };
-        FavoriteButton.Visibility = _favoriteVisible && hasSuccessfulText
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        FavoriteButton.IsEnabled = FavoriteButton.Visibility == Visibility.Visible;
+        return _favoriteVisible && hasSuccessfulText;
+    }
+
+    private bool HasAnkiAction() =>
+        SettingsService.Instance.AnkiEnabled && _serviceResult?.Result is { ResultKind: TranslationResultKind.Success };
+
+    private void ApplySaveActionLayout()
+    {
+        SavedActionBar.Visibility = _favoriteVisible || (_serviceResult?.HasSuccessfulResult == true)
+            ? Visibility.Visible : Visibility.Collapsed;
+        var layout = ResultSaveActionLayout.Resolve(
+            SettingsService.Instance.PreferAnkiButton, HasAnkiAction(), HasFavoriteAction());
+        AnkiButton.Visibility = layout.AnkiButton ? Visibility.Visible : Visibility.Collapsed;
+        AnkiButton.IsEnabled = layout.AnkiButton && !_ankiBusy;
+        FavoriteButton.Visibility = layout.FavoriteButton ? Visibility.Visible : Visibility.Collapsed;
+        FavoriteButton.IsEnabled = layout.FavoriteButton;
+        AnkiMenuItem.Visibility = layout.AnkiMenu ? Visibility.Visible : Visibility.Collapsed;
+        AnkiMenuItem.IsEnabled = layout.AnkiMenu && !_ankiBusy;
+        FavoriteMenuItem.Visibility = layout.FavoriteMenu ? Visibility.Visible : Visibility.Collapsed;
+        FavoriteMenuItem.IsEnabled = layout.FavoriteMenu;
         FavoriteIcon.Glyph = _isFavorited ? "\uE735" : "\uE734";
         var localization = LocalizationService.Instance;
-        var tooltip = _isFavorited
+        var favoriteText = _isFavorited
             ? localization.GetStringOrDefault("SavedItemsRemoveResultFavorite", "Remove result favorite")
             : localization.GetStringOrDefault("SavedItemsAddResultFavorite", "Add result favorite");
-        ToolTipService.SetToolTip(FavoriteButton, tooltip);
-        AutomationProperties.SetName(FavoriteButton, tooltip);
+        var ankiText = localization.GetStringOrDefault("AnkiAdd", "Add to Anki");
+        ToolTipService.SetToolTip(FavoriteButton, favoriteText);
+        AutomationProperties.SetName(FavoriteButton, favoriteText);
+        FavoriteMenuItem.Text = favoriteText;
+        ToolTipService.SetToolTip(AnkiButton, ankiText);
+        AutomationProperties.SetName(AnkiButton, ankiText);
+        AnkiMenuItem.Text = ankiText;
     }
 
     private static string GetStatusText(ServiceQueryResult serviceResult) =>
@@ -361,6 +382,20 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     private void OnCopyClicked(object sender, RoutedEventArgs e) => CopySavedText(
         _serviceResult?.IsGrammarMode == true ? _serviceResult.GrammarResult?.CorrectedText : _serviceResult?.Result?.TranslatedText);
+
+    private bool _ankiBusy;
+
+    private void OnSavedMenuOpening(object sender, object e) => ApplySaveActionLayout();
+
+    private async void OnAddToAnki(object sender, RoutedEventArgs e)
+    {
+        if (_ankiBusy || !HasAnkiAction() || _serviceResult?.Result is not { ResultKind: TranslationResultKind.Success } result || XamlRoot is null)
+            return;
+        _ankiBusy = true;
+        ApplySaveActionLayout();
+        try { await AnkiConnectDialog.ShowAsync(XamlRoot, result); }
+        finally { _ankiBusy = false; ApplySaveActionLayout(); }
+    }
 
     private void OnCopySavedSource(object sender, RoutedEventArgs e) => CopySavedText(
         _serviceResult?.IsGrammarMode == true ? _serviceResult.GrammarResult?.OriginalText : _serviceResult?.Result?.OriginalText);

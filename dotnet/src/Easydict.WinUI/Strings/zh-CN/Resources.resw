@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>阶段可能重叠，请勿将耗时相加。等待响应头包含网络和服务器等待。仅显示已测量的阶段。</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>查询准备</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>语言识别</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>界面准备</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>语言路由</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>提示词准备</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>请求准备</value></data>

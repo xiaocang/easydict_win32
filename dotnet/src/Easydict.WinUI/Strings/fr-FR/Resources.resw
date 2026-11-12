@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Les étapes peuvent se chevaucher : ne pas additionner leurs durées. L'attente des en-têtes comprend le réseau et le serveur. Seules les étapes mesurées sont affichées.</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Préparation de la requête</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Détection de la langue</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>Préparation de l'interface</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Choix des langues</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Préparation du prompt</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Préparation de la demande</value></data>

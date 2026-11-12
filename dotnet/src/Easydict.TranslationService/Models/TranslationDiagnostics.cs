@@ -6,6 +6,7 @@ public enum TranslationDiagnosticStage
 {
     QueryPreparation,
     LanguageDetection,
+    UiPreparation,
     LanguageRouting,
     PromptPreparation,
     RequestPreparation,

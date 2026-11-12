@@ -704,10 +704,14 @@ public sealed partial class FixedWindow : Window
                         : await DetectionWarning.DetectAsync(_detectionService, inputText, CancellationToken.None);
             }
             _lastDetectedLanguage = detectedLanguage;
-            var resolution = ResolveQuickQueryLanguage(
-                detectedLanguage,
-                HasEnabledGrammarCorrectionService(detectedLanguage));
-            serviceResult.CurrentMode = resolution.EffectiveMode;
+            QuickQueryLanguageResolution resolution;
+            using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
+            {
+                resolution = ResolveQuickQueryLanguage(
+                    detectedLanguage,
+                    HasEnabledGrammarCorrectionService(detectedLanguage));
+                serviceResult.CurrentMode = resolution.EffectiveMode;
+            }
 
             if (resolution.EffectiveMode == QueryMode.GrammarCorrection
                 && serviceResult.IsGrammarCapable)
@@ -1087,17 +1091,23 @@ public sealed partial class FixedWindow : Window
             }
             _lastDetectedLanguage = detectedLanguage;
 
-            var resolution = ResolveQuickQueryLanguage(
-                detectedLanguage,
-                HasEnabledGrammarCorrectionService(detectedLanguage));
-            ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
+            QuickQueryLanguageResolution resolution;
+            using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
+            {
+                resolution = ResolveQuickQueryLanguage(
+                    detectedLanguage,
+                    HasEnabledGrammarCorrectionService(detectedLanguage));
+                var preparedTarget = resolution.EffectiveTargetLanguage;
+                ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
+
+                if (resolution.GrammarCorrectionFallback && preparedTarget != TranslationLanguage.Auto)
+                {
+                    UpdateTargetLanguageSelector(preparedTarget);
+                    StatusText.Text = LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice");
+                }
+            }
 
             var targetLanguage = resolution.EffectiveTargetLanguage;
-            if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
-            {
-                UpdateTargetLanguageSelector(targetLanguage);
-                StatusText.Text = LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice");
-            }
 
             if (_serviceResults.Count == 0)
             {

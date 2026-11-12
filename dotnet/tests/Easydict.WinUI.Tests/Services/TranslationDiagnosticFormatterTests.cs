@@ -24,7 +24,7 @@ public class TranslationDiagnosticFormatterTests
     }
 
     [Fact]
-    public void FormatDrawsBarsAtEachStageOffsetSoOverlapIsVisible()
+    public void FormatKeepsStagesInMeasurementOrderWithStartAndDuration()
     {
         var snapshot = new TranslationDiagnosticSnapshot(1000, TranslationDiagnosticStatus.Completed,
         [
@@ -36,20 +36,16 @@ public class TranslationDiagnosticFormatterTests
 
         var preparation = lines.Single(line => line.EndsWith("DiagnosticStageQueryPreparation"));
         var headers = lines.Single(line => line.EndsWith("DiagnosticStageResponseHeaders"));
-
-        // Both rows align in the bar column; the later stage starts to the right of the earlier one.
-        preparation.IndexOf('#').Should().BeLessThan(headers.IndexOf('#'));
-        headers.IndexOf('#').Should().Be(preparation.LastIndexOf('#') + 1);
-        headers.Count(c => c == '#').Should().BeGreaterThan(preparation.Count(c => c == '#'));
+        preparation.Should().Contain("0 ms").And.Contain("100 ms");
+        headers.Should().Contain("100 ms").And.Contain("400 ms");
     }
 
     [Fact]
-    public void RunningStageUsesADistinctBarMarker()
+    public void TextOutputHasNoArtworkOnlyRows()
     {
-        var snapshot = new TranslationDiagnosticSnapshot(500, TranslationDiagnosticStatus.Running,
-            [new(TranslationDiagnosticStage.FirstOutput, 0, 200, true)]);
-        var line = TranslationDiagnosticFormatter.Format(snapshot, key => key)
-            .Split(Environment.NewLine).Single(row => row.Contains("DiagnosticStageFirstOutput"));
-        line.Should().Contain("~").And.NotContain("#");
+        var snapshot = new TranslationDiagnosticSnapshot(500, TranslationDiagnosticStatus.Completed,
+            [new(TranslationDiagnosticStage.FirstOutput, 0, 200, false)]);
+        var text = TranslationDiagnosticFormatter.Format(snapshot, key => key);
+        text.Should().NotContain("#").And.NotContain("~");
     }
 }

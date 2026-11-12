@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>단계는 겹칠 수 있으므로 소요 시간을 더하지 마세요. 응답 헤더 대기에는 네트워크와 서버 대기가 포함됩니다. 측정된 단계만 표시됩니다.</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>쿼리 준비</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>언어 감지</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>인터페이스 준비</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>언어 라우팅</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>프롬프트 준비</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>요청 준비</value></data>

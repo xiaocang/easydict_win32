@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>ขั้นตอนอาจทับซ้อนกัน อย่าบวกระยะเวลาเข้าด้วยกัน การรอส่วนหัวการตอบกลับรวมการรอเครือข่ายและเซิร์ฟเวอร์ แสดงเฉพาะขั้นตอนที่วัดได้</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>การเตรียมคำค้น</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>การตรวจจับภาษา</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>การเตรียมอินเทอร์เฟซ</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>การกำหนดเส้นทางภาษา</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>การเตรียมพรอมต์</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>การเตรียมคำขอ</value></data>

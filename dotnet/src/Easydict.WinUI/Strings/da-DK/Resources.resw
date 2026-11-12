@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Faser kan overlappe; læg ikke tiderne sammen. Ventetid på svarheadere omfatter netværk og server. Kun målte faser vises.</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Forberedelse af forespørgsel</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Sprogregistrering</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>Forberedelse af grænseflade</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Sprogvalg</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Forberedelse af prompt</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Forberedelse af anmodning</value></data>

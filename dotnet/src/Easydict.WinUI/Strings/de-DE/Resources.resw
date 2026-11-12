@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Phasen können sich überlappen; Zeiten nicht addieren. Das Warten auf Antwortheader umfasst Netzwerk- und Serverwartezeit. Nur gemessene Phasen werden angezeigt.</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Abfragevorbereitung</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Spracherkennung</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>Oberflächenvorbereitung</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Sprachauswahl</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Prompt vorbereiten</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Anfrage vorbereiten</value></data>

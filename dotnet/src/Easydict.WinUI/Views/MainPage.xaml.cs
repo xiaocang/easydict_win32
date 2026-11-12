@@ -2184,10 +2184,14 @@ namespace Easydict.WinUI.Views
                         : await DetectSourceLanguageForQueryAsync(inputText, _detectionService, ct);
                 }
                 _lastDetectedLanguage = detectedLanguage;
-                var resolution = ResolveQuickQueryLanguage(
-                    detectedLanguage,
-                    HasEnabledGrammarCorrectionService(detectedLanguage));
-                serviceResult.CurrentMode = resolution.EffectiveMode;
+                QuickQueryLanguageResolution resolution;
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
+                {
+                    resolution = ResolveQuickQueryLanguage(
+                        detectedLanguage,
+                        HasEnabledGrammarCorrectionService(detectedLanguage));
+                    serviceResult.CurrentMode = resolution.EffectiveMode;
+                }
 
                 // Grammar mode: route to grammar correction for capable services only.
                 // Non-grammar-capable services fall through to normal translation below.
@@ -2650,22 +2654,29 @@ namespace Easydict.WinUI.Views
                 var resolution = ResolveQuickQueryLanguage(
                     detectedLanguage,
                     HasEnabledGrammarCorrectionService(detectedLanguage));
-                ApplyQuickQueryResolution(
-                    resolution,
-                    reinitializeServiceResults: true,
-                    reason: "StartQueryModeResolved");
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
+                {
+                    // Coarse on purpose: mode resolution rebuilds every service row, and the gap
+                    // between detection and the network call is otherwise invisible.
+                    ApplyQuickQueryResolution(
+                        resolution,
+                        reinitializeServiceResults: true,
+                        reason: "StartQueryModeResolved");
+
+                    var preparedTarget = resolution.EffectiveTargetLanguage;
+                    _currentSnapshotDraft = null;
+                    CurrentQueryFavoriteButton.Visibility = Visibility.Collapsed;
+                    CurrentQueryFavoriteIcon.Glyph = "\uE734";
+                    if (resolution.GrammarCorrectionFallback && preparedTarget != TranslationLanguage.Auto)
+                    {
+                        UpdateTargetLanguageSelector(preparedTarget);
+                        SetStatusSummary(
+                            LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice"),
+                            important: true);
+                    }
+                }
 
                 var targetLanguage = resolution.EffectiveTargetLanguage;
-                _currentSnapshotDraft = null;
-                CurrentQueryFavoriteButton.Visibility = Visibility.Collapsed;
-                CurrentQueryFavoriteIcon.Glyph = "\uE734";
-                if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
-                {
-                    UpdateTargetLanguageSelector(targetLanguage);
-                    SetStatusSummary(
-                        LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice"),
-                        important: true);
-                }
 
                 if (_serviceResults.Count == 0)
                 {
@@ -2684,19 +2695,22 @@ namespace Easydict.WinUI.Views
                 }
 
                 PhiSilicaModelPreparationPromptResult phiSilicaPromptResult;
-                try
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
                 {
-                    phiSilicaPromptResult = await PhiSilicaModelPreparationPromptService.PromptAndPrepareIfNeededAsync(
-                        _serviceResults.Where(result => result.EnabledQuery),
-                        _settings,
-                        XamlRoot,
-                        ShowDialogAsync,
-                        ct,
-                        ShowLocalModelPreparationProgress);
-                }
-                finally
-                {
-                    SyncLocalModelPreparationProgressFromCoordinator();
+                    try
+                    {
+                        phiSilicaPromptResult = await PhiSilicaModelPreparationPromptService.PromptAndPrepareIfNeededAsync(
+                            _serviceResults.Where(result => result.EnabledQuery),
+                            _settings,
+                            XamlRoot,
+                            ShowDialogAsync,
+                            ct,
+                            ShowLocalModelPreparationProgress);
+                    }
+                    finally
+                    {
+                        SyncLocalModelPreparationProgressFromCoordinator();
+                    }
                 }
                 if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
                 {
@@ -2738,32 +2752,35 @@ namespace Easydict.WinUI.Views
                     }
                 }
 
-                // The preparation prompt can disable the last grammar service and
-                // change both the query mode and target language.
-                snapshotDraft = new QuerySnapshotDraft(
-                    inputText,
-                    detectedLanguage.ToIso639(),
-                    (automaticRouter is null ? targetLanguage : TranslationLanguage.Auto).ToIso639(),
-                    SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
-                    sourceKind,
-                    _settings.HistoryEnabled);
-                _currentSnapshotDraft = snapshotDraft;
-
-                _hasAutoPlayedCurrentQuery = false;
-
-                // Reset all service results
-                foreach (var result in _serviceResults)
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
                 {
-                    result.Reset();
-                    // Only set loading for auto-query services
-                    if (PhiSilicaModelPreparationPromptService.ShouldQueryServiceForCurrentQuery(result, phiSilicaPromptResult))
-                    {
-                        result.IsLoading = true;
-                    }
-                }
+                    // The preparation prompt can disable the last grammar service and
+                    // change both the query mode and target language.
+                    snapshotDraft = new QuerySnapshotDraft(
+                        inputText,
+                        detectedLanguage.ToIso639(),
+                        (automaticRouter is null ? targetLanguage : TranslationLanguage.Auto).ToIso639(),
+                        SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
+                        sourceKind,
+                        _settings.HistoryEnabled);
+                    _currentSnapshotDraft = snapshotDraft;
 
-                // Hide placeholder
-                PlaceholderText.Visibility = Visibility.Collapsed;
+                    _hasAutoPlayedCurrentQuery = false;
+
+                    // Reset all service results
+                    foreach (var result in _serviceResults)
+                    {
+                        result.Reset();
+                        // Only set loading for auto-query services
+                        if (PhiSilicaModelPreparationPromptService.ShouldQueryServiceForCurrentQuery(result, phiSilicaPromptResult))
+                        {
+                            result.IsLoading = true;
+                        }
+                    }
+
+                    // Hide placeholder
+                    PlaceholderText.Visibility = Visibility.Collapsed;
+                }
 
                 // Route based on effective quick-query mode
                 if (resolution.EffectiveMode == QueryMode.GrammarCorrection)

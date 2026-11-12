@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Peringkat boleh bertindih; jangan jumlahkan tempohnya. Menunggu pengepala respons merangkumi rangkaian dan pelayan. Hanya peringkat yang diukur dipaparkan.</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Persediaan pertanyaan</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Pengesanan bahasa</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>Persediaan antara muka</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Pemilihan bahasa</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Persediaan prom</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Persediaan permintaan</value></data>

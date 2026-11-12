@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>段階は重複することがあります。所要時間は合計しないでください。応答ヘッダー待ちにはネットワークとサーバーの待ち時間が含まれます。計測された段階のみ表示します。</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>クエリの準備</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>言語検出</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>画面の準備</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>言語ルーティング</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>プロンプト準備</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>リクエスト準備</value></data>

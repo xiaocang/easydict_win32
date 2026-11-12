@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Tahap dapat tumpang tindih; jangan jumlahkan durasinya. Menunggu header respons mencakup jaringan dan server. Hanya tahap yang diukur yang ditampilkan.</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Persiapan kueri</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Deteksi bahasa</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>Persiapan antarmuka</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Pemilihan bahasa</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Persiapan prompt</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Persiapan permintaan</value></data>

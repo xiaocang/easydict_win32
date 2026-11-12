@@ -1828,6 +1828,7 @@
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Le fasi possono sovrapporsi: non sommare le durate. L'attesa delle intestazioni include rete e server. Sono mostrate solo le fasi misurate.</value></data>
   <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Preparazione della query</value></data>
   <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Rilevamento della lingua</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>Preparazione dell'interfaccia</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Scelta delle lingue</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Preparazione del prompt</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Preparazione della richiesta</value></data>

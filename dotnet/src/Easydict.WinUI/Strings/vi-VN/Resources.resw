@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Điều chỉnh cỡ chữ của kết quả dịch.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>Cỡ chữ phiên âm</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>Điều chỉnh cỡ chữ phiên âm trong kết quả từ điển và tra cứu khi trỏ chuột.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>Chế độ thu gọn</value>
   </data>

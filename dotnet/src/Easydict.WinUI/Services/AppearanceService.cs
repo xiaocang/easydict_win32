@@ -12,6 +12,7 @@ public readonly struct AppearanceSettings
     public double ResultFontSize { get; init; }
     public double ServiceNameFontSize { get; init; }
     public double StatusFontSize { get; init; }
+    public double PhoneticFontSize { get; init; }
 }
 
 /// <summary>
@@ -29,8 +30,24 @@ internal static class AppearanceService
     private const double BaseServiceNameFontSize = 12.0;
     private const double BaseStatusFontSize = 10.0;
 
+    /// <summary>
+    /// The phonetic badge size that shipped before issue #249. Kept as the base so the
+    /// phonetic scale reads as "how much bigger than the old unreadable badges".
+    /// </summary>
+    private const double BasePhoneticFontSize = 10.0;
+
     private const double MinFontScale = 0.85;
     private const double MaxFontScale = 1.4;
+
+    private const double MinPhoneticFontScale = 1.0;
+    private const double MaxPhoneticFontScale = 2.4;
+
+    /// <summary>
+    /// Ceiling for the composed phonetic size. The phonetic scale multiplies the result
+    /// font scale, so both sliders at maximum must still leave a readable badge instead of
+    /// an unbounded one.
+    /// </summary>
+    private const double MaxPhoneticFontSize = 32.0;
 
     /// <summary>
     /// Minimum height (DIPs) the floating windows shrink to. Lowered from the
@@ -46,11 +63,24 @@ internal static class AppearanceService
     public static double ServiceNameFontSize => BaseServiceNameFontSize * FontScale;
     public static double StatusFontSize => BaseStatusFontSize * FontScale;
 
+    /// <summary>Clamped phonetic-size multiplier from settings.</summary>
+    public static double PhoneticFontScale =>
+        Math.Clamp(SettingsService.Instance.PhoneticFontScale, MinPhoneticFontScale, MaxPhoneticFontScale);
+
+    /// <summary>
+    /// Effective phonetic (IPA) badge font size in DIPs. Phonetics follow the global result
+    /// font scale — enlarging all result text must not leave them behind — and carry their
+    /// own multiplier on top, which is what issue #249 asked for.
+    /// </summary>
+    public static double PhoneticFontSize =>
+        Math.Min(BasePhoneticFontSize * PhoneticFontScale * FontScale, MaxPhoneticFontSize);
+
     /// <summary>Captures the current effective metrics into an immutable snapshot.</summary>
     public static AppearanceSettings CurrentSnapshot() => new()
     {
         ResultFontSize = ResultFontSize,
         ServiceNameFontSize = ServiceNameFontSize,
         StatusFontSize = StatusFontSize,
+        PhoneticFontSize = PhoneticFontSize,
     };
 }

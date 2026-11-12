@@ -3456,6 +3456,26 @@
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     TextWrapping="Wrap"/>
 
+                                <!-- Phonetic font size (issue #249) -->
+                                <TextBlock
+                                    x:Name="PhoneticFontSizeLabel"
+                                    Text="Phonetic font size"
+                                    FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <Slider
+                                    x:Name="PhoneticFontScaleSlider"
+                                    AutomationProperties.AutomationId="PhoneticFontScaleSlider"
+                                    Minimum="1.0"
+                                    Maximum="2.4"
+                                    StepFrequency="0.1"
+                                    Width="250"
+                                    HorizontalAlignment="Left"/>
+                                <TextBlock
+                                    x:Name="PhoneticFontSizeDescriptionText"
+                                    Text="Adjust the size of phonetic transcriptions in dictionary results and hover lookup."
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+
                                 <!-- Quick-action button visibility -->
                                 <Expander x:Name="QuickActionsExpander"
                                           AutomationProperties.AutomationId="QuickActionsExpander"

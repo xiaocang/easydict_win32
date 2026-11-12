@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Adjust the font size of translation results.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>Phonetic font size</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>Adjust the size of phonetic transcriptions in dictionary results and hover lookup.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>Compact mode</value>
   </data>

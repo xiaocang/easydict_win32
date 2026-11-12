@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Juster skriftstørrelsen for oversættelsesresultater.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>Størrelse på lydskrift</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>Juster størrelsen på lydskrift i ordbogsresultater og ved hover-opslag.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>Kompakt tilstand</value>
   </data>

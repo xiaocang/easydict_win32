@@ -25,6 +25,18 @@ public class PhoneticRenderingContractTests
     private static readonly string MinimalServiceResultItemXamlPath = Path.Combine(
         ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "MinimalServiceResultItem.xaml");
 
+    private static readonly string HoverLookupWindowPath = Path.Combine(
+        ProjectRoot, "src", "Easydict.WinUI", "Views", "HoverLookupWindow.xaml.cs");
+
+    private static readonly string AppPath = Path.Combine(
+        ProjectRoot, "src", "Easydict.WinUI", "App.xaml.cs");
+
+    private static readonly string SettingsPageXamlPath = Path.Combine(
+        ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml");
+
+    private static readonly string SettingsPageCodeBehindPath = Path.Combine(
+        ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml.cs");
+
     [Fact]
     public void ServiceResultItem_DelegatesPhoneticSelectionToSharedHelper()
     {
@@ -61,8 +73,7 @@ public class PhoneticRenderingContractTests
     }
 
     [Fact]
-    public void MinimalTheme_RendersNoPhoneticBadges()
-    {
+    public void MinimalTheme_RendersNoPhoneticBadges()    {
         // Deliberate and permanent product decision: the minimal theme trades dictionary
         // chrome for a bare result. This is not a gap to be filled later — if a future
         // change adds phonetics to the minimal renderer, this test should fail and the
@@ -79,8 +90,81 @@ public class PhoneticRenderingContractTests
             "the minimal theme intentionally does not select phonetics for display");
     }
 
-    private static string FindProjectRoot()
+    /// <summary>
+    /// Issue #249: the badge used to hardcode <c>FontSize = 10</c> in three places, which is
+    /// what users reported as unreadable. Every part of the badge must now take the size the
+    /// appearance settings compute.
+    /// </summary>
+    [Fact]
+    public void ServiceResultItem_BadgesUseTheConfiguredPhoneticFontSize()
     {
+        var content = File.ReadAllText(ServiceResultItemPath);
+
+        content.Should().NotContain("FontSize = 10",
+            "the hardcoded 10 DIP phonetic size is the defect reported in issue #249");
+        content.Should().Contain("FontSize = phoneticFontSize",
+            "the accent label, the phonetic text and the speaker icon must all follow the setting");
+        content.Should().Contain("var phoneticFontSize = _phoneticFontSize;");
+        content.Should().Contain("private double _phoneticFontSize = AppearanceService.PhoneticFontSize;",
+            "badges rendered before ApplyAppearance runs must already use the configured size");
+    }
+
+    /// <summary>
+    /// The phonetic panel caches its render. If the font size is not part of that cache key,
+    /// moving the settings slider leaves the already-rendered badges at the old size until the
+    /// next query, which reads as "the setting does nothing".
+    /// </summary>
+    [Fact]
+    public void ServiceResultItem_RebuildsPhoneticsWhenTheFontSizeChanges()
+    {
+        var content = File.ReadAllText(ServiceResultItemPath);
+
+        content.Should().Contain("_phoneticsRenderedFontSize",
+            "the phonetic render cache must remember which size it rendered at");
+        content.Should().Contain("Math.Abs(_phoneticsRenderedFontSize - _phoneticFontSize) < 0.001",
+            "a size change must invalidate the cached phonetic render");
+        content.Should().Contain("ApplyPhoneticAppearance(settings.PhoneticFontSize)",
+            "ApplyAppearance is the path a settings change takes into an existing result item");
+    }
+
+    /// <summary>
+    /// The hover card renders phonetics in its own TextBlock, outside ServiceResultItem, so it
+    /// needs the shared size applied explicitly (issue #249 asks for hover to be covered too).
+    /// </summary>
+    [Fact]
+    public void HoverLookup_UsesTheConfiguredPhoneticFontSize()
+    {
+        var content = File.ReadAllText(HoverLookupWindowPath);
+
+        content.Should().Contain("PhoneticText.FontSize = AppearanceService.PhoneticFontSize",
+            "the hover card must read the same phonetic size as the dictionary results");
+        content.Should().Contain("public void ApplyAppearance()");
+    }
+
+    [Fact]
+    public void ApplyAppearance_FanOutReachesTheHoverPopup()
+    {
+        var content = File.ReadAllText(AppPath);
+
+        content.Should().Contain("_hoverWordLookupService?.ApplyAppearance()",
+            "without the fan-out, changing the setting never reaches an open hover card");
+    }
+
+    [Fact]
+    public void SettingsPage_ExposesThePhoneticFontSizeSlider()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var code = File.ReadAllText(SettingsPageCodeBehindPath);
+
+        xaml.Should().Contain("x:Name=\"PhoneticFontScaleSlider\"");
+        xaml.Should().Contain("Minimum=\"1.0\"", "phonetics must not be adjustable back down to the unreadable size");
+        code.Should().Contain("PhoneticFontScaleSlider.Value = Math.Clamp(",
+            "loading clamps a value that predates the slider's range");
+        code.Should().Contain("_settings.PhoneticFontScale = PhoneticFontScaleSlider.Value;");
+        code.Should().Contain("loc.GetString(\"PhoneticFontSizeDescription\")");
+    }
+
+    private static string FindProjectRoot()    {
         var current = AppDomain.CurrentDomain.BaseDirectory;
         while (!string.IsNullOrEmpty(current))
         {

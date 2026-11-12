@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>번역 결과의 글꼴 크기를 조정합니다.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>발음 기호 크기</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>사전 결과와 호버 조회의 발음 기호 크기를 조정합니다.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>간결 모드</value>
   </data>

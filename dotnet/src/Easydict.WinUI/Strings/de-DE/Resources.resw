@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Passen Sie die Schriftgröße der Übersetzungsergebnisse an.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>Größe der Lautschrift</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>Passen Sie die Größe der Lautschrift in Wörterbuchergebnissen und bei der Hover-Suche an.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>Kompaktmodus</value>
   </data>

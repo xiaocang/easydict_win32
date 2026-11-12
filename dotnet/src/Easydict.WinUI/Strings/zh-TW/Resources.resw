@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>調整翻譯結果的字型大小。</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>音標字型大小</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>調整詞典結果與懸停查詢中音標的字型大小。</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>緊湊模式</value>
   </data>

@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>اضبط حجم خط نتائج الترجمة.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>حجم الكتابة الصوتية</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>اضبط حجم الكتابة الصوتية في نتائج القاموس والبحث عند التمرير.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>الوضع المضغوط</value>
   </data>

@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>अनुवाद परिणामों के फ़ॉन्ट आकार को समायोजित करें।</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>ध्वन्यात्मक लिपि का आकार</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>शब्दकोश परिणामों और हॉवर खोज में ध्वन्यात्मक लिपि का आकार समायोजित करें।</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>कॉम्पैक्ट मोड</value>
   </data>

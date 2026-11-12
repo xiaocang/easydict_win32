@@ -10,6 +10,9 @@ namespace Easydict.WinUI.Tests.Services;
 /// contracts instead of driving the control, matching the approach used by the other
 /// regression suites in this project. The selection logic they delegate to is covered
 /// directly by the tests in Easydict.TranslationService.Tests.
+///
+/// Scope: these prove which size and selection the renderers read from source. They do not
+/// prove what a pixel looks like on screen — that still needs a manual visual check.
 /// </summary>
 [Trait("Category", "WinUI")]
 public class PhoneticRenderingContractTests
@@ -73,7 +76,8 @@ public class PhoneticRenderingContractTests
     }
 
     [Fact]
-    public void MinimalTheme_RendersNoPhoneticBadges()    {
+    public void MinimalTheme_RendersNoPhoneticBadges()
+    {
         // Deliberate and permanent product decision: the minimal theme trades dictionary
         // chrome for a bare result. This is not a gap to be filled later — if a future
         // change adds phonetics to the minimal renderer, this test should fail and the
@@ -99,12 +103,16 @@ public class PhoneticRenderingContractTests
     public void ServiceResultItem_BadgesUseTheConfiguredPhoneticFontSize()
     {
         var content = File.ReadAllText(ServiceResultItemPath);
+        var badgeFactory = ExtractRegion(
+            content,
+            "private Border CreatePhoneticBadge(",
+            "private static string? GetAccentDisplayLabel(");
 
-        content.Should().NotContain("FontSize = 10",
+        badgeFactory.Should().NotContain("FontSize = 10",
             "the hardcoded 10 DIP phonetic size is the defect reported in issue #249");
-        content.Should().Contain("FontSize = phoneticFontSize",
+        badgeFactory.Should().Contain("FontSize = phoneticFontSize",
             "the accent label, the phonetic text and the speaker icon must all follow the setting");
-        content.Should().Contain("var phoneticFontSize = _phoneticFontSize;");
+        badgeFactory.Should().Contain("var phoneticFontSize = _phoneticFontSize;");
         content.Should().Contain("private double _phoneticFontSize = AppearanceService.PhoneticFontSize;",
             "badges rendered before ApplyAppearance runs must already use the configured size");
     }
@@ -164,7 +172,23 @@ public class PhoneticRenderingContractTests
         code.Should().Contain("loc.GetString(\"PhoneticFontSizeDescription\")");
     }
 
-    private static string FindProjectRoot()    {
+    /// <summary>
+    /// Returns the source between two markers, failing loudly when a marker disappears: an empty
+    /// or truncated region would silently turn the assertions below into no-ops.
+    /// </summary>
+    private static string ExtractRegion(string source, string startMarker, string endMarker)
+    {
+        var start = source.IndexOf(startMarker, StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0, $"expected to find '{startMarker}'");
+
+        var end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+        end.Should().BeGreaterThan(start, $"expected to find '{endMarker}' after '{startMarker}'");
+
+        return source[start..end];
+    }
+
+    private static string FindProjectRoot()
+    {
         var current = AppDomain.CurrentDomain.BaseDirectory;
         while (!string.IsNullOrEmpty(current))
         {

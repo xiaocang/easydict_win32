@@ -43,13 +43,6 @@ internal static class AppearanceService
     private const double MaxPhoneticFontScale = 2.4;
 
     /// <summary>
-    /// Ceiling for the composed phonetic size. The phonetic scale multiplies the result
-    /// font scale, so both sliders at maximum must still leave a readable badge instead of
-    /// an unbounded one.
-    /// </summary>
-    private const double MaxPhoneticFontSize = 32.0;
-
-    /// <summary>
     /// Minimum height (DIPs) the floating windows shrink to. Lowered from the
     /// previous hardcoded 200 so short results take less screen space (issue #172).
     /// </summary>
@@ -71,9 +64,13 @@ internal static class AppearanceService
     /// Effective phonetic (IPA) badge font size in DIPs. Phonetics follow the global result
     /// font scale — enlarging all result text must not leave them behind — and carry their
     /// own multiplier on top, which is what issue #249 asked for.
+    /// <para>
+    /// There is deliberately no additional ceiling: both multipliers are already bounded by
+    /// their sliders, so the composition tops out at 33.6 DIP. An extra cap would silently
+    /// make the top of the phonetic slider do nothing once the result scale is raised.
+    /// </para>
     /// </summary>
-    public static double PhoneticFontSize =>
-        Math.Min(BasePhoneticFontSize * PhoneticFontScale * FontScale, MaxPhoneticFontSize);
+    public static double PhoneticFontSize => BasePhoneticFontSize * PhoneticFontScale * FontScale;
 
     /// <summary>Captures the current effective metrics into an immutable snapshot.</summary>
     public static AppearanceSettings CurrentSnapshot() => new()

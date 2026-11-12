@@ -167,16 +167,20 @@ public class AppearanceServiceTests
         }
     }
 
+    /// <summary>
+    /// Both multipliers are bounded by their sliders, so the composition is bounded too; this
+    /// pins that maximum so a future change cannot quietly grow it into an unreadable badge.
+    /// </summary>
     [Fact]
-    public void PhoneticFontSize_IsCappedWhenBothScalesAreMaximal()
+    public void PhoneticFontSize_IsBoundedByBothSliderRanges()
     {
         var original = _settings.ResultFontScale;
         var originalPhonetic = _settings.PhoneticFontScale;
         try
         {
-            _settings.ResultFontScale = 10.0;
-            _settings.PhoneticFontScale = 10.0;
-            AppearanceService.PhoneticFontSize.Should().BeLessThanOrEqualTo(32.0);
+            _settings.ResultFontScale = 10.0;   // clamps to 1.4
+            _settings.PhoneticFontScale = 10.0; // clamps to 2.4
+            AppearanceService.PhoneticFontSize.Should().BeApproximately(10.0 * 2.4 * 1.4, 0.001);
         }
         finally
         {
@@ -185,23 +189,37 @@ public class AppearanceServiceTests
         }
     }
 
+    /// <summary>
+    /// Issue #249 acceptance: the phonetic size must survive a restart. Asserting the in-memory
+    /// property after Save() would pass even if Save() never wrote anything, so this saves in one
+    /// instance and reads back through a second one over a scratch directory. The internal
+    /// constructor takes an explicit directory, so the shared singleton is not touched.
+    /// </summary>
     [Fact]
-    public void PhoneticFontScale_SurvivesSave()
+    public void PhoneticFontScale_SurvivesSaveAndReload()
     {
-        var originalPhonetic = _settings.PhoneticFontScale;
+        var directory = Path.Combine(
+            Path.GetTempPath(), "Easydict.Tests", $"phonetic-font-scale-{Guid.NewGuid():N}");
 
         try
         {
-            _settings.PhoneticFontScale = 1.9;
-            _settings.Save();
+            var writer = new SettingsService(directory);
+            writer.PhoneticFontScale = 1.9;
+            writer.Save();
 
-            _settings.PhoneticFontScale.Should().Be(1.9,
-                "the phonetic size must persist across restarts, not reset per session");
+            File.Exists(Path.Combine(directory, "settings.json")).Should().BeTrue(
+                "Save must put the setting on disk");
+
+            var reader = new SettingsService(directory);
+            reader.PhoneticFontScale.Should().BeApproximately(1.9, 0.001,
+                "a fresh instance must read the saved size back from disk");
         }
         finally
         {
-            _settings.PhoneticFontScale = originalPhonetic;
-            _settings.Save();
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 

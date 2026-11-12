@@ -89,9 +89,9 @@
                     </Button>
                 </Grid>
 
-                <!-- Phonetics -->
+                <!-- Phonetics. The size is set from AppearanceService in the code-behind, so it
+                     follows the user's phonetic font size setting; do not hardcode it here. -->
                 <TextBlock x:Name="PhoneticText"
-                           FontSize="12"
                            TextWrapping="Wrap"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            Visibility="Collapsed"/>

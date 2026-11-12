@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Annulleret</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>Start / Varighed / Fase</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Faser kan overlappe; læg ikke tiderne sammen. Ventetid på svarheadere omfatter netværk og server. Kun målte faser vises.</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Forberedelse (inkl. sprogregistrering)</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Forberedelse af forespørgsel</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Sprogregistrering</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Sprogvalg</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Forberedelse af prompt</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Forberedelse af anmodning</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Venter på første tekst</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Streamingoutput</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Efterbehandling</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>Opslag af fonetik</value></data>
 </root>

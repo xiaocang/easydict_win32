@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>أُلغي</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>البداية / المدة / المرحلة</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>قد تتداخل المراحل؛ لا تجمع مددها. يشمل انتظار ترويسات الاستجابة انتظار الشبكة والخادم. تُعرض المراحل المقاسة فقط.</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>إعداد الاستعلام (بما في ذلك الاكتشاف)</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>تحضير الاستعلام</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>اكتشاف اللغة</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>توجيه اللغة</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>إعداد المطالبة</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>إعداد الطلب</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>انتظار أول نص</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>إخراج متدفق</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>المعالجة اللاحقة</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>البحث عن النطق</value></data>
 </root>

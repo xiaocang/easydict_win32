@@ -4,7 +4,16 @@ namespace Easydict.TranslationService.Models;
 
 public enum TranslationDiagnosticStage
 {
-    QueryPreparation, LanguageRouting, PromptPreparation, RequestPreparation, ResponseHeaders, FirstOutput, Streaming, PostProcessing
+    QueryPreparation,
+    LanguageDetection,
+    LanguageRouting,
+    PromptPreparation,
+    RequestPreparation,
+    ResponseHeaders,
+    FirstOutput,
+    Streaming,
+    PostProcessing,
+    PhoneticEnrichment
 }
 
 public enum TranslationDiagnosticStatus { Running, Completed, Failed, Cancelled }
@@ -52,6 +61,22 @@ public sealed class TranslationDiagnostics
             var index = _phases.Count;
             _phases.Add(new(stage, _ended ?? _time.GetTimestamp()));
             return new Measurement(this, index);
+        }
+    }
+
+    /// <summary>
+    /// Measures a stage that may still be running after <see cref="Complete"/> froze the total,
+    /// such as best-effort work that publishes its result before finishing. Unlike
+    /// <see cref="Measure"/>, both endpoints use the live clock, so the reported duration is real
+    /// elapsed time rather than being clamped at completion.
+    /// </summary>
+    public IDisposable MeasureAfterCompletion(TranslationDiagnosticStage stage)
+    {
+        lock (_lock)
+        {
+            var index = _phases.Count;
+            _phases.Add(new(stage, _time.GetTimestamp()));
+            return new Measurement(this, index, allowAfterCompletion: true);
         }
     }
 
@@ -129,17 +154,17 @@ public sealed class TranslationDiagnostics
             yield return new TranslationStreamUpdate.TextDelta(text);
     }
 
-    private void EndPhase(int index)
+    private void EndPhase(int index, bool allowAfterCompletion = false)
     {
         lock (_lock)
         {
             if (_phases[index].Ended is null)
-                _phases[index] = _phases[index] with { Ended = _ended ?? _time.GetTimestamp() };
+                _phases[index] = _phases[index] with { Ended = allowAfterCompletion ? _time.GetTimestamp() : _ended ?? _time.GetTimestamp() };
         }
     }
 
-    private sealed class Measurement(TranslationDiagnostics owner, int index) : IDisposable
+    private sealed class Measurement(TranslationDiagnostics owner, int index, bool allowAfterCompletion = false) : IDisposable
     {
-        public void Dispose() => owner.EndPhase(index);
+        public void Dispose() => owner.EndPhase(index, allowAfterCompletion);
     }
 }

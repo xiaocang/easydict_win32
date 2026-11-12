@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Annullato</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>Inizio / Durata / Fase</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Le fasi possono sovrapporsi: non sommare le durate. L'attesa delle intestazioni include rete e server. Sono mostrate solo le fasi misurate.</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Preparazione della query (rilevamento incluso)</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Preparazione della query</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Rilevamento della lingua</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Scelta delle lingue</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Preparazione del prompt</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Preparazione della richiesta</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Attesa del primo testo</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Output in streaming</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Post-elaborazione</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>Ricerca fonetica</value></data>
 </root>

@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Abgebrochen</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>Start / Dauer / Phase</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Phasen können sich überlappen; Zeiten nicht addieren. Das Warten auf Antwortheader umfasst Netzwerk- und Serverwartezeit. Nur gemessene Phasen werden angezeigt.</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Abfragevorbereitung (inkl. Spracherkennung)</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Abfragevorbereitung</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Spracherkennung</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Sprachauswahl</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Prompt vorbereiten</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Anfrage vorbereiten</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Auf ersten Text warten</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Streaming-Ausgabe</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Nachbearbeitung</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>Phonetikabruf</value></data>
 </root>

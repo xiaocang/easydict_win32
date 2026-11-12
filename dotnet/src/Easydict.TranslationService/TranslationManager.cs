@@ -334,6 +334,7 @@ public sealed class TranslationManager : IDisposable
         // Enrich phonetics if missing (word queries with an English side, either direction)
         if (policy.AllowPhoneticEnrichment)
         {
+            using var enrichment = request.Diagnostics?.Measure(TranslationDiagnosticStage.PhoneticEnrichment);
             result = await EnrichPhoneticsIfMissingAsync(result, request, cancellationToken);
         }
 

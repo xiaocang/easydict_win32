@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Cancelled</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>Start / Duration / Stage</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Stages can overlap; do not add their durations. Response-header wait includes network and server waiting. Only measured stages are shown.</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Query preparation (including detection)</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Query preparation</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Language detection</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Language routing</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Prompt preparation</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Request preparation</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Waiting for first text</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Streaming output</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Post-processing</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>Phonetic lookup (Youdao)</value></data>
 </root>

@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>रद्द किया गया</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>प्रारंभ / अवधि / चरण</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>चरण ओवरलैप हो सकते हैं; उनकी अवधियाँ न जोड़ें। प्रतिक्रिया शीर्षलेख की प्रतीक्षा में नेटवर्क और सर्वर प्रतीक्षा शामिल है। केवल मापे गए चरण दिखाए जाते हैं।</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>क्वेरी तैयारी (पता लगाने सहित)</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>क्वेरी तैयारी</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>भाषा पहचान</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>भाषा रूटिंग</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>प्रॉम्प्ट तैयारी</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>अनुरोध तैयारी</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>पहले पाठ की प्रतीक्षा</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>स्ट्रीमिंग आउटपुट</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>पोस्ट-प्रोसेसिंग</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>ध्वन्यात्मक खोज</value></data>
 </root>

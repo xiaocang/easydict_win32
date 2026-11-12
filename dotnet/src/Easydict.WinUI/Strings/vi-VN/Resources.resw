@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Đã hủy</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>Bắt đầu / Thời lượng / Giai đoạn</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>Các giai đoạn có thể chồng lên; không cộng thời lượng. Chờ tiêu đề phản hồi bao gồm chờ mạng và máy chủ. Chỉ hiển thị các giai đoạn đã đo.</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Chuẩn bị truy vấn (gồm nhận diện ngôn ngữ)</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Chuẩn bị truy vấn</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Nhận diện ngôn ngữ</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Chọn ngôn ngữ</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Chuẩn bị lời nhắc</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Chuẩn bị yêu cầu</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Chờ văn bản đầu tiên</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Xuất dữ liệu trực tuyến</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Xử lý sau</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>Tra cứu phiên âm</value></data>
 </root>

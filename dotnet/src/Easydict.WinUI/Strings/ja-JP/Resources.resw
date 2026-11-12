@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>キャンセル</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>開始 / 所要時間 / 段階</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>段階は重複することがあります。所要時間は合計しないでください。応答ヘッダー待ちにはネットワークとサーバーの待ち時間が含まれます。計測された段階のみ表示します。</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>クエリ準備（検出を含む）</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>クエリの準備</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>言語検出</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>言語ルーティング</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>プロンプト準備</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>リクエスト準備</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>最初のテキスト待ち</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>ストリーミング出力</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>後処理</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>発音記号の取得</value></data>
 </root>

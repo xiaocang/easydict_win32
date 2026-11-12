@@ -1826,7 +1826,8 @@
   <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>已取消</value></data>
   <data name="DiagnosticColumns" xml:space="preserve"><value>開始 / 耗時 / 階段</value></data>
   <data name="DiagnosticTimingNote" xml:space="preserve"><value>階段可能重疊，請勿將耗時相加。等待回應標頭包含網路與伺服器等待。僅顯示已測量的階段。</value></data>
-  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>查詢準備（含語言偵測）</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>查詢準備</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>語言偵測</value></data>
   <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>語言路由</value></data>
   <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>提示詞準備</value></data>
   <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>請求準備</value></data>
@@ -1834,4 +1835,5 @@
   <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>等待首段文字</value></data>
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>串流輸出</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>後處理</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>音標查詢</value></data>
 </root>

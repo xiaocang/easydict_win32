@@ -2176,9 +2176,13 @@ namespace Easydict.WinUI.Views
                 if (TranslationManagerService.Instance.Manager.IsStreamingService(serviceResult.ServiceId))
                     serviceResult.Diagnostics = queryDiagnostics;
                 var automaticRouter = CreateAutomaticTranslationRouter(inputText, _detectionService, ct);
-                var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
-                    ? _lastDetectedLanguage
-                    : await DetectSourceLanguageForQueryAsync(inputText, _detectionService, ct);
+                TranslationLanguage detectedLanguage;
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.LanguageDetection))
+                {
+                    detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
+                        ? _lastDetectedLanguage
+                        : await DetectSourceLanguageForQueryAsync(inputText, _detectionService, ct);
+                }
                 _lastDetectedLanguage = detectedLanguage;
                 var resolution = ResolveQuickQueryLanguage(
                     detectedLanguage,
@@ -2635,7 +2639,12 @@ namespace Easydict.WinUI.Views
                 using var queryDiagnosticCancellation = ct.Register(() => queryDiagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
                 using var queryPreparation = queryDiagnostics.Measure(TranslationDiagnosticStage.QueryPreparation);
                 var automaticRouter = CreateAutomaticTranslationRouter(inputText, detectionService, ct);
-                var detectedLanguage = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
+                queryPreparation.Dispose();
+                TranslationLanguage detectedLanguage;
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.LanguageDetection))
+                {
+                    detectedLanguage = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
+                }
                 _lastDetectedLanguage = detectedLanguage;
 
                 var resolution = ResolveQuickQueryLanguage(
@@ -3403,50 +3412,53 @@ namespace Easydict.WinUI.Views
             }
 
             stopwatch.Stop();
-            using var postProcessing = diagnostics.Measure(TranslationDiagnosticStage.PostProcessing);
 
             TranslationResult result;
-            if (completed is not null)
+            using (diagnostics.Measure(TranslationDiagnosticStage.PostProcessing))
             {
-                // Rich-streaming services deliver the final result themselves. An empty text is
-                // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
-                result = completed with
+                if (completed is not null)
                 {
-                    ServiceName = string.IsNullOrEmpty(completed.ServiceName)
-                        ? serviceResult.ServiceDisplayName
-                        : completed.ServiceName,
-                    TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
-                };
-            }
-            else
-            {
-                // Final update with complete result (apply same cleanup as non-streaming path)
-                var finalText = CleanupStreamingResult(sb.ToString());
-                if (string.IsNullOrWhiteSpace(finalText))
-                {
-                    throw new TranslationException("Streaming service returned an empty response")
+                    // Rich-streaming services deliver the final result themselves. An empty text is
+                    // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
+                    result = completed with
                     {
-                        ErrorCode = TranslationErrorCode.InvalidResponse,
-                        ServiceId = serviceResult.ServiceId
+                        ServiceName = string.IsNullOrEmpty(completed.ServiceName)
+                            ? serviceResult.ServiceDisplayName
+                            : completed.ServiceName,
+                        TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
                     };
                 }
-
-                // Create initial result
-                result = new TranslationResult
+                else
                 {
-                    TranslatedText = finalText,
-                    OriginalText = request.Text,
-                    DetectedLanguage = detectedLanguage,
-                    TargetLanguage = targetLanguage,
-                    ServiceName = serviceResult.ServiceDisplayName,
-                    TimingMs = stopwatch.ElapsedMilliseconds
-                };
+                    // Final update with complete result (apply same cleanup as non-streaming path)
+                    var finalText = CleanupStreamingResult(sb.ToString());
+                    if (string.IsNullOrWhiteSpace(finalText))
+                    {
+                        throw new TranslationException("Streaming service returned an empty response")
+                        {
+                            ErrorCode = TranslationErrorCode.InvalidResponse,
+                            ServiceId = serviceResult.ServiceId
+                        };
+                    }
+
+                    // Create initial result
+                    result = new TranslationResult
+                    {
+                        TranslatedText = finalText,
+                        OriginalText = request.Text,
+                        DetectedLanguage = detectedLanguage,
+                        TargetLanguage = targetLanguage,
+                        ServiceName = serviceResult.ServiceDisplayName,
+                        TimingMs = stopwatch.ElapsedMilliseconds
+                    };
+                }
             }
 
             // Enrich with phonetics from Youdao if missing (for word queries).
             // Run on thread pool to avoid blocking UI thread; honors the service's execution policy.
             try
             {
+                using var enrichment = diagnostics.Measure(TranslationDiagnosticStage.PhoneticEnrichment);
                 result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct, serviceResult.ServiceId));
             }
             catch

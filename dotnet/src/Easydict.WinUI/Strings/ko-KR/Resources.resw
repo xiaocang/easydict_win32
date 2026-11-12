@@ -1818,4 +1818,20 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>쿼리 진단 보기</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>총 경과 시간</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>실행 중</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>완료</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>실패</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>취소됨</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>시작 / 소요 시간 / 단계</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>단계는 겹칠 수 있으므로 소요 시간을 더하지 마세요. 응답 헤더 대기에는 네트워크와 서버 대기가 포함됩니다. 측정된 단계만 표시됩니다.</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>쿼리 준비(감지 포함)</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>언어 라우팅</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>프롬프트 준비</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>요청 준비</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>응답 헤더 대기</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>첫 텍스트 대기</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>스트리밍 출력</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>후처리</value></data>
 </root>

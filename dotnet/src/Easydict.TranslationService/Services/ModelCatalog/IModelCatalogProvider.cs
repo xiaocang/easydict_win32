@@ -2,13 +2,12 @@ namespace Easydict.TranslationService.Services.ModelCatalog;
 
 /// <summary>
 /// A translation service that can enumerate the models its provider currently offers.
-/// Implemented by the aggregator services (OpenRouter, OrcaRouter) whose catalogs change
-/// often enough that a hard-coded list goes stale.
+/// Supports both OpenAI-compatible catalogs and provider-native lists such as Ollama's.
 /// </summary>
 public interface IModelCatalogProvider
 {
     /// <summary>
-    /// Absolute URL of the provider's OpenAI-compatible <c>/models</c> endpoint.
+    /// Absolute URL of the provider's model-list endpoint (for example <c>/models</c> or <c>/api/tags</c>).
     /// </summary>
     string ModelsEndpoint { get; }
 

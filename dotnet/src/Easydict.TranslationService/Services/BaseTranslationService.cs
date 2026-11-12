@@ -20,6 +20,7 @@ public abstract class BaseTranslationService : ITranslationService
     }
 
     public abstract string ServiceId { get; }
+    public virtual bool SupportsAutomaticLanguageDirection => false;
     public abstract string DisplayName { get; }
     public abstract bool RequiresApiKey { get; }
     public abstract bool IsConfigured { get; }
@@ -105,7 +106,8 @@ public abstract class BaseTranslationService : ITranslationService
             };
         }
 
-        if (!SupportsLanguagePair(request.FromLanguage, request.ToLanguage))
+        if (!(SupportsAutomaticLanguageDirection && request.AutomaticDirection is not null)
+            && !SupportsLanguagePair(request.FromLanguage, request.ToLanguage))
         {
             throw new TranslationException(
                 $"Language pair not supported: {request.FromLanguage} -> {request.ToLanguage}")

@@ -18,6 +18,19 @@ namespace Easydict.WinUI.Tests.Services;
 public class PhiSilicaTranslationServiceTests
 {
     [Fact]
+    public void AutomaticDirection_PromptContainsPairWithoutFixedTarget()
+    {
+        var prompt = PhiSilicaTranslationService.BuildTranslationPrompt(new TranslationRequest
+        {
+            Text = "bonjour", ToLanguage = Language.Auto,
+            AutomaticDirection = new(Language.English, Language.Japanese)
+        });
+        prompt.Should().Contain("first language is English").And.Contain("second language is Japanese");
+        prompt.Should().Contain("otherwise translate into English").And.Contain("bonjour");
+        prompt.Should().NotContain("to Auto");
+    }
+
+    [Fact]
     public void ServiceId_IsWindowsLocalAi()
     {
         var service = new PhiSilicaTranslationService(new FakeClient());

@@ -535,6 +535,31 @@ public sealed partial class MiniWindow : Window
             && GrammarCorrectionServiceAvailability.IsAvailable(service, sourceLanguage));
     }
 
+    private AutomaticTranslationRouter? CreateAutomaticTranslationRouter(
+        string text, LanguageDetectionService detectionService, CancellationToken ct)
+    {
+        if (GetSourceLanguage() != TranslationLanguage.Auto || GetTargetLanguage() != TranslationLanguage.Auto
+            || detectionService.TryDetectLocally(text) is not null)
+            return null;
+
+        return new AutomaticTranslationRouter(
+            new AutomaticLanguageDirection(
+                LanguageExtensions.FromCode(_settings.FirstLanguage),
+                LanguageExtensions.FromCode(_settings.SecondLanguage)),
+            async () =>
+            {
+                var detected = await DetectionWarning.DetectAsync(detectionService, text, ct);
+                ct.ThrowIfCancellationRequested();
+                if (!_isClosing)
+                {
+                    _lastDetectedLanguage = detected;
+                    UpdateDetectedLanguageDisplay(detected);
+                }
+                return detected;
+            },
+            _targetLanguageSelector.ResolveAutoTargetLanguage);
+    }
+
     private QuickQueryLanguageResolution ResolveQuickQueryLanguage(
         TranslationLanguage effectiveSource,
         bool grammarCorrectionAvailable)
@@ -735,9 +760,18 @@ public sealed partial class MiniWindow : Window
 
             // Detect language (use cached if available from recent query)
             // Run detection on thread pool to avoid blocking UI thread
+            var queryDiagnostics = new TranslationDiagnostics();
+            using var queryDiagnosticCancellation = ct.Register(() => queryDiagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+            using var queryPreparation = queryDiagnostics.Measure(TranslationDiagnosticStage.QueryPreparation);
+            if (TranslationManagerService.Instance.Manager.IsStreamingService(serviceResult.ServiceId))
+                serviceResult.Diagnostics = queryDiagnostics;
+            var automaticRouter = CreateAutomaticTranslationRouter(inputText, _detectionService, ct);
             var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
-                : await DetectionWarning.DetectAsync(_detectionService, inputText, ct);
+                : GetSourceLanguage() != TranslationLanguage.Auto ? GetSourceLanguage()
+                : GetTargetLanguage() == TranslationLanguage.Auto
+                    ? _detectionService.TryDetectLocally(inputText) ?? TranslationLanguage.Auto
+                    : await DetectionWarning.DetectAsync(_detectionService, inputText, ct);
             _lastDetectedLanguage = detectedLanguage;
             var resolution = ResolveQuickQueryLanguage(
                 detectedLanguage,
@@ -749,6 +783,7 @@ public sealed partial class MiniWindow : Window
             if (resolution.EffectiveMode == QueryMode.GrammarCorrection
                 && serviceResult.IsGrammarCapable)
             {
+                queryPreparation.Dispose();
                 var grammarRequest = new GrammarCorrectionRequest
                 {
                     Text = inputText,
@@ -769,16 +804,24 @@ public sealed partial class MiniWindow : Window
             }
 
             // Create request
+            queryPreparation.Dispose();
             var request = new TranslationRequest
             {
                 Text = inputText,
                 FromLanguage = detectedLanguage,
-                ToLanguage = targetLanguage
+                ToLanguage = targetLanguage,
+                Diagnostics = queryDiagnostics
             };
 
             // Execute translation
             using var handle = TranslationManagerService.Instance.AcquireHandle();
             var manager = handle.Manager;
+            if (automaticRouter is not null)
+            {
+                request = await automaticRouter.CreateRequestAsync(manager.Services[serviceResult.ServiceId], request, ct);
+                detectedLanguage = request.FromLanguage;
+                targetLanguage = request.ToLanguage;
+            }
 
             if (manager.IsStreamingService(serviceResult.ServiceId))
             {
@@ -1208,11 +1251,18 @@ public sealed partial class MiniWindow : Window
             SetLoading(true);
             PrepareServiceResultsForQueryStart();
 
+            var queryDiagnostics = new TranslationDiagnostics();
+            using var queryDiagnosticCancellation = ct.Register(() => queryDiagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+            using var queryPreparation = queryDiagnostics.Measure(TranslationDiagnosticStage.QueryPreparation);
+            var automaticRouter = CreateAutomaticTranslationRouter(inputText, detectionService, ct);
             var sourceLanguage = GetSourceLanguage();
             TranslationLanguage detectedLanguage;
             if (sourceLanguage == TranslationLanguage.Auto)
             {
-                detectedLanguage = await DetectionWarning.DetectAsync(detectionService, inputText, ct);
+                _detectionWarning?.Reset();
+                detectedLanguage = GetTargetLanguage() == TranslationLanguage.Auto
+                    ? detectionService.TryDetectLocally(inputText) ?? TranslationLanguage.Auto
+                    : await DetectionWarning.DetectAsync(detectionService, inputText, ct);
                 UpdateDetectedLanguageDisplay(detectedLanguage);
             }
             else
@@ -1302,7 +1352,7 @@ public sealed partial class MiniWindow : Window
             snapshotDraft = _settings.HistoryEnabled ? new QuerySnapshotDraft(
                 inputText,
                 detectedLanguage.ToIso639(),
-                targetLanguage.ToIso639(),
+                (automaticRouter is null ? targetLanguage : TranslationLanguage.Auto).ToIso639(),
                 SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
                 sourceKind,
                 historyEnabled: true) : null;
@@ -1324,17 +1374,22 @@ public sealed partial class MiniWindow : Window
             // Route based on effective quick-query mode
             if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
             {
+                queryPreparation.Dispose();
+                foreach (var row in _serviceResults.Where(row => row.EnabledQuery && row.IsGrammarCapable))
+                    row.Diagnostics = queryDiagnostics.Fork();
                 await StartGrammarCorrectionInternalAsync(
                     inputText, detectedLanguage, targetLanguage, ct, snapshotDraft);
                 return;
             }
 
             // Create translation request
-            var request = new TranslationRequest
+            queryPreparation.Dispose();
+            var defaultRequest = new TranslationRequest
             {
                 Text = inputText,
                 FromLanguage = detectedLanguage,
-                ToLanguage = targetLanguage
+                ToLanguage = targetLanguage,
+                Diagnostics = queryDiagnostics
             };
 
             // Execute translation for each enabled service in parallel
@@ -1355,6 +1410,11 @@ public sealed partial class MiniWindow : Window
                     // Acquire handle once per service to ensure consistent manager instance
                     using var handle = TranslationManagerService.Instance.AcquireHandle();
                     var manager = handle.Manager;
+                    var request = defaultRequest.WithDiagnostics(queryDiagnostics.Fork());
+                    if (manager.IsStreamingService(serviceResult.ServiceId))
+                        serviceResult.Diagnostics = request.Diagnostics;
+                    if (automaticRouter is not null)
+                        request = await automaticRouter.CreateRequestAsync(manager.Services[serviceResult.ServiceId], request, ct);
                     QueryExecutionOutcome outcome;
 
                     // Check if service supports streaming
@@ -1362,7 +1422,7 @@ public sealed partial class MiniWindow : Window
                     {
                         // Streaming path for LLM services (pass manager to avoid re-acquiring)
                         var streamedResult = await ExecuteStreamingTranslationForServiceAsync(
-                            manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
+                            manager, serviceResult, request, request.FromLanguage, request.ToLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
                         outcome = streamedResult.ResultKind == TranslationResultKind.Success
                             ? QueryExecutionOutcome.Success
                             : QueryExecutionOutcome.Neutral;
@@ -1406,7 +1466,7 @@ public sealed partial class MiniWindow : Window
                                 if (!string.IsNullOrEmpty(targetText))
                                 {
                                     _hasAutoPlayedCurrentQuery = true;
-                                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, request.ToLanguage);
                                     NotifyAutoPlayTts(serviceResult, playbackTask);
                                 }
                             }
@@ -1730,6 +1790,10 @@ public sealed partial class MiniWindow : Window
                 || service is not IGrammarCorrectionService grammarService)
                 return null;
 
+            var diagnostics = serviceResult.Diagnostics ?? new TranslationDiagnostics();
+            using var diagnosticCancellation = ct.Register(() => diagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+            serviceResult.Diagnostics = diagnostics;
+            request = request.WithDiagnostics(diagnostics);
             var stopwatch = Stopwatch.StartNew();
             var sb = new StringBuilder();
             var lastUpdateTime = DateTime.UtcNow;
@@ -1745,8 +1809,8 @@ public sealed partial class MiniWindow : Window
 
             // See ExecuteStreamingTranslationForServiceAsync above for the rationale —
             // grammar correction shares the same streaming/measure cost profile.
-            await foreach (var chunk in grammarService
-                .CorrectGrammarStreamAsync(request, ct).ConfigureAwait(false))
+            await foreach (var chunk in diagnostics.ObserveTextAsync(grammarService
+                .CorrectGrammarStreamAsync(request, ct), ct).ConfigureAwait(false))
             {
                 sb.Append(chunk);
 
@@ -1759,6 +1823,7 @@ public sealed partial class MiniWindow : Window
             }
 
             stopwatch.Stop();
+            using var postProcessing = diagnostics.Measure(TranslationDiagnosticStage.PostProcessing);
             var rawOutput = sb.ToString();
             var grammarResult = GrammarCorrectionParser.Parse(
                 rawOutput, request.Text, serviceResult.ServiceDisplayName,
@@ -1846,6 +1911,10 @@ public sealed partial class MiniWindow : Window
         QuerySnapshotDraft? snapshotDraft = null,
         int displayOrder = 0)
     {
+        var diagnostics = request.Diagnostics ?? new TranslationDiagnostics();
+        using var diagnosticCancellation = ct.Register(() => diagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+        request = request.WithDiagnostics(diagnostics);
+        serviceResult.Diagnostics = diagnostics;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var sb = new StringBuilder();
         var lastUpdateTime = DateTime.UtcNow;
@@ -1873,8 +1942,8 @@ public sealed partial class MiniWindow : Window
         // finished content; during streaming the existing ScrollViewer handles
         // overflow.
         TranslationResult? completed = null;
-        await foreach (var update in manager.TranslateStreamUpdatesAsync(
-            request, ct, serviceResult.ServiceId).ConfigureAwait(false))
+        await foreach (var update in diagnostics.ObserveStreamAsync(manager.TranslateStreamUpdatesAsync(
+            request, ct, serviceResult.ServiceId), ct).ConfigureAwait(false))
         {
             switch (update)
             {
@@ -1903,6 +1972,7 @@ public sealed partial class MiniWindow : Window
         }
 
         stopwatch.Stop();
+        using var postProcessing = diagnostics.Measure(TranslationDiagnosticStage.PostProcessing);
 
         TranslationResult result;
         if (completed is not null)

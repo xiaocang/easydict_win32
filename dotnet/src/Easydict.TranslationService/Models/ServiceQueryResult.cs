@@ -20,6 +20,18 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     private bool _hasQueried;
     private QueryMode _currentMode = QueryMode.Translation;
     private GrammarCorrectionResult? _grammarResult;
+    private TranslationDiagnostics? _diagnostics;
+
+    public TranslationDiagnostics? Diagnostics
+    {
+        get => _diagnostics;
+        set
+        {
+            if (ReferenceEquals(_diagnostics, value)) return;
+            _diagnostics?.Complete(TranslationDiagnosticStatus.Cancelled);
+            SetField(ref _diagnostics, value);
+        }
+    }
 
     /// <summary>
     /// Service identifier (e.g., "google", "deepl").
@@ -64,6 +76,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         {
             if (SetField(ref _result, value))
             {
+                if (value is not null) Diagnostics?.Complete(TranslationDiagnosticStatus.Completed);
                 OnResultStateChanged();
             }
         }
@@ -79,6 +92,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         {
             if (SetField(ref _error, value))
             {
+                if (value is not null) Diagnostics?.Complete(TranslationDiagnosticStatus.Failed);
                 OnResultStateChanged();
             }
         }
@@ -226,6 +240,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         {
             if (SetField(ref _grammarResult, value))
             {
+                if (value is not null) Diagnostics?.Complete(TranslationDiagnosticStatus.Completed);
                 OnPropertyChanged(nameof(HasResult));
                 OnPropertyChanged(nameof(DisplayText));
                 OnPropertyChanged(nameof(StatusText));
@@ -243,7 +258,10 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     /// Clear the queried state so the service can be retried.
     /// Used when a manual query is cancelled before producing a result.
     /// </summary>
-    public void ClearQueried() => HasQueried = false;
+    public void ClearQueried()
+    {
+        HasQueried = false;
+    }
 
     // Computed properties for UI binding
 
@@ -376,6 +394,8 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     /// </summary>
     public void Reset()
     {
+        Diagnostics?.Complete(TranslationDiagnosticStatus.Cancelled);
+        Diagnostics = null;
         Result = null;
         Error = null;
         GrammarResult = null;

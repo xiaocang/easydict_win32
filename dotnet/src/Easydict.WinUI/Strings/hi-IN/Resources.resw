@@ -1818,4 +1818,20 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>क्वेरी निदान देखें</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>कुल बीता समय</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>चल रहा है</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>पूर्ण</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>विफल</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>रद्द किया गया</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>प्रारंभ / अवधि / चरण</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>चरण ओवरलैप हो सकते हैं; उनकी अवधियाँ न जोड़ें। प्रतिक्रिया शीर्षलेख की प्रतीक्षा में नेटवर्क और सर्वर प्रतीक्षा शामिल है। केवल मापे गए चरण दिखाए जाते हैं।</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>क्वेरी तैयारी (पता लगाने सहित)</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>भाषा रूटिंग</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>प्रॉम्प्ट तैयारी</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>अनुरोध तैयारी</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>प्रतिक्रिया शीर्षलेख की प्रतीक्षा</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>पहले पाठ की प्रतीक्षा</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>स्ट्रीमिंग आउटपुट</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>पोस्ट-प्रोसेसिंग</value></data>
 </root>

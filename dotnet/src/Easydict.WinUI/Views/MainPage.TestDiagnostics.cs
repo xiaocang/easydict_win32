@@ -31,6 +31,15 @@ public sealed partial class MainPage
             {
                 foreach (var result in results)
                 {
+                    var diagnosticScenario = Environment.GetEnvironmentVariable("EASYDICT_QUERY_DIAGNOSTICS_TEST");
+                    if (diagnosticScenario is "completed" or "timeout" or "running")
+                    {
+                        result.Diagnostics = new TranslationDiagnostics();
+                        using (result.Diagnostics.Measure(TranslationDiagnosticStage.QueryPreparation))
+                            await Task.Delay(20);
+                        using (result.Diagnostics.Measure(TranslationDiagnosticStage.ResponseHeaders))
+                            await Task.Delay(30);
+                    }
                     result.Result = new TranslationResult
                     {
                         OriginalText = draft.SourceText,
@@ -39,6 +48,21 @@ public sealed partial class MainPage
                     };
                     result.MarkQueried();
                     draft.TryAddTranslation(result.ServiceId, result.ServiceDisplayName, _serviceResults.IndexOf(result), result.Result);
+                    if (diagnosticScenario is "timeout" or "running")
+                    {
+                        result.Result = null;
+                        // A fresh record represents an in-flight query rather than a completed one.
+                        var diagnostics = result.Diagnostics!.Fork();
+                        result.Diagnostics = diagnostics;
+                        diagnostics.Measure(TranslationDiagnosticStage.FirstOutput);
+                        if (diagnosticScenario == "timeout")
+                            result.Error = new Easydict.TranslationService.TranslationException("Fixture request timed out")
+                            {
+                                ErrorCode = Easydict.TranslationService.TranslationErrorCode.Timeout
+                            };
+                        else
+                            result.IsLoading = true;
+                    }
                     RefreshServiceResultView(result);
                 }
                 // Exercise the same optional persistence/read pair used by both

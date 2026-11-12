@@ -170,6 +170,28 @@ public sealed class LanguageDetectionService : IDisposable
         }
     }
 
+    /// <summary>Resolve script or cached results without starting a network request.</summary>
+    public Language? TryDetectLocally(string text)
+    {
+        if (IsDisposed() || string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var local = DetectByScript(text,
+            LanguageExtensions.FromCode(_settings.FirstLanguage),
+            LanguageExtensions.FromCode(_settings.SecondLanguage));
+        if (local is not null)
+            return local;
+
+        try
+        {
+            return _cache.TryGetValue(GetCacheKey(text), out Language cached) ? cached : null;
+        }
+        catch (ObjectDisposedException)
+        {
+            return null;
+        }
+    }
+
     private static async Task<Language> DetectWithSharedServicesAsync(
         string text, CancellationToken cancellationToken, Action? onRateLimited)
     {

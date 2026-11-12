@@ -7,6 +7,9 @@ namespace Easydict.TranslationService;
 /// </summary>
 public interface ITranslationService
 {
+    /// <summary>Whether translation prompts can choose a target from the user's language pair.</summary>
+    bool SupportsAutomaticLanguageDirection => false;
+
     /// <summary>
     /// Unique identifier for this service type.
     /// </summary>

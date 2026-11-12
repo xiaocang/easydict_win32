@@ -35,6 +35,7 @@ public class ProfiledTranslationService : ITranslationService, ICacheKeyDiscrimi
     public string ServiceId { get; }
     public string DisplayName { get; }
     public bool RequiresApiKey => InnerService.RequiresApiKey;
+    public bool SupportsAutomaticLanguageDirection => InnerService.SupportsAutomaticLanguageDirection;
     public bool IsConfigured => _isEnabled && InnerService.IsConfigured;
     public IReadOnlyList<Language> SupportedLanguages => InnerService.SupportedLanguages;
     public string? CacheKeyDiscriminator { get; }

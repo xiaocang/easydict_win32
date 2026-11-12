@@ -66,6 +66,8 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     public bool RequiresApiKey => false;
     public bool IsConfigured => true;
     public bool IsStreaming => true;
+    public bool SupportsAutomaticLanguageDirection => _settings.LocalAIProvider is
+        LocalAiProviderModes.WindowsAI or LocalAiProviderModes.FoundryLocal;
 
     public IReadOnlyList<Language> SupportedLanguages { get; } =
         Enum.GetValues<Language>().Where(l => l != Language.Auto).ToArray();
@@ -548,6 +550,9 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             Text = request.Text,
             FromLanguage = request.FromLanguage.ToString(),
             ToLanguage = request.ToLanguage.ToString(),
+            AutomaticFirstLanguage = request.AutomaticDirection?.FirstLanguage.ToString(),
+            AutomaticSecondLanguage = request.AutomaticDirection?.SecondLanguage.ToString(),
+            CustomPrompt = request.CustomPrompt,
             ProviderMode = _settings.LocalAIProvider ?? LocalAiProviderModes.Auto,
         };
     }

@@ -1818,4 +1818,20 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>View query diagnostics</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>Total elapsed</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>Running</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>Completed</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>Start / Duration / Stage</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>Stages can overlap; do not add their durations. Response-header wait includes network and server waiting. Only measured stages are shown.</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Query preparation (including detection)</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Language routing</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Prompt preparation</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Request preparation</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>Waiting for response headers</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Waiting for first text</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Streaming output</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Post-processing</value></data>
 </root>

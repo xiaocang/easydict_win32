@@ -11,6 +11,7 @@ namespace Easydict.TranslationService.Services;
 /// </summary>
 public sealed class GeminiService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
+    public override bool SupportsAutomaticLanguageDirection => true;
     private const string DefaultModel = "gemini-2.5-flash";
     private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -86,6 +87,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         TranslationRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var preparation = request.Diagnostics?.Measure(TranslationDiagnosticStage.PromptPreparation);
         ValidateConfiguration();
 
         var sourceLangName = request.FromLanguage == Language.Auto
@@ -93,7 +95,9 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             : request.FromLanguage.GetDisplayName();
         var targetLangName = request.ToLanguage.GetDisplayName();
 
-        var userPrompt = $"Translate the following {sourceLangName} text into {targetLangName} text: \"\"\"{request.Text}\"\"\"";
+        var userPrompt = request.AutomaticDirection is { } direction
+            ? $"{direction.BuildInstruction()}\n\nSource text: \"\"\"{request.Text}\"\"\""
+            : $"Translate the following {sourceLangName} text into {targetLangName} text: \"\"\"{request.Text}\"\"\"";
 
         // Build Gemini-specific request body
         var requestBody = new
@@ -134,9 +138,11 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             Encoding.UTF8,
             "application/json");
 
+        preparation?.Dispose();
         HttpResponseMessage response;
         try
         {
+            using var headers = request.Diagnostics?.Measure(TranslationDiagnosticStage.ResponseHeaders);
             response = await HttpClient.SendAsync(
                 httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -239,6 +245,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         GrammarCorrectionRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var preparation = request.Diagnostics?.Measure(TranslationDiagnosticStage.PromptPreparation);
         ValidateConfiguration();
 
         var requestBody = new
@@ -269,9 +276,11 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             Encoding.UTF8,
             "application/json");
 
+        preparation?.Dispose();
         HttpResponseMessage response;
         try
         {
+            using var headers = request.Diagnostics?.Measure(TranslationDiagnosticStage.ResponseHeaders);
             response = await HttpClient.SendAsync(
                 httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,

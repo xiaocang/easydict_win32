@@ -15,6 +15,7 @@ namespace Easydict.WindowsAI.Services;
 /// </summary>
 public sealed class PhiSilicaTranslationService : IStreamTranslationService, IGrammarCorrectionService, ILocalModelProvider
 {
+    public bool SupportsAutomaticLanguageDirection => true;
     public const string ServiceIdValue = "windows-local-ai";
 
     private static readonly IReadOnlyList<Language> _allLanguages =
@@ -505,7 +506,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, IGr
             };
         }
 
-        if (request.ToLanguage == Language.Auto)
+        if (request.ToLanguage == Language.Auto && request.AutomaticDirection is null)
         {
             throw new TranslationException("Target language cannot be Auto")
             {
@@ -607,7 +608,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, IGr
         You are a professional translation engine used inside a desktop dictionary app.
 
         Task:
-        Translate the text from {from} to {to}.
+        {(request.AutomaticDirection is { } direction ? direction.BuildInstruction() : $"Translate the text from {from} to {to}.")}
 
         Rules:
         - Output only the translated text.

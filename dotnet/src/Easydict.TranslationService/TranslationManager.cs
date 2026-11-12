@@ -988,7 +988,7 @@ public sealed class TranslationManager : IDisposable
         // (BobTranslationService.BuildQueryJson) and can change its output even when Text/From/To
         // are identical. All of it must separate cache entries.
         var discriminator = (service as ICacheKeyDiscriminatorProvider)?.CacheKeyDiscriminator;
-        var raw = $"{serviceId}|{request.FromLanguage}|{request.ToLanguage}|{request.Text}|{request.CustomPrompt}|{request.OriginalText}|{request.DetectedFromLanguage}|{discriminator}";
+        var raw = $"{serviceId}|{request.FromLanguage}|{request.ToLanguage}|{request.Text}|{request.CustomPrompt}|{request.OriginalText}|{request.DetectedFromLanguage}|{discriminator}|{request.AutomaticDirection}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
         return Convert.ToHexString(bytes);
     }

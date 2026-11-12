@@ -5142,7 +5142,7 @@ public sealed partial class SettingsPage : Page
             || !SameSecret(CustomOpenAIKeyBox.Password, _settings.CustomOpenAIApiKey)
             || !SameSetting(string.IsNullOrWhiteSpace(customModel) ? "gpt-3.5-turbo" : customModel, _settings.CustomOpenAIModel)
             || !SameSetting(string.IsNullOrWhiteSpace(ollamaEndpoint) ? "http://localhost:11434/v1/chat/completions" : ollamaEndpoint, _settings.OllamaEndpoint)
-            || !SameSetting(OllamaModelCombo.Text?.Trim() ?? "llama3.2", _settings.OllamaModel)
+            || !SameSetting(GetEditableComboValue(OllamaModelCombo, "llama3.2"), _settings.OllamaModel)
             || !SameSetting(GetTagComboValue(OllamaPromptStyleCombo, "Standard"), _settings.OllamaPromptStyle)
             || !SameSetting(OllamaCustomPromptBox.Text?.Trim() ?? "", _settings.OllamaCustomPrompt)
             || !SameSetting(GetSelectedTag(LocalAIProviderCombo) ?? "Auto", _settings.LocalAIProvider)
@@ -7007,7 +7007,7 @@ public sealed partial class SettingsPage : Page
         _settings.OllamaEndpoint = string.IsNullOrWhiteSpace(ollamaEndpoint)
             ? "http://localhost:11434/v1/chat/completions"
             : ollamaEndpoint;
-        _settings.OllamaModel = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
+        _settings.OllamaModel = GetEditableComboValue(OllamaModelCombo, "llama3.2");
         _settings.OllamaPromptStyle = GetTagComboValue(OllamaPromptStyleCombo, "Standard");
         _settings.OllamaCustomPrompt = OllamaCustomPromptBox.Text?.Trim() ?? "";
         _settings.LocalAIProvider = GetSelectedTag(LocalAIProviderCombo) ?? "Auto";
@@ -7710,54 +7710,24 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Refreshes the available Ollama models from the local server.
+    /// Refreshes installed and cloud Ollama models using the shared catalog provider.
     /// </summary>
     private async void OnRefreshOllamaModels(object sender, RoutedEventArgs e)
     {
         RefreshOllamaButton.IsEnabled = false;
         try
         {
-            // Extract base URL from endpoint
-            var endpoint = OllamaEndpointBox.Text?.Trim() ?? "http://localhost:11434/v1/chat/completions";
-            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
-            {
-                uri = new Uri("http://localhost:11434");
-            }
-            var baseUrl = $"{uri.Scheme}://{uri.Host}:{uri.Port}";
-            var tagsUrl = $"{baseUrl}/api/tags";
-
-            using var httpClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var response = await httpClient.GetStringAsync(tagsUrl);
-
-            // Parse JSON response: {"models": [{"name": "llama3.2"}, ...]}
-            using var doc = JsonDocument.Parse(response);
-            if (doc.RootElement.TryGetProperty("models", out var models))
-            {
-                var currentSelection = OllamaModelCombo.Text;
-                OllamaModelCombo.Items.Clear();
-
-                foreach (var model in models.EnumerateArray())
-                {
-                    if (model.TryGetProperty("name", out var nameElement))
-                    {
-                        var name = nameElement.GetString();
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            OllamaModelCombo.Items.Add(new ComboBoxItem { Content = name, Tag = name });
-                        }
-                    }
-                }
-
-                // Restore selection or select first item
-                if (!string.IsNullOrEmpty(currentSelection))
-                {
-                    OllamaModelCombo.Text = currentSelection;
-                }
-                else if (OllamaModelCombo.Items.Count > 0)
-                {
-                    OllamaModelCombo.SelectedIndex = 0;
-                }
-            }
+            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var service = new OllamaService(httpClient);
+            service.Configure(endpoint: OllamaEndpointBox.Text?.Trim());
+            var models = await service.FetchModelsAsync(_lifetimeCts.Token);
+            if (_isUnloaded) return;
+            var currentSelection = GetEditableComboValue(OllamaModelCombo, "llama3.2");
+            ReplaceEditableComboOptions(OllamaModelCombo, models, currentSelection);
+        }
+        catch (OperationCanceledException) when (_isUnloaded)
+        {
+            // Navigating away cancels the refresh without showing a connection error.
         }
         catch (Exception ex)
         {
@@ -7774,7 +7744,8 @@ public sealed partial class SettingsPage : Page
         }
         finally
         {
-            RefreshOllamaButton.IsEnabled = true;
+            if (!_isUnloaded)
+                RefreshOllamaButton.IsEnabled = true;
         }
     }
 
@@ -8501,7 +8472,7 @@ public sealed partial class SettingsPage : Page
             if (service is OllamaService ollama)
             {
                 var endpoint = OllamaEndpointBox.Text?.Trim();
-                var model = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
+                var model = GetEditableComboValue(OllamaModelCombo, "llama3.2");
                 ollama.Configure(
                     string.IsNullOrWhiteSpace(endpoint) ? "http://localhost:11434/v1/chat/completions" : endpoint,
                     model);

@@ -5,6 +5,14 @@ namespace Easydict.TranslationService.Models;
 /// </summary>
 public sealed class GrammarCorrectionRequest
 {
+    public TranslationDiagnostics? Diagnostics { get; init; }
+
+    public GrammarCorrectionRequest WithDiagnostics(TranslationDiagnostics diagnostics) => new()
+    {
+        Text = Text, Language = Language, IncludeExplanations = IncludeExplanations,
+        TimeoutMs = TimeoutMs, Diagnostics = diagnostics
+    };
+
     /// <summary>
     /// Text to check and correct.
     /// </summary>

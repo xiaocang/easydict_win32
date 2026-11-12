@@ -10,6 +10,24 @@ namespace Easydict.TranslationService.Tests;
 /// </summary>
 public class TranslationManagerTests : IDisposable
 {
+    [Fact]
+    public async Task AutomaticDirection_ChangingPreferencesDoesNotReuseOldTranslation()
+    {
+        var service = new TestTranslationService("direction-cache", "Test");
+        _manager.RegisterService(service);
+        TranslationRequest RequestFor(Language first, Language second) => new()
+        {
+            Text = "bonjour le monde", FromLanguage = Language.Auto, ToLanguage = Language.Auto,
+            AutomaticDirection = new(first, second)
+        };
+        var englishFirst = RequestFor(Language.English, Language.Japanese);
+        (await _manager.TranslateAsync(englishFirst, serviceId: service.ServiceId)).FromCache.Should().BeFalse();
+        (await _manager.TranslateAsync(englishFirst, serviceId: service.ServiceId)).FromCache.Should().BeTrue();
+        (await _manager.TranslateAsync(RequestFor(Language.Japanese, Language.English), serviceId: service.ServiceId))
+            .FromCache.Should().BeFalse();
+        service.TranslationCallCount.Should().Be(2);
+    }
+
     private readonly TranslationManager _manager;
 
     public TranslationManagerTests()
@@ -278,6 +296,7 @@ public class TranslationManagerTests : IDisposable
             await Release.Task.WaitAsync(cancellationToken);
             return new TranslationResult
             {
+                ServiceName = DisplayName,
                 OriginalText = request.Text,
                 TranslatedText = "你好",
                 TargetLanguage = request.ToLanguage,

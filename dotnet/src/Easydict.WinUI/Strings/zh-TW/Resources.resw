@@ -1818,4 +1818,20 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>欄位範本支援 {Word}、{Phonetic}、{Definition}、{Translation}。</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>請先在設定 → Labs 中設定 Anki。</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>所選牌組或筆記類型無法使用，請選擇其他目標。</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>檢視查詢診斷</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>總耗時</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>進行中</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>已完成</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>失敗</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>已取消</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>開始 / 耗時 / 階段</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>階段可能重疊，請勿將耗時相加。等待回應標頭包含網路與伺服器等待。僅顯示已測量的階段。</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>查詢準備（含語言偵測）</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>語言路由</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>提示詞準備</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>請求準備</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>等待回應標頭</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>等待首段文字</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>串流輸出</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>後處理</value></data>
 </root>

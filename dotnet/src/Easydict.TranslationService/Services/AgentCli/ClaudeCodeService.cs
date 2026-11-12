@@ -13,6 +13,7 @@ namespace Easydict.TranslationService.Services.AgentCli;
 /// </summary>
 public sealed class ClaudeCodeService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
+    public override bool SupportsAutomaticLanguageDirection => true;
     public const string ServiceIdValue = "claude-code";
     public const string DefaultModel = "haiku";
     public const string InstallDocumentationUrl = "https://code.claude.com/docs/en/quickstart";

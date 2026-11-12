@@ -106,6 +106,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         TranslationRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var preparation = request.Diagnostics?.Measure(TranslationDiagnosticStage.PromptPreparation);
         if (!IsConfigured)
         {
             throw new TranslationException("Service not configured. Please provide an API key.")
@@ -152,9 +153,11 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         httpRequest.Content = content;
         httpRequest.Headers.Add("Authorization", $"Bearer {_apiKey}");
 
+        preparation?.Dispose();
         HttpResponseMessage response;
         try
         {
+            using var headers = request.Diagnostics?.Measure(TranslationDiagnosticStage.ResponseHeaders);
             response = await HttpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)

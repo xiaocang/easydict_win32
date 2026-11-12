@@ -101,6 +101,11 @@ internal sealed class TranslateHandler
             Text = p.Text,
             FromLanguage = Enum.TryParse<Language>(p.FromLanguage, out var from) ? from : Language.Auto,
             ToLanguage = Enum.TryParse<Language>(p.ToLanguage, out var to) ? to : Language.English,
+            CustomPrompt = p.CustomPrompt,
+            AutomaticDirection = Enum.TryParse<Language>(p.AutomaticFirstLanguage, out var first)
+                && Enum.TryParse<Language>(p.AutomaticSecondLanguage, out var second)
+                && first != Language.Auto && second != Language.Auto && first != second
+                    ? new AutomaticLanguageDirection(first, second) : null,
         };
     }
 

@@ -1818,4 +1818,20 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>Afficher le diagnostic de la requête</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>Durée totale</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>En cours</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>Terminé</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>Échec</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Annulé</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>Début / Durée / Étape</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>Les étapes peuvent se chevaucher : ne pas additionner leurs durées. L'attente des en-têtes comprend le réseau et le serveur. Seules les étapes mesurées sont affichées.</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Préparation de la requête (détection incluse)</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Choix des langues</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Préparation du prompt</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Préparation de la demande</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>Attente des en-têtes</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Attente du premier texte</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Sortie en continu</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Post-traitement</value></data>
 </root>

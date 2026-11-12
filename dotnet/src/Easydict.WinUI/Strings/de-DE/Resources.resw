@@ -1818,4 +1818,20 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>Abfragediagnose anzeigen</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>Gesamtdauer</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>Läuft</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>Abgeschlossen</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>Fehlgeschlagen</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Abgebrochen</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>Start / Dauer / Phase</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>Phasen können sich überlappen; Zeiten nicht addieren. Das Warten auf Antwortheader umfasst Netzwerk- und Serverwartezeit. Nur gemessene Phasen werden angezeigt.</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Abfragevorbereitung (inkl. Spracherkennung)</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Sprachauswahl</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Prompt vorbereiten</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Anfrage vorbereiten</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>Auf Antwortheader warten</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Auf ersten Text warten</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Streaming-Ausgabe</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Nachbearbeitung</value></data>
 </root>

@@ -1477,16 +1477,18 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(badge,
             "Click the speaker button to hear pronunciation");
 
-        var panel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 2
-        };
+        // A grid rather than a horizontal stack: the badge must be able to shrink to the
+        // available width and wrap its transcription, otherwise a long phonetic at the
+        // largest size would still push the speaker button out of a narrow result column.
+        var panel = new Grid();
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         // Accent label (e.g., "美", "英", "src", "dest")
         if (!string.IsNullOrEmpty(accentLabel))
         {
-            panel.Children.Add(new TextBlock
+            var accentText = new TextBlock
             {
                 Text = accentLabel,
                 FontSize = phoneticFontSize,
@@ -1494,12 +1496,15 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 Foreground = FindServiceChromeBrushFallback(
                     "PhoneticBadgeTextBrush",
                     "QueryTextBrush"),
-                VerticalAlignment = VerticalAlignment.Center
-            });
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 2, 0)
+            };
+            Grid.SetColumn(accentText, 0);
+            panel.Children.Add(accentText);
         }
 
         // Phonetic text
-        panel.Children.Add(new TextBlock
+        var phoneticText = new TextBlock
         {
             Text = PhoneticDisplayHelper.FormatPhoneticText(phonetic.Text!),
             FontSize = phoneticFontSize,
@@ -1507,8 +1512,11 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 "PhoneticBadgeTextBrush",
                 "QueryTextBrush"),
             VerticalAlignment = VerticalAlignment.Center,
-            IsTextSelectionEnabled = true
-        });
+            IsTextSelectionEnabled = true,
+            TextWrapping = TextWrapping.Wrap
+        };
+        Grid.SetColumn(phoneticText, 1);
+        panel.Children.Add(phoneticText);
 
         // TTS speaker button. The tap target grows with the glyph so it never clips.
         var speakerExtent = Math.Max(22.0, Math.Ceiling(phoneticFontSize) + 10.0);
@@ -1591,6 +1599,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 }));
         };
 
+        Grid.SetColumn(speakerButton, 2);
         panel.Children.Add(speakerButton);
         badge.Child = panel;
         return badge;

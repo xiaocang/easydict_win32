@@ -22,6 +22,9 @@ public class PhoneticRenderingContractTests
     private static readonly string ServiceResultItemPath = Path.Combine(
         ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml.cs");
 
+    private static readonly string ServiceResultItemXamlPath = Path.Combine(
+        ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
+
     private static readonly string MinimalServiceResultItemPath = Path.Combine(
         ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "MinimalServiceResultItem.xaml.cs");
 
@@ -115,6 +118,33 @@ public class PhoneticRenderingContractTests
         badgeFactory.Should().Contain("var phoneticFontSize = _phoneticFontSize;");
         content.Should().Contain("private double _phoneticFontSize = AppearanceService.PhoneticFontSize;",
             "badges rendered before ApplyAppearance runs must already use the configured size");
+    }
+
+    /// <summary>
+    /// Issue #249 regression: at the largest phonetic size a US+UK pair no longer fits the
+    /// default 320-DIP result column, and the result scroll viewer has no horizontal scroll.
+    /// The badge row must wrap, and each badge must let its transcription wrap instead of
+    /// pushing the speaker button out of view.
+    /// </summary>
+    [Fact]
+    public void ServiceResultItem_PhoneticBadgesWrapInNarrowWindows()
+    {
+        var xaml = File.ReadAllText(ServiceResultItemXamlPath);
+        var badgeRow = ExtractRegion(xaml, "<!-- Phonetic Transcription Badges", "</controls:WrapPanel>");
+
+        badgeRow.Should().Contain("<controls:WrapPanel",
+            "a horizontal StackPanel clips instead of wrapping when the badges do not fit");
+        badgeRow.Should().Contain("x:Name=\"PhoneticPanel\"",
+            "the wrapping row must stay the element the code-behind populates");
+
+        var content = File.ReadAllText(ServiceResultItemPath);
+        var badgeFactory = ExtractRegion(
+            content,
+            "private Border CreatePhoneticBadge(",
+            "private static string? GetAccentDisplayLabel(");
+
+        badgeFactory.Should().Contain("TextWrapping = TextWrapping.Wrap",
+            "long transcriptions must wrap inside the badge rather than overflow it");
     }
 
     /// <summary>

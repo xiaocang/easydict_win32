@@ -440,11 +440,13 @@ public class SettingsPageSplitTabsTests
         {
             var code = File.ReadAllText(path).Replace("\r\n", "\n");
 
+            // The published result can be a local copy (the mini window publishes before
+            // enrichment continues), so only the clearing order matters, not the variable name.
             code.Should().MatchRegex(
                 @"serviceResult\.IsLoading = false;\s+" +
                 @"serviceResult\.IsStreaming = false;\s+" +
                 @"serviceResult\.StreamingText = """";\s+" +
-                @"serviceResult\.Result = result;",
+                @"serviceResult\.Result = \w+;",
                 $"{Path.GetFileName(path)} should not leave a completed streaming result stuck in Translating");
             code.Should().Contain(
                 "Streaming service returned an empty response",

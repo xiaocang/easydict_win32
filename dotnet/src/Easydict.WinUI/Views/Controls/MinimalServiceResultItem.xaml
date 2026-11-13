@@ -93,6 +93,7 @@
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         FontSize="12"
                         Visibility="Collapsed"/>
+                    <Button x:Name="TimeoutDiagnosticsButton" Click="OnViewDiagnostics" Visibility="Collapsed" HorizontalAlignment="Left"/>
                     <StackPanel x:Name="SavedActionBar" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0" Visibility="Collapsed">
                         <Button x:Name="PlayButton" Width="32" Height="32" Padding="0" Click="OnPlayClicked">
                             <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="14"/>
@@ -124,6 +125,7 @@
                             <Button.Flyout><MenuFlyout Opening="OnSavedMenuOpening">
                                 <MenuFlyoutItem x:Name="AnkiMenuItem" Click="OnAddToAnki"/>
                                 <MenuFlyoutItem x:Name="FavoriteMenuItem" AutomationProperties.AutomationId="FavoriteMenuItem" Click="OnFavoriteClicked" Visibility="Collapsed"/>
+                                <MenuFlyoutItem x:Name="ViewDiagnosticsMenuItem" Click="OnViewDiagnostics" Visibility="Collapsed"/>
                                 <MenuFlyoutItem x:Name="SavedCopySourceMenuItem" Click="OnCopySavedSource"/>
                                 <MenuFlyoutItem x:Name="SavedCollapseMenuItem" Click="OnCollapseClicked"/>
                             </MenuFlyout></Button.Flyout>

@@ -185,11 +185,20 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         using var hotspot = UiThreadHotspotDiagnostics.Measure("MinimalServiceResultItem.UpdateUI");
         _renderedUpdateUIVersion = _updateUIRequestVersion;
         var hasSavedResult = _serviceResult?.HasSuccessfulResult == true;
+        var hasDiagnostics = _serviceResult?.Diagnostics is not null;
+        var diagnosticsLabel = LocalizationService.Instance.GetString("ViewQueryDiagnostics");
+        ViewDiagnosticsMenuItem.Text = diagnosticsLabel;
+        ViewDiagnosticsMenuItem.Visibility = hasDiagnostics ? Visibility.Visible : Visibility.Collapsed;
+        TimeoutDiagnosticsButton.Content = diagnosticsLabel;
+        TimeoutDiagnosticsButton.Visibility = hasDiagnostics
+            && _serviceResult?.Error?.ErrorCode == Easydict.TranslationService.TranslationErrorCode.Timeout
+                ? Visibility.Visible : Visibility.Collapsed;
+        SavedCopySourceMenuItem.Visibility = SavedCollapseMenuItem.Visibility = hasSavedResult ? Visibility.Visible : Visibility.Collapsed;
         CopyButton.Visibility = CollapseButton.Visibility = hasSavedResult ? Visibility.Visible : Visibility.Collapsed;
-        SavedActionBar.Visibility = hasSavedResult || _favoriteVisible ? Visibility.Visible : Visibility.Collapsed;
+        SavedActionBar.Visibility = hasSavedResult || _favoriteVisible || hasDiagnostics ? Visibility.Visible : Visibility.Collapsed;
         PlayButton.Visibility = hasSavedResult && _serviceResult?.Result is not null ? Visibility.Visible : Visibility.Collapsed;
-        SavedMoreButton.Visibility = hasSavedResult ? Visibility.Visible : Visibility.Collapsed;
-        if (hasSavedResult)
+        SavedMoreButton.Visibility = hasSavedResult || hasDiagnostics ? Visibility.Visible : Visibility.Collapsed;
+        if (hasSavedResult || hasDiagnostics)
         {
             HeaderBar.Padding = new Thickness(12, 4, 8, 4);
             ContentArea.Padding = new Thickness(SettingsService.Instance.CompactMode ? 8 : 12);
@@ -267,7 +276,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
             }
         }
 
-        var hasVisibleContent = showPendingHint
+        var hasVisibleContent = hasDiagnostics || showPendingHint
             || ResultText.Visibility == Visibility.Visible
             || ErrorText.Visibility == Visibility.Visible;
         ContentArea.Visibility = hasVisibleContent ? Visibility.Visible : Visibility.Collapsed;
@@ -298,7 +307,9 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     private void ApplySaveActionLayout()
     {
-        SavedActionBar.Visibility = _favoriteVisible || (_serviceResult?.HasSuccessfulResult == true)
+        SavedActionBar.Visibility = _favoriteVisible
+            || _serviceResult?.HasSuccessfulResult == true
+            || _serviceResult?.Diagnostics is not null
             ? Visibility.Visible : Visibility.Collapsed;
         var layout = ResultSaveActionLayout.Resolve(
             SettingsService.Instance.PreferAnkiButton, HasAnkiAction(), HasFavoriteAction());
@@ -395,6 +406,11 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         ApplySaveActionLayout();
         try { await AnkiConnectDialog.ShowAsync(XamlRoot, result); }
         finally { _ankiBusy = false; ApplySaveActionLayout(); }
+    }
+
+    private async void OnViewDiagnostics(object sender, RoutedEventArgs e)
+    {
+        await TranslationDiagnosticsPresenter.ShowAsync(this, _serviceResult);
     }
 
     private void OnCopySavedSource(object sender, RoutedEventArgs e) => CopySavedText(

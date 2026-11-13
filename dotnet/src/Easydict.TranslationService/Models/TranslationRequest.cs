@@ -5,6 +5,19 @@ namespace Easydict.TranslationService.Models;
 /// </summary>
 public sealed class TranslationRequest
 {
+    public TranslationDiagnostics? Diagnostics { get; init; }
+
+    public TranslationRequest WithDiagnostics(TranslationDiagnostics diagnostics) => new()
+    {
+        Text = Text, FromLanguage = FromLanguage, ToLanguage = ToLanguage,
+        TimeoutMs = TimeoutMs, BypassCache = BypassCache, CustomPrompt = CustomPrompt,
+        OriginalText = OriginalText, DetectedFromLanguage = DetectedFromLanguage,
+        AutomaticDirection = AutomaticDirection, Diagnostics = diagnostics
+    };
+
+    /// <summary>Let a prompt-capable service detect the source and choose the translation direction.</summary>
+    public AutomaticLanguageDirection? AutomaticDirection { get; init; }
+
     /// <summary>
     /// Text to translate.
     /// </summary>
@@ -16,7 +29,8 @@ public sealed class TranslationRequest
     public Language FromLanguage { get; init; } = Language.Auto;
 
     /// <summary>
-    /// Target language for translation.
+    /// Target language for translation. Auto when <see cref="AutomaticDirection"/> lets
+    /// the model choose it; the host does not claim a language that has not been detected.
     /// </summary>
     public required Language ToLanguage { get; init; }
 

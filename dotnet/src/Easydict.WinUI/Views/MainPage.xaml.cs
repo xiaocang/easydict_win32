@@ -1923,6 +1923,14 @@ namespace Easydict.WinUI.Views
                 return sourceLanguage;
             }
 
+            if (GetTargetLanguage() == TranslationLanguage.Auto)
+            {
+                _detectionWarning?.Reset();
+                var local = detectionService.TryDetectLocally(inputText) ?? TranslationLanguage.Auto;
+                UpdateDetectedLanguageDisplay(local);
+                return local;
+            }
+
             var requiresReliableDetection = GetTargetLanguage() != TranslationLanguage.Auto;
             var detectedLanguage = await DetectAutoSourceLanguageAsync(
                 inputText,
@@ -1949,6 +1957,31 @@ namespace Easydict.WinUI.Views
             return _settings.MainWindowEnabledServices.Any(serviceId =>
                 manager.Services.TryGetValue(serviceId, out var service)
                 && GrammarCorrectionServiceAvailability.IsAvailable(service, sourceLanguage));
+        }
+
+        private AutomaticTranslationRouter? CreateAutomaticTranslationRouter(
+            string text, LanguageDetectionService detectionService, CancellationToken ct)
+        {
+            if (GetSourceLanguage() != TranslationLanguage.Auto || GetTargetLanguage() != TranslationLanguage.Auto
+                || detectionService.TryDetectLocally(text) is not null)
+                return null;
+
+            return new AutomaticTranslationRouter(
+                new AutomaticLanguageDirection(
+                    LanguageExtensions.FromCode(_settings.FirstLanguage),
+                    LanguageExtensions.FromCode(_settings.SecondLanguage)),
+                async () =>
+                {
+                    var detected = await DetectionWarning.DetectAsync(detectionService, text, ct);
+                    ct.ThrowIfCancellationRequested();
+                    if (!_isClosing)
+                    {
+                        _lastDetectedLanguage = detected;
+                        UpdateDetectedLanguageDisplay(detected);
+                    }
+                    return detected;
+                },
+                _targetLanguageSelector.ResolveAutoTargetLanguage);
         }
 
         private QuickQueryLanguageResolution ResolveQuickQueryLanguage(
@@ -2137,20 +2170,35 @@ namespace Easydict.WinUI.Views
                 // Preserve the draft captured when this manual provider request began.
 
                 // Detect language (use cached if available from recent query)
-                var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
-                    ? _lastDetectedLanguage
-                    : await DetectSourceLanguageForQueryAsync(inputText, _detectionService, ct);
+                var queryDiagnostics = new TranslationDiagnostics();
+                using var queryDiagnosticCancellation = ct.Register(() => queryDiagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+                using var queryPreparation = queryDiagnostics.Measure(TranslationDiagnosticStage.QueryPreparation);
+                if (TranslationManagerService.Instance.Manager.IsStreamingService(serviceResult.ServiceId))
+                    serviceResult.Diagnostics = queryDiagnostics;
+                var automaticRouter = CreateAutomaticTranslationRouter(inputText, _detectionService, ct);
+                TranslationLanguage detectedLanguage;
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.LanguageDetection))
+                {
+                    detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
+                        ? _lastDetectedLanguage
+                        : await DetectSourceLanguageForQueryAsync(inputText, _detectionService, ct);
+                }
                 _lastDetectedLanguage = detectedLanguage;
-                var resolution = ResolveQuickQueryLanguage(
-                    detectedLanguage,
-                    HasEnabledGrammarCorrectionService(detectedLanguage));
-                serviceResult.CurrentMode = resolution.EffectiveMode;
+                QuickQueryLanguageResolution resolution;
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
+                {
+                    resolution = ResolveQuickQueryLanguage(
+                        detectedLanguage,
+                        HasEnabledGrammarCorrectionService(detectedLanguage));
+                    serviceResult.CurrentMode = resolution.EffectiveMode;
+                }
 
                 // Grammar mode: route to grammar correction for capable services only.
                 // Non-grammar-capable services fall through to normal translation below.
                 if (resolution.EffectiveMode == QueryMode.GrammarCorrection
                     && serviceResult.IsGrammarCapable)
                 {
+                    queryPreparation.Dispose();
                     var grammarRequest = new GrammarCorrectionRequest
                     {
                         Text = inputText,
@@ -2176,16 +2224,24 @@ namespace Easydict.WinUI.Views
                 }
 
                 // Create request
+                queryPreparation.Dispose();
                 var request = new TranslationRequest
                 {
                     Text = inputText,
                     FromLanguage = detectedLanguage,
-                    ToLanguage = targetLanguage
+                    ToLanguage = targetLanguage,
+                    Diagnostics = queryDiagnostics
                 };
 
                 // Execute translation
                 using var handle = TranslationManagerService.Instance.AcquireHandle();
                 var manager = handle.Manager;
+                if (automaticRouter is not null)
+                {
+                    request = await automaticRouter.CreateRequestAsync(manager.Services[serviceResult.ServiceId], request, ct);
+                    detectedLanguage = request.FromLanguage;
+                    targetLanguage = request.ToLanguage;
+                }
 
                 if (manager.IsStreamingService(serviceResult.ServiceId))
                 {
@@ -2583,28 +2639,44 @@ namespace Easydict.WinUI.Views
 
                 // Resolve the effective quick-query mode before prompting services so
                 // grammar mode only prepares/runs grammar-capable services.
-                var detectedLanguage = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
+                var queryDiagnostics = new TranslationDiagnostics();
+                using var queryDiagnosticCancellation = ct.Register(() => queryDiagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+                using var queryPreparation = queryDiagnostics.Measure(TranslationDiagnosticStage.QueryPreparation);
+                var automaticRouter = CreateAutomaticTranslationRouter(inputText, detectionService, ct);
+                queryPreparation.Dispose();
+                TranslationLanguage detectedLanguage;
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.LanguageDetection))
+                {
+                    detectedLanguage = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
+                }
                 _lastDetectedLanguage = detectedLanguage;
 
                 var resolution = ResolveQuickQueryLanguage(
                     detectedLanguage,
                     HasEnabledGrammarCorrectionService(detectedLanguage));
-                ApplyQuickQueryResolution(
-                    resolution,
-                    reinitializeServiceResults: true,
-                    reason: "StartQueryModeResolved");
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
+                {
+                    // Coarse on purpose: mode resolution rebuilds every service row, and the gap
+                    // between detection and the network call is otherwise invisible.
+                    ApplyQuickQueryResolution(
+                        resolution,
+                        reinitializeServiceResults: true,
+                        reason: "StartQueryModeResolved");
+
+                    var preparedTarget = resolution.EffectiveTargetLanguage;
+                    _currentSnapshotDraft = null;
+                    CurrentQueryFavoriteButton.Visibility = Visibility.Collapsed;
+                    CurrentQueryFavoriteIcon.Glyph = "\uE734";
+                    if (resolution.GrammarCorrectionFallback && preparedTarget != TranslationLanguage.Auto)
+                    {
+                        UpdateTargetLanguageSelector(preparedTarget);
+                        SetStatusSummary(
+                            LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice"),
+                            important: true);
+                    }
+                }
 
                 var targetLanguage = resolution.EffectiveTargetLanguage;
-                _currentSnapshotDraft = null;
-                CurrentQueryFavoriteButton.Visibility = Visibility.Collapsed;
-                CurrentQueryFavoriteIcon.Glyph = "\uE734";
-                if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
-                {
-                    UpdateTargetLanguageSelector(targetLanguage);
-                    SetStatusSummary(
-                        LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice"),
-                        important: true);
-                }
 
                 if (_serviceResults.Count == 0)
                 {
@@ -2623,19 +2695,22 @@ namespace Easydict.WinUI.Views
                 }
 
                 PhiSilicaModelPreparationPromptResult phiSilicaPromptResult;
-                try
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
                 {
-                    phiSilicaPromptResult = await PhiSilicaModelPreparationPromptService.PromptAndPrepareIfNeededAsync(
-                        _serviceResults.Where(result => result.EnabledQuery),
-                        _settings,
-                        XamlRoot,
-                        ShowDialogAsync,
-                        ct,
-                        ShowLocalModelPreparationProgress);
-                }
-                finally
-                {
-                    SyncLocalModelPreparationProgressFromCoordinator();
+                    try
+                    {
+                        phiSilicaPromptResult = await PhiSilicaModelPreparationPromptService.PromptAndPrepareIfNeededAsync(
+                            _serviceResults.Where(result => result.EnabledQuery),
+                            _settings,
+                            XamlRoot,
+                            ShowDialogAsync,
+                            ct,
+                            ShowLocalModelPreparationProgress);
+                    }
+                    finally
+                    {
+                        SyncLocalModelPreparationProgressFromCoordinator();
+                    }
                 }
                 if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
                 {
@@ -2677,47 +2752,55 @@ namespace Easydict.WinUI.Views
                     }
                 }
 
-                // The preparation prompt can disable the last grammar service and
-                // change both the query mode and target language.
-                snapshotDraft = new QuerySnapshotDraft(
-                    inputText,
-                    detectedLanguage.ToIso639(),
-                    targetLanguage.ToIso639(),
-                    SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
-                    sourceKind,
-                    _settings.HistoryEnabled);
-                _currentSnapshotDraft = snapshotDraft;
-
-                _hasAutoPlayedCurrentQuery = false;
-
-                // Reset all service results
-                foreach (var result in _serviceResults)
+                using (queryDiagnostics.Measure(TranslationDiagnosticStage.UiPreparation))
                 {
-                    result.Reset();
-                    // Only set loading for auto-query services
-                    if (PhiSilicaModelPreparationPromptService.ShouldQueryServiceForCurrentQuery(result, phiSilicaPromptResult))
-                    {
-                        result.IsLoading = true;
-                    }
-                }
+                    // The preparation prompt can disable the last grammar service and
+                    // change both the query mode and target language.
+                    snapshotDraft = new QuerySnapshotDraft(
+                        inputText,
+                        detectedLanguage.ToIso639(),
+                        (automaticRouter is null ? targetLanguage : TranslationLanguage.Auto).ToIso639(),
+                        SavedQueryClassifier.Classify(resolution.EffectiveMode, sourceKind),
+                        sourceKind,
+                        _settings.HistoryEnabled);
+                    _currentSnapshotDraft = snapshotDraft;
 
-                // Hide placeholder
-                PlaceholderText.Visibility = Visibility.Collapsed;
+                    _hasAutoPlayedCurrentQuery = false;
+
+                    // Reset all service results
+                    foreach (var result in _serviceResults)
+                    {
+                        result.Reset();
+                        // Only set loading for auto-query services
+                        if (PhiSilicaModelPreparationPromptService.ShouldQueryServiceForCurrentQuery(result, phiSilicaPromptResult))
+                        {
+                            result.IsLoading = true;
+                        }
+                    }
+
+                    // Hide placeholder
+                    PlaceholderText.Visibility = Visibility.Collapsed;
+                }
 
                 // Route based on effective quick-query mode
                 if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
                 {
+                    queryPreparation.Dispose();
+                    foreach (var row in _serviceResults.Where(row => row.EnabledQuery && row.IsGrammarCapable))
+                        row.Diagnostics = queryDiagnostics.Fork();
                     await StartGrammarCorrectionInternalAsync(
                         inputText, detectedLanguage, targetLanguage, snapshotDraft, ct);
                     return;
                 }
 
                 // Execute translation for each enabled service in parallel
-                var request = new TranslationRequest
+                queryPreparation.Dispose();
+                var defaultRequest = new TranslationRequest
                 {
                     Text = inputText,
                     FromLanguage = detectedLanguage,
-                    ToLanguage = targetLanguage
+                    ToLanguage = targetLanguage,
+                    Diagnostics = queryDiagnostics
                 };
 
                 // Task returns an execution outcome so neutral info results (for example MDX misses)
@@ -2739,6 +2822,11 @@ namespace Easydict.WinUI.Views
                         // Acquire handle once per service to ensure consistent manager instance
                         using var handle = TranslationManagerService.Instance.AcquireHandle();
                         var manager = handle.Manager;
+                        var request = defaultRequest.WithDiagnostics(queryDiagnostics.Fork());
+                        if (manager.IsStreamingService(serviceResult.ServiceId))
+                            serviceResult.Diagnostics = request.Diagnostics;
+                        if (automaticRouter is not null)
+                            request = await automaticRouter.CreateRequestAsync(manager.Services[serviceResult.ServiceId], request, ct);
                         QueryExecutionOutcome outcome;
 
                         // Check if service supports streaming
@@ -2746,7 +2834,7 @@ namespace Easydict.WinUI.Views
                         {
                             // Streaming path for LLM services
                             var streamedResult = await ExecuteStreamingTranslationForServiceAsync(
-                                manager, serviceResult, request, detectedLanguage, targetLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
+                                manager, serviceResult, request, request.FromLanguage, request.ToLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
                             outcome = streamedResult.ResultKind == TranslationResultKind.Success
                                 ? QueryExecutionOutcome.Success
                                 : QueryExecutionOutcome.Neutral;
@@ -2781,7 +2869,7 @@ namespace Easydict.WinUI.Views
                                     if (!string.IsNullOrEmpty(targetText))
                                     {
                                         _hasAutoPlayedCurrentQuery = true;
-                                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, result.TargetLanguage);
                                         NotifyAutoPlayTts(serviceResult, playbackTask);
                                     }
                                 }
@@ -3077,7 +3165,7 @@ namespace Easydict.WinUI.Views
                         if (!string.IsNullOrEmpty(targetText))
                         {
                             _hasAutoPlayedCurrentQuery = true;
-                            var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                            var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, result.TargetLanguage);
                             NotifyAutoPlayTts(serviceResult, playbackTask);
                         }
                     }
@@ -3151,6 +3239,10 @@ namespace Easydict.WinUI.Views
                     || service is not IGrammarCorrectionService grammarService)
                     return null;
 
+                var diagnostics = serviceResult.Diagnostics ?? new TranslationDiagnostics();
+                using var diagnosticCancellation = ct.Register(() => diagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+                serviceResult.Diagnostics = diagnostics;
+                request = request.WithDiagnostics(diagnostics);
                 var stopwatch = Stopwatch.StartNew();
                 var sb = new StringBuilder();
                 var lastUpdateTime = DateTime.UtcNow;
@@ -3166,8 +3258,8 @@ namespace Easydict.WinUI.Views
                 });
 
                 // See ExecuteStreamingTranslationForServiceAsync for the rationale.
-                await foreach (var chunk in grammarService
-                    .CorrectGrammarStreamAsync(request, ct).ConfigureAwait(false))
+                await foreach (var chunk in diagnostics.ObserveTextAsync(grammarService
+                    .CorrectGrammarStreamAsync(request, ct), ct).ConfigureAwait(false))
                 {
                     sb.Append(chunk);
 
@@ -3187,6 +3279,7 @@ namespace Easydict.WinUI.Views
                 }
 
                 stopwatch.Stop();
+                using var postProcessing = diagnostics.Measure(TranslationDiagnosticStage.PostProcessing);
                 var rawOutput = sb.ToString();
                 var grammarResult = GrammarCorrectionParser.Parse(
                     rawOutput, request.Text, serviceResult.ServiceDisplayName,
@@ -3275,6 +3368,10 @@ namespace Easydict.WinUI.Views
             QuerySnapshotDraft? snapshotDraft = null,
             int displayOrder = 0)
         {
+            var diagnostics = request.Diagnostics ?? new TranslationDiagnostics();
+            using var diagnosticCancellation = ct.Register(() => diagnostics.Complete(TranslationDiagnosticStatus.Cancelled));
+            request = request.WithDiagnostics(diagnostics);
+            serviceResult.Diagnostics = diagnostics;
             var stopwatch = Stopwatch.StartNew();
             var sb = new StringBuilder();
             var lastUpdateTime = DateTime.UtcNow;
@@ -3295,8 +3392,8 @@ namespace Easydict.WinUI.Views
             // invalidating a wrapped-TextBlock measure pass. The coalescer collapses
             // all N services into ≤1 UI callback per frame (~16ms).
             TranslationResult? completed = null;
-            await foreach (var update in manager.TranslateStreamUpdatesAsync(
-                request, ct, serviceResult.ServiceId).ConfigureAwait(false))
+            await foreach (var update in diagnostics.ObserveStreamAsync(manager.TranslateStreamUpdatesAsync(
+                request, ct, serviceResult.ServiceId), ct).ConfigureAwait(false))
             {
                 switch (update)
                 {
@@ -3334,47 +3431,55 @@ namespace Easydict.WinUI.Views
             stopwatch.Stop();
 
             TranslationResult result;
-            if (completed is not null)
+            using (diagnostics.Measure(TranslationDiagnosticStage.PostProcessing))
             {
-                // Rich-streaming services deliver the final result themselves. An empty text is
-                // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
-                result = completed with
+                if (completed is not null)
                 {
-                    ServiceName = string.IsNullOrEmpty(completed.ServiceName)
-                        ? serviceResult.ServiceDisplayName
-                        : completed.ServiceName,
-                    TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
-                };
-            }
-            else
-            {
-                // Final update with complete result (apply same cleanup as non-streaming path)
-                var finalText = CleanupStreamingResult(sb.ToString());
-                if (string.IsNullOrWhiteSpace(finalText))
-                {
-                    throw new TranslationException("Streaming service returned an empty response")
+                    // Rich-streaming services deliver the final result themselves. An empty text is
+                    // legitimate here (e.g. a NoResult outcome), so the empty-response check must not run.
+                    result = completed with
                     {
-                        ErrorCode = TranslationErrorCode.InvalidResponse,
-                        ServiceId = serviceResult.ServiceId
+                        ServiceName = string.IsNullOrEmpty(completed.ServiceName)
+                            ? serviceResult.ServiceDisplayName
+                            : completed.ServiceName,
+                        TimingMs = completed.TimingMs > 0 ? completed.TimingMs : stopwatch.ElapsedMilliseconds
+                    };
+                }
+                else
+                {
+                    // Final update with complete result (apply same cleanup as non-streaming path)
+                    var finalText = CleanupStreamingResult(sb.ToString());
+                    if (string.IsNullOrWhiteSpace(finalText))
+                    {
+                        throw new TranslationException("Streaming service returned an empty response")
+                        {
+                            ErrorCode = TranslationErrorCode.InvalidResponse,
+                            ServiceId = serviceResult.ServiceId
+                        };
+                    }
+
+                    // Create initial result
+                    result = new TranslationResult
+                    {
+                        TranslatedText = finalText,
+                        OriginalText = request.Text,
+                        DetectedLanguage = detectedLanguage,
+                        TargetLanguage = targetLanguage,
+                        ServiceName = serviceResult.ServiceDisplayName,
+                        TimingMs = stopwatch.ElapsedMilliseconds
                     };
                 }
 
-                // Create initial result
-                result = new TranslationResult
-                {
-                    TranslatedText = finalText,
-                    OriginalText = request.Text,
-                    DetectedLanguage = detectedLanguage,
-                    TargetLanguage = targetLanguage,
-                    ServiceName = serviceResult.ServiceDisplayName,
-                    TimingMs = stopwatch.ElapsedMilliseconds
-                };
+                // Automatic-direction routing leaves ToLanguage as Auto; resolve the language actually
+                // produced so text-to-speech receives a real language instead of a default voice.
+                result = result.ResolveTargetLanguage(request);
             }
 
             // Enrich with phonetics from Youdao if missing (for word queries).
             // Run on thread pool to avoid blocking UI thread; honors the service's execution policy.
             try
             {
+                using var enrichment = diagnostics.Measure(TranslationDiagnosticStage.PhoneticEnrichment);
                 result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct, serviceResult.ServiceId));
             }
             catch
@@ -3407,7 +3512,7 @@ namespace Easydict.WinUI.Views
                     if (!string.IsNullOrEmpty(targetText))
                     {
                         _hasAutoPlayedCurrentQuery = true;
-                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, result.TargetLanguage);
                         NotifyAutoPlayTts(serviceResult, playbackTask);
                     }
                 }

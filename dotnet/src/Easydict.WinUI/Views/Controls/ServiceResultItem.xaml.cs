@@ -489,7 +489,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         // Content visibility: show during streaming, when result available, or for pending query hint
         var showPendingHint = _serviceResult.IsExpanded && _serviceResult.ShowPendingQueryHint;
         var showContent = _serviceResult.IsExpanded &&
-            (_serviceResult.HasResult || _serviceResult.IsStreaming || showPendingHint);
+            (_serviceResult.HasResult || _serviceResult.IsStreaming || showPendingHint || _serviceResult.Diagnostics is not null);
         ContentArea.Visibility = showContent ? Visibility.Visible : Visibility.Collapsed;
 
         // Update header corner radius based on expand state
@@ -1979,7 +1979,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         if (_isSavedItemView) RetryButton.Visibility = Visibility.Collapsed;
         ReplaceButton.Visibility = !_isSavedItemView && _serviceResult?.HasSuccessfulResult == true && TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
         var hasResult = _serviceResult?.HasSuccessfulResult == true;
-        ActionButtons.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        ActionButtons.Visibility = hasResult || _serviceResult?.Diagnostics is not null ? Visibility.Visible : Visibility.Collapsed;
         HeaderRow.Height = new GridLength(40);
         ContentArea.Padding = new Thickness(SettingsService.Instance.CompactMode ? 8 : 12);
         Grid.SetRow(ActionButtons, 1);
@@ -1992,8 +1992,15 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         PlayButton.Width = PlayButton.Height = 32;
         FavoriteButton.Width = FavoriteButton.Height = 32;
         AnkiButton.Width = AnkiButton.Height = 32;
-        SavedMoreButton.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        SavedMoreButton.Visibility = hasResult || _serviceResult?.Diagnostics is not null ? Visibility.Visible : Visibility.Collapsed;
         var loc = LocalizationService.Instance;
+        ViewDiagnosticsMenuItem.Text = loc.GetString("ViewQueryDiagnostics");
+        ViewDiagnosticsMenuItem.Visibility = _serviceResult?.Diagnostics is not null ? Visibility.Visible : Visibility.Collapsed;
+        TimeoutDiagnosticsButton.Content = loc.GetString("ViewQueryDiagnostics");
+        TimeoutDiagnosticsButton.Visibility = _serviceResult?.Diagnostics is not null
+            && _serviceResult.Error?.ErrorCode == Easydict.TranslationService.TranslationErrorCode.Timeout
+                ? Visibility.Visible : Visibility.Collapsed;
+        SavedCopySourceMenuItem.Visibility = SavedCollapseMenuItem.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
         SavedCopySourceMenuItem.Text = loc.GetStringOrDefault("SavedItemsCopySource", "Copy source");
         SavedCollapseMenuItem.Text = loc.GetStringOrDefault("SavedItemsCollapseResult", "Collapse result");
         ToolTipService.SetToolTip(HeaderCopyButton, loc.GetStringOrDefault("Copy", "Copy"));
@@ -2017,6 +2024,11 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         ApplySaveActionLayout();
         try { await AnkiConnectDialog.ShowAsync(XamlRoot, result); }
         finally { _ankiBusy = false; ApplySaveActionLayout(); }
+    }
+
+    private async void OnViewDiagnostics(object sender, RoutedEventArgs e)
+    {
+        await TranslationDiagnosticsPresenter.ShowAsync(this, _serviceResult);
     }
 
     private void OnCopySavedSource(object sender, RoutedEventArgs e)

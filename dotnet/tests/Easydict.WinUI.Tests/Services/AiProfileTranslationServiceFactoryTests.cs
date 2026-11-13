@@ -5,6 +5,7 @@ using System.Text.Json;
 using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services.ModelCatalog;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.Workers;
@@ -17,6 +18,60 @@ namespace Easydict.WinUI.Tests.Services;
 [Collection("SettingsService")]
 public sealed class AiProfileTranslationServiceFactoryTests
 {
+    [Theory]
+    [InlineData("http://localhost:11434/v1/chat/completions", "http://localhost:11434/api/tags")]
+    [InlineData("https://ollama.example/proxy/v1/chat/completions", "https://ollama.example/proxy/api/tags")]
+    public async Task OllamaProfilePreservesModelListingCapability(string endpoint, string expected)
+    {
+        var profile = new AiServiceProfile
+        {
+            ProfileId = Guid.NewGuid().ToString("N"),
+            ServiceId = $"ai-profile:{Guid.NewGuid():N}",
+            ProviderType = "ollama",
+            Name = "Ollama test",
+            Configuration = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["endpoint"] = endpoint, ["model"] = "selected-model"
+            }
+        };
+        using var handler = new OllamaCatalogHandler();
+        using var client = new HttpClient(handler);
+        var service = AiProfileTranslationServiceFactory.Create(profile, _ => null, client);
+
+        AiProviderCatalog.All.Single(provider => provider.Id == "ollama").SupportsModelListing.Should().BeTrue();
+        var catalog = service.Should().BeAssignableTo<IModelCatalogProvider>().Which;
+        service.Should().BeAssignableTo<IStreamTranslationService>();
+        service.Should().BeAssignableTo<IGrammarCorrectionService>();
+        service.ServiceId.Should().Be(profile.ServiceId);
+
+        var models = await catalog.FetchModelsAsync();
+
+        catalog.ModelsEndpoint.Should().Be(expected);
+        handler.RequestedEndpoints.Should().BeEquivalentTo(expected,
+            expected.Replace("/api/tags", "/api/experimental/model-recommendations", StringComparison.Ordinal));
+        models.Select(model => model.Id).Should().Equal("qwen3:8b", "gpt-oss:cloud");
+        models[1].Name.Should().Contain("recommended");
+    }
+
+    private sealed class OllamaCatalogHandler : HttpMessageHandler
+    {
+        public List<string> RequestedEndpoints { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestedEndpoints.Add(request.RequestUri!.AbsoluteUri);
+            request.Method.Should().Be(HttpMethod.Get);
+            request.Headers.Authorization.Should().BeNull();
+            request.RequestUri.Host.Should().NotBe("ollama.com", "a local server with recommendations must not need the public catalog");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(request.RequestUri.AbsolutePath.EndsWith("/model-recommendations", StringComparison.Ordinal)
+                    ? """{"recommendations":[{"model":"gpt-oss:cloud","context_length":131072}]}"""
+                    : """{"models":[{"name":"qwen3:8b"}]}""", Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
     [Theory]
     [InlineData("claude-code")]
     [InlineData("codex")]

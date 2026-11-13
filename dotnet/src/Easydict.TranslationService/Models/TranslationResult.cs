@@ -9,6 +9,28 @@ public enum TranslationResultKind
     NoResult
 }
 
+/// <summary>Follow-ups on a finished result that depend on the request that produced it.</summary>
+public static class TranslationResultExtensions
+{
+    /// <summary>
+    /// Replaces the <see cref="Language.Auto"/> target sentinel left by automatic-direction routing
+    /// with the language the service actually produced. Language-dependent work such as
+    /// text-to-speech must never receive the sentinel: it maps to a default voice.
+    /// </summary>
+    public static TranslationResult ResolveTargetLanguage(this TranslationResult result, TranslationRequest request)
+    {
+        if (result.TargetLanguage != Language.Auto || request.AutomaticDirection is not { } direction)
+        {
+            return result;
+        }
+
+        var source = result.DetectedLanguage != Language.Auto
+            ? result.DetectedLanguage
+            : request.FromLanguage;
+        return result with { TargetLanguage = direction.ResolveOutputLanguage(result.TranslatedText, source) };
+    }
+}
+
 /// <summary>
 /// Result of a translation request.
 /// Using record for immutable data with 'with' expression support.

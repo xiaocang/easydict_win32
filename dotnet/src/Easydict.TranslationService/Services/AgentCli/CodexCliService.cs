@@ -15,6 +15,7 @@ namespace Easydict.TranslationService.Services.AgentCli;
 /// </summary>
 public sealed class CodexCliService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
+    public override bool SupportsAutomaticLanguageDirection => true;
     public const string ServiceIdValue = "codex";
     public const string InstallDocumentationUrl = "https://developers.openai.com/codex/cli";
     public const string DefaultModel = "gpt-5.6-luna";

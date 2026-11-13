@@ -57,6 +57,12 @@ public sealed class LocalAiTranslateParams
 
     [JsonPropertyName("customPrompt")]
     public string? CustomPrompt { get; init; }
+
+    [JsonPropertyName("automaticFirstLanguage")]
+    public string? AutomaticFirstLanguage { get; init; }
+
+    [JsonPropertyName("automaticSecondLanguage")]
+    public string? AutomaticSecondLanguage { get; init; }
 }
 
 /// <summary>

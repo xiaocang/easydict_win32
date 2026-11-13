@@ -113,6 +113,12 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
     public bool IsConfigured => true;
 
     public bool IsStreaming => true;
+    public bool SupportsAutomaticLanguageDirection => _providerMode switch
+    {
+        LocalAIProviderMode.WindowsAI => true,
+        LocalAIProviderMode.FoundryLocal => FoundryLocal.SupportsAutomaticLanguageDirection,
+        _ => false // Auto may fall back to OpenVINO's explicit-language translation model.
+    };
 
     public IReadOnlyList<Language> SupportedLanguages { get; } =
         Enum.GetValues<Language>()
@@ -319,7 +325,8 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
                 _ => OpenVino,
             };
 
-            if (explicitService.SupportsLanguagePair(from, to))
+            if ((to == Language.Auto && SupportsAutomaticLanguageDirection)
+                || explicitService.SupportsLanguagePair(from, to))
             {
                 yield return explicitService;
             }

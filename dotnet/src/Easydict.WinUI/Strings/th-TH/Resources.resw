@@ -1818,4 +1818,23 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>ดูการวินิจฉัยคำค้น</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>เวลารวม</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>กำลังทำงาน</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>เสร็จสิ้น</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>ล้มเหลว</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>ยกเลิกแล้ว</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>เริ่มต้น / ระยะเวลา / ขั้นตอน</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>ขั้นตอนอาจทับซ้อนกัน อย่าบวกระยะเวลาเข้าด้วยกัน การรอส่วนหัวการตอบกลับรวมการรอเครือข่ายและเซิร์ฟเวอร์ แสดงเฉพาะขั้นตอนที่วัดได้</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>การเตรียมคำค้น</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>การตรวจจับภาษา</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>การเตรียมอินเทอร์เฟซ</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>การกำหนดเส้นทางภาษา</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>การเตรียมพรอมต์</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>การเตรียมคำขอ</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>กำลังรอส่วนหัวการตอบกลับ</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>กำลังรอข้อความแรก</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>เอาต์พุตแบบสตรีม</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>การประมวลผลภายหลัง</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>การค้นหาเสียงอ่าน</value></data>
 </root>

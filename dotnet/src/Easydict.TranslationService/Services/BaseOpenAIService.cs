@@ -20,6 +20,7 @@ namespace Easydict.TranslationService.Services;
 /// </summary>
 public abstract class BaseOpenAIService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
+    public override bool SupportsAutomaticLanguageDirection => true;
     /// <summary>
     /// Common set of languages supported by most LLM services.
     /// </summary>
@@ -191,6 +192,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         TranslationRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var promptPreparation = request.Diagnostics?.Measure(TranslationDiagnosticStage.PromptPreparation);
         ValidateConfiguration();
 
         var detectedFormat = DetectedFormat;
@@ -203,7 +205,8 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             GetReasoningEffort(detectedFormat),
             GetMaxOutputTokens(request.Text));
 
-        await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
+        promptPreparation?.Dispose();
+        await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken, request.Diagnostics).ConfigureAwait(false))
         {
             yield return chunk;
         }
@@ -216,6 +219,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         GrammarCorrectionRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var promptPreparation = request.Diagnostics?.Measure(TranslationDiagnosticStage.PromptPreparation);
         ValidateConfiguration();
 
         var detectedFormat = DetectedFormat;
@@ -228,7 +232,8 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             GetReasoningEffort(detectedFormat),
             GetMaxOutputTokens(request.Text));
 
-        await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
+        promptPreparation?.Dispose();
+        await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken, request.Diagnostics).ConfigureAwait(false))
         {
             yield return chunk;
         }
@@ -254,7 +259,9 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         return new List<ChatMessage>
         {
             new(ChatRole.System, systemPrompt),
-            new(ChatRole.User, $"Translate the following {sourceLangName} text into {targetLangName} text: \"\"\"{request.Text}\"\"\"")
+            new(ChatRole.User, request.AutomaticDirection is { } direction
+                ? $"{direction.BuildInstruction()}\n\nSource text: \"\"\"{request.Text}\"\"\""
+                : $"Translate the following {sourceLangName} text into {targetLangName} text: \"\"\"{request.Text}\"\"\"")
         };
     }
 
@@ -318,8 +325,10 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     private async IAsyncEnumerable<string> SendAndParseAsync(
         IOpenAIFormatStrategy strategy,
         object requestBody,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        TranslationDiagnostics? diagnostics = null)
     {
+        using var preparation = diagnostics?.Measure(TranslationDiagnosticStage.RequestPreparation);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint);
         httpRequest.Content = new StringContent(
             JsonSerializer.Serialize(requestBody),
@@ -332,10 +341,12 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         }
 
         ConfigureHttpRequest(httpRequest);
+        preparation?.Dispose();
 
         HttpResponseMessage response;
         try
         {
+            using var headers = diagnostics?.Measure(TranslationDiagnosticStage.ResponseHeaders);
             response = await HttpClient.SendAsync(
                 httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,

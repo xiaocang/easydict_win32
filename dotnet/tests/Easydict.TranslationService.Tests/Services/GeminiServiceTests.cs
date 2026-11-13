@@ -13,6 +13,25 @@ namespace Easydict.TranslationService.Tests.Services;
 /// </summary>
 public class GeminiServiceTests
 {
+    [Fact]
+    public async Task AutomaticDirection_SendsLanguagePairInsteadOfAutoTarget()
+    {
+        _service.Configure("test-api-key");
+        _mockHandler.EnqueueJsonResponse("""{"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}""");
+        var request = new TranslationRequest
+        {
+            Text = "bonjour", ToLanguage = Language.Auto,
+            AutomaticDirection = new(Language.English, Language.Japanese)
+        };
+        await foreach (var _ in _service.TranslateStreamAsync(request)) { }
+
+        using var body = System.Text.Json.JsonDocument.Parse(_mockHandler.LastRequestBody!);
+        var prompt = body.RootElement.GetProperty("contents")[0].GetProperty("parts")[0].GetProperty("text").GetString()!;
+        prompt.Should().Contain("first language is English").And.Contain("second language is Japanese");
+        prompt.Should().Contain("otherwise translate into English").And.Contain("bonjour");
+        prompt.Should().NotContain("into Auto");
+    }
+
     private readonly MockHttpMessageHandler _mockHandler;
     private readonly HttpClient _httpClient;
     private readonly GeminiService _service;

@@ -1818,4 +1818,23 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>Field templates: {Word}, {Phonetic}, {Definition}, {Translation}.</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>Configure Anki in Settings → Labs first.</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>The selected deck or note type is unavailable. Choose an available target.</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>Lihat diagnostik pertanyaan</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>Jumlah masa</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>Sedang berjalan</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>Selesai</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>Gagal</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>Dibatalkan</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>Mula / Tempoh / Peringkat</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>Peringkat boleh bertindih; jangan jumlahkan tempohnya. Menunggu pengepala respons merangkumi rangkaian dan pelayan. Hanya peringkat yang diukur dipaparkan.</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>Persediaan pertanyaan</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>Pengesanan bahasa</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>Persediaan antara muka</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>Pemilihan bahasa</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>Persediaan prom</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>Persediaan permintaan</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>Menunggu pengepala respons</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>Menunggu teks pertama</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Output penstriman</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Pemprosesan akhir</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>Carian fonetik</value></data>
 </root>

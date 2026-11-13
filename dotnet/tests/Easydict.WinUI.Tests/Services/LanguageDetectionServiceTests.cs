@@ -16,6 +16,24 @@ namespace Easydict.WinUI.Tests.Services;
 [Collection("SettingsService")]
 public class LanguageDetectionServiceTests : IDisposable
 {
+    [Fact]
+    public async Task TryDetectLocally_DoesNotStartNetworkAndReusesCachedDetection()
+    {
+        var calls = 0;
+        using var service = new LanguageDetectionService(SettingsService.Instance, (_, _) =>
+        {
+            calls++;
+            return Task.FromResult(Language.French);
+        });
+        service.TryDetectLocally("bonjour").Should().BeNull();
+        calls.Should().Be(0);
+        await service.DetectAsync("bonjour");
+        service.TryDetectLocally("bonjour").Should().Be(Language.French);
+        calls.Should().Be(1);
+        service.TryDetectLocally("カタカナ").Should().Be(Language.Japanese);
+        calls.Should().Be(1);
+    }
+
     private readonly SettingsService _settings;
     private readonly LanguageDetectionService _service;
 

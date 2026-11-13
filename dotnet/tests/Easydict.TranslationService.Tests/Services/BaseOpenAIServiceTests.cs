@@ -13,6 +13,41 @@ namespace Easydict.TranslationService.Tests.Services;
 /// </summary>
 public class BaseOpenAIServiceTests
 {
+    [Fact]
+    public async Task TranslationDiagnostics_RecordsPromptSerializationAndResponseHeaders()
+    {
+        _service.Configure("synthetic-key");
+        _mockHandler.EnqueueStreamingResponse(new[] { """{"choices":[{"delta":{"content":"hello"}}]}""" });
+        var diagnostics = new TranslationDiagnostics();
+        await foreach (var _ in _service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "fixture", ToLanguage = Language.English, Diagnostics = diagnostics
+        })) { }
+        diagnostics.Snapshot().Timings.Select(row => row.Stage).Should().Equal(
+            TranslationDiagnosticStage.PromptPreparation, TranslationDiagnosticStage.RequestPreparation,
+            TranslationDiagnosticStage.ResponseHeaders);
+        diagnostics.Snapshot().Timings.Should().OnlyContain(row => !row.IsRunning);
+    }
+
+    [Fact]
+    public async Task AutomaticDirection_PromptChoosesTargetWithoutFixedTargetInstruction()
+    {
+        _service.Configure("sk-test");
+        _mockHandler.EnqueueStreamingResponse(new[] { "{\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}" });
+        var request = new TranslationRequest
+        {
+            Text = "bonjour", ToLanguage = Language.Auto,
+            AutomaticDirection = new(Language.English, Language.Japanese)
+        };
+        await foreach (var _ in _service.TranslateStreamAsync(request)) { }
+
+        using var body = System.Text.Json.JsonDocument.Parse(_mockHandler.LastRequestBody!);
+        var prompt = body.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!;
+        prompt.Should().Contain("first language is English").And.Contain("second language is Japanese");
+        prompt.Should().Contain("otherwise translate into English").And.Contain("bonjour");
+        prompt.Should().NotContain("into Auto");
+    }
+
     private readonly MockHttpMessageHandler _mockHandler;
     private readonly HttpClient _httpClient;
     private readonly TestOpenAIService _service;

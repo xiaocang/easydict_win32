@@ -1818,4 +1818,23 @@
   <data name="AnkiSettingsTemplates" xml:space="preserve"><value>字段模板支持 {Word}、{Phonetic}、{Definition}、{Translation}。</value></data>
   <data name="AnkiConfigureFirst" xml:space="preserve"><value>请先在设置 → Labs 中配置 Anki。</value></data>
   <data name="AnkiTargetMissing" xml:space="preserve"><value>所选牌组或笔记类型不可用，请选择其他目标。</value></data>
+  <data name="ViewQueryDiagnostics" xml:space="preserve"><value>查看查询诊断</value></data>
+  <data name="DiagnosticTotal" xml:space="preserve"><value>总耗时</value></data>
+  <data name="DiagnosticStatusRunning" xml:space="preserve"><value>进行中</value></data>
+  <data name="DiagnosticStatusCompleted" xml:space="preserve"><value>已完成</value></data>
+  <data name="DiagnosticStatusFailed" xml:space="preserve"><value>失败</value></data>
+  <data name="DiagnosticStatusCancelled" xml:space="preserve"><value>已取消</value></data>
+  <data name="DiagnosticColumns" xml:space="preserve"><value>开始 / 耗时 / 阶段</value></data>
+  <data name="DiagnosticTimingNote" xml:space="preserve"><value>阶段可能重叠，请勿将耗时相加。等待响应头包含网络和服务器等待。仅显示已测量的阶段。</value></data>
+  <data name="DiagnosticStageQueryPreparation" xml:space="preserve"><value>查询准备</value></data>
+  <data name="DiagnosticStageLanguageDetection" xml:space="preserve"><value>语言识别</value></data>
+  <data name="DiagnosticStageUiPreparation" xml:space="preserve"><value>界面准备</value></data>
+  <data name="DiagnosticStageLanguageRouting" xml:space="preserve"><value>语言路由</value></data>
+  <data name="DiagnosticStagePromptPreparation" xml:space="preserve"><value>提示词准备</value></data>
+  <data name="DiagnosticStageRequestPreparation" xml:space="preserve"><value>请求准备</value></data>
+  <data name="DiagnosticStageResponseHeaders" xml:space="preserve"><value>等待响应头</value></data>
+  <data name="DiagnosticStageFirstOutput" xml:space="preserve"><value>等待首段文本</value></data>
+  <data name="DiagnosticStageStreaming" xml:space="preserve"><value>流式输出</value></data>
+  <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>后处理</value></data>
+  <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>音标查询</value></data>
 </root>

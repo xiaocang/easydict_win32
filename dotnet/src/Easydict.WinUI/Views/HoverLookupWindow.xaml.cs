@@ -138,6 +138,7 @@ public sealed partial class HoverLookupWindow : Window
 
         ConfigureWindowStyle();
         ApplyLocalization();
+        ApplyAppearance();
 
         RootGrid.Loaded += OnRootGridLoaded;
         ContentPanel.SizeChanged += OnContentPanelSizeChanged;
@@ -195,6 +196,16 @@ public sealed partial class HoverLookupWindow : Window
         var openInMini = loc.GetString("HoverLookupOpenInMiniWindow");
         ToolTipService.SetToolTip(OpenInMiniButton, openInMini);
         AutomationProperties.SetName(OpenInMiniButton, openInMini);
+    }
+
+    /// <summary>
+    /// Apply the appearance settings that affect the card. The hover card renders phonetics
+    /// outside <c>ServiceResultItem</c>, so it reads the shared size directly (issue #249).
+    /// Resizing while visible re-fits the popup through <see cref="OnContentPanelSizeChanged"/>.
+    /// </summary>
+    public void ApplyAppearance()
+    {
+        PhoneticText.FontSize = AppearanceService.PhoneticFontSize;
     }
 
     /// <summary>

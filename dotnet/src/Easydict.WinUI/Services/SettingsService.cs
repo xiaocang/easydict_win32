@@ -646,6 +646,17 @@ public sealed class SettingsService
     /// </summary>
     public double ResultFontScale { get; set; } = 1.0;
 
+    /// <summary>
+    /// Additional multiplier for phonetic (IPA) transcription text, on top of the result
+    /// font scale. Fixes https://github.com/xiaocang/easydict_win32/issues/249: the hardcoded
+    /// 10 DIP badges were too small to read. 1.4 = default (14 DIP at the default result
+    /// scale); clamped to [1.0, 2.4] when applied via AppearanceService.
+    /// </summary>
+    public double PhoneticFontScale { get; set; } = DefaultPhoneticFontScale;
+
+    /// <summary>Default value of <see cref="PhoneticFontScale"/>.</summary>
+    public const double DefaultPhoneticFontScale = 1.4;
+
     /// <summary>Hide secondary chrome and optional helper actions for a tighter translation surface.</summary>
     public bool CompactMode { get; set; } = false;
 
@@ -1080,6 +1091,7 @@ public sealed class SettingsService
 
         // Appearance / personalization (issue #172)
         ResultFontScale = GetValue(nameof(ResultFontScale), 1.0);
+        PhoneticFontScale = GetValue(nameof(PhoneticFontScale), DefaultPhoneticFontScale);
         CompactMode = GetValue(nameof(CompactMode), false);
         ShowOcrButton = GetValue(nameof(ShowOcrButton), true);
         ShowPinButton = GetValue(nameof(ShowPinButton), true);
@@ -2020,6 +2032,7 @@ public sealed class SettingsService
 
         // Appearance / personalization (issue #172)
         _settings[nameof(ResultFontScale)] = ResultFontScale;
+        _settings[nameof(PhoneticFontScale)] = PhoneticFontScale;
         _settings[nameof(CompactMode)] = CompactMode;
         _settings[nameof(ShowOcrButton)] = ShowOcrButton;
         _settings[nameof(ShowPinButton)] = ShowPinButton;

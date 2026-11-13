@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Laraskan saiz fon hasil terjemahan.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>Saiz transkripsi fonetik</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>Laraskan saiz transkripsi fonetik dalam hasil kamus dan carian hover.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>Mod padat</value>
   </data>

@@ -147,7 +147,28 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         StatusText.FontSize = settings.StatusFontSize;
         ResultText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
         CorrectedText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
+        ApplyPhoneticAppearance(settings.PhoneticFontSize);
         if (_dictWebView is not null && _dictWebViewRenderedFontScale != AppearanceService.FontScale) QueueUpdateUI();
+    }
+
+    /// <summary>
+    /// Applies the phonetic badge size. The size is baked into every badge, so a change has to
+    /// invalidate the render cache and rebuild the panel: without it, dragging the phonetic
+    /// size slider would keep the old badges until the next query (issue #249).
+    /// </summary>
+    private void ApplyPhoneticAppearance(double phoneticFontSize)
+    {
+        if (Math.Abs(phoneticFontSize - _phoneticFontSize) < 0.001)
+        {
+            return;
+        }
+
+        _phoneticFontSize = phoneticFontSize;
+        _phoneticsRenderValid = false;
+        if (_serviceResult?.Result is { } result)
+        {
+            UpdatePhonetics(result);
+        }
     }
 
     public void RefreshThemeChrome()
@@ -327,6 +348,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private TranslationResult? _phoneticsRenderedResult;
     private string? _phoneticsRenderedDeduplicationKey;
     private ElementTheme _phoneticsRenderedTheme;
+    private double _phoneticsRenderedFontSize;
+
+    /// <summary>Phonetic badge font size in DIPs, seeded from the current settings.</summary>
+    private double _phoneticFontSize = AppearanceService.PhoneticFontSize;
     private bool _dictionaryRenderValid;
     private TranslationResult? _dictionaryRenderedResult;
     private ElementTheme _dictionaryRenderedTheme;
@@ -1101,7 +1126,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         if (_phoneticsRenderValid
             && ReferenceEquals(_phoneticsRenderedResult, result)
             && string.Equals(_phoneticsRenderedDeduplicationKey, deduplicationKey, StringComparison.Ordinal)
-            && _phoneticsRenderedTheme == theme)
+            && _phoneticsRenderedTheme == theme
+            && Math.Abs(_phoneticsRenderedFontSize - _phoneticFontSize) < 0.001)
         {
             PhoneticPanel.Visibility = PhoneticPanel.Children.Count > 0
                 ? Visibility.Visible
@@ -1113,6 +1139,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         _phoneticsRenderedResult = result;
         _phoneticsRenderedDeduplicationKey = deduplicationKey;
         _phoneticsRenderedTheme = theme;
+        _phoneticsRenderedFontSize = _phoneticFontSize;
 
         PhoneticPanel.Children.Clear();
 
@@ -1432,6 +1459,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         };
         var accessibleName = $"{accentDescription}: {phonetic.Text}";
 
+        // One user-adjustable size drives all three parts of the badge. They all shipped at
+        // 10 DIP before issue #249, so scaling them together keeps the design's proportions.
+        var phoneticFontSize = _phoneticFontSize;
+
         var badge = new Border
         {
             Background = FindServiceChromeBrushFallback(
@@ -1446,46 +1477,55 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(badge,
             "Click the speaker button to hear pronunciation");
 
-        var panel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 2
-        };
+        // A grid rather than a horizontal stack: the badge must be able to shrink to the
+        // available width and wrap its transcription, otherwise a long phonetic at the
+        // largest size would still push the speaker button out of a narrow result column.
+        var panel = new Grid();
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         // Accent label (e.g., "美", "英", "src", "dest")
         if (!string.IsNullOrEmpty(accentLabel))
         {
-            panel.Children.Add(new TextBlock
+            var accentText = new TextBlock
             {
                 Text = accentLabel,
-                FontSize = 10,
+                FontSize = phoneticFontSize,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Foreground = FindServiceChromeBrushFallback(
                     "PhoneticBadgeTextBrush",
                     "QueryTextBrush"),
-                VerticalAlignment = VerticalAlignment.Center
-            });
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 2, 0)
+            };
+            Grid.SetColumn(accentText, 0);
+            panel.Children.Add(accentText);
         }
 
         // Phonetic text
-        panel.Children.Add(new TextBlock
+        var phoneticText = new TextBlock
         {
             Text = PhoneticDisplayHelper.FormatPhoneticText(phonetic.Text!),
-            FontSize = 10,
+            FontSize = phoneticFontSize,
             Foreground = FindServiceChromeBrushFallback(
                 "PhoneticBadgeTextBrush",
                 "QueryTextBrush"),
             VerticalAlignment = VerticalAlignment.Center,
-            IsTextSelectionEnabled = true
-        });
+            IsTextSelectionEnabled = true,
+            TextWrapping = TextWrapping.Wrap
+        };
+        Grid.SetColumn(phoneticText, 1);
+        panel.Children.Add(phoneticText);
 
-        // TTS speaker button
+        // TTS speaker button. The tap target grows with the glyph so it never clips.
+        var speakerExtent = Math.Max(22.0, Math.Ceiling(phoneticFontSize) + 10.0);
         var speakerButton = new Button
         {
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
-            Width = 22,
-            Height = 22,
+            Width = speakerExtent,
+            Height = speakerExtent,
             Padding = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -1493,7 +1533,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         var speakerIcon = new FontIcon
         {
             Glyph = "\uE767", // Volume icon
-            FontSize = 10,
+            FontSize = phoneticFontSize,
             Foreground = FindServiceChromeBrushFallback(
                 "PhoneticBadgeTextBrush",
                 "QueryTextBrush")
@@ -1559,6 +1599,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 }));
         };
 
+        Grid.SetColumn(speakerButton, 2);
         panel.Children.Add(speakerButton);
         badge.Child = panel;
         return badge;

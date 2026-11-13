@@ -61,17 +61,165 @@ public class AppearanceServiceTests
     public void CurrentSnapshot_DerivesHeaderAndStatusSizesFromScale()
     {
         var original = _settings.ResultFontScale;
+        var originalPhonetic = _settings.PhoneticFontScale;
         try
         {
             _settings.ResultFontScale = 1.0;
+            _settings.PhoneticFontScale = SettingsService.DefaultPhoneticFontScale;
             var snapshot = AppearanceService.CurrentSnapshot();
             snapshot.ResultFontSize.Should().BeApproximately(14.0, 0.001);
             snapshot.ServiceNameFontSize.Should().BeApproximately(12.0, 0.001);
             snapshot.StatusFontSize.Should().BeApproximately(10.0, 0.001);
+            snapshot.PhoneticFontSize.Should().BeApproximately(14.0, 0.001);
         }
         finally
         {
             _settings.ResultFontScale = original;
+            _settings.PhoneticFontScale = originalPhonetic;
+        }
+    }
+
+    /// <summary>
+    /// Issue #249: the phonetic badges were hardcoded at 10 DIP and were reported as unreadable.
+    /// The default must therefore render them larger than the size that shipped.
+    /// </summary>
+    [Fact]
+    public void PhoneticFontSize_DefaultIsLargerThanTheOldHardcodedSize()
+    {
+        var original = _settings.ResultFontScale;
+        var originalPhonetic = _settings.PhoneticFontScale;
+        try
+        {
+            _settings.ResultFontScale = 1.0;
+            _settings.PhoneticFontScale = SettingsService.DefaultPhoneticFontScale;
+
+            AppearanceService.PhoneticFontSize.Should().BeGreaterThan(10.0,
+                "the pre-#249 badge size is the readability floor, not the target");
+            AppearanceService.PhoneticFontSize.Should().BeApproximately(14.0, 0.001);
+        }
+        finally
+        {
+            _settings.ResultFontScale = original;
+            _settings.PhoneticFontScale = originalPhonetic;
+        }
+    }
+
+    [Theory]
+    [InlineData(1.0, 10.0)]
+    [InlineData(1.4, 14.0)]
+    [InlineData(2.0, 20.0)]
+    public void PhoneticFontSize_ScalesWithPhoneticSetting(double scale, double expected)
+    {
+        var original = _settings.ResultFontScale;
+        var originalPhonetic = _settings.PhoneticFontScale;
+        try
+        {
+            _settings.ResultFontScale = 1.0;
+            _settings.PhoneticFontScale = scale;
+            AppearanceService.PhoneticFontSize.Should().BeApproximately(expected, 0.001);
+        }
+        finally
+        {
+            _settings.ResultFontScale = original;
+            _settings.PhoneticFontScale = originalPhonetic;
+        }
+    }
+
+    [Theory]
+    [InlineData(0.5, 1.0)]   // below min clamps up: phonetics never shrink back to unreadable
+    [InlineData(9.0, 2.4)]   // above max clamps down
+    public void PhoneticFontScale_IsClamped(double raw, double clamped)
+    {
+        var original = _settings.PhoneticFontScale;
+        try
+        {
+            _settings.PhoneticFontScale = raw;
+            AppearanceService.PhoneticFontScale.Should().Be(clamped);
+        }
+        finally
+        {
+            _settings.PhoneticFontScale = original;
+        }
+    }
+
+    /// <summary>
+    /// Phonetics sit inside result text, so enlarging all results must carry them along; the
+    /// phonetic slider is an additional multiplier on top, not a replacement for that.
+    /// </summary>
+    [Fact]
+    public void PhoneticFontSize_FollowsTheResultFontScale()
+    {
+        var original = _settings.ResultFontScale;
+        var originalPhonetic = _settings.PhoneticFontScale;
+        try
+        {
+            _settings.PhoneticFontScale = 1.4;
+            _settings.ResultFontScale = 1.0;
+            var atDefault = AppearanceService.PhoneticFontSize;
+
+            _settings.ResultFontScale = 1.4;
+            AppearanceService.PhoneticFontSize.Should().BeApproximately(atDefault * 1.4, 0.001);
+        }
+        finally
+        {
+            _settings.ResultFontScale = original;
+            _settings.PhoneticFontScale = originalPhonetic;
+        }
+    }
+
+    /// <summary>
+    /// Both multipliers are bounded by their sliders, so the composition is bounded too; this
+    /// pins that maximum so a future change cannot quietly grow it into an unreadable badge.
+    /// </summary>
+    [Fact]
+    public void PhoneticFontSize_IsBoundedByBothSliderRanges()
+    {
+        var original = _settings.ResultFontScale;
+        var originalPhonetic = _settings.PhoneticFontScale;
+        try
+        {
+            _settings.ResultFontScale = 10.0;   // clamps to 1.4
+            _settings.PhoneticFontScale = 10.0; // clamps to 2.4
+            AppearanceService.PhoneticFontSize.Should().BeApproximately(10.0 * 2.4 * 1.4, 0.001);
+        }
+        finally
+        {
+            _settings.ResultFontScale = original;
+            _settings.PhoneticFontScale = originalPhonetic;
+        }
+    }
+
+    /// <summary>
+    /// Issue #249 acceptance: the phonetic size must survive a restart. Asserting the in-memory
+    /// property after Save() would pass even if Save() never wrote anything, so this saves in one
+    /// instance and reads back through a second one over a scratch directory. The internal
+    /// constructor takes an explicit directory, so the shared singleton is not touched.
+    /// </summary>
+    [Fact]
+    public void PhoneticFontScale_SurvivesSaveAndReload()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(), "Easydict.Tests", $"phonetic-font-scale-{Guid.NewGuid():N}");
+
+        try
+        {
+            var writer = new SettingsService(directory);
+            writer.PhoneticFontScale = 1.9;
+            writer.Save();
+
+            File.Exists(Path.Combine(directory, "settings.json")).Should().BeTrue(
+                "Save must put the setting on disk");
+
+            var reader = new SettingsService(directory);
+            reader.PhoneticFontScale.Should().BeApproximately(1.9, 0.001,
+                "a fresh instance must read the saved size back from disk");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 

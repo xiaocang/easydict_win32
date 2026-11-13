@@ -42,6 +42,15 @@ public sealed class WrapPanel : Panel
         foreach (var child in Children)
         {
             child.Measure(availableSize);
+
+            // A child wider than the panel cannot be fixed by wrapping it to its own row: it
+            // would still overflow. Re-measure constrained to the panel width so it can shrink
+            // (e.g. a phonetic badge wrapping its transcription instead of clipping).
+            if (!double.IsInfinity(availableSize.Width) && child.DesiredSize.Width > availableSize.Width)
+            {
+                child.Measure(new Size(availableSize.Width, availableSize.Height));
+            }
+
             var desired = child.DesiredSize;
 
             if (x > 0 && x + HorizontalSpacing + desired.Width > availableSize.Width)

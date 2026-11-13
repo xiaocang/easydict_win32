@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Regola la dimensione del carattere dei risultati di traduzione.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>Dimensione della trascrizione fonetica</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>Regola la dimensione della trascrizione fonetica nei risultati del dizionario e nella ricerca al passaggio del mouse.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>Modalità compatta</value>
   </data>

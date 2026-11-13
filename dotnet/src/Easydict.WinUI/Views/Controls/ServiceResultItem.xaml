@@ -227,16 +227,18 @@
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                 Visibility="Collapsed"/>
 
-                            <!-- Phonetic Transcription Badges -->
-                            <StackPanel
+                            <!-- Phonetic Transcription Badges. Wraps instead of overflowing: at the
+                                 largest phonetic sizes a US+UK pair no longer fits the narrow results
+                                 column, and the enclosing scroll viewer has no horizontal scroll. -->
+                            <controls:WrapPanel
                                 x:Name="PhoneticPanel"
                                 AutomationProperties.AutomationId="PhoneticPanel"
                                 Grid.Row="1"
-                                Orientation="Horizontal"
-                                Spacing="6"
+                                HorizontalSpacing="6"
+                                VerticalSpacing="4"
                                 Margin="0,0,0,4"
                                 Visibility="Collapsed">
-                            </StackPanel>
+                            </controls:WrapPanel>
 
                             <!-- Dictionary Definitions and Examples -->
                             <StackPanel

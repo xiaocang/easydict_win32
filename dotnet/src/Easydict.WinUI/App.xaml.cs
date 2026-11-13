@@ -1667,6 +1667,7 @@ namespace Easydict.WinUI
 
             MiniWindowService.Instance.ApplyAppearance();
             FixedWindowService.Instance.ApplyAppearance();
+            Instance._hoverWordLookupService?.ApplyAppearance();
         }
 
         private static bool IsSystemTheme(string? theme) =>

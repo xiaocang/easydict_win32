@@ -3902,6 +3902,8 @@ public sealed partial class SettingsPage : Page
         CompactModeDescriptionText.Text = loc.GetString("CompactModeDescription");
         ResultFontSizeLabel.Text = loc.GetString("ResultFontSize");
         ResultFontSizeDescriptionText.Text = loc.GetString("ResultFontSizeDescription");
+        PhoneticFontSizeLabel.Text = loc.GetString("PhoneticFontSize");
+        PhoneticFontSizeDescriptionText.Text = loc.GetString("PhoneticFontSizeDescription");
         QuickActionsHeaderText.Text = loc.GetString("QuickActionsHeader");
         ShowOcrButtonToggle.Header = loc.GetString("ShowOcrButton");
         ShowPinButtonToggle.Header = loc.GetString("ShowPinButton");
@@ -4590,6 +4592,7 @@ public sealed partial class SettingsPage : Page
         ProxyBypassChinaToggle.Toggled += OnSettingChanged;
         TtsSpeedSlider.ValueChanged += OnSettingChanged;
         ResultFontScaleSlider.ValueChanged += OnSettingChanged;
+        PhoneticFontScaleSlider.ValueChanged += OnSettingChanged;
         MouseSelectionPopDelaySlider.ValueChanged += OnSettingChanged;
         AutoPlayTranslationToggle.Toggled += OnSettingChanged;
         TtsVoiceCombo.SelectionChanged += OnTtsVoiceSelectionChanged;
@@ -4731,6 +4734,7 @@ public sealed partial class SettingsPage : Page
         ProxyBypassChinaToggle.Toggled -= OnSettingChanged;
         TtsSpeedSlider.ValueChanged -= OnSettingChanged;
         ResultFontScaleSlider.ValueChanged -= OnSettingChanged;
+        PhoneticFontScaleSlider.ValueChanged -= OnSettingChanged;
         MouseSelectionPopDelaySlider.ValueChanged -= OnSettingChanged;
         AutoPlayTranslationToggle.Toggled -= OnSettingChanged;
         TtsVoiceCombo.SelectionChanged -= OnTtsVoiceSelectionChanged;
@@ -5190,6 +5194,7 @@ public sealed partial class SettingsPage : Page
             || HideEmptyServiceResultsToggle.IsOn != _settings.HideEmptyServiceResults
             || EnableLocalDictionarySuggestionsToggle.IsOn != _settings.EnableLocalDictionarySuggestions
             || !SameDouble(ResultFontScaleSlider.Value, _settings.ResultFontScale)
+            || !SameDouble(PhoneticFontScaleSlider.Value, _settings.PhoneticFontScale)
             || (int)Math.Round(MouseSelectionPopDelaySlider.Value) != _settings.MouseSelectionPopDelayMs
             || CompactModeToggle.IsOn != _settings.CompactMode
             || ShowOcrButtonToggle.IsOn != _settings.ShowOcrButton
@@ -5526,6 +5531,8 @@ public sealed partial class SettingsPage : Page
                 ? Visibility.Visible : Visibility.Collapsed;
             AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
             ResultFontScaleSlider.Value = _settings.ResultFontScale;
+            PhoneticFontScaleSlider.Value = Math.Clamp(
+                _settings.PhoneticFontScale, PhoneticFontScaleSlider.Minimum, PhoneticFontScaleSlider.Maximum);
             MouseSelectionPopDelaySlider.Value = _settings.MouseSelectionPopDelayMs;
             CompactModeToggle.IsOn = _settings.CompactMode;
             ShowOcrButtonToggle.IsOn = _settings.ShowOcrButton;
@@ -7118,6 +7125,7 @@ public sealed partial class SettingsPage : Page
         _settings.HoverWordLookupServiceId = GetTagComboValue(HoverWordLookupServiceCombo, "");
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.ResultFontScale = ResultFontScaleSlider.Value;
+        _settings.PhoneticFontScale = PhoneticFontScaleSlider.Value;
         _settings.MouseSelectionPopDelayMs = (int)Math.Round(MouseSelectionPopDelaySlider.Value);
         _settings.CompactMode = CompactModeToggle.IsOn;
         _settings.ShowOcrButton = ShowOcrButtonToggle.IsOn;

@@ -262,6 +262,16 @@ public sealed partial class HoverWordLookupService : IDisposable
         _window?.ApplyTheme(theme, forceResourceRefresh);
     }
 
+    /// <summary>
+    /// Re-applies appearance settings that affect the popup (issue #249: phonetic size).
+    /// Mirrors <see cref="ApplyTheme"/>; the window is created lazily, so a popup that does not
+    /// exist yet picks the setting up from its constructor instead.
+    /// </summary>
+    public void ApplyAppearance()
+    {
+        _window?.ApplyAppearance();
+    }
+
     // ---------------------------------------------------------------------
     // Dwell timer (UI thread)
     // ---------------------------------------------------------------------
@@ -674,6 +684,7 @@ public sealed partial class HoverWordLookupService : IDisposable
         _mouseHook.AddOwnedWindowHandle(_window.WindowHandle);
 
         _window.ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme));
+        _window.ApplyAppearance();
         Debug.WriteLine("[HoverLookup] Popup window created");
     }
 

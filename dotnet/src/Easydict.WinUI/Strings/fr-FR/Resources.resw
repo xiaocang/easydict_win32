@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Ajustez la taille de police des résultats de traduction.</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>Taille de la transcription phonétique</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>Ajustez la taille de la transcription phonétique dans les résultats de dictionnaire et la recherche au survol.</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>Mode compact</value>
   </data>

@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>ปรับขนาดฟอนต์ของผลการแปล</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>ขนาดสัทอักษร</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>ปรับขนาดสัทอักษรในผลลัพธ์พจนานุกรมและการค้นหาแบบชี้</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>โหมดกะทัดรัด</value>
   </data>

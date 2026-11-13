@@ -770,6 +770,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>翻訳結果のフォントサイズを調整します。</value>
   </data>
+  <data name="PhoneticFontSize" xml:space="preserve">
+    <value>発音記号のサイズ</value>
+  </data>
+  <data name="PhoneticFontSizeDescription" xml:space="preserve">
+    <value>辞書の結果とホバー検索の発音記号のサイズを調整します。</value>
+  </data>
   <data name="CompactMode" xml:space="preserve">
     <value>コンパクトモード</value>
   </data>

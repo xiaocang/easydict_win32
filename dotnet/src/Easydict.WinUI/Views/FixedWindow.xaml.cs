@@ -1783,6 +1783,10 @@ public sealed partial class FixedWindow : Window
                     TimingMs = stopwatch.ElapsedMilliseconds
                 };
             }
+
+            // Automatic-direction routing leaves ToLanguage as Auto; resolve the language actually
+            // produced so text-to-speech receives a real language instead of a default voice.
+            result = result.ResolveTargetLanguage(request);
         }
 
         // Enrich with phonetics from Youdao if missing (for word queries).

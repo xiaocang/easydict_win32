@@ -129,6 +129,27 @@ public class TranslationStreamUpdatesTests : IDisposable
     }
 
     [Fact]
+    public async Task RichService_CompletedResultResolvesAutomaticDirectionTarget()
+    {
+        var auto = Completed("こんにちは") with { TargetLanguage = Language.Auto };
+        _manager.RegisterService(new RichStreamTestService("rich-auto",
+            new TranslationStreamUpdate[] { new TranslationStreamUpdate.Completed(auto) }));
+
+        TranslationResult? result = null;
+        await foreach (var update in _manager.TranslateStreamUpdatesAsync(new TranslationRequest
+        {
+            Text = "bonjour", FromLanguage = Language.French, ToLanguage = Language.Auto,
+            AutomaticDirection = new(Language.English, Language.Japanese)
+        }, serviceId: "rich-auto"))
+        {
+            if (update is TranslationStreamUpdate.Completed done) result = done.Result;
+        }
+
+        result!.TargetLanguage.Should().Be(Language.English,
+            "text-to-speech must not receive the Auto sentinel from automatic-direction routing");
+    }
+
+    [Fact]
     public async Task ToDeltas_EmitsOnlyExtensions()
     {
         var updates = new TranslationStreamUpdate[]

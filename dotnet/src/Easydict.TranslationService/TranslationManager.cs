@@ -326,6 +326,10 @@ public sealed class TranslationManager : IDisposable
             service, request, cancellationToken,
             maxRetries: policy.AllowHostRetry ? DefaultMaxRetries : 0);
 
+        // Automatic-direction routing leaves ToLanguage as Auto; resolve the language the service
+        // actually produced so language-dependent follow-ups (text-to-speech) never see the sentinel.
+        result = result.ResolveTargetLanguage(request);
+
         // The translation is usable before optional phonetic enrichment completes.
         // Callers that support progressive rendering can publish it immediately.
         cancellationToken.ThrowIfCancellationRequested();
@@ -808,7 +812,11 @@ public sealed class TranslationManager : IDisposable
                         var update = enumerator.Current;
                         if (update is TranslationStreamUpdate.Completed done)
                         {
-                            completed = done.Result;
+                            // A rich service's final result carries the request's ToLanguage, which is
+                            // Auto on the automatic-direction path. Resolve it before it reaches
+                            // language-dependent consumers such as text-to-speech.
+                            completed = done.Result.ResolveTargetLanguage(request);
+                            update = new TranslationStreamUpdate.Completed(completed);
                         }
 
                         yield return update;

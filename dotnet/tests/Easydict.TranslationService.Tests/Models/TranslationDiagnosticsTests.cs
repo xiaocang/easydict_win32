@@ -178,4 +178,63 @@ public class TranslationDiagnosticsTests
         old.Snapshot().TotalMs.Should().Be(35);
         current.Snapshot().Status.Should().Be(TranslationDiagnosticStatus.Running);
     }
+
+    [Fact]
+    public void PostCompletionMeasurementKeepsReportingLiveElapsedTime()
+    {
+        var clock = new Clock();
+        var diagnostics = new TranslationDiagnostics(clock);
+        clock.Advance(20);
+        diagnostics.Complete(TranslationDiagnosticStatus.Completed);
+        using var enrichment = diagnostics.MeasureAfterCompletion(TranslationDiagnosticStage.PhoneticEnrichment);
+        clock.Advance(30);
+
+        var pending = diagnostics.Snapshot();
+        pending.TotalMs.Should().Be(20, "the frozen total must not grow with best-effort work");
+        var running = pending.Timings.Should().ContainSingle().Subject;
+        running.DurationMs.Should().Be(30, "an open post-completion phase reports real elapsed time");
+        running.IsRunning.Should().BeTrue();
+
+        enrichment.Dispose();
+        clock.Advance(10);
+        var finished = diagnostics.Snapshot().Timings.Single();
+        finished.DurationMs.Should().Be(30);
+        finished.IsRunning.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PostCompletionPhaseStartingAfterCompletionIsNotNegativeOrFrozen()
+    {
+        var clock = new Clock();
+        var diagnostics = new TranslationDiagnostics(clock);
+        clock.Advance(50);
+        diagnostics.Complete(TranslationDiagnosticStatus.Completed);
+        clock.Advance(60);
+        using var enrichment = diagnostics.MeasureAfterCompletion(TranslationDiagnosticStage.PhoneticEnrichment);
+
+        var pending = diagnostics.Snapshot().Timings.Should().ContainSingle().Subject;
+        pending.StartedMs.Should().Be(110);
+        pending.DurationMs.Should().Be(0);
+        pending.IsRunning.Should().BeTrue();
+
+        clock.Advance(15);
+        diagnostics.Snapshot().Timings.Single().DurationMs.Should().Be(15);
+    }
+
+    [Fact]
+    public void ForkKeepsPostCompletionMeasurementsLive()
+    {
+        var clock = new Clock();
+        var query = new TranslationDiagnostics(clock);
+        clock.Advance(10);
+        query.Complete(TranslationDiagnosticStatus.Completed);
+        using var enrichment = query.MeasureAfterCompletion(TranslationDiagnosticStage.PhoneticEnrichment);
+        var copy = query.Fork();
+        clock.Advance(25);
+
+        var timing = copy.Snapshot().Timings.Should().ContainSingle().Subject;
+        timing.Stage.Should().Be(TranslationDiagnosticStage.PhoneticEnrichment);
+        timing.DurationMs.Should().Be(25);
+        timing.IsRunning.Should().BeTrue();
+    }
 }

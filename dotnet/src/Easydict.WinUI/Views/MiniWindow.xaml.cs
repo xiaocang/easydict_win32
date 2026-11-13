@@ -1485,7 +1485,7 @@ public sealed partial class MiniWindow : Window
                                 if (!string.IsNullOrEmpty(targetText))
                                 {
                                     _hasAutoPlayedCurrentQuery = true;
-                                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, request.ToLanguage);
+                                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, result.TargetLanguage);
                                     NotifyAutoPlayTts(serviceResult, playbackTask);
                                 }
                             }
@@ -2031,6 +2031,10 @@ public sealed partial class MiniWindow : Window
                     TimingMs = stopwatch.ElapsedMilliseconds
                 };
             }
+
+            // Automatic-direction routing leaves ToLanguage as Auto; resolve the language actually
+            // produced so text-to-speech receives a real language instead of a default voice.
+            result = result.ResolveTargetLanguage(request);
         }
 
         // Publish the completed translation before optional phonetic enrichment.
@@ -2064,7 +2068,7 @@ public sealed partial class MiniWindow : Window
                 if (!string.IsNullOrEmpty(targetText))
                 {
                     _hasAutoPlayedCurrentQuery = true;
-                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, initialResult.TargetLanguage);
                     NotifyAutoPlayTts(serviceResult, playbackTask);
                 }
             }

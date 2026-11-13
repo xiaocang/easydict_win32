@@ -2869,7 +2869,7 @@ namespace Easydict.WinUI.Views
                                     if (!string.IsNullOrEmpty(targetText))
                                     {
                                         _hasAutoPlayedCurrentQuery = true;
-                                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, request.ToLanguage);
+                                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, result.TargetLanguage);
                                         NotifyAutoPlayTts(serviceResult, playbackTask);
                                     }
                                 }
@@ -3165,7 +3165,7 @@ namespace Easydict.WinUI.Views
                         if (!string.IsNullOrEmpty(targetText))
                         {
                             _hasAutoPlayedCurrentQuery = true;
-                            var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                            var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, result.TargetLanguage);
                             NotifyAutoPlayTts(serviceResult, playbackTask);
                         }
                     }
@@ -3469,6 +3469,10 @@ namespace Easydict.WinUI.Views
                         TimingMs = stopwatch.ElapsedMilliseconds
                     };
                 }
+
+                // Automatic-direction routing leaves ToLanguage as Auto; resolve the language actually
+                // produced so text-to-speech receives a real language instead of a default voice.
+                result = result.ResolveTargetLanguage(request);
             }
 
             // Enrich with phonetics from Youdao if missing (for word queries).
@@ -3508,7 +3512,7 @@ namespace Easydict.WinUI.Views
                     if (!string.IsNullOrEmpty(targetText))
                     {
                         _hasAutoPlayedCurrentQuery = true;
-                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                        var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, result.TargetLanguage);
                         NotifyAutoPlayTts(serviceResult, playbackTask);
                     }
                 }

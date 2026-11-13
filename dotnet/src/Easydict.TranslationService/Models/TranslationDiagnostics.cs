@@ -25,7 +25,11 @@ public sealed record TranslationDiagnosticSnapshot(double TotalMs, TranslationDi
 /// <summary>Per-query timing only: never stores prompts, credentials, response text, or endpoint URLs.</summary>
 public sealed class TranslationDiagnostics
 {
-    private sealed record Phase(TranslationDiagnosticStage Stage, long Started, long? Ended = null);
+    private sealed record Phase(
+        TranslationDiagnosticStage Stage,
+        long Started,
+        long? Ended = null,
+        bool AllowsAfterCompletion = false);
     private readonly object _lock = new();
     private readonly TimeProvider _time;
     private readonly long _started;
@@ -51,7 +55,12 @@ public sealed class TranslationDiagnostics
         lock (_lock)
         {
             var now = _ended ?? _time.GetTimestamp();
-            return new(_time, _started, _phases.Select(phase => phase with { Ended = phase.Ended ?? now }));
+            // Post-completion phases that are still open stay open in the copy, so the fork keeps
+            // reporting their live elapsed time instead of freezing them at this instant.
+            return new(_time, _started, _phases.Select(phase => phase with
+            {
+                Ended = phase.AllowsAfterCompletion ? phase.Ended : phase.Ended ?? now
+            }));
         }
     }
 
@@ -76,7 +85,7 @@ public sealed class TranslationDiagnostics
         lock (_lock)
         {
             var index = _phases.Count;
-            _phases.Add(new(stage, _time.GetTimestamp()));
+            _phases.Add(new(stage, _time.GetTimestamp(), AllowsAfterCompletion: true));
             return new Measurement(this, index, allowAfterCompletion: true);
         }
     }
@@ -97,10 +106,19 @@ public sealed class TranslationDiagnostics
         {
             var now = _ended ?? _time.GetTimestamp();
             return new(_time.GetElapsedTime(_started, now).TotalMilliseconds, _status,
-                _phases.Select(phase => new TranslationDiagnosticTiming(phase.Stage,
-                    _time.GetElapsedTime(_started, phase.Started).TotalMilliseconds,
-                    _time.GetElapsedTime(phase.Started, phase.Ended ?? now).TotalMilliseconds,
-                    phase.Ended is null && _ended is null)).ToArray());
+                _phases.Select(phase =>
+                {
+                    // Best-effort work started with MeasureAfterCompletion keeps running after the
+                    // total was frozen. Report its live elapsed time and running state instead of
+                    // clamping it to the completion instant, which would freeze the duration or
+                    // make a phase that started later read as negative.
+                    var isLive = phase.AllowsAfterCompletion && phase.Ended is null;
+                    var ended = phase.Ended ?? (isLive ? _time.GetTimestamp() : now);
+                    return new TranslationDiagnosticTiming(phase.Stage,
+                        _time.GetElapsedTime(_started, phase.Started).TotalMilliseconds,
+                        _time.GetElapsedTime(phase.Started, ended).TotalMilliseconds,
+                        phase.Ended is null && (isLive || _ended is null));
+                }).ToArray());
         }
     }
 

@@ -80,6 +80,10 @@ public static class AiProviderCatalog
         Provider("magpie", "magpie", "Magpie", true, true, true,
             Field("endpoint", "", "http://127.0.0.1:3425/v1/chat/completions"),
             Field("allowRemote", "", "false"),
+            // Remembered per-scope addresses. They are internal storage, never rendered as fields, but they must be
+            // declared here or the profile configuration writer rejects them as unsupported.
+            Field("localEndpoint", "", ""),
+            Field("remoteEndpoint", "", ""),
             Secret("apiKey", ""),
             Field("model", "", "")) with { HasLegacyConfiguration = false },
         Provider("openrouter", "openrouter", "OpenRouter", true, true, true,

@@ -1249,6 +1249,16 @@ public sealed partial class SettingsPage : Page
 
             foreach (var field in draft.Provider.Fields)
             {
+                // Magpie's scope selector owns "allowRemote"; generating the legacy toggle as well would show two
+                // controls for one setting (and the old one stayed visible because it is nested deeper than the row).
+                if (string.Equals(draft.ProviderType, "magpie", StringComparison.Ordinal)
+                    && (string.Equals(field.Id, "allowRemote", StringComparison.Ordinal)
+                        || string.Equals(field.Id, "localEndpoint", StringComparison.Ordinal)
+                        || string.Equals(field.Id, "remoteEndpoint", StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
                 BuildAiProfileField(draft, field);
             }
 
@@ -1641,7 +1651,10 @@ public sealed partial class SettingsPage : Page
                 }
             }
 
-            if (_aiProfileFieldControls.TryGetValue("endpoint", out var endpointControl)
+            // Only mirror the endpoint into the control while it is visible. Writing it while hidden raises
+            // TextChanged with the stale text, which would write the old remote address back into the draft.
+            if (remote
+                && _aiProfileFieldControls.TryGetValue("endpoint", out var endpointControl)
                 && endpointControl is TextBox endpointTextBox
                 && draft.Configuration.TryGetValue("endpoint", out var activeEndpoint))
             {

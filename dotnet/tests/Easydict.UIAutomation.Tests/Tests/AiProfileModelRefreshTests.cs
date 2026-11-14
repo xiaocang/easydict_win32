@@ -85,6 +85,7 @@ public sealed class AiProfileModelRefreshTests
         Thread.Sleep(600);
         Invoke(Wait(window, "SettingsTab_Services"));
         Thread.Sleep(600);
+        SignalDemoReadyAndWait(launcher, window);
         return window;
     }
 
@@ -144,14 +145,16 @@ public sealed class AiProfileModelRefreshTests
         private readonly HttpListener _listener = new();
         private readonly CancellationTokenSource _cts = new();
         private readonly List<string> _requests = [];
+        private readonly int _helloDelayMs;
         private readonly Task _loop;
 
-        public LoopbackModelStub(string[] magpieModels, string[] ollamaModels)
+        public LoopbackModelStub(string[] magpieModels, string[] ollamaModels, int helloDelayMs = 0)
         {
             var port = GetFreePort();
             BaseAddress = $"http://127.0.0.1:{port}";
             _listener.Prefixes.Add(BaseAddress + "/");
             _listener.Start();
+            _helloDelayMs = helloDelayMs;
             _loop = Task.Run(() => ServeAsync(magpieModels, ollamaModels));
         }
 
@@ -186,6 +189,8 @@ public sealed class AiProfileModelRefreshTests
                 }
 
                 var path = context.Request.Url?.AbsolutePath ?? string.Empty;
+                if (path == "/api/hello" && _helloDelayMs > 0) Thread.Sleep(_helloDelayMs);
+
                 lock (_requests)
                 {
                     _requests.Add(path);
@@ -582,6 +587,116 @@ public sealed class AiProfileModelRefreshTests
         }
 
         Thread.Sleep(400);
+    }
+
+    /// <summary>
+    /// Switching from a remote gateway to "This computer" must leave a configuration that is consistent with the
+    /// mode, otherwise saving or translating fails because allowRemote=false meets a remote endpoint.
+    /// The endpoint control is hidden in local mode, so the assertion reads the saved settings rather than UI text.
+    /// </summary>
+    [Fact]
+    public void MagpieLocalScope_SavesALoopbackEndpointAndDisablesRemote()
+    {
+        var (launcher, settingsDirectory) = LaunchWithMagpieProfile(
+            "https://gateway.invalid/v1/chat/completions", allowRemote: true);
+        using (launcher)
+        {
+            var window = OpenSettingsServicesTab(launcher);
+
+            var card = Retry.WhileNull(
+                () => window.FindFirstDescendant(cf => cf.ByName("Magpie (UIA)")),
+                TimeSpan.FromSeconds(20),
+                TimeSpan.FromMilliseconds(200)).Result;
+            card.Should().NotBeNull("the seeded Magpie profile should appear as a card");
+            card!.Click();
+            Thread.Sleep(500);
+
+            SelectOption(Wait(window, "AiProfileMagpieScopeLocal"));
+            Thread.Sleep(400);
+
+            var saveButton = Retry.WhileNull(
+                () => window.FindFirstDescendant(cf => cf.ByName("Save Settings")),
+                TimeSpan.FromSeconds(15),
+                TimeSpan.FromMilliseconds(250)).Result;
+            saveButton.Should().NotBeNull("the settings page saves the edited profile");
+            Invoke(saveButton!);
+            Thread.Sleep(2500);
+
+            var settingsPath = Path.Combine(settingsDirectory, "settings.json");
+            File.Exists(settingsPath).Should().BeTrue("saving must write the isolated settings file");
+
+            using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            var magpieProfile = document.RootElement.GetProperty("AiServiceProfiles")
+                .EnumerateArray()
+                .First(profile => profile.GetProperty("ProviderType").GetString() == "magpie");
+            var configuration = magpieProfile.GetProperty("Configuration");
+
+            configuration.GetProperty("allowRemote").GetString()
+                .Should().Be("false", "choosing This computer means the profile is not a remote gateway any more");
+            var savedEndpoint = configuration.GetProperty("endpoint").GetString();
+            savedEndpoint.Should().NotBeNull();
+            new Uri(savedEndpoint!).Host
+                .Should().BeOneOf("127.0.0.1", "localhost", "::1")
+                .And.NotBe("gateway.invalid", "the active endpoint must match the chosen scope, not keep the remote one");
+
+            // Switching back to remote must restore the address the user had entered, so the remote configuration is
+            // not lost while the local mode was active.
+            SelectOption(Wait(window, "AiProfileMagpieScopeRemote"));
+            Thread.Sleep(500);
+            Wait(window, "AiProfileMagpieRemoteEndpoint").AsTextBox().Text
+                .Should().Be("https://gateway.invalid/v1/chat/completions",
+                    "the remote address is kept aside and restored when switching back");
+        }
+    }
+
+    /// <summary>
+    /// Recording handshake used by the ui-demo workflow. When EASYDICT_DEMO_HANDSHAKE_DIR is set, the scenario
+    /// announces the app it actually launched (pid/hwnd/exe/title) and waits for the recorder to confirm capture has
+    /// started before touching the UI. Without the variable this is a no-op, so normal test runs are unaffected.
+    /// </summary>
+    private static void SignalDemoReadyAndWait(AppLauncher launcher, Window window)
+    {
+        var handshakeDirectory = Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR");
+        if (string.IsNullOrWhiteSpace(handshakeDirectory))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(handshakeDirectory);
+        var processId = launcher.Application.ProcessId;
+        string exePath = string.Empty;
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            exePath = process.MainModule?.FileName ?? string.Empty;
+        }
+        catch (Exception)
+        {
+            // The recorder treats an empty path as a mismatch; better to report it than to guess.
+        }
+
+        var payload = new
+        {
+            pid = processId,
+            hwnd = window.Properties.NativeWindowHandle.Value.ToInt64(),
+            exePath,
+            windowTitle = window.Title,
+        };
+        File.WriteAllText(
+            Path.Combine(handshakeDirectory, "ready.json"),
+            JsonSerializer.Serialize(payload));
+
+        var continuePath = Path.Combine(handshakeDirectory, "continue");
+        var deadline = DateTime.UtcNow.AddSeconds(90);
+        while (!File.Exists(continuePath))
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("The recorder did not signal 'continue'; refusing to act before capture starts.");
+            }
+
+            Thread.Sleep(200);
+        }
     }
 
     private static AutomationElement Wait(Window window, string automationId) =>

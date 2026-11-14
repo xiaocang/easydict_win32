@@ -262,6 +262,9 @@ public sealed partial class SettingsPage : Page
     private bool _aiProfileEditorInitialized;
     private CancellationTokenSource? _aiProfileActionCts;
     private CancellationTokenSource? _magpieDiscoveryCts;
+
+    /// <summary>Inline "remote gateway needs a key" message created with the scope selector, if any.</summary>
+    private TextBlock? _magpieRemoteKeyErrorText;
     private bool _isBuildingAiProfileEditor;
     private ContentControl? _aiProfileEditorHost;
     private StackPanel? _aiProfileCustomPromptRow;
@@ -961,6 +964,21 @@ public sealed partial class SettingsPage : Page
     private async void OnConnectMagpieClick(object sender, RoutedEventArgs e)
     {
         if (_magpieDiscoveryCts is not null) return;
+
+        // A remote gateway cannot be discovered without a key, so say so in place instead of firing a request
+        // that is guaranteed to be rejected.
+        var preselected = _selectedAiProfileDraft;
+        if (preselected?.ProviderType == "magpie"
+            && string.Equals(preselected.Configuration.GetValueOrDefault("allowRemote"), "true", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(GetPendingMagpieApiKey(preselected)))
+        {
+            if (_magpieRemoteKeyErrorText is not null)
+                _magpieRemoteKeyErrorText.Visibility = Visibility.Visible;
+            AiProfileActionStatusText.Text =
+                AiProfileText("AiProfileMagpieRemoteKeyRequired", "A remote gateway needs an API key before it can be connected.");
+            return;
+        }
+
         UpdateAiProfileListLabelsAndDirtyState();
         var source = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
         _magpieDiscoveryCts = source;
@@ -977,8 +995,15 @@ public sealed partial class SettingsPage : Page
             if (targetDraft is null) return;
             var priorConfiguration = targetDraft.Configuration;
             var priorEndpoint = priorConfiguration?.GetValueOrDefault("endpoint");
-            var baseAddress = GetMagpieBaseAddress(priorEndpoint) ?? MagpieGatewayDiscoveryService.DefaultBaseAddress;
             var allowRemote = string.Equals(priorConfiguration?.GetValueOrDefault("allowRemote"), "true", StringComparison.OrdinalIgnoreCase);
+            // Local mode keeps a loopback endpoint the user configured (so a custom local port survives), but a
+            // remote address left over from a previous setup must not make "this computer" fail: that case uses
+            // the default local gateway for this attempt only.
+            var savedBaseAddress = GetMagpieBaseAddress(priorEndpoint);
+            var savedIsLocal = savedBaseAddress is not null && MagpieGatewayDiscoveryService.IsLoopbackAddress(savedBaseAddress);
+            var baseAddress = allowRemote
+                ? savedBaseAddress ?? MagpieGatewayDiscoveryService.DefaultBaseAddress
+                : savedIsLocal ? savedBaseAddress! : MagpieGatewayDiscoveryService.DefaultBaseAddress;
             string? remoteKey = targetDraft.ClearedSecretFields.Contains("apiKey")
                     ? null
                     : targetDraft.SecretEdits.GetValueOrDefault("apiKey")
@@ -1017,26 +1042,22 @@ public sealed partial class SettingsPage : Page
             var existingModel = hasPreviouslyConfiguredModel
                 ? result.Models!.FirstOrDefault(model => string.Equals(model.Id, previouslyConfiguredModel, StringComparison.Ordinal))?.Id
                 : null;
-            string? selectedModel = existingModel
-                ?? (hasPreviouslyConfiguredModel
-                    ? await ShowMagpieModelPickerAsync(result.Models!, source.Token)
-                    : result.Models!.Count == 1
-                        ? result.Models[0].Id
-                        : await ShowMagpieModelPickerAsync(result.Models!, source.Token));
-            if (selectedModel is null) return;
-            if (string.IsNullOrWhiteSpace(selectedModel))
-            {
-                if (!source.IsCancellationRequested) await ShowMagpieInfoAsync(AiProfileText("AiProfileMagpieModelRequired", "Choose a model to finish connecting Magpie."));
-                return;
-            }
+            // No second picker: connecting fills the same model dropdown that refresh fills and leaves the choice
+            // there. A previously configured model is kept when the gateway still offers it.
             if (source.IsCancellationRequested || !ReferenceEquals(_magpieDiscoveryCts, source)) return;
 
             if (!AiProviderCatalog.TryGet("magpie", out _)) return;
             var draft = targetDraft;
 
-            draft.Configuration["endpoint"] = new Uri(result.BaseAddress!, "v1/chat/completions").AbsoluteUri;
+            // Persist the address only when it belongs to this mode: a temporary default used because the stored
+            // value pointed at a remote gateway must not overwrite the user's remote setup.
+            if (allowRemote || savedIsLocal)
+            {
+                draft.Configuration["endpoint"] = new Uri(result.BaseAddress!, "v1/chat/completions").AbsoluteUri;
+            }
             draft.Configuration["allowRemote"] = MagpieGatewayDiscoveryService.IsLoopbackAddress(baseAddress) ? "false" : "true";
-            draft.Configuration["model"] = selectedModel;
+            if (!string.IsNullOrWhiteSpace(existingModel)) draft.Configuration["model"] = existingModel;
+            else draft.Configuration.Remove("model");
             draft.SecretEdits["apiKey"] = MagpieGatewayDiscoveryService.ApiKeyForProfile(baseAddress, remoteKey);
             draft.ClearedSecretFields.Remove("apiKey");
             RefreshAiProfileListLabels();
@@ -1045,13 +1066,19 @@ public sealed partial class SettingsPage : Page
             {
                 if (_aiProfileFieldControls.TryGetValue("endpoint", out var endpointControl) && endpointControl is TextBox endpointBox)
                     endpointBox.Text = draft.Configuration["endpoint"];
-                if (_aiProfileFieldControls.TryGetValue("model", out var modelControl) && modelControl is TextBox modelBox)
-                    modelBox.Text = selectedModel;
+                if (_aiProfileFieldControls.TryGetValue("model", out var modelControl) && modelControl is ComboBox modelCombo)
+                {
+                    // Fill the dropdown with what the gateway offers; the previous model stays selected/visible
+                    // when it is still listed, otherwise the field is simply left for the user to choose from.
+                    ReplaceEditableComboOptions(modelCombo, result.Models!, existingModel ?? string.Empty);
+                }
                 if (_aiProfileFieldControls.TryGetValue("allowRemote", out var remoteControl) && remoteControl is ToggleSwitch remoteToggle)
                     remoteToggle.IsOn = draft.Configuration["allowRemote"] == "true";
                 MarkAiProfileEditorChanged();
             }
-            AiProfileActionStatusText.Text = AiProfileText("AiProfileMagpieSaveHint", "Magpie is ready. Save settings to apply this connection.");
+            AiProfileActionStatusText.Text = string.IsNullOrWhiteSpace(draft.Configuration.GetValueOrDefault("model"))
+                ? AiProfileText("AiProfileMagpieModelRequired", "Choose a model to finish connecting Magpie.")
+                : AiProfileText("AiProfileMagpieSaveHint", "Magpie is ready. Save settings to apply this connection.");
         }
         catch (OperationCanceledException)
         {
@@ -1135,33 +1162,6 @@ public sealed partial class SettingsPage : Page
         return new(addressBox.Text?.Trim() ?? "", apiKeyBox.Password, allowRemoteBox.IsChecked == true);
     }
 
-    private async Task<string?> ShowMagpieModelPickerAsync(IReadOnlyList<ModelCatalogEntry> models, CancellationToken cancellationToken)
-    {
-        var picker = new ComboBox
-        {
-            MinWidth = 360,
-            DisplayMemberPath = nameof(ModelCatalogEntry.DisplayLabel)
-        };
-        AutomationProperties.SetName(picker, "Magpie model");
-        foreach (var model in models)
-            picker.Items.Add(new ComboBoxItem { Content = model.DisplayLabel, Tag = model.Id });
-        if (picker.Items.Count == 1) picker.SelectedIndex = 0;
-        var dialog = new ContentDialog
-        {
-            Title = AiProfileText("AiProfileModelPickerTitle", "Select a model"),
-            Content = picker,
-            PrimaryButtonText = AiProfileText("OK", "OK"),
-            CloseButtonText = AiProfileText("Cancel", "Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot
-        };
-        using var registration = cancellationToken.Register(() =>
-            DispatcherQueue.TryEnqueue(() => { try { dialog.Hide(); } catch (COMException) { } }));
-        if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary || cancellationToken.IsCancellationRequested)
-            return null;
-        return (picker.SelectedItem as ComboBoxItem)?.Tag as string ?? string.Empty;
-    }
-
     private async Task ShowMagpieInfoAsync(string message)
     {
         var dialog = new ContentDialog
@@ -1231,9 +1231,12 @@ public sealed partial class SettingsPage : Page
             AiProfileCommitPendingButton.Visibility = isPending ? Visibility.Visible : Visibility.Collapsed;
             AiProfileTestButton.IsEnabled = !isPending;
             AiProfileRefreshModelsButton.IsEnabled = true;
-            AiProfileRefreshModelsButton.Visibility = draft.Provider.SupportsModelListing
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            // One entry per provider: Magpie lists its models through the connect action, so showing a second
+            // "Refresh models" button next to it would reintroduce the duplicate entry the issue reports.
+            AiProfileRefreshModelsButton.Visibility =
+                draft.Provider.SupportsModelListing && !string.Equals(draft.ProviderType, "magpie", StringComparison.Ordinal)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             UpdateMagpieConnectVisibility();
             AiProfileActionProgressRing.IsActive = false;
             AiProfileActionProgressRing.Visibility = Visibility.Collapsed;
@@ -1243,6 +1246,13 @@ public sealed partial class SettingsPage : Page
             foreach (var field in draft.Provider.Fields)
             {
                 BuildAiProfileField(draft, field);
+            }
+
+            // Magpie connectivity is an explicit either/or instead of a lone "allow remote" toggle that the user
+            // had to interpret: local gateways need no key, remote ones must ask for it up front.
+            if (string.Equals(draft.ProviderType, "magpie", StringComparison.Ordinal))
+            {
+                InsertMagpieScopeSelector(draft);
             }
         }
         finally
@@ -1502,6 +1512,131 @@ public sealed partial class SettingsPage : Page
         }
 
         AiProfileFieldsPanel.Children.Add(row);
+    }
+
+    /// <summary>
+    /// Adds the explicit "this computer / remote gateway" choice to a Magpie profile and keeps the endpoint and
+    /// key fields in step with it. The selection is stored in the existing <c>allowRemote</c> configuration key,
+    /// so no settings schema change is needed.
+    /// </summary>
+    private void InsertMagpieScopeSelector(AiProfileDraft draft)
+    {
+        if (AiProfileFieldsPanel is null) return;
+
+        var isRemote = string.Equals(
+            draft.Configuration.GetValueOrDefault("allowRemote"), "true", StringComparison.OrdinalIgnoreCase);
+
+        var row = new StackPanel { Spacing = 6 };
+        row.Children.Add(new TextBlock
+        {
+            Text = AiProfileText("AiProfileMagpieScope", "Magpie gateway"),
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"]
+        });
+
+        var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18 };
+        AutomationProperties.SetAutomationId(options, "AiProfileMagpieScopeSelector");
+
+        var localOption = new RadioButton
+        {
+            Content = AiProfileText("AiProfileMagpieScopeLocalLabel", "This computer"),
+            GroupName = $"magpieScope-{draft.DraftKey}",
+            IsChecked = !isRemote
+        };
+        AutomationProperties.SetAutomationId(localOption, "AiProfileMagpieScopeLocal");
+
+        var remoteOption = new RadioButton
+        {
+            Content = AiProfileText("AiProfileMagpieScopeRemoteLabel", "Remote gateway"),
+            GroupName = $"magpieScope-{draft.DraftKey}",
+            IsChecked = isRemote
+        };
+        AutomationProperties.SetAutomationId(remoteOption, "AiProfileMagpieScopeRemote");
+
+        var keyError = new TextBlock
+        {
+            Text = AiProfileText("AiProfileMagpieRemoteKeyRequired", "A remote gateway needs an API key before it can be connected."),
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed
+        };
+        AutomationProperties.SetAutomationId(keyError, "AiProfileMagpieRemoteKeyError");
+        _magpieRemoteKeyErrorText = keyError;
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var criticalBrush)
+            && criticalBrush is Brush brush)
+        {
+            keyError.Foreground = brush;
+        }
+
+        options.Children.Add(localOption);
+        options.Children.Add(remoteOption);
+        row.Children.Add(options);
+        row.Children.Add(keyError);
+
+        // The toggle it replaces would say the same thing twice.
+        if (_aiProfileFieldControls.TryGetValue("allowRemote", out var remoteToggleControl)
+            && FindAiProfileFieldRow(remoteToggleControl) is { } toggleRow)
+        {
+            toggleRow.Visibility = Visibility.Collapsed;
+        }
+
+        // The endpoint and key controls are the generated fields; give them stable automation ids so the
+        // behaviour tests can drive them without depending on layout order.
+        if (_aiProfileFieldControls.TryGetValue("endpoint", out var endpointField))
+            AutomationProperties.SetAutomationId(endpointField, "AiProfileMagpieRemoteEndpoint");
+        if (_aiProfileFieldControls.TryGetValue("apiKey", out var apiKeyField))
+            AutomationProperties.SetAutomationId(apiKeyField, "AiProfileMagpieRemoteKey");
+
+        void ApplyScope(bool remote, bool markChanged)
+        {
+            draft.Configuration["allowRemote"] = remote ? "true" : "false";
+
+            foreach (var fieldId in new[] { "endpoint", "apiKey" })
+            {
+                if (_aiProfileFieldControls.TryGetValue(fieldId, out var control)
+                    && FindAiProfileFieldRow(control) is { } fieldRow)
+                {
+                    fieldRow.Visibility = remote ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+
+            keyError.Visibility = Visibility.Collapsed;
+            if (markChanged) MarkAiProfileEditorChanged();
+        }
+
+        localOption.Checked += (_, _) => ApplyScope(false, markChanged: true);
+        remoteOption.Checked += (_, _) => ApplyScope(true, markChanged: true);
+
+        if (!isRemote) ApplyScope(false, markChanged: false);
+
+        AiProfileFieldsPanel.Children.Insert(0, row);
+    }
+
+    /// <summary>
+    /// The API key that would be used if the profile were saved now: a pending edit, else the stored secret.
+    /// Mirrors what the connect flow reads so the pre-check and the actual request agree.
+    /// </summary>
+    private string? GetPendingMagpieApiKey(AiProfileDraft draft)
+        => draft.ClearedSecretFields.Contains("apiKey")
+            ? null
+            : draft.SecretEdits.GetValueOrDefault("apiKey")
+                ?? (draft.ProfileId is null ? null : _settings.GetAiServiceProfileSecret(draft.ProfileId, "apiKey"));
+
+    /// <summary>Walks up from a field control to the row that was added to the fields panel.</summary>
+    private FrameworkElement? FindAiProfileFieldRow(UIElement control)
+    {
+        var current = control as DependencyObject;
+        while (current is not null)
+        {
+            if (current is FrameworkElement element && ReferenceEquals(element.Parent, AiProfileFieldsPanel))
+            {
+                return element;
+            }
+
+            current = (current as FrameworkElement)?.Parent;
+        }
+
+        return null;
     }
 
     private FrameworkElement CreateAiProfileFieldLabel(
@@ -2232,72 +2367,27 @@ public sealed partial class SettingsPage : Page
                 return;
             }
 
-            var picker = new ComboBox
+            // Fill the editor's own model control and leave the choice there: the dialog-based picker was the
+            // duplicated "pick a model again" step reported in task #9. A saved model that is no longer offered
+            // stays visible instead of being cleared silently.
+            if (_aiProfileFieldControls.TryGetValue("model", out var modelField) && modelField is ComboBox modelFieldCombo)
             {
-                MinWidth = 360,
-                IsEditable = true,
-                DisplayMemberPath = nameof(ModelCatalogEntry.DisplayLabel)
-            };
-            foreach (var model in models)
-            {
-                picker.Items.Add(new ComboBoxItem { Content = model.DisplayLabel, Tag = model.Id });
+                ReplaceEditableComboOptions(modelFieldCombo, models, draft.Configuration.GetValueOrDefault("model") ?? string.Empty);
             }
-            if (draft.Configuration.TryGetValue("model", out var currentModel))
-            {
-                var currentItem = picker.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
-                    string.Equals(item.Tag as string, currentModel, StringComparison.Ordinal));
-                if (currentItem is not null) picker.SelectedItem = currentItem;
-                if (draft.ProviderType != "magpie" || currentItem is not null)
-                    picker.Text = currentModel;
-            }
-            var dialog = new ContentDialog
-            {
-                Title = AiProfileText("AiProfileModelPickerTitle", "Select a model"),
-                Content = picker,
-                PrimaryButtonText = AiProfileText("OK", "OK"),
-                CloseButtonText = AiProfileText("Cancel", "Cancel"),
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot
-            };
-            using var cancellationRegistration = source.Token.Register(() =>
-                DispatcherQueue.TryEnqueue(() => { try { dialog.Hide(); } catch (COMException) { } }));
-            var response = await ShowDialogAsync(dialog);
-            if (source.IsCancellationRequested)
-            {
-                EndAiProfileAction(draft, source);
-                return;
-            }
-            if (response != ContentDialogResult.Primary)
-            {
-                EndAiProfileAction(draft, source, AiProfileText("Cancelled", "Canceled."));
-                return;
-            }
-            if (response == ContentDialogResult.Primary)
-            {
-                var selectedModel = picker.SelectedItem is ComboBoxItem selected
-                    ? selected.Tag as string
-                    : draft.ProviderType == "magpie" ? null : picker.Text?.Trim();
-                if (!string.IsNullOrWhiteSpace(selectedModel))
-                {
-                    draft.Configuration["model"] = selectedModel;
-                    if (_aiProfileFieldControls.TryGetValue("model", out var modelControl))
-                    {
-                        if (modelControl is TextBox modelBox) modelBox.Text = selectedModel;
-                        else if (modelControl is ComboBox modelCombo) SetEditableComboValue(modelCombo, selectedModel);
-                    }
-                    RefreshAiProfileListLabels();
-                    if (!ReferenceEquals(draft, _pendingAiProfileDraft)) MarkAiProfileEditorChanged();
-                }
-                else if (draft.ProviderType == "magpie")
-                {
-                    EndAiProfileAction(draft, source, AiProfileText("AiProfileMagpieModelRemoved", "The previously selected model is no longer available. Choose a current Magpie model."));
-                    return;
-                }
-            }
-            EndAiProfileAction(draft, source, string.Format(
+
+            var loadedMessage = string.Format(
                 System.Globalization.CultureInfo.CurrentCulture,
                 AiProfileText("AiProfileModelsLoaded", "Loaded {0} models."),
-                models.Count));
+                models.Count);
+            var savedModel = draft.Configuration.GetValueOrDefault("model");
+            if (!string.IsNullOrWhiteSpace(savedModel)
+                && !models.Any(model => string.Equals(model.Id, savedModel, StringComparison.Ordinal)))
+            {
+                loadedMessage += " " + AiProfileText(
+                    "AiProfileMagpieModelRemoved",
+                    "The previously selected model is no longer available. Choose a current model.");
+            }
+            EndAiProfileAction(draft, source, loadedMessage);
         }
         catch (OperationCanceledException)
         {

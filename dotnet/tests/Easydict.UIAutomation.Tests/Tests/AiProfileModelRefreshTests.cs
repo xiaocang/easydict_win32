@@ -730,12 +730,57 @@ public sealed class AiProfileModelRefreshTests
                 ? "<absent>"
                 : endpointField.IsOffscreen ? "<hidden>" : endpointField.AsTextBox().Text));
 
+            var settingsFilePath = Path.Combine(settingsDirectory, "settings.json");
+            diagnostics.Add("settingsWriteBeforeUtc=" + (File.Exists(settingsFilePath) ? File.GetLastWriteTimeUtc(settingsFilePath).ToString("O") : "<absent>"));
+
             Invoke(saveButton!);
             Thread.Sleep(2500);
 
-            var dialogAfterSave = window.FindFirstDescendant(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Window));
-            diagnostics.Add("dialogAfterSave=" + (dialogAfterSave?.Name ?? "<none>"));
-            diagnostics.Add("settingsWriteUtc=" + File.GetLastWriteTimeUtc(Path.Combine(settingsDirectory, "settings.json")));
+            // A dialog may be a validation failure OR the success confirmation, so its own text is what identifies it.
+            var dialog = window.FindFirstDescendant(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Window));
+            if (dialog is null)
+            {
+                diagnostics.Add("dialogAfterSave=<none>");
+            }
+            else
+            {
+                diagnostics.Add("dialogAfterSaveName=" + dialog.Name);
+                var text = string.Join(" | ", dialog.FindAllDescendants()
+                    .Where(element => element.ControlType == FlaUI.Core.Definitions.ControlType.Text)
+                    .Select(element => { try { return element.Name; } catch { return string.Empty; } })
+                    .Where(name => !string.IsNullOrWhiteSpace(name)));
+                diagnostics.Add("dialogText=" + text);
+            }
+
+            diagnostics.Add("settingsWriteAfterUtc=" + (File.Exists(settingsFilePath) ? File.GetLastWriteTimeUtc(settingsFilePath).ToString("O") : "<absent>"));
+
+            // Bounded poll instead of a fixed sleep: the save may land a moment later, and every attempt is recorded
+            // so a mismatch can be explained from the log instead of guessed.
+            var attempts = new List<string>();
+            var sawExpected = false;
+            for (var attempt = 0; attempt < 20 && !sawExpected; attempt++)
+            {
+                Thread.Sleep(500);
+                try
+                {
+                    using var probe = JsonDocument.Parse(File.ReadAllText(settingsFilePath));
+                    var probeProfile = probe.RootElement.GetProperty("AiServiceProfiles").EnumerateArray()
+                        .FirstOrDefault(profile => profile.GetProperty("ProfileId").GetString() == "uia-magpie-1");
+                    if (probeProfile.ValueKind != JsonValueKind.Undefined)
+                    {
+                        var probeAllowRemote = probeProfile.GetProperty("Configuration").GetProperty("allowRemote").GetString();
+                        attempts.Add($"t{attempt}:{probeAllowRemote}");
+                        sawExpected = probeAllowRemote == "false";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    attempts.Add($"t{attempt}:<{ex.GetType().Name}>");
+                }
+            }
+            diagnostics.Add("settingsPath=" + settingsFilePath);
+            diagnostics.Add("appPid=" + launcher.Application.ProcessId);
+            diagnostics.Add("readAttempts=" + string.Join(",", attempts));
             File.WriteAllLines(Path.Combine(Path.GetTempPath(), "task9-save-diagnostics.txt"), diagnostics);
 
             var settingsPath = Path.Combine(settingsDirectory, "settings.json");
@@ -744,7 +789,7 @@ public sealed class AiProfileModelRefreshTests
             using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
             var magpieProfile = document.RootElement.GetProperty("AiServiceProfiles")
                 .EnumerateArray()
-                .First(profile => profile.GetProperty("ProviderType").GetString() == "magpie");
+                .First(profile => profile.GetProperty("ProfileId").GetString() == "uia-magpie-1");
             var configuration = magpieProfile.GetProperty("Configuration");
 
             configuration.GetProperty("allowRemote").GetString()

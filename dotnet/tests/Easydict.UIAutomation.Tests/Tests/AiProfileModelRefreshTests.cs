@@ -717,8 +717,26 @@ public sealed class AiProfileModelRefreshTests
                 TimeSpan.FromSeconds(15),
                 TimeSpan.FromMilliseconds(250)).Result;
             saveButton.Should().NotBeNull("the settings page saves the edited profile");
+
+            // Diagnostic trail for the save-path investigation: which scope is actually selected, what the endpoint
+            // control holds before saving, and whether a dialog answered the save. Read-only and always written so a
+            // CI run explains itself without another round trip.
+            var diagnostics = new List<string>
+            {
+                "localSelected=" + (Wait(window, "AiProfileMagpieScopeLocal").AsRadioButton().IsChecked),
+            };
+            var endpointField = window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfileMagpieRemoteEndpoint"));
+            diagnostics.Add("endpointBeforeSave=" + (endpointField is null
+                ? "<absent>"
+                : endpointField.IsOffscreen ? "<hidden>" : endpointField.AsTextBox().Text));
+
             Invoke(saveButton!);
             Thread.Sleep(2500);
+
+            var dialogAfterSave = window.FindFirstDescendant(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Window));
+            diagnostics.Add("dialogAfterSave=" + (dialogAfterSave?.Name ?? "<none>"));
+            diagnostics.Add("settingsWriteUtc=" + File.GetLastWriteTimeUtc(Path.Combine(settingsDirectory, "settings.json")));
+            File.WriteAllLines(Path.Combine(Path.GetTempPath(), "task9-save-diagnostics.txt"), diagnostics);
 
             var settingsPath = Path.Combine(settingsDirectory, "settings.json");
             File.Exists(settingsPath).Should().BeTrue("saving must write the isolated settings file");

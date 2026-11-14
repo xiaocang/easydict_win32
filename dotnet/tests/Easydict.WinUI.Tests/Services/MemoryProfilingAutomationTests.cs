@@ -318,6 +318,51 @@ public sealed class MemoryProfilingAutomationTests
         script.Should().Contain("current source sha already has nightly memory results");
     }
 
+    /// <summary>
+    /// GitHub Actions runs a <c>shell: pwsh</c> step through a wrapper that ends with
+    /// <c>if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }</c>, so the
+    /// status of the script's last native command becomes the step result. The last native command
+    /// here is <c>git fetch</c>, which legitimately fails while the scratch branch does not exist
+    /// yet - the normal first run. That made the nightly gate report failure and skip every
+    /// profiling step behind it for as long as the scratch branch had never been published, so the
+    /// script must settle the decision with an explicit success code. Real failures still throw
+    /// first, so this cannot hide them.
+    /// </summary>
+    [Fact]
+    public void NightlyMemoryProfileGate_EndsWithAnExplicitSuccessExit()
+    {
+        var scriptPath = Path.Combine(ProjectRoot, "scripts", "memory", "Test-MemoryProfileShouldRun.ps1");
+        var script = File.ReadAllText(scriptPath);
+
+        script.TrimEnd().Should().EndWith("exit 0",
+            "the runner wrapper propagates $LASTEXITCODE from the last native command, which is the "
+            + "fetch that fails on a first run with no scratch branch yet");
+        script.Should().Contain("throw \"Could not resolve git repository root.\"",
+            "genuine failures must keep failing the step");
+    }
+
+    /// <summary>
+    /// A failed <c>git fetch</c> is not by itself proof that the scratch branch does not exist: it
+    /// also fails when origin is unreachable or when the ref exists but cannot be fetched. Only the
+    /// first case is the normal first run, so the script must ask the remote with an exact ref name
+    /// and keep the other two cases failing the step.
+    /// </summary>
+    [Fact]
+    public void NightlyMemoryProfileGate_DistinguishesMissingBranchFromFetchFailures()
+    {
+        var scriptPath = Path.Combine(ProjectRoot, "scripts", "memory", "Test-MemoryProfileShouldRun.ps1");
+        var script = File.ReadAllText(scriptPath);
+
+        script.Should().Contain("$branchRef = \"refs/heads/$BranchName\"",
+            "the lookup must name the full ref so nothing else can match it");
+        script.Should().Contain("ls-remote --heads origin $branchRef",
+            "a failed fetch has to be classified by asking the remote");
+        script.Should().Contain("Could not reach origin to resolve",
+            "a network or auth outage must fail the step instead of silently profiling");
+        script.Should().Contain("exists on origin but could not be fetched",
+            "a ref that exists but cannot be fetched must not be downgraded to a first run");
+    }
+
     [Fact]
     public void ScratchBranchPublisher_PushesComparableArtifactsOnly()
     {

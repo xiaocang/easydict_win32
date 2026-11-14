@@ -575,6 +575,41 @@ public sealed class AiProfileModelRefreshTests
     /// Select a radio button without needing a clickable point: UIA's SelectionItem pattern also works when the
     /// control is scrolled out of view, which a synthetic click does not.
     /// </summary>
+    /// <summary>
+    /// The profile editor must use the width it is given and keep its action row reachable: a nested scroll area with
+    /// a fixed max height squeezed the form and produced a second, inner scrollbar (reported from the demo GIF).
+    /// </summary>
+    [Fact]
+    public void AiProfileEditor_UsesTheAvailableWidthAndKeepsActionsReachable()
+    {
+        var (launcher, _) = LaunchWithMagpieProfile("http://127.0.0.1:1/v1/chat/completions");
+        using (launcher)
+        {
+            var window = OpenSettingsServicesTab(launcher);
+
+            var card = Retry.WhileNull(
+                () => window.FindFirstDescendant(cf => cf.ByName("Magpie (UIA)")),
+                TimeSpan.FromSeconds(20),
+                TimeSpan.FromMilliseconds(200)).Result;
+            card.Should().NotBeNull("the seeded Magpie profile should appear as a card");
+            card!.Click();
+            Thread.Sleep(600);
+
+            var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+            var container = window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfilesContainer"));
+            container.Should().NotBeNull("the AI profiles section exists on the Services page");
+
+            var containerBounds = container!.BoundingRectangle;
+            (containerBounds.Width / (double)windowBounds.Width)
+                .Should().BeGreaterThan(0.6,
+                    "the editor must use the available width instead of collapsing to a narrow column");
+
+            var connect = Wait(window, "ConnectMagpieButton").BoundingRectangle;
+            connect.Bottom.Should().BeLessThanOrEqualTo(windowBounds.Bottom,
+                "the action row has to stay inside the window; an inner scroll area pushed it out of reach");
+        }
+    }
+
     private static void SelectOption(AutomationElement element)
     {
         if (element.Patterns.SelectionItem.IsSupported)
@@ -663,6 +698,17 @@ public sealed class AiProfileModelRefreshTests
         }
 
         Directory.CreateDirectory(handshakeDirectory);
+
+        // The recording must show the profile editor, not the top of the settings page: bring the app forward and
+        // scroll the editor into view before announcing readiness.
+        try { window.SetForeground(); } catch { /* best effort */ }
+        var editor = window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfilesContainer"));
+        if (editor is not null)
+        {
+            try { editor.Focus(); } catch { /* best effort */ }
+            Thread.Sleep(700);
+        }
+
         var processId = launcher.Application.ProcessId;
         string exePath = string.Empty;
         try

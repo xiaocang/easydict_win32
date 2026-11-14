@@ -638,6 +638,17 @@ public sealed class AiProfileModelRefreshTests
     {
         window.SetForeground();
         var viewport = Wait(window, "SettingsDetailsScrollViewer");
+        var ancestor = targets[^1].Parent;
+        for (var depth = 0; ancestor is not null && depth < 24; depth++, ancestor = ancestor.Parent)
+        {
+            if (ancestor.Patterns.Scroll.IsSupported
+                && ancestor.Patterns.Scroll.Pattern.VerticallyScrollable.Value)
+            {
+                viewport = ancestor;
+                break;
+            }
+        }
+        Console.WriteLine($"Demo scroll host: {viewport.Properties.AutomationId.ValueOrDefault}; bounds={viewport.BoundingRectangle}; window={window.BoundingRectangle}");
         bool TargetsAreVisible()
         {
             var area = System.Drawing.Rectangle.Intersect(viewport.BoundingRectangle, window.BoundingRectangle);
@@ -651,10 +662,14 @@ public sealed class AiProfileModelRefreshTests
         }
 
         var found = ScrollHelper.ScrollToFind(viewport, 0,
-            () => TargetsAreVisible() ? targets[^1] : null);
-        found.Should().NotBeNull("the specific demo controls must be visible before capture starts");
+            () => TargetsAreVisible() ? targets[^1] : null,
+            Console.WriteLine);
+        foreach (var target in targets)
+            Console.WriteLine($"Demo target: {target.Properties.AutomationId.ValueOrDefault}; bounds={target.BoundingRectangle}; offscreen={target.IsOffscreen}");
+        found.Should().NotBeNull("the specific demo controls must be visible in the active scroll host");
         TargetsAreVisible().Should().BeTrue("the recording must show the controls, not just their profile title");
-        targets[^1].Focus();
+        if (targets[^1].Properties.IsKeyboardFocusable.ValueOrDefault)
+            targets[^1].Focus();
         Thread.Sleep(700);
     }
 

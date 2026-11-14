@@ -7,7 +7,7 @@ name: UI Demo Recording
 #             and updates the pull request
 on:
   pull_request:
-    types: [labeled, synchronize, reopened]
+    types: [labeled, synchronize, reopened, edited]
   workflow_dispatch:
     inputs:
       pull_request_number:
@@ -78,7 +78,7 @@ jobs:
           persist-credentials: false      # the record job never pushes
 
       # The scenarios for a run are declared in the pull request description, so picking different cases never
-      # requires editing this workflow. A ```ui-demo fenced block holds `name = testFilter` lines.
+      # requires editing this workflow. A ```ui-demo fenced block holds the same JSON array as local runs.
       - name: Resolve scenarios from the pull request
         id: demo_scenarios
         shell: pwsh
@@ -96,34 +96,35 @@ jobs:
             $body = [string]$event.pull_request.body
           }
 
-          $scenarios = @()
-          if ($body -match '(?s)```ui-demo\s*(.*?)```') {
-            foreach ($line in ($Matches[1] -split "`n")) {
-              $trimmed = $line.Trim()
-              if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
-              $parts = $trimmed -split '=', 2
-              if ($parts.Count -ne 2) { throw "Malformed ui-demo line: '$trimmed'. Use 'name = testFilter'." }
-              $name = $parts[0].Trim()
-              $filter = $parts[1].Trim()
-              if ($name -notmatch '^[a-z0-9][a-z0-9-]{0,63}$') { throw "Scenario name '$name' is not a safe file name." }
-              if (-not $filter) { throw "Scenario '$name' has no test filter." }
-              $scenarios += [pscustomobject]@{ name = $name; testFilter = $filter; maxSeconds = 40 }
+          $blocks = [regex]::Matches($body, '(?ms)^```ui-demo[ \t]*\r?\n(.*?)^```[ \t]*\r?$')
+          if ($blocks.Count -ne 1) { throw 'An enabled PR must contain exactly one ui-demo fenced JSON array.' }
+          $scenarios = ConvertFrom-Json -InputObject $blocks[0].Groups[1].Value -NoEnumerate
+          if ($scenarios -isnot [array] -or $scenarios.Count -lt 1 -or $scenarios.Count -gt 8) {
+            throw 'ui-demo must be a JSON array containing 1 to 8 scenarios.'
+          }
+          $seenNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          foreach ($scenario in $scenarios) {
+            if ($scenario.name -isnot [string] -or $scenario.name -notmatch '^[a-z0-9][a-z0-9-]{0,63}$') {
+              throw 'Each scenario needs a lowercase, safe name (up to 64 characters).'
+            }
+            if (-not $seenNames.Add($scenario.name)) { throw "Duplicate scenario name: $($scenario.name)" }
+            if ($scenario.testFilter -isnot [string] -or $scenario.testFilter -notmatch '^FullyQualifiedName[=~][A-Za-z0-9_.+]+$') {
+              throw "Scenario '$($scenario.name)' must select a WinUI case using FullyQualifiedName= or FullyQualifiedName~."
+            }
+            if ($null -ne $scenario.maxSeconds -and
+                ($scenario.maxSeconds -isnot [long] -and $scenario.maxSeconds -isnot [int] -or
+                 $scenario.maxSeconds -lt 5 -or $scenario.maxSeconds -gt 180)) {
+              throw "Scenario '$($scenario.name)' maxSeconds must be an integer from 5 to 180."
             }
           }
 
-          if ($scenarios.Count -eq 0) {
-            $manifest = 'dotnet/scripts/demo/demo-scenarios.json'
-            if (Test-Path $manifest) { $scenarios = @(Get-Content $manifest -Raw | ConvertFrom-Json) }
-            Write-Host "No ui-demo block in the PR description; using $manifest."
-          }
-
-          $scenarios | ConvertTo-Json -Depth 4 -Compress | Set-Content -Path 'demo-scenarios-resolved.json' -Encoding utf8
-          "present=$((@($scenarios).Count -gt 0).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          ConvertTo-Json -InputObject $scenarios -Depth 4 -Compress | Set-Content -Path 'demo-scenarios-resolved.json' -Encoding utf8
+          'present=true' >> $env:GITHUB_OUTPUT
       - name: Read the scenario manifest
         id: scenarios
         shell: pwsh
         run: |
-          # Use the scenarios resolved from the PR description; falling back to the manifest happens there.
+          # Every later step consumes only this PR's validated scenarios.
           $resolved = 'demo-scenarios-resolved.json'
           if (-not (Test-Path $resolved)) {
             "present=false" >> $env:GITHUB_OUTPUT

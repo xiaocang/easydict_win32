@@ -616,9 +616,8 @@ public sealed class AiProfileModelRefreshTests
             card!.Click();
             Thread.Sleep(600);
 
-            var container = Wait(window, "AiProfilesContainer");
             var viewport = Wait(window, "SettingsDetailsScrollViewer");
-            Console.WriteLine($"Profile width: {container.BoundingRectangle.Width}; content viewport width: {viewport.BoundingRectangle.Width}");
+            Console.WriteLine($"Content viewport width: {viewport.BoundingRectangle.Width}");
             var connect = Wait(window, "ConnectMagpieButton");
             BringDemoTargetsIntoView(window, connect);
             connect.IsOffscreen.Should().BeFalse("the outer settings scroller makes the actions visible");

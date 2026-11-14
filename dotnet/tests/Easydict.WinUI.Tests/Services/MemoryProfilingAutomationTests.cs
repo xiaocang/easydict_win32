@@ -282,7 +282,8 @@ public sealed class MemoryProfilingAutomationTests
         var workflow = File.ReadAllText(Path.GetFullPath(workflowPath));
 
         workflow.Should().Contain("schedule:");
-        workflow.Should().NotContain("workflow_dispatch:");
+        workflow.Should().Contain("workflow_dispatch:",
+            "a fix has to be verifiable without waiting for the next scheduled run");
         workflow.Split('\n')
             .Count(line => line.TrimStart().StartsWith("- cron:", StringComparison.Ordinal))
             .Should()

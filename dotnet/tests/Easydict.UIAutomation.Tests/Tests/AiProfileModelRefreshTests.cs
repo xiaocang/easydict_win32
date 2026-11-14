@@ -505,6 +505,7 @@ public sealed class AiProfileModelRefreshTests
             card.Should().NotBeNull("the seeded Magpie profile should appear as a card");
             card!.Click();
             Thread.Sleep(500);
+            FocusForDemo(card);
 
             var remoteOption = Retry.WhileNull(
                 () => window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfileMagpieScopeRemote")),
@@ -608,6 +609,21 @@ public sealed class AiProfileModelRefreshTests
             connect.Bottom.Should().BeLessThanOrEqualTo(windowBounds.Bottom,
                 "the action row has to stay inside the window; an inner scroll area pushed it out of reach");
         }
+    }
+
+    /// <summary>
+    /// Bring the profile card that the scenario is about into view before acting, so the recording shows the editor
+    /// rather than the top of the settings page. No-op outside a demo run.
+    /// </summary>
+    private static void FocusForDemo(AutomationElement card)
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR")))
+        {
+            return;
+        }
+
+        try { card.Focus(); } catch { /* best effort */ }
+        Thread.Sleep(700);
     }
 
     private static void SelectOption(AutomationElement element)

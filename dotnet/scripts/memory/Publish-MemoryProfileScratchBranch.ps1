@@ -71,7 +71,7 @@ function Copy-ComparableArtifacts([string]$Source, [string]$Destination) {
         }
     }
 
-    return @($copied)
+    return $copied.ToArray()
 }
 
 function Get-HeavyArtifacts([string]$Source) {
@@ -88,7 +88,7 @@ function Get-HeavyArtifacts([string]$Source) {
         }
     }
 
-    return @($artifacts)
+    return $artifacts.ToArray()
 }
 
 function Get-RunCapturedAtUtc([System.IO.DirectoryInfo]$RunDirectory) {
@@ -183,8 +183,8 @@ $runDir = Join-Path $runsRoot $runKey
 $latestDir = Join-Path $branchRoot "latest"
 New-Directory $runDir
 
-$copiedArtifacts = Copy-ComparableArtifacts $SourceDir $runDir
-$skippedHeavyArtifacts = Get-HeavyArtifacts $SourceDir
+$copiedArtifacts = @(Copy-ComparableArtifacts $SourceDir $runDir)
+$skippedHeavyArtifacts = @(Get-HeavyArtifacts $SourceDir)
 
 $manifest = [ordered]@{
     schemaVersion = 1
@@ -198,8 +198,8 @@ $manifest = [ordered]@{
     capturedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     retentionDays = $RetentionDays
     retentionRuns = $RetentionRuns
-    copiedArtifacts = @($copiedArtifacts)
-    skippedHeavyArtifacts = @($skippedHeavyArtifacts)
+    copiedArtifacts = $copiedArtifacts
+    skippedHeavyArtifacts = $skippedHeavyArtifacts
 }
 $manifestPath = Join-Path $runDir "manifest.json"
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
@@ -249,7 +249,7 @@ $index = [ordered]@{
     updatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     retentionDays = $RetentionDays
     retentionRuns = $RetentionRuns
-    runs = @($indexRuns)
+    runs = $indexRuns.ToArray()
 }
 $index | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $branchRoot "index.json") -Encoding UTF8
 

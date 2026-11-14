@@ -388,9 +388,39 @@ public sealed class MemoryProfilingAutomationTests
         script.Should().Contain("RetentionRuns");
     }
 
+    /// <summary>
+    /// A <c>New-Object System.Collections.Generic.List[object]</c> comes back wrapped in a PSObject, and
+    /// the array-subexpression operator on that wrapper throws <c>ArgumentException: Argument types do
+    /// not match</c>. That is what failed the only real nightly publish attempt at
+    /// <c>return @($copied)</c>: the branch never existed before, so the publish path had never run.
+    /// The same shape appears three times, so the guard covers each one, plus the call sites that have
+    /// to wrap the (possibly empty) result themselves so an empty list does not become a single $null.
+    /// </summary>
     [Fact]
-    public void MemoryProfilingGuide_DocumentsNightlyProfileScript()
+    public void ScratchBranchPublisher_AvoidsArrayWrappingListsFromNewObject()
     {
+        var scriptPath = Path.Combine(ProjectRoot, "scripts", "memory", "Publish-MemoryProfileScratchBranch.ps1");
+        var script = File.ReadAllText(scriptPath);
+
+        script.Should().NotContain("return @($copied)",
+            "@() over a New-Object list throws Argument types do not match");
+        script.Should().NotContain("return @($artifacts)",
+            "the heavy-artifact list has the same shape and fails right after the first one is fixed");
+        script.Should().NotContain("runs = @($indexRuns)",
+            "the published index would hit the same failure while writing index.json");
+
+        script.Should().Contain("return $copied.ToArray()");
+        script.Should().Contain("return $artifacts.ToArray()");
+        script.Should().Contain("runs = $indexRuns.ToArray()");
+
+        script.Should().Contain("$copiedArtifacts = @(Copy-ComparableArtifacts",
+            "the caller has to wrap the result, otherwise an empty run yields a single $null entry");
+        script.Should().Contain("$skippedHeavyArtifacts = @(Get-HeavyArtifacts",
+            "same for the heavy-artifact list");
+    }
+
+    [Fact]
+    public void MemoryProfilingGuide_DocumentsNightlyProfileScript()    {
         var docPath = Path.Combine(ProjectRoot, "memory-profiling.md");
         var doc = File.ReadAllText(docPath);
 

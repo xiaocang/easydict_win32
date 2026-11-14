@@ -1,0 +1,13 @@
+
+Provider Name                           Keywords            Level               Enabled By
+Microsoft-Windows-DotNETRuntime         0x0000000000008003  Verbose(5)          --profile 
+
+Process        : D:\a\easydict_win32\easydict_win32\dotnet\publish\x64\Easydict.WinUI.exe
+Output File    : D:\a\easydict_win32\easydict_win32\artifacts\memory-gate\nightly\gc-verbose.nettrace
+Trace Duration : 00:00:03:00
+
+
+
+Stopping the trace. This may take several minutes depending on the application being traced.
+
+Trace completed.

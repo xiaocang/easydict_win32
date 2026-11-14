@@ -1,0 +1,13 @@
+{
+  "scenario": "nightly-memory-profile",
+  "processId": 1632,
+  "durationSeconds": 180,
+  "artifacts": {
+    "typeperfCsv": "D:\\a\\easydict_win32\\easydict_win32\\artifacts\\memory-gate\\nightly\\typeperf.csv",
+    "dotnetCountersJson": "D:\\a\\easydict_win32\\easydict_win32\\artifacts\\memory-gate\\nightly\\dotnet-counters.json",
+    "dotnetTrace": "D:\\a\\easydict_win32\\easydict_win32\\artifacts\\memory-gate\\nightly\\gc-verbose.nettrace",
+    "wprReferenceSet": "D:\\a\\easydict_win32\\easydict_win32\\artifacts\\memory-gate\\nightly\\wpr-reference-set.etl",
+    "wprHeapVirtualAlloc": null,
+    "vmmap": null
+  }
+}

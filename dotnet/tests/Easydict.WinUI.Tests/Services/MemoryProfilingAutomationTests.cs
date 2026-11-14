@@ -420,7 +420,8 @@ public sealed class MemoryProfilingAutomationTests
     }
 
     [Fact]
-    public void MemoryProfilingGuide_DocumentsNightlyProfileScript()    {
+    public void MemoryProfilingGuide_DocumentsNightlyProfileScript()
+    {
         var docPath = Path.Combine(ProjectRoot, "memory-profiling.md");
         var doc = File.ReadAllText(docPath);
 

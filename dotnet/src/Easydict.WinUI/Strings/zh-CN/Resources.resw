@@ -1790,6 +1790,7 @@
   <data name="AiProfileMagpieScopeLocalLabel" xml:space="preserve"><value>本机</value></data>
   <data name="AiProfileMagpieScopeRemoteLabel" xml:space="preserve"><value>远端</value></data>
   <data name="AiProfileMagpieRemoteKeyRequired" xml:space="preserve"><value>连接远端网关前需要填写 API key。</value></data>
+  <data name="AiProfileMagpieLocalEndpointRequired" xml:space="preserve"><value>“本机”需要本地网关地址（127.0.0.1）。要保留远端地址请选择“远端”。</value></data>
   <data name="AiProfileFieldAllowRemote" xml:space="preserve"><value>允许远程 Magpie 网关</value></data>
   <data name="AiProfileMagpieRemoteRequired" xml:space="preserve"><value>远程 Magpie 配置必须明确启用远程访问、使用 HTTPS 并填写有效的网关密钥。</value></data>
   <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>连接本机 Magpie 时使用 EasyDict 本地识别密钥，无需上游 AI 服务商密钥。连接远程网关时，需要填写该网关授权的密钥。</value></data>

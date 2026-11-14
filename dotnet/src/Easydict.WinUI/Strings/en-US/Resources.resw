@@ -1790,6 +1790,7 @@
   <data name="AiProfileMagpieScopeLocalLabel" xml:space="preserve"><value>This computer</value></data>
   <data name="AiProfileMagpieScopeRemoteLabel" xml:space="preserve"><value>Remote gateway</value></data>
   <data name="AiProfileMagpieRemoteKeyRequired" xml:space="preserve"><value>A remote gateway needs an API key before it can be connected.</value></data>
+  <data name="AiProfileMagpieLocalEndpointRequired" xml:space="preserve"><value>"This computer" needs a local gateway address (127.0.0.1). Choose the remote option to keep a remote address.</value></data>
   <data name="AiProfileFieldAllowRemote" xml:space="preserve"><value>Allow remote Magpie gateway</value></data>
   <data name="AiProfileMagpieRemoteRequired" xml:space="preserve"><value>Remote Magpie profiles require explicit opt-in, HTTPS, and an authorized gateway key.</value></data>
   <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>A local Magpie gateway uses EasyDict's local attribution key; no upstream provider key is needed. A remote gateway requires its authorized gateway key.</value></data>

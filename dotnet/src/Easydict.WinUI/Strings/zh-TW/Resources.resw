@@ -1790,6 +1790,7 @@
   <data name="AiProfileMagpieScopeLocalLabel" xml:space="preserve"><value>本機</value></data>
   <data name="AiProfileMagpieScopeRemoteLabel" xml:space="preserve"><value>遠端</value></data>
   <data name="AiProfileMagpieRemoteKeyRequired" xml:space="preserve"><value>連線遠端閘道前需要填寫 API key。</value></data>
+  <data name="AiProfileMagpieLocalEndpointRequired" xml:space="preserve"><value>「本機」需要本機閘道位址（127.0.0.1）。要保留遠端位址請選擇「遠端」。</value></data>
   <data name="AiProfileFieldAllowRemote" xml:space="preserve"><value>Allow remote Magpie gateway</value></data>
   <data name="AiProfileMagpieRemoteRequired" xml:space="preserve"><value>Remote Magpie profiles require explicit opt-in, HTTPS, and an authorized gateway key.</value></data>
   <data name="AiProfileMagpieApiKeyHelp" xml:space="preserve"><value>連線本機 Magpie 時使用 EasyDict 本機識別金鑰，不需要上游 AI 服務商金鑰。連線遠端閘道時，必須填寫該閘道授權的金鑰。</value></data>

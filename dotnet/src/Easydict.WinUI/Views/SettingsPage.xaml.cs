@@ -724,7 +724,11 @@ public sealed partial class SettingsPage : Page
 
         cardContent.Children.Add(header);
 
-        var editorHost = new ContentControl { Visibility = Visibility.Collapsed };
+        var editorHost = new ContentControl
+            {
+                Visibility = Visibility.Collapsed,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            };
         cardContent.Children.Add(editorHost);
         card.Child = cardContent;
         _aiProfileCards[draft.DraftKey] = (card, editorHost, expandCollapseIcon);
@@ -1589,6 +1593,43 @@ public sealed partial class SettingsPage : Page
 
         void ApplyScope(bool remote, bool markChanged)
         {
+            // Switching scope invalidates a discovery that is still running for the previous scope, otherwise its
+            // result would be written back against the new choice.
+            try { _magpieDiscoveryCts?.Cancel(); } catch (ObjectDisposedException) { }
+
+            // The active endpoint always describes the current mode, so saving and translation validation see a
+            // usable address. The remote address is kept in its own key and restored when the user goes back.
+            var currentEndpoint = draft.Configuration.GetValueOrDefault("endpoint");
+            var currentBase = GetMagpieBaseAddress(currentEndpoint);
+            var currentIsLocal = currentBase is null || MagpieGatewayDiscoveryService.IsLoopbackAddress(currentBase);
+            var localEndpoint = MagpieGatewayDiscoveryService.DefaultBaseAddress.TrimEnd('/') + "/v1/chat/completions";
+
+            if (currentIsLocal && string.IsNullOrWhiteSpace(draft.Configuration.GetValueOrDefault("localEndpoint")))
+            {
+                // Seed the remembered local address from the old configuration once.
+                draft.Configuration["localEndpoint"] = currentEndpoint ?? localEndpoint;
+            }
+
+            if (remote)
+            {
+                if (currentIsLocal) draft.Configuration["localEndpoint"] = currentEndpoint!;
+                var savedRemote = draft.Configuration.GetValueOrDefault("remoteEndpoint");
+                if (!currentIsLocal)
+                {
+                    draft.Configuration["remoteEndpoint"] = currentEndpoint!;
+                }
+                else if (!string.IsNullOrWhiteSpace(savedRemote))
+                {
+                    draft.Configuration["endpoint"] = savedRemote!;
+                }
+            }
+            else
+            {
+                if (!currentIsLocal) draft.Configuration["remoteEndpoint"] = currentEndpoint!;
+                var savedLocal = draft.Configuration.GetValueOrDefault("localEndpoint");
+                draft.Configuration["endpoint"] = string.IsNullOrWhiteSpace(savedLocal) ? localEndpoint : savedLocal!;
+            }
+
             draft.Configuration["allowRemote"] = remote ? "true" : "false";
 
             foreach (var fieldId in new[] { "endpoint", "apiKey" })
@@ -1598,6 +1639,13 @@ public sealed partial class SettingsPage : Page
                 {
                     fieldRow.Visibility = remote ? Visibility.Visible : Visibility.Collapsed;
                 }
+            }
+
+            if (_aiProfileFieldControls.TryGetValue("endpoint", out var endpointControl)
+                && endpointControl is TextBox endpointTextBox
+                && draft.Configuration.TryGetValue("endpoint", out var activeEndpoint))
+            {
+                endpointTextBox.Text = activeEndpoint;
             }
 
             keyError.Visibility = Visibility.Collapsed;
@@ -2051,6 +2099,25 @@ public sealed partial class SettingsPage : Page
             }
 
             if (!draft.IsEnabled) continue;
+
+            // Never re-derive the mode from the address: the user picked it, and a remote gateway can legitimately
+            // be reached through a loopback port (SSH forwarding). Only a local choice with a non-loopback address
+            // is rejected, because that combination cannot work.
+            if (string.Equals(draft.ProviderType, "magpie", StringComparison.Ordinal))
+            {
+                var allowRemote = string.Equals(
+                    draft.Configuration.GetValueOrDefault("allowRemote"), "true", StringComparison.OrdinalIgnoreCase);
+                var endpoint = draft.Configuration.GetValueOrDefault("endpoint");
+                if (!allowRemote && !string.IsNullOrWhiteSpace(endpoint)
+                    && !MagpieGatewayDiscoveryService.IsLoopbackAddress(endpoint))
+                {
+                    error = AiProfileText(
+                        "AiProfileMagpieLocalEndpointRequired",
+                        "\"This computer\" needs a local gateway address (127.0.0.1). Choose the remote option to keep a remote address.");
+                    return false;
+                }
+            }
+
             if (draft.Provider.RequiresModel
                 && (!draft.Configuration.TryGetValue("model", out var model) || string.IsNullOrWhiteSpace(model)))
             {

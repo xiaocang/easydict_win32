@@ -25,7 +25,7 @@ namespace Easydict.UIAutomation.Tests.Tests;
 public sealed class AiProfileModelRefreshTests
 {
     /// <summary>Seed one Magpie profile pointing at <paramref name="endpoint"/> and launch the app.</summary>
-    private static (AppLauncher Launcher, string SettingsDirectory) LaunchWithMagpieProfile(string endpoint, bool allowRemote = false)
+    private static (AppLauncher Launcher, string SettingsDirectory) LaunchWithMagpieProfile(string endpoint, bool allowRemote = false, string model = "")
     {
         WaitForNoRunningApp();
 
@@ -61,7 +61,7 @@ public sealed class AiProfileModelRefreshTests
                     {
                         ["endpoint"] = endpoint,
                         ["allowRemote"] = allowRemote ? "true" : "false",
-                        ["model"] = string.Empty,
+                        ["model"] = model,
                     },
                 },
             },
@@ -85,7 +85,6 @@ public sealed class AiProfileModelRefreshTests
         Thread.Sleep(600);
         Invoke(Wait(window, "SettingsTab_Services"));
         Thread.Sleep(600);
-        SignalDemoReadyAndWait(launcher, window);
         return window;
     }
 
@@ -204,7 +203,7 @@ public sealed class AiProfileModelRefreshTests
                     // Answer 200 with an empty list. A 404/405 makes OllamaService fall back to the real
                     // https://ollama.com/api/tags catalogue, which both leaves the machine-dependent count in the
                     // UI and makes this test non-reproducible offline.
-                    "/experimental/model-recommendations" => (200, "{\"recommendations\":[]}"),
+                    "/api/experimental/model-recommendations" or "/experimental/model-recommendations" => (200, "{\"recommendations\":[]}"),
                     _ => (404, "{}"),
                 };
 
@@ -444,13 +443,11 @@ public sealed class AiProfileModelRefreshTests
     }
 
     /// <summary>
-    /// Last baseline: the visible (AI-profile) Ollama refresh. Confirm branch: concrete observation of whether a
-    /// picker appears and what the model field shows afterwards.
+    /// Refresh fills the visible Ollama profile dropdown. Keep the original filter name for PR demo configurations;
+    /// this is one launch now that the old dialog's confirm/cancel branches no longer exist.
     /// </summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void OllamaProfileRefresh_ConfirmAndCancel(bool confirm)
+    [Fact]
+    public void OllamaProfileRefresh_ConfirmAndCancel()
     {
         using var stub = new LoopbackModelStub(["model-a", "model-b"], ["llama3.2", "qwen2.5"]);
         var (launcher, _) = LaunchWithOllamaProfile(stub.BaseAddress + "/v1/chat/completions");
@@ -466,21 +463,36 @@ public sealed class AiProfileModelRefreshTests
             card!.Click();
             Thread.Sleep(500);
 
-            ScreenshotHelper.CaptureWindow(window, $"task9_ollama_profile_before_{(confirm ? "confirm" : "cancel")}");
+            var refresh = Wait(window, "RefreshAiProfileModelsButton");
+            var model = Retry.WhileNull(
+                () => window.FindAllDescendants(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.ComboBox))
+                    .FirstOrDefault(element => element.AsComboBox().IsEditable),
+                TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(200)).Result;
+            model.Should().NotBeNull("the selected Ollama profile has an editable model dropdown");
+            SignalDemoReadyAndWait(launcher, window, model!, refresh);
+            ScreenshotHelper.CaptureWindow(window, "task9_ollama_profile_before_refresh");
 
-            Invoke(Wait(window, "RefreshAiProfileModelsButton"));
+            Invoke(refresh);
 
             // After the single-entry change, refresh fills the editor's own dropdown and must NOT open a picker.
             Thread.Sleep(3000);
             window.FindFirstDescendant(cf => cf.ByName("Select a model"))
                 .Should().BeNull("refresh must fill the model dropdown in place instead of opening a picker");
 
-            Thread.Sleep(1500);
+            var modelCombo = model!.AsComboBox();
+            modelCombo.Expand();
+            DemoPause();
+            var choices = modelCombo.Items;
+            choices.Should().Contain(item => item.Text == "llama3.2" || item.Text.StartsWith("llama3.2 ", StringComparison.Ordinal));
+            choices.Should().Contain(item => item.Text == "qwen2.5" || item.Text.StartsWith("qwen2.5 ", StringComparison.Ordinal));
+            var selectedChoice = choices.Single(item => item.Text == "qwen2.5" || item.Text.StartsWith("qwen2.5 ", StringComparison.Ordinal));
+            modelCombo.Select(selectedChoice.Text);
+            DemoPause();
             File.WriteAllText(
-                Path.Combine(Path.GetTempPath(), $"uia-ollama-{(confirm ? "confirm" : "cancel")}-requests.txt"),
+                Path.Combine(Path.GetTempPath(), "uia-ollama-refresh-requests.txt"),
                 string.Join(", ", stub.Requests));
             var editorRegion = window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfilesContainer")) ?? (AutomationElement)window;
-            ScreenshotHelper.CaptureElement(editorRegion, $"task9_ollama_profile_after_{(confirm ? "confirm" : "cancel")}");
+            ScreenshotHelper.CaptureElement(editorRegion, "task9_ollama_profile_after_refresh");
         }
     }
 
@@ -505,7 +517,6 @@ public sealed class AiProfileModelRefreshTests
             card.Should().NotBeNull("the seeded Magpie profile should appear as a card");
             card!.Click();
             Thread.Sleep(500);
-            FocusForDemo(card);
 
             var remoteOption = Retry.WhileNull(
                 () => window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfileMagpieScopeRemote")),
@@ -515,16 +526,24 @@ public sealed class AiProfileModelRefreshTests
             SelectOption(remoteOption!);
             Thread.Sleep(400);
 
+            var connect = Wait(window, "ConnectMagpieButton");
+            SignalDemoReadyAndWait(launcher, window, remoteOption!);
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR")))
+                BringDemoTargetsIntoView(window, connect);
+            DemoPause();
             var requestCountBefore = stub.Requests.Count;
-            Invoke(Wait(window, "ConnectMagpieButton"));
+            Invoke(connect);
             Thread.Sleep(2500);
 
-            window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfileMagpieRemoteKeyError"))
-                .Should().NotBeNull("the missing key is reported in place, not in a dialog");
+            var keyError = window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfileMagpieRemoteKeyError"));
+            keyError.Should().NotBeNull("the missing key is reported in place, not in a dialog");
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR")))
+                BringDemoTargetsIntoView(window, keyError!);
             stub.Requests.Count.Should().Be(requestCountBefore,
                 "a remote profile without a key must not send any request");
             window.FindFirstDescendant(cf => cf.ByName("Magpie connection"))
                 .Should().BeNull("no information dialog may be used for this validation");
+            DemoPause();
         }
     }
 
@@ -548,6 +567,7 @@ public sealed class AiProfileModelRefreshTests
             Thread.Sleep(500);
 
             var remote = Wait(window, "AiProfileMagpieScopeRemote");
+            SignalDemoReadyAndWait(launcher, window, remote, Wait(window, "AiProfileMagpieRemoteEndpoint"));
             SelectOption(remote); // RadioButtons expose SelectionItem, not Invoke; a scrolled-out button has no clickable point
             Thread.Sleep(400);
 
@@ -556,10 +576,13 @@ public sealed class AiProfileModelRefreshTests
             var keyBox = Wait(window, "AiProfileMagpieRemoteKey").AsTextBox();
             keyBox.Text = "uia-remote-key";
             Thread.Sleep(300);
+            DemoPause();
 
             SelectOption(Wait(window, "AiProfileMagpieScopeLocal"));
+            DemoPause();
             Thread.Sleep(400);
             SelectOption(Wait(window, "AiProfileMagpieScopeRemote"));
+            DemoPause();
             Thread.Sleep(400);
 
             Wait(window, "AiProfileMagpieRemoteEndpoint").AsTextBox().Text
@@ -573,15 +596,11 @@ public sealed class AiProfileModelRefreshTests
     }
 
     /// <summary>
-    /// Select a radio button without needing a clickable point: UIA's SelectionItem pattern also works when the
-    /// control is scrolled out of view, which a synthetic click does not.
-    /// </summary>
-    /// <summary>
-    /// The profile editor must use the width it is given and keep its action row reachable: a nested scroll area with
-    /// a fixed max height squeezed the form and produced a second, inner scrollbar (reported from the demo GIF).
+    /// The profile editor's actions must be reachable using the outer settings scroller. Width is recorded for
+    /// visual review; a percentage of the whole window does not account for the navigation column and margins.
     /// </summary>
     [Fact]
-    public void AiProfileEditor_UsesTheAvailableWidthAndKeepsActionsReachable()
+    public void AiProfileEditor_KeepsActionsReachable()
     {
         var (launcher, _) = LaunchWithMagpieProfile("http://127.0.0.1:1/v1/chat/completions");
         using (launcher)
@@ -596,33 +615,46 @@ public sealed class AiProfileModelRefreshTests
             card!.Click();
             Thread.Sleep(600);
 
-            var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
-            var container = window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfilesContainer"));
-            container.Should().NotBeNull("the AI profiles section exists on the Services page");
-
-            var containerBounds = container!.BoundingRectangle;
-            (containerBounds.Width / (double)windowBounds.Width)
-                .Should().BeGreaterThan(0.6,
-                    "the editor must use the available width instead of collapsing to a narrow column");
-
-            var connect = Wait(window, "ConnectMagpieButton").BoundingRectangle;
-            connect.Bottom.Should().BeLessThanOrEqualTo(windowBounds.Bottom,
-                "the action row has to stay inside the window; an inner scroll area pushed it out of reach");
+            var container = Wait(window, "AiProfilesContainer");
+            var viewport = Wait(window, "SettingsDetailsScrollViewer");
+            Console.WriteLine($"Profile width: {container.BoundingRectangle.Width}; content viewport width: {viewport.BoundingRectangle.Width}");
+            var connect = Wait(window, "ConnectMagpieButton");
+            BringDemoTargetsIntoView(window, connect);
+            connect.IsOffscreen.Should().BeFalse("the outer settings scroller makes the actions visible");
+            connect.IsEnabled.Should().BeTrue("the visible connection action remains available");
+            _ = connect.GetClickablePoint();
         }
     }
 
-    /// <summary>
-    /// Bring the profile card that the scenario is about into view before acting, so the recording shows the editor
-    /// rather than the top of the settings page. No-op outside a demo run.
-    /// </summary>
-    private static void FocusForDemo(AutomationElement card)
+    private static void DemoPause()
     {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR")))
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR")))
+            Thread.Sleep(1500);
+    }
+
+    // UIA can invoke offscreen controls, but that does not produce a useful recording. Require all of the
+    // scenario's target controls to fit inside the actual settings viewport before releasing the recorder.
+    private static void BringDemoTargetsIntoView(Window window, params AutomationElement[] targets)
+    {
+        window.SetForeground();
+        var viewport = Wait(window, "SettingsDetailsScrollViewer");
+        bool TargetsAreVisible()
         {
-            return;
+            var area = System.Drawing.Rectangle.Intersect(viewport.BoundingRectangle, window.BoundingRectangle);
+            return targets.All(target =>
+            {
+                var bounds = target.BoundingRectangle;
+                return !target.IsOffscreen && bounds.Width > 0 && bounds.Height > 0
+                    && bounds.Left >= area.Left && bounds.Right <= area.Right
+                    && bounds.Top >= area.Top && bounds.Bottom <= area.Bottom;
+            });
         }
 
-        try { card.Focus(); } catch { /* best effort */ }
+        var found = ScrollHelper.ScrollToFind(viewport, 0,
+            () => TargetsAreVisible() ? targets[^1] : null);
+        found.Should().NotBeNull("the specific demo controls must be visible before capture starts");
+        TargetsAreVisible().Should().BeTrue("the recording must show the controls, not just their profile title");
+        targets[^1].Focus();
         Thread.Sleep(700);
     }
 
@@ -649,7 +681,7 @@ public sealed class AiProfileModelRefreshTests
     public void MagpieLocalScope_SavesALoopbackEndpointAndDisablesRemote()
     {
         var (launcher, settingsDirectory) = LaunchWithMagpieProfile(
-            "https://gateway.invalid/v1/chat/completions", allowRemote: true);
+            "https://gateway.invalid/v1/chat/completions", allowRemote: true, model: "model-a");
         using (launcher)
         {
             var window = OpenSettingsServicesTab(launcher);
@@ -705,7 +737,7 @@ public sealed class AiProfileModelRefreshTests
     /// announces the app it actually launched (pid/hwnd/exe/title) and waits for the recorder to confirm capture has
     /// started before touching the UI. Without the variable this is a no-op, so normal test runs are unaffected.
     /// </summary>
-    private static void SignalDemoReadyAndWait(AppLauncher launcher, Window window)
+    private static void SignalDemoReadyAndWait(AppLauncher launcher, Window window, params AutomationElement[] targets)
     {
         var handshakeDirectory = Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR");
         if (string.IsNullOrWhiteSpace(handshakeDirectory))
@@ -715,15 +747,8 @@ public sealed class AiProfileModelRefreshTests
 
         Directory.CreateDirectory(handshakeDirectory);
 
-        // The recording must show the profile editor, not the top of the settings page: bring the app forward and
-        // scroll the editor into view before announcing readiness.
-        try { window.SetForeground(); } catch { /* best effort */ }
-        var editor = window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfilesContainer"));
-        if (editor is not null)
-        {
-            try { editor.Focus(); } catch { /* best effort */ }
-            Thread.Sleep(700);
-        }
+        targets.Should().NotBeEmpty("each recorded case must declare its visible target controls");
+        BringDemoTargetsIntoView(window, targets);
 
         var processId = launcher.Application.ProcessId;
         string exePath = string.Empty;

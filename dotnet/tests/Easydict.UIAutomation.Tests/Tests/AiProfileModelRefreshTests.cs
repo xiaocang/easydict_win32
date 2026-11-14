@@ -581,27 +581,6 @@ public sealed class AiProfileModelRefreshTests
             SelectOption(Wait(window, "AiProfileMagpieScopeLocal"));
             DemoPause();
             Thread.Sleep(400);
-            // Saving collapses the editor by design (the reload path clears the selection and renders an empty
-            // editor), so the scope radios disappear until the card is reopened. Wait for the reload, reopen it, and
-            // only then switch back to remote.
-            // The save-report dialog is modal: dismiss it before touching anything else.
-            var okButtonAfterSave = window.FindFirstDescendant(cf => cf.ByName("OK"))
-                                    ?? window.FindFirstDescendant(cf => cf.ByName("OK "));
-            if (okButtonAfterSave is not null)
-            {
-                Invoke(okButtonAfterSave);
-                Retry.WhileNotNull(
-                    () => window.FindFirstDescendant(cf => cf.ByName("OK")),
-                    TimeSpan.FromSeconds(10),
-                    TimeSpan.FromMilliseconds(250));
-            }
-            Thread.Sleep(800);
-
-            window.FindFirstDescendant(cf => cf.ByName("Magpie (UIA)"))?.Click();
-            Retry.WhileNull(
-                () => window.FindFirstDescendant(cf => cf.ByAutomationId("AiProfileMagpieScopeLocal")),
-                TimeSpan.FromSeconds(15),
-                TimeSpan.FromMilliseconds(250));
 
             SelectOption(Wait(window, "AiProfileMagpieScopeRemote"));
             DemoPause();

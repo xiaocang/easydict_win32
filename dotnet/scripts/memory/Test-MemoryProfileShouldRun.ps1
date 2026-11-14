@@ -58,6 +58,21 @@ else {
         }
     }
     else {
+        # A failed fetch has three very different meanings and only one of them is the normal
+        # first run, so ask the remote instead of assuming. The full ref name keeps the lookup
+        # exact - no prefix or glob matching.
+        $branchRef = "refs/heads/$BranchName"
+        $remoteRefs = (& git -C $repoRoot ls-remote --heads origin $branchRef 2>$null) -join "`n"
+        $lsRemoteExitCode = $LASTEXITCODE
+
+        if ($lsRemoteExitCode -ne 0) {
+            throw "Could not reach origin to resolve $branchRef (git ls-remote exited $lsRemoteExitCode)."
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($remoteRefs)) {
+            throw "$branchRef exists on origin but could not be fetched; refusing to treat that as a first run."
+        }
+
         $reason = "scratch branch does not exist yet"
     }
 }
@@ -72,3 +87,12 @@ Write-Host "reason=$reason"
 if (-not [string]::IsNullOrWhiteSpace($lastSourceSha)) {
     Write-Host "last_source_sha=$lastSourceSha"
 }
+
+# GitHub Actions runs a `shell: pwsh` step through a wrapper that appends
+# `if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }`, so the status of
+# the last native command decides the step result. The last native command here is the fetch
+# above, which legitimately fails while the scratch branch does not exist yet - that is the
+# normal first run. That turned a successful "should run" decision into a failed step and
+# skipped every profiling step behind it. The decision is complete at this point, so end the
+# script with an explicit success code; genuine failures still throw before reaching it.
+exit 0

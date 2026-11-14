@@ -3,6 +3,9 @@ name: Nightly Memory Profile
 on:
   schedule:
     - cron: '17 19 * * *'
+  # On-demand entry so a fix can be verified without waiting for the scheduled run. The nightly
+  # cadence is still the single cron above; this adds no schedule of its own.
+  workflow_dispatch:
 
 concurrency:
   group: nightly-memory-profile-${{ github.ref }}

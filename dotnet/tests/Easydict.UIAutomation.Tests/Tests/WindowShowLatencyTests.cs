@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
@@ -101,11 +101,7 @@ public sealed class WindowShowLatencyTests : IDisposable
         {
             source.BringToForeground();
             var timer = Stopwatch.StartNew();
-            // PostMessage(WM_HOTKEY) is synthetic: the window shows, but Windows does not grant it foreground rights,
-            // so the Fixed path sat out the full 8s at the activation wait. Drive the registered hotkey instead - it
-            // carries the same foreground authorization as real user input.
-            if (fixedWindow) SendRegisteredShowHotkey(true);
-            else SendShowHotkey(false);
+            SendShowHotkey(fixedWindow);
             var hwnd = WaitForSecondaryWindow();
             var visibleMs = timer.ElapsedMilliseconds;
             WaitUntil(() => GetForegroundWindow() == hwnd, TimeSpan.FromSeconds(8)).Should().BeTrue();

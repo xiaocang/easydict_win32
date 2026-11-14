@@ -86,10 +86,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
         run: |
-          $body = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            gh pr view $env:PR_NUMBER --repo '${{ github.repository }}' --json body --jq '.body'
-          } else {
-            '${{ github.event.pull_request.body }}'
+          # Never inline the PR body into the script text: it contains backticks, quotes and newlines that would
+          # break the generated PowerShell. Read it from the event payload instead.
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $body = gh pr view $env:PR_NUMBER --repo '${{ github.repository }}' --json body --jq '.body'
+          }
+          else {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $body = [string]$event.pull_request.body
           }
 
           $scenarios = @()
@@ -119,13 +123,14 @@ jobs:
         id: scenarios
         shell: pwsh
         run: |
-          $manifest = 'dotnet/scripts/demo/demo-scenarios.json'
-          if (-not (Test-Path $manifest)) {
+          # Use the scenarios resolved from the PR description; falling back to the manifest happens there.
+          $resolved = 'demo-scenarios-resolved.json'
+          if (-not (Test-Path $resolved)) {
             "present=false" >> $env:GITHUB_OUTPUT
-            Write-Host "No demo manifest at $manifest; nothing to record."
+            Write-Host "No resolved scenarios; nothing to record."
             exit 0
           }
-          $scenarios = @(Get-Content $manifest -Raw | ConvertFrom-Json)
+          $scenarios = @(Get-Content $resolved -Raw | ConvertFrom-Json)
           $present = $scenarios.Count -gt 0
           "present=$($present.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 

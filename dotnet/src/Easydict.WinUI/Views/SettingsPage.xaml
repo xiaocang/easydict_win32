@@ -442,14 +442,14 @@
                                                     ToolTipService.ToolTip="Dismiss"
                                                     VerticalAlignment="Center"/>
                                         </Grid>
-                                        <ContentControl x:Name="AiProfilePendingEditorHost" Visibility="Collapsed"/>
+                                        <ContentControl x:Name="AiProfilePendingEditorHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch"/>
                                     </StackPanel>
                                 </Border>
                                 <StackPanel x:Name="AiProfileCardsPanel" Spacing="4"/>
                                 <StackPanel x:Name="AiProfileEditorParking" Visibility="Collapsed">
                                     <ScrollViewer x:Name="AiProfileEditorScrollViewer"
-                                                  MaxHeight="600"
-                                                  VerticalScrollBarVisibility="Auto"
+                                                  VerticalScrollMode="Disabled"
+                                                  VerticalScrollBarVisibility="Disabled"
                                                   HorizontalScrollBarVisibility="Disabled">
                                         <StackPanel x:Name="AiProfileEditorPanel" Spacing="12">
                                             <Grid ColumnSpacing="10">

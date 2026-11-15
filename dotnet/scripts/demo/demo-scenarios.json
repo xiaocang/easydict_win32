@@ -1,0 +1,20 @@
+[
+  {
+    "name": "magpie-remote-needs-key",
+    "description": "Choosing a remote Magpie gateway asks for the API key in place and sends no request without one",
+    "testFilter": "FullyQualifiedName~MagpieRemoteScope_WithoutKey_SendsNoRequestAndExplainsInPlace",
+    "maxSeconds": 40
+  },
+  {
+    "name": "magpie-scope-keeps-config",
+    "description": "Switching remote / local / remote keeps the endpoint in the field",
+    "testFilter": "FullyQualifiedName~MagpieScopeSwitch_KeepsRemoteEndpointAndKey",
+    "maxSeconds": 40
+  },
+  {
+    "name": "ollama-refresh-in-place",
+    "description": "Refreshing an Ollama profile fills the model dropdown without a picker dialog",
+    "testFilter": "FullyQualifiedName~OllamaProfileRefresh_ConfirmAndCancel",
+    "maxSeconds": 40
+  }
+]

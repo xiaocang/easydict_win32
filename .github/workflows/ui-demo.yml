@@ -1,0 +1,272 @@
+name: UI Demo Recording
+
+# Opt-in: only runs for pull requests labelled `ui-demo`.
+# Split into two jobs on purpose:
+#   record  - read-only, runs the PR's own code and records the demos
+#   publish - write access, never executes PR code; only moves the produced GIFs to the data branch
+#             and updates the pull request
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened, edited]
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Pull request number to record and comment on
+        required: true
+
+concurrency:
+  group: ui-demo-${{ github.event.pull_request.number || inputs.pull_request_number }}
+  cancel-in-progress: true
+
+jobs:
+  record:
+    name: Record demos (read-only)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'ui-demo')
+    permissions:
+      contents: read
+      pull-requests: read
+
+    outputs:
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      has_scenarios: ${{ steps.scenarios.outputs.present }}
+      can_publish: ${{ steps.resolve.outputs.can_publish }}
+
+    env:
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DEMO_OUTPUT_DIR: ${{ github.workspace }}/artifacts/ui-demos
+
+    steps:
+      - name: Resolve the pull request head
+        id: resolve
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $prNumber = [int]'${{ inputs.pull_request_number }}'
+            $pr = gh pr view $prNumber --repo '${{ github.repository }}' --json headRefOid,headRepository | ConvertFrom-Json
+            # Compare the full repository identity: same owner is not enough to prove it is this repo.
+            if ($pr.headRepository.nameWithOwner -ne '${{ github.repository }}') {
+              throw "PR #$prNumber head lives in '$($pr.headRepository.nameWithOwner)', not in this repository; refusing to record."
+            }
+            $headSha = $pr.headRefOid
+          }
+          else {
+            $prNumber = [int]'${{ github.event.pull_request.number }}'
+            $headSha = '${{ github.event.pull_request.head.sha }}'
+          }
+          "head_sha=$headSha" >> $env:GITHUB_OUTPUT
+          "pr_number=$prNumber" >> $env:GITHUB_OUTPUT
+          # Fork pull requests cannot push to this repository's data branch.
+          $canPublish = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $true }
+                        else { '${{ github.event.pull_request.head.repo.full_name }}' -eq '${{ github.repository }}' }
+          "can_publish=$($canPublish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          Write-Host "Recording PR #$prNumber at $headSha (can_publish=$canPublish)"
+
+      - name: Check out the recorded SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.head_sha }}
+          submodules: recursive
+          persist-credentials: false      # the record job never pushes
+
+      # The scenarios for a run are declared in the pull request description, so picking different cases never
+      # requires editing this workflow. A ```ui-demo fenced block holds the same JSON array as local runs.
+      - name: Resolve scenarios from the pull request
+        id: demo_scenarios
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        run: |
+          # Never inline the PR body into the script text: it contains backticks, quotes and newlines that would
+          # break the generated PowerShell. Read it from the event payload instead.
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $body = gh pr view $env:PR_NUMBER --repo '${{ github.repository }}' --json body --jq '.body'
+          }
+          else {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $body = [string]$event.pull_request.body
+          }
+
+          $blocks = [regex]::Matches($body, '(?ms)^```ui-demo[ \t]*\r?\n(.*?)^```[ \t]*\r?$')
+          if ($blocks.Count -ne 1) { throw 'An enabled PR must contain exactly one ui-demo fenced JSON array.' }
+          $scenarios = ConvertFrom-Json -InputObject $blocks[0].Groups[1].Value -NoEnumerate
+          if ($scenarios -isnot [array] -or $scenarios.Count -lt 1 -or $scenarios.Count -gt 8) {
+            throw 'ui-demo must be a JSON array containing 1 to 8 scenarios.'
+          }
+          $seenNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          foreach ($scenario in $scenarios) {
+            if ($scenario.name -isnot [string] -or $scenario.name -notmatch '^[a-z0-9][a-z0-9-]{0,63}$') {
+              throw 'Each scenario needs a lowercase, safe name (up to 64 characters).'
+            }
+            if (-not $seenNames.Add($scenario.name)) { throw "Duplicate scenario name: $($scenario.name)" }
+            if ($scenario.testFilter -isnot [string] -or $scenario.testFilter -notmatch '^FullyQualifiedName[=~][A-Za-z0-9_.+]+$') {
+              throw "Scenario '$($scenario.name)' must select a WinUI case using FullyQualifiedName= or FullyQualifiedName~."
+            }
+            if ($null -ne $scenario.maxSeconds -and
+                ($scenario.maxSeconds -isnot [long] -and $scenario.maxSeconds -isnot [int] -or
+                 $scenario.maxSeconds -lt 5 -or $scenario.maxSeconds -gt 180)) {
+              throw "Scenario '$($scenario.name)' maxSeconds must be an integer from 5 to 180."
+            }
+          }
+
+          ConvertTo-Json -InputObject $scenarios -Depth 4 -Compress | Set-Content -Path 'demo-scenarios-resolved.json' -Encoding utf8
+          'present=true' >> $env:GITHUB_OUTPUT
+      - name: Read the scenario manifest
+        id: scenarios
+        shell: pwsh
+        run: |
+          # Every later step consumes only this PR's validated scenarios.
+          $resolved = 'demo-scenarios-resolved.json'
+          if (-not (Test-Path $resolved)) {
+            "present=false" >> $env:GITHUB_OUTPUT
+            Write-Host "No resolved scenarios; nothing to record."
+            exit 0
+          }
+          $scenarios = @(Get-Content $resolved -Raw | ConvertFrom-Json)
+          $present = $scenarios.Count -gt 0
+          "present=$($present.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET
+        if: steps.scenarios.outputs.present == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+
+      - name: Ensure FFmpeg
+        if: steps.scenarios.outputs.present == 'true'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+          }
+          ffmpeg -hide_banner -version | Select-Object -First 1
+
+      - name: Build the app and the automation tests once
+        if: steps.scenarios.outputs.present == 'true'
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release --runtime win-x64 --self-contained true `
+            -p:Platform=x64 -p:BuildWorkerOutputs=false -p:EasydictUiTestBuild=true `
+            --output publish/x64
+          dotnet build tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
+            --configuration Release -p:Platform=x64 -p:BuildWorkerOutputs=false
+
+      - name: Record every scenario
+        if: steps.scenarios.outputs.present == 'true'
+        shell: pwsh
+        env:
+          EASYDICT_EXE_PATH: ${{ github.workspace }}/dotnet/publish/x64/Easydict.WinUI.exe
+        run: |
+          $scenarios = Get-Content 'demo-scenarios-resolved.json' -Raw | ConvertFrom-Json
+          $failed = 0
+          foreach ($scenario in $scenarios) {
+            # No -Publish here: this job has read-only permissions by design.
+            & dotnet/scripts/demo/Invoke-UiDemoRecording.ps1 `
+              -ScenarioName $scenario.name `
+              -TestFilter $scenario.testFilter `
+              -AppExePath $env:EASYDICT_EXE_PATH `
+              -OutputDir $env:DEMO_OUTPUT_DIR `
+              -CaptureTarget desktop `
+              -MaxSeconds ([int]($scenario.maxSeconds ?? 30)) `
+              -SourceSha '${{ steps.resolve.outputs.head_sha }}' `
+              -KeepVideo
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { throw "$failed scenario(s) failed; see the logs above." }
+
+      - name: Upload demos
+        if: always() && steps.scenarios.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-demo
+          path: |
+            artifacts/ui-demos/*.gif
+            artifacts/ui-demos/*.meta.json
+            artifacts/ui-demos/*.log
+            artifacts/ui-demos/*.mp4
+          retention-days: 14
+          if-no-files-found: warn
+
+  publish:
+    name: Publish demos to the PR
+    needs: record
+    runs-on: windows-latest
+    if: needs.record.outputs.has_scenarios == 'true' && needs.record.outputs.can_publish == 'true'
+    permissions:
+      contents: write       # push the GIF to the data branch
+      pull-requests: write  # update the demo comment / body
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      # The publisher runs from the DEFAULT BRANCH, not from the pull request: this job holds a write
+      # token and must never execute code a contributor controls. The artifact is treated as data.
+      - name: Check out the trusted publisher
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: true     # this job pushes to the data branch
+
+      # Bootstrap: on the very first PR that introduces this tooling, the default branch does not
+      # contain the publisher yet. A pinned, independently reviewed commit may provide it - never an
+      # arbitrary PR head, and only the demo scripts are materialised from it.
+      - name: Ensure the trusted publisher is available
+        shell: pwsh
+        env:
+          DEMO_SCRIPT_REF: ${{ vars.DEMO_SCRIPT_REF }}
+        run: |
+          $publisher = 'dotnet/scripts/demo/Publish-UiDemoToPullRequest.ps1'
+          if (Test-Path $publisher) {
+            Write-Host 'Using the publisher from the default branch.'
+            exit 0
+          }
+          if ($env:DEMO_SCRIPT_REF -notmatch '^[0-9a-f]{40}$') {
+            throw "The default branch does not contain $publisher and DEMO_SCRIPT_REF is not a pinned 40-char commit SHA."
+          }
+          git fetch --depth=1 origin $env:DEMO_SCRIPT_REF
+          if ($LASTEXITCODE -ne 0) { throw "Could not fetch the pinned tooling commit $env:DEMO_SCRIPT_REF." }
+          git checkout FETCH_HEAD -- dotnet/scripts/demo
+          if (-not (Test-Path $publisher)) { throw "The pinned commit does not contain $publisher." }
+          Write-Host "Using the pinned publisher from $env:DEMO_SCRIPT_REF"
+
+      - name: Download demos
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-demo
+          path: artifacts/ui-demos
+
+      - name: Publish each GIF
+        shell: pwsh
+        env:
+          PR_NUMBER: ${{ needs.record.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.record.outputs.head_sha }}
+        run: |
+          # The publisher re-checks the PR head itself and refuses to publish a stale run.
+          $gifs = Get-ChildItem 'artifacts/ui-demos' -Filter *.gif
+          foreach ($gif in $gifs) {
+            $scenario = $gif.BaseName
+            $meta = Join-Path $gif.DirectoryName "$scenario.meta.json"
+            if (-not (Test-Path $meta)) { throw "Missing metadata for '$scenario'; refusing to publish unverified output." }
+            # Hashtable splatting: a plain array binds positionally and cannot carry named parameters.
+            $publishArgs = @{
+              GifPath = $gif.FullName
+              MetaPath = $meta
+              ScenarioName = $scenario
+              Repository = '${{ github.repository }}'
+              PullRequestNumber = [int]$env:PR_NUMBER
+              SourceSha = $env:HEAD_SHA
+            }
+            & dotnet/scripts/demo/Publish-UiDemoToPullRequest.ps1 @publishArgs
+            if ($LASTEXITCODE -ne 0) { throw "Publishing '$scenario' failed." }
+          }

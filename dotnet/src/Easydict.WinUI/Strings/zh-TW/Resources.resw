@@ -1893,4 +1893,46 @@
   <data name="OnboardingQuickStartMenu" xml:space="preserve"><value>快速開始</value></data>
   <data name="OnboardingOpenServices" xml:space="preserve"><value>翻譯服務</value></data>
   <data name="OnboardingSupportOpenFailed" xml:space="preserve"><value>無法開啟瀏覽器。請前往 github.com/xiaocang/easydict_win32 支援本專案。</value></data>
+  <data name="OnboardingDemoOfflineLabel" xml:space="preserve">
+    <value>離線範例</value>
+  </data>
+  <data name="OnboardingDemoOfflineNotice" xml:space="preserve">
+    <value>示範使用 Easydict 的實際視窗和離線範例，不呼叫翻譯服務。</value>
+  </data>
+  <data name="OnboardingDemoUnavailable" xml:space="preserve">
+    <value>示範暫時無法開啟。可以重試，或直接自己試一次。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep0" xml:space="preserve">
+    <value>按一下播放，看看選取文字後會出現什麼。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep1" xml:space="preserve">
+    <value>選取想翻譯的文字。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep2" xml:space="preserve">
+    <value>按一下選取範圍旁的 Easydict 圖示。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep3" xml:space="preserve">
+    <value>譯文出現在獨立的 Mini 翻譯視窗。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep4" xml:space="preserve">
+    <value>查完繼續閱讀。也可以選「自己試一次」，完成實際翻譯。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep0" xml:space="preserve">
+    <value>從 Mini 頂部的截圖按鈕，或系統匣選單顯示的快捷鍵開啟截圖翻譯。播放時會短暫出現全螢幕遮罩，不儲存或上傳截圖。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep1" xml:space="preserve">
+    <value>截圖工具覆蓋桌面，等待選擇辨識區域。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep2" xml:space="preserve">
+    <value>拖曳框選文字。空白鍵暫停，→ 下一步，Esc 結束示範。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep3" xml:space="preserve">
+    <value>確認選取範圍後，辨識出的文字填入 Mini 視窗。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep4" xml:space="preserve">
+    <value>譯文顯示在同一個 Mini 翻譯視窗中。</value>
+  </data>
+  <data name="OnboardingDemoCaptureTip" xml:space="preserve">
+    <value>離線示範：自動框選範例。空白鍵暫停或繼續，→ 下一步，Esc 離開。</value>
+  </data>
 </root>

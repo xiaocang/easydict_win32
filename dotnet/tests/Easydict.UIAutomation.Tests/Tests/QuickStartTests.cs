@@ -118,7 +118,20 @@ public sealed class QuickStartTests
         Invoke(wideStop);
         WaitForStep(window, 1);
         window.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Normal);
-        window.Patterns.Transform.Pattern.Resize(520, 680);
+        window.Patterns.Transform.Pattern.Resize(400, 680);
+        var minimumStop = Find(window, "FeatureDemoStop")!;
+        if (minimumStop.Patterns.ScrollItem.IsSupported) minimumStop.Patterns.ScrollItem.Pattern.ScrollIntoView();
+        var leftEdge = Find(window, "FeatureDemoStepProgress")!.BoundingRectangle.Left;
+        var rightEdge = Find(window, "FeatureDemoStepCounter")!.BoundingRectangle.Right;
+        foreach (var id in new[] { "FeatureDemoPlayPause", "FeatureDemoNextStep", "FeatureDemoReplay", "FeatureDemoStop" })
+        {
+            var button = Find(window, id)!;
+            button.IsOffscreen.Should().BeFalse($"{id} must remain visible at the supported 400-DIP width");
+            button.BoundingRectangle.Left.Should().BeGreaterOrEqualTo(leftEdge - 1);
+            button.BoundingRectangle.Right.Should().BeLessOrEqualTo(rightEdge + 1);
+            button.BoundingRectangle.Width.Should().BeGreaterOrEqualTo(60, "the button must not be partly clipped");
+        }
+        ScreenshotHelper.CaptureWindow(window, "onboarding-minimum-width-controls");
         var next = Wait(window, "FeatureDemoNextStep");
         window.Focus();
         next.Focus();
@@ -196,11 +209,36 @@ public sealed class QuickStartTests
         OpenFromAbout(window);
         SignalRecordingReadyAndWait(app, window);
         Invoke(Wait(window, "FeatureDemoPlayPause"));
-        WaitForStep(window, 5, TimeSpan.FromSeconds(22));
+        WaitForStep(window, 3, TimeSpan.FromSeconds(12));
+        var popup = PopButtonFinder.WaitForPopButton((uint)app.Application.ProcessId, TimeSpan.FromSeconds(3));
+        popup.Should().NotBe(IntPtr.Zero, "the demo uses the actual independent PopButtonWindow");
+        PopButtonFinder.GetStyleFlags(popup).HasNoActivate.Should().BeTrue();
+        var popupBounds = app.Automation.FromHandle(popup).BoundingRectangle;
+        var sampleBounds = Wait(window, "FeatureDemoSelectionSample").BoundingRectangle;
+        var margin = (int)Math.Ceiling(40 * ScreenshotHelper.GetWindowDpiScale(window));
+        popupBounds.Left.Should().BeGreaterThanOrEqualTo(sampleBounds.Left - margin);
+        popupBounds.Right.Should().BeLessThanOrEqualTo(sampleBounds.Right + margin);
+        popupBounds.Top.Should().BeGreaterThanOrEqualTo(sampleBounds.Top - margin);
+        popupBounds.Bottom.Should().BeLessThanOrEqualTo(sampleBounds.Bottom + margin);
+        ScreenshotHelper.CaptureScreen("onboarding-real-popup");
+        WaitForStep(window, 4, TimeSpan.FromSeconds(8));
+        OnboardingNativeWindowFinder.WaitForMiniPreview(app, "好主意可以改变一切。").BoundingRectangle.Width.Should().BeGreaterThan(200);
+        ScreenshotHelper.CaptureScreen("onboarding-real-mini-preview");
+        WaitForStep(window, 5, TimeSpan.FromSeconds(8));
         server.RequestCount.Should().Be(0);
         Invoke(Wait(window, "OnboardingOcrDemo"));
         Invoke(Wait(window, "FeatureDemoPlayPause"));
-        WaitForStep(window, 5, TimeSpan.FromSeconds(22));
+        WaitForStep(window, 3, TimeSpan.FromSeconds(12));
+        var overlay = OnboardingNativeWindowFinder.WaitForCapture(app);
+        var captureBounds = ScreenshotHelper.GetWindowPhysicalBounds(app.Automation.FromHandle(overlay).AsWindow());
+        var desktopBounds = ScreenshotHelper.GetVirtualScreenPhysicalBounds();
+        captureBounds.Left.Should().Be(desktopBounds.Left);
+        captureBounds.Top.Should().Be(desktopBounds.Top);
+        captureBounds.Size.Should().Be(desktopBounds.Size);
+        ScreenshotHelper.CaptureScreen("onboarding-real-capture-overlay");
+        WaitForStep(window, 5, TimeSpan.FromSeconds(12));
+        OnboardingNativeWindowFinder.WaitForMiniPreview(app, "微小的进步也能带来很大改变。").Should().NotBeNull();
+        OnboardingNativeWindowFinder.HasCapture(app).Should().BeFalse("confirmation releases the real capture overlay");
         PauseForRecording(2000);
         server.RequestCount.Should().Be(0, "both demonstrations remain offline");
         StartPractice(window);
@@ -210,6 +248,48 @@ public sealed class QuickStartTests
         Wait(window, "OnboardingGitHubSupport");
         ScreenshotHelper.CaptureWindow(window, "onboarding-complete");
         PauseForRecording(1800);
+        FinishRecordingBeforeClosingApp();
+    }
+
+    [Fact]
+    public void CapturePreview_CanPauseEscapeAndReplayWithoutLeavingWindowsOrCallingAProvider()
+    {
+        using var server = new TranslationServer { Succeed = true };
+        using var settings = new SettingsScope();
+        settings.SeedProvider(server.Endpoint);
+        using var app = Launch();
+        var window = app.GetMainWindow();
+        OpenFromAbout(window);
+        Invoke(Wait(window, "OnboardingOcrDemo"));
+        Invoke(Wait(window, "FeatureDemoNextStep"));
+        var firstOverlay = OnboardingNativeWindowFinder.WaitForCapture(app);
+        app.Automation.FromHandle(firstOverlay).AsWindow().SetForeground();
+        Keyboard.Type(VirtualKeyShort.SPACE);
+        Retry.WhileFalse(() => Find(window, "FeatureDemoPlayPause")?.Name == "Pause demo", TimeSpan.FromSeconds(3)).Success.Should().BeTrue();
+        Keyboard.Type(VirtualKeyShort.SPACE);
+        Retry.WhileFalse(() => Find(window, "FeatureDemoPlayPause")?.Name == "Play demo", TimeSpan.FromSeconds(3)).Success.Should().BeTrue();
+        Thread.Sleep(4500);
+        WaitForStep(window, 2);
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        WaitForStep(window, 1);
+        Retry.WhileFalse(() => !OnboardingNativeWindowFinder.HasCapture(app), TimeSpan.FromSeconds(5)).Success.Should().BeTrue();
+        OnboardingNativeWindowFinder.FindMiniPreview(app).Should().BeNull("Esc must not produce a late offline result");
+
+        // Stop immediately after opening, then replay. Only the new session may remain visible.
+        window.Focus();
+        Invoke(Wait(window, "FeatureDemoNextStep"));
+        OnboardingNativeWindowFinder.WaitForCapture(app);
+        Invoke(Wait(window, "FeatureDemoStop"));
+        Invoke(Wait(window, "FeatureDemoReplay"));
+        WaitForStep(window, 2, TimeSpan.FromSeconds(8));
+        var replayOverlay = OnboardingNativeWindowFinder.WaitForCapture(app);
+        app.Automation.FromHandle(replayOverlay).AsWindow().SetForeground();
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        WaitForStep(window, 1);
+        Retry.WhileFalse(() => !OnboardingNativeWindowFinder.HasCapture(app), TimeSpan.FromSeconds(5)).Success.Should().BeTrue();
+        OnboardingNativeWindowFinder.FindMiniPreview(app).Should().BeNull();
+        ReadFlag(settings.FilePath, "QuickStartPracticeSucceeded").Should().BeFalse();
+        server.RequestCount.Should().Be(0);
     }
 
     private static void StartPractice(Window window)
@@ -221,6 +301,15 @@ public sealed class QuickStartTests
         practice.Patterns.Text.Pattern.DocumentRange.Select();
         PauseForRecording(900);
         Invoke(Wait(window, "OnboardingTranslateSelection"));
+    }
+
+    private static void FinishRecordingBeforeClosingApp()
+    {
+        var directory = Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR");
+        if (string.IsNullOrWhiteSpace(directory)) return;
+        File.WriteAllText(Path.Combine(directory, "finished"), DateTime.UtcNow.ToString("O"));
+        Retry.WhileFalse(() => File.Exists(Path.Combine(directory, "capture-stopped")), TimeSpan.FromSeconds(30),
+            TimeSpan.FromMilliseconds(100), throwOnTimeout: true).Success.Should().BeTrue();
     }
 
     private static void PauseForRecording(int milliseconds)
@@ -239,12 +328,12 @@ public sealed class QuickStartTests
 
     private static void SignalRecordingReadyAndWait(AppLauncher app, Window window)
     {
-        var directory = Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR");
-        if (string.IsNullOrWhiteSpace(directory)) return;
         window.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Maximized);
         window.Focus();
         Wait(window, "FeatureDemoPlayPause").IsOffscreen.Should().BeFalse();
         Wait(window, "OnboardingTryIt").IsOffscreen.Should().BeFalse();
+        var directory = Environment.GetEnvironmentVariable("EASYDICT_DEMO_HANDSHAKE_DIR");
+        if (string.IsNullOrWhiteSpace(directory)) return;
         using var process = System.Diagnostics.Process.GetProcessById(app.Application.ProcessId);
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "ready.json"), JsonSerializer.Serialize(new

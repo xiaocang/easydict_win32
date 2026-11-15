@@ -3,302 +3,65 @@
     x:Class="Easydict.WinUI.Views.Controls.FeatureDemoControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Easydict.WinUI.Views.Controls"
     MinHeight="330">
     <UserControl.Resources>
-        <Storyboard x:Key="DemoStepTransition"
-                    Storyboard.TargetName="DemoStage"
-                    Storyboard.TargetProperty="Opacity">
+        <Storyboard x:Key="DemoStepTransition" Storyboard.TargetName="DemoStage" Storyboard.TargetProperty="Opacity">
             <DoubleAnimation From="0.76" To="1.0" Duration="0:0:0.18" />
         </Storyboard>
     </UserControl.Resources>
-
-    <Border
-        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-        BorderThickness="1"
-        CornerRadius="12"
-        Padding="16">
+    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12" Padding="16">
         <Grid x:Name="RootGrid" RowSpacing="12" IsTabStop="True">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-
-            <Grid Grid.Row="0" ColumnSpacing="12" VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ProgressBar
-                    x:Name="StepProgress"
-                    Grid.Column="0"
-                    AutomationProperties.AutomationId="FeatureDemoStepProgress"
-                    AutomationProperties.Name="Demo progress"
-                    Minimum="0"
-                    Maximum="4"
-                    Value="0"
-                    VerticalAlignment="Center" />
-                <TextBlock
-                    x:Name="StepCounterText"
-                    Grid.Column="1"
-                    AutomationProperties.AutomationId="FeatureDemoStepCounter"
-                    FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    VerticalAlignment="Center" />
+            <Grid ColumnSpacing="12" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <ProgressBar x:Name="StepProgress" AutomationProperties.AutomationId="FeatureDemoStepProgress"
+                             AutomationProperties.Name="Demo progress" Minimum="0" Maximum="4" Value="0" VerticalAlignment="Center" />
+                <TextBlock x:Name="StepCounterText" Grid.Column="1" AutomationProperties.AutomationId="FeatureDemoStepCounter"
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
             </Grid>
-
-            <Grid x:Name="DemoStage" Grid.Row="1" MinHeight="230" AutomationProperties.AutomationId="FeatureDemoStage">
-                <Grid x:Name="SelectionDemoPanel" Visibility="Visible">
-                    <Grid RowSpacing="12">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock
-                            x:Name="SelectionHintText"
-                            Grid.Row="0"
-                            AutomationProperties.AutomationId="FeatureDemoSelectionHint"
-                            TextWrapping="Wrap"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-                        <Border
-                            Grid.Row="1"
-                            Background="{ThemeResource LayerFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="18"
-                            VerticalAlignment="Stretch">
-                            <StackPanel Spacing="10" VerticalAlignment="Center">
-                                <TextBlock
-                                    Text="A short reading sample"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock
-                                    x:Name="SelectionSampleText"
-                                    AutomationProperties.AutomationId="FeatureDemoSelectionSample"
-                                    FontSize="22"
-                                    TextWrapping="Wrap"
-                                    IsTextSelectionEnabled="False"
-                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            </StackPanel>
-                        </Border>
-
-                        <Button
-                            x:Name="SelectionActionButton"
-                            Grid.Row="2"
-                            AutomationProperties.AutomationId="FeatureDemoSelectionAction"
-                            HorizontalAlignment="Right"
-                            Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
-                            Visibility="Collapsed">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE8C1;" FontSize="14" />
-                                <TextBlock x:Name="SelectionActionText" />
-                            </StackPanel>
-                        </Button>
-
-                        <Border
-                            x:Name="MiniTranslationCard"
-                            Grid.Row="3"
-                            AutomationProperties.AutomationId="FeatureDemoMiniTranslation"
-                            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="12"
-                            Visibility="Collapsed">
-                            <StackPanel Spacing="6">
-                                <TextBlock
-                                    Text="Easydict Mini"
-                                    FontSize="12"
-                                    FontWeight="SemiBold"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock
-                                    x:Name="SelectionTranslationText"
-                                    AutomationProperties.AutomationId="FeatureDemoSelectionTranslation"
-                                    FontSize="16"
-                                    TextWrapping="Wrap"
-                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            </StackPanel>
+            <Grid x:Name="DemoStage" Grid.Row="1" MinHeight="230" RowSpacing="12" AutomationProperties.AutomationId="FeatureDemoStage">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <TextBlock x:Name="OfflineNoticeText" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Grid.Row="1">
+                    <Grid x:Name="SelectionDemoPanel">
+                        <TextBox x:Name="SelectionSampleText" AutomationProperties.AutomationId="FeatureDemoSelectionSample"
+                                 IsReadOnly="True" TextWrapping="Wrap" FontSize="22" Padding="18"
+                                 VerticalAlignment="Center" />
+                    </Grid>
+                    <Grid x:Name="ScreenshotDemoPanel" Visibility="Collapsed">
+                        <Border x:Name="ScreenshotSampleBorder" Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="18">
+                            <TextBlock x:Name="ScreenshotSampleText" AutomationProperties.AutomationId="FeatureDemoScreenshotSourceText"
+                                       FontSize="22" TextWrapping="Wrap" VerticalAlignment="Center" />
                         </Border>
                     </Grid>
                 </Grid>
-
-                <Grid x:Name="ScreenshotDemoPanel" Visibility="Collapsed">
-                    <Grid RowSpacing="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock
-                            x:Name="ScreenshotHintText"
-                            Grid.Row="0"
-                            AutomationProperties.AutomationId="FeatureDemoScreenshotHint"
-                            TextWrapping="Wrap"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-                        <Border
-                            Grid.Row="1"
-                            AutomationProperties.AutomationId="FeatureDemoScreenshot"
-                            Background="#FFFDFB"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="12">
-                            <Grid RowSpacing="10">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-                                <Grid Grid.Row="0" ColumnSpacing="6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Ellipse Grid.Column="0" Width="8" Height="8" Fill="#FFE47B6A" />
-                                    <Ellipse Grid.Column="1" Width="8" Height="8" Fill="#FFF2C14E" />
-                                    <Ellipse Grid.Column="2" Width="8" Height="8" Fill="#FF6BBF82" />
-                                    <Border Grid.Column="3" Background="#FFF0F0F0" CornerRadius="4" Padding="8,3" Margin="6,0,0,0">
-                                        <TextBlock Text="example.com/article" FontSize="10" Foreground="#FF555555" />
-                                    </Border>
-                                </Grid>
-                                <Grid x:Name="ScreenshotTextRegion" Grid.Row="1" MinHeight="96">
-                                    <StackPanel Spacing="6" VerticalAlignment="Center">
-                                        <TextBlock Text="READING" FontSize="10" FontWeight="Bold" Foreground="#FF6B7280" />
-                                        <TextBlock
-                                            x:Name="ScreenshotSampleText"
-                                            AutomationProperties.AutomationId="FeatureDemoScreenshotSourceText"
-                                            FontSize="19"
-                                            FontWeight="SemiBold"
-                                            TextWrapping="Wrap"
-                                            Foreground="#FF202020" />
-                                        <TextBlock Text="A simple idea can start a meaningful change." FontSize="12" TextWrapping="Wrap" Foreground="#FF5B5B5B" />
-                                    </StackPanel>
-                                    <Border
-                                        x:Name="ScreenshotSelectionOverlay"
-                                        AutomationProperties.AutomationId="FeatureDemoScreenshotSelection"
-                                        BorderBrush="#FF0F6CBD"
-                                        BorderThickness="2"
-                                        Background="#220F6CBD"
-                                        CornerRadius="4"
-                                        Height="54"
-                                        Margin="0,22,0,0"
-                                        VerticalAlignment="Top"
-                                        Visibility="Collapsed" />
-                                </Grid>
-                            </Grid>
-                        </Border>
-
-                        <Button
-                            x:Name="ScreenshotActionButton"
-                            Grid.Row="2"
-                            AutomationProperties.AutomationId="FeatureDemoScreenshotAction"
-                            HorizontalAlignment="Right"
-                            Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
-                            Visibility="Collapsed">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE721;" FontSize="14" />
-                                <TextBlock x:Name="ScreenshotActionText" />
-                            </StackPanel>
-                        </Button>
-
-                        <Grid x:Name="ScreenshotResultsGrid" Grid.Row="3" ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border
-                                x:Name="ScreenshotOcrCard"
-                                Grid.Column="0"
-                                AutomationProperties.AutomationId="FeatureDemoOcrResult"
-                                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="10"
-                                Visibility="Collapsed">
-                                <StackPanel Spacing="4">
-                                    <TextBlock x:Name="ScreenshotOcrLabel" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock
-                                        x:Name="ScreenshotOcrText"
-                                        AutomationProperties.AutomationId="FeatureDemoOcrText"
-                                        FontSize="13"
-                                        TextWrapping="Wrap"
-                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                </StackPanel>
-                            </Border>
-                            <Border
-                                x:Name="ScreenshotTranslationCard"
-                                Grid.Column="1"
-                                AutomationProperties.AutomationId="FeatureDemoScreenshotTranslation"
-                                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="10"
-                                Visibility="Collapsed">
-                                <StackPanel Spacing="4">
-                                    <TextBlock x:Name="ScreenshotTranslationLabel" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock
-                                        x:Name="ScreenshotTranslationText"
-                                        FontSize="13"
-                                        TextWrapping="Wrap"
-                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-                    </Grid>
-                </Grid>
+                <TextBlock x:Name="StageHintText" Grid.Row="2" AutomationProperties.AutomationId="FeatureDemoStageHint"
+                           TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </Grid>
-
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button
-                    x:Name="PlayPauseButton"
-                    AutomationProperties.AutomationId="FeatureDemoPlayPause"
-                    Padding="12,6">
+            <controls:WrapPanel Grid.Row="2" HorizontalAlignment="Right" HorizontalSpacing="8" VerticalSpacing="8">
+                <Button x:Name="PlayPauseButton" AutomationProperties.AutomationId="FeatureDemoPlayPause" Padding="12,6">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="12" />
-                        <TextBlock x:Name="PlayPauseText" />
+                        <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="12" /><TextBlock x:Name="PlayPauseText" />
                     </StackPanel>
                 </Button>
-                <Button
-                    x:Name="NextStepButton"
-                    AutomationProperties.AutomationId="FeatureDemoNextStep"
-                    Padding="12,6">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock x:Name="NextStepText" />
-                        <FontIcon Glyph="&#xE72A;" FontSize="12" />
-                    </StackPanel>
+                <Button x:Name="NextStepButton" AutomationProperties.AutomationId="FeatureDemoNextStep" Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock x:Name="NextStepText" /><FontIcon Glyph="&#xE72A;" FontSize="12" /></StackPanel>
                 </Button>
-                <Button
-                    x:Name="ReplayButton"
-                    AutomationProperties.AutomationId="FeatureDemoReplay"
-                    Padding="12,6">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE72C;" FontSize="12" />
-                        <TextBlock x:Name="ReplayText" />
-                    </StackPanel>
+                <Button x:Name="ReplayButton" AutomationProperties.AutomationId="FeatureDemoReplay" Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE72C;" FontSize="12" /><TextBlock x:Name="ReplayText" /></StackPanel>
                 </Button>
-                <Button
-                    x:Name="StopButton"
-                    AutomationProperties.AutomationId="FeatureDemoStop"
-                    Padding="12,6">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE71A;" FontSize="12" />
-                        <TextBlock x:Name="StopText" />
-                    </StackPanel>
+                <Button x:Name="StopButton" AutomationProperties.AutomationId="FeatureDemoStop" Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE71A;" FontSize="12" /><TextBlock x:Name="StopText" /></StackPanel>
                 </Button>
-            </StackPanel>
+            </controls:WrapPanel>
         </Grid>
     </Border>
 </UserControl>

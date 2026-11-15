@@ -1893,4 +1893,46 @@
   <data name="OnboardingQuickStartMenu" xml:space="preserve"><value>快速上手</value></data>
   <data name="OnboardingOpenServices" xml:space="preserve"><value>翻译服务</value></data>
   <data name="OnboardingSupportOpenFailed" xml:space="preserve"><value>无法打开浏览器。请访问 github.com/xiaocang/easydict_win32 支持本项目。</value></data>
+  <data name="OnboardingDemoOfflineLabel" xml:space="preserve">
+    <value>离线示例</value>
+  </data>
+  <data name="OnboardingDemoOfflineNotice" xml:space="preserve">
+    <value>演示使用 Easydict 的实际窗口和离线示例，不调用翻译服务。</value>
+  </data>
+  <data name="OnboardingDemoUnavailable" xml:space="preserve">
+    <value>演示暂时无法打开。可以重试，或直接自己试一次。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep0" xml:space="preserve">
+    <value>点击播放，看看选中文字后会出现什么。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep1" xml:space="preserve">
+    <value>选中想翻译的文字。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep2" xml:space="preserve">
+    <value>点击选区旁边的 Easydict 图标。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep3" xml:space="preserve">
+    <value>译文出现在独立的 Mini 翻译窗口。</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep4" xml:space="preserve">
+    <value>查完继续阅读。也可以选“自己试一次”，完成真实翻译。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep0" xml:space="preserve">
+    <value>从 Mini 顶部的截图按钮，或托盘菜单显示的快捷键打开截图翻译。播放时会短暂出现全屏遮罩，不保存或上传截图。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep1" xml:space="preserve">
+    <value>截图工具覆盖桌面，等待选择识别区域。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep2" xml:space="preserve">
+    <value>拖动框选文字。空格暂停，→ 下一步，Esc 结束演示。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep3" xml:space="preserve">
+    <value>确认选区后，识别出的文字填入 Mini 窗口。</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep4" xml:space="preserve">
+    <value>译文显示在同一个 Mini 翻译窗口中。</value>
+  </data>
+  <data name="OnboardingDemoCaptureTip" xml:space="preserve">
+    <value>离线演示：自动框选示例。空格暂停或继续，→ 下一步，Esc 退出。</value>
+  </data>
 </root>

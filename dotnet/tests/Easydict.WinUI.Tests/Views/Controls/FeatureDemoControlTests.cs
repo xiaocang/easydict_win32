@@ -38,74 +38,45 @@ public sealed class FeatureDemoControlTests : IDisposable
         var completedCount = 0;
         control.DemoCompleted += (_, _) => completedCount++;
 
-        var sample = FindByAutomationId<TextBlock>(control, "FeatureDemoSelectionSample");
-        var action = FindByAutomationId<Button>(control, "FeatureDemoSelectionAction");
-        var miniResult = FindByAutomationId<Border>(control, "FeatureDemoMiniTranslation");
+        var sample = FindByAutomationId<TextBox>(control, "FeatureDemoSelectionSample");
         var stage = FindByAutomationId<Grid>(control, "FeatureDemoStage");
-
-        sample.TextHighlighters.Should().BeEmpty("the first step is the plain reading view");
-        action.Visibility.Should().Be(Visibility.Collapsed);
-        miniResult.Visibility.Should().Be(Visibility.Collapsed);
-
+        sample.IsReadOnly.Should().BeTrue();
+        sample.SelectionLength.Should().Be(0);
+        TryFindByAutomationId<Button>(control, "FeatureDemoSelectionAction").Should().BeNull("the actual popup is a separate native window");
+        TryFindByAutomationId<Border>(control, "FeatureDemoMiniTranslation").Should().BeNull("Mini is no longer drawn as an inline card");
         control.NextStep();
-        control.CurrentStep.Should().Be(1);
-        sample.TextHighlighters.Should().ContainSingle("the selected phrase is highlighted");
+        sample.SelectedText.Should().Be(sample.Text);
         stage.Opacity.Should().Be(1, "reduced motion disables the step fade");
-
         control.NextStep();
-        control.CurrentStep.Should().Be(2);
-        action.Visibility.Should().Be(Visibility.Visible);
         completedCount.Should().Be(0);
-
         control.NextStep();
-        control.CurrentStep.Should().Be(3);
-        miniResult.Visibility.Should().Be(Visibility.Visible);
         completedCount.Should().Be(0);
-
         control.NextStep();
-        control.CurrentStep.Should().Be(4);
         control.IsCompleted.Should().BeTrue();
-        sample.TextHighlighters.Should().BeEmpty("the sequence returns to the reading view");
-        miniResult.Visibility.Should().Be(Visibility.Collapsed);
+        sample.SelectionLength.Should().Be(0);
         completedCount.Should().Be(1);
-
         control.NextStep();
         completedCount.Should().Be(1, "completion is raised only once per run");
     }
 
     [SkippableFact]
-    public void ScreenshotDemo_ShowsSelectionThenOcrThenTranslation()
+    public void ScreenshotDemo_DescribesTheNativeSequenceWithoutDrawingSubstituteResults()
     {
         Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
         var control = CreateControl(QuickStartDemoKind.ScreenshotTranslation);
-        control.AnimationsEnabledForTest = false;
-        var selection = FindByAutomationId<Border>(control, "FeatureDemoScreenshotSelection");
-        var action = FindByAutomationId<Button>(control, "FeatureDemoScreenshotAction");
-        var ocr = FindByAutomationId<Border>(control, "FeatureDemoOcrResult");
-        var translation = FindByAutomationId<Border>(control, "FeatureDemoScreenshotTranslation");
-        var sourceText = FindByAutomationId<TextBlock>(control, "FeatureDemoScreenshotSourceText");
-        var ocrText = FindByAutomationId<TextBlock>(control, "FeatureDemoOcrText");
-
-        selection.Visibility.Should().Be(Visibility.Collapsed);
-        action.Visibility.Should().Be(Visibility.Collapsed);
-        ocr.Visibility.Should().Be(Visibility.Collapsed);
-        translation.Visibility.Should().Be(Visibility.Collapsed);
-
-        control.NextStep();
-        selection.Visibility.Should().Be(Visibility.Visible);
-
-        control.NextStep();
-        action.Visibility.Should().Be(Visibility.Visible);
-
-        control.NextStep();
-        action.Visibility.Should().Be(Visibility.Collapsed);
-        ocr.Visibility.Should().Be(Visibility.Visible);
-        Grid.GetColumnSpan(ocr).Should().Be(2, "the OCR result fills the result area until translation appears");
-        ocrText.Text.Should().Be(sourceText.Text, "the demo OCR result uses the fixed screenshot text");
-
-        control.NextStep();
-        translation.Visibility.Should().Be(Visibility.Visible);
-        Grid.GetColumnSpan(ocr).Should().Be(1);
+        var source = FindByAutomationId<TextBlock>(control, "FeatureDemoScreenshotSourceText");
+        source.Text.Should().NotBeNullOrWhiteSpace();
+        TryFindByAutomationId<Border>(control, "FeatureDemoScreenshotSelection").Should().BeNull();
+        TryFindByAutomationId<Border>(control, "FeatureDemoOcrResult").Should().BeNull();
+        TryFindByAutomationId<Border>(control, "FeatureDemoScreenshotTranslation").Should().BeNull();
+        var descriptions = new HashSet<string>();
+        for (var step = 0; step < 5; step++)
+        {
+            control.CurrentStep.Should().Be(step);
+            descriptions.Add(FindByAutomationId<TextBlock>(control, "FeatureDemoStageHint").Text);
+            if (step < 4) control.NextStep();
+        }
+        descriptions.Should().HaveCount(5, "each native operation has its own explanation");
         control.IsCompleted.Should().BeTrue();
     }
 
@@ -152,7 +123,7 @@ public sealed class FeatureDemoControlTests : IDisposable
 
     private FeatureDemoControl CreateControl(QuickStartDemoKind kind)
     {
-        var control = new FeatureDemoControl { DemoKind = kind };
+        var control = new FeatureDemoControl { NativeWindowsEnabledForTest = false, DemoKind = kind };
         var window = new Window { Content = control };
         _windows.Add(window);
         window.Activate();

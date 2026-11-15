@@ -4,7 +4,6 @@ using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -24,6 +23,7 @@ public sealed partial class FeatureDemoControl : UserControl
 
     private readonly DispatcherTimer _playbackTimer = new();
     private readonly KeyEventHandler _rootKeyDownHandler;
+    private readonly PointerEventHandler _samplePointerPressedHandler;
     private readonly UISettings? _uiSettings;
     private Storyboard? _stepTransition;
     private bool _handlersAttached;
@@ -53,6 +53,7 @@ public sealed partial class FeatureDemoControl : UserControl
 
         _playbackTimer.Interval = DefaultPlaybackInterval;
         _rootKeyDownHandler = OnRootKeyDown;
+        _samplePointerPressedHandler = OnSamplePointerPressed;
         Loaded += OnControlLoaded;
         Unloaded += OnControlUnloaded;
         SetLocalizedText();
@@ -84,6 +85,7 @@ public sealed partial class FeatureDemoControl : UserControl
 
 #if WINUI_TEST
     internal bool? AnimationsEnabledForTest { get; set; }
+    internal bool NativeWindowsEnabledForTest { get; set; } = true;
 #endif
 
     /// <summary>Starts or resumes the four-transition demonstration.</summary>
@@ -102,7 +104,7 @@ public sealed partial class FeatureDemoControl : UserControl
 
         _isPlaying = true;
         _playWhenLoaded = !IsLoaded;
-        if (IsLoaded && _handlersAttached)
+        if (IsLoaded && _handlersAttached && !_isPresentingNative)
         {
             _playbackTimer.Start();
         }
@@ -122,7 +124,7 @@ public sealed partial class FeatureDemoControl : UserControl
     /// <summary>Advances one step. The final step raises <see cref="DemoCompleted"/> once.</summary>
     public void NextStep()
     {
-        AdvanceToNextStep(restartTimer: true);
+        AdvanceToNextStep();
     }
 
     /// <summary>Returns to the first step and starts the demonstration again.</summary>
@@ -153,14 +155,13 @@ public sealed partial class FeatureDemoControl : UserControl
         if (!_handlersAttached)
         {
             _playbackTimer.Tick += OnPlaybackTimerTick;
-            // Observe handled key events too: focused controls can consume arrow keys before they bubble.
-            RootGrid.AddHandler(UIElement.KeyDownEvent, _rootKeyDownHandler, handledEventsToo: true);
+            // Intercept before the readonly sample can move its caret and invalidate the selection.
+            RootGrid.AddHandler(UIElement.PreviewKeyDownEvent, _rootKeyDownHandler, handledEventsToo: true);
+            SelectionSampleText.AddHandler(UIElement.PointerPressedEvent, _samplePointerPressedHandler, handledEventsToo: true);
             PlayPauseButton.Click += OnPlayPauseClicked;
             NextStepButton.Click += OnNextStepClicked;
             ReplayButton.Click += OnReplayClicked;
             StopButton.Click += OnStopClicked;
-            SelectionActionButton.Click += OnSelectionActionClicked;
-            ScreenshotActionButton.Click += OnScreenshotActionClicked;
             _handlersAttached = true;
         }
 
@@ -171,7 +172,7 @@ public sealed partial class FeatureDemoControl : UserControl
         if (_playWhenLoaded && _isPlaying)
         {
             _playWhenLoaded = false;
-            _playbackTimer.Start();
+            if (!_isPresentingNative) _playbackTimer.Start();
         }
     }
 
@@ -187,22 +188,21 @@ public sealed partial class FeatureDemoControl : UserControl
         }
 
         _playbackTimer.Tick -= OnPlaybackTimerTick;
-        RootGrid.RemoveHandler(UIElement.KeyDownEvent, _rootKeyDownHandler);
+        RootGrid.RemoveHandler(UIElement.PreviewKeyDownEvent, _rootKeyDownHandler);
+        SelectionSampleText.RemoveHandler(UIElement.PointerPressedEvent, _samplePointerPressedHandler);
         PlayPauseButton.Click -= OnPlayPauseClicked;
         NextStepButton.Click -= OnNextStepClicked;
         ReplayButton.Click -= OnReplayClicked;
         StopButton.Click -= OnStopClicked;
-        SelectionActionButton.Click -= OnSelectionActionClicked;
-        ScreenshotActionButton.Click -= OnScreenshotActionClicked;
         _handlersAttached = false;
     }
 
     private void OnPlaybackTimerTick(object? sender, object e)
     {
-        AdvanceToNextStep(restartTimer: false);
+        AdvanceToNextStep();
     }
 
-    private void AdvanceToNextStep(bool restartTimer)
+    private void AdvanceToNextStep()
     {
         if (_isCompleted || CurrentStep >= LastStep)
         {
@@ -223,7 +223,7 @@ public sealed partial class FeatureDemoControl : UserControl
         {
             DemoCompleted?.Invoke(this, EventArgs.Empty);
         }
-        else if (restartTimer && _isPlaying)
+        else if (_isPlaying && !_isPresentingNative && IsLoaded && _handlersAttached)
         {
             _playbackTimer.Stop();
             _playbackTimer.Start();
@@ -232,6 +232,7 @@ public sealed partial class FeatureDemoControl : UserControl
 
     private void ResetToFirstStep(bool animate)
     {
+        ResetNativeScene();
         _playbackTimer.Stop();
         _playWhenLoaded = false;
         _isPlaying = false;
@@ -258,22 +259,6 @@ public sealed partial class FeatureDemoControl : UserControl
     private void OnReplayClicked(object sender, RoutedEventArgs e) => Replay();
 
     private void OnStopClicked(object sender, RoutedEventArgs e) => Stop();
-
-    private void OnSelectionActionClicked(object sender, RoutedEventArgs e)
-    {
-        if (DemoKind == QuickStartDemoKind.SelectionTranslation && CurrentStep == 2)
-        {
-            NextStep();
-        }
-    }
-
-    private void OnScreenshotActionClicked(object sender, RoutedEventArgs e)
-    {
-        if (DemoKind == QuickStartDemoKind.ScreenshotTranslation && CurrentStep == 2)
-        {
-            NextStep();
-        }
-    }
 
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -336,7 +321,6 @@ public sealed partial class FeatureDemoControl : UserControl
     private void SetLocalizedText()
     {
         var play = GetText("OnboardingDemoPlay", "Play demo");
-        var pause = GetText("OnboardingDemoPause", "Pause demo");
         var next = GetText("OnboardingDemoNextStep", "Next step");
         var replay = GetText("OnboardingDemoReplay", "Replay");
         var stop = GetText("OnboardingDemoStop", "Stop demo");
@@ -345,32 +329,14 @@ public sealed partial class FeatureDemoControl : UserControl
         NextStepText.Text = next;
         ReplayText.Text = replay;
         StopText.Text = stop;
-        SelectionHintText.Text = GetText("OnboardingDemoSelectionHint", "Watch how selected text is translated");
-        SelectionActionText.Text = GetText("OnboardingDemoSelectionAction", "Translate selection");
-        SelectionSampleText.Text = GetText(
-            "OnboardingDemoSelectionSampleText",
-            "A good idea can change everything.");
-        SelectionTranslationText.Text = GetText(
-            "OnboardingDemoSelectionTranslation",
-            "好主意可以改变一切。");
-        ScreenshotSampleText.Text = GetText(
-            "OnboardingDemoScreenshotSampleText",
-            "Small steps make a big difference.");
-        ScreenshotHintText.Text = GetText("OnboardingDemoScreenshotHint", "Watch how text is recognized and translated from an image");
-        ScreenshotActionText.Text = GetText("OnboardingDemoScreenshotAction", "Recognize text");
-        ScreenshotOcrLabel.Text = GetText("OnboardingDemoScreenshotOcrLabel", "Recognized text");
-        ScreenshotTranslationLabel.Text = GetText("OnboardingDemoScreenshotTranslationLabel", "Translation");
-        ScreenshotOcrText.Text = ScreenshotSampleText.Text;
-        ScreenshotTranslationText.Text = GetText(
-            "OnboardingDemoScreenshotTranslation",
-            "微小的进步也能带来很大改变。");
+        SelectionSampleText.Text = GetText("OnboardingDemoSelectionSampleText", "A good idea can change everything.");
+        ScreenshotSampleText.Text = GetText("OnboardingDemoScreenshotSampleText", "Small steps make a big difference.");
+        OfflineNoticeText.Text = GetText("OnboardingDemoOfflineNotice", "The actual Easydict windows show fixed offline examples. No translation service is called.");
 
         AutomationProperties.SetName(PlayPauseButton, play);
         AutomationProperties.SetName(NextStepButton, next);
         AutomationProperties.SetName(ReplayButton, replay);
         AutomationProperties.SetName(StopButton, stop);
-        AutomationProperties.SetName(SelectionActionButton, SelectionActionText.Text);
-        AutomationProperties.SetName(ScreenshotActionButton, ScreenshotActionText.Text);
     }
 
     private void UpdatePlaybackControls()
@@ -412,16 +378,19 @@ public sealed partial class FeatureDemoControl : UserControl
         SelectionDemoPanel.Visibility = selectionDemo ? Visibility.Visible : Visibility.Collapsed;
         ScreenshotDemoPanel.Visibility = selectionDemo ? Visibility.Collapsed : Visibility.Visible;
 
-        if (selectionDemo)
+        if (selectionDemo && CurrentStep is >= 1 and <= 3)
         {
-            UpdateSelectionVisualState();
+            if (IsLoaded && CurrentStep == 1) SelectionSampleText.Focus(FocusState.Programmatic);
+            SelectionSampleText.SelectAll();
         }
         else
         {
-            UpdateScreenshotVisualState();
+            SelectionSampleText.Select(0, 0);
         }
+        StageHintText.Text = GetStageHint();
+        RequestNativePresentation();
 
-        if (animate && IsLoaded && AnimationsEnabled)
+        if (animate && selectionDemo && IsLoaded && AnimationsEnabled)
         {
             try
             {
@@ -445,69 +414,6 @@ public sealed partial class FeatureDemoControl : UserControl
             _stepTransition?.Stop();
             DemoStage.Opacity = 1;
         }
-    }
-
-    private void UpdateSelectionVisualState()
-    {
-        var isHighlighted = CurrentStep is >= 1 and <= 3;
-        SelectionSampleText.TextHighlighters.Clear();
-        if (isHighlighted)
-        {
-            AddSelectionHighlight();
-        }
-
-        SelectionActionButton.Visibility = CurrentStep == 2 ? Visibility.Visible : Visibility.Collapsed;
-        MiniTranslationCard.Visibility = CurrentStep == 3 ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void AddSelectionHighlight()
-    {
-        var sample = SelectionSampleText.Text;
-        var target = GetText(
-            "OnboardingDemoSelectionTargetText",
-            "A good idea can change everything.");
-        if (string.IsNullOrWhiteSpace(sample) || string.IsNullOrWhiteSpace(target))
-        {
-            return;
-        }
-
-        var index = sample.IndexOf(target, StringComparison.CurrentCultureIgnoreCase);
-        if (index < 0)
-        {
-            // The resource can be localized independently. If it is not a substring of the
-            // localized sample, highlight the whole sample so the animation remains legible.
-            index = 0;
-            target = sample;
-        }
-
-        var background = ThemeResourceService.GetBrush("SystemFillColorAttentionBackgroundBrush", this)
-            ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 250, 205));
-        var foreground = ThemeResourceService.GetBrush("TextFillColorPrimaryBrush", this)
-            ?? SelectionSampleText.Foreground;
-        var highlighter = new TextHighlighter
-        {
-            Background = background,
-            Foreground = foreground
-        };
-        highlighter.Ranges.Add(new TextRange { StartIndex = index, Length = target.Length });
-        SelectionSampleText.TextHighlighters.Add(highlighter);
-    }
-
-    private void UpdateScreenshotVisualState()
-    {
-        ScreenshotSelectionOverlay.Visibility = CurrentStep >= 1
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ScreenshotActionButton.Visibility = CurrentStep == 2
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ScreenshotOcrCard.Visibility = CurrentStep >= 3
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ScreenshotTranslationCard.Visibility = CurrentStep >= LastStep
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        Grid.SetColumnSpan(ScreenshotOcrCard, CurrentStep >= LastStep ? 1 : 2);
     }
 
     private bool AnimationsEnabled

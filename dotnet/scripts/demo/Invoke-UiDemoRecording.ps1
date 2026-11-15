@@ -8,7 +8,10 @@
 #   3. this script validates that pid/hwnd belong to *this* run, starts the capture, and writes
 #      `continue`;
 #   4. only then does the scenario perform the recorded operations.
-# Without that handshake a title match could capture a window that was already on the desktop, and
+# Optional end handshake: a scenario writes `finished` and waits; this script stops ffmpeg, writes
+# `capture-stopped`, then waits for the scenario to exit. Scenarios that never write `finished` keep
+# the original exit-then-stop behavior.
+# Without the ready handshake a title match could capture a window that was already on the desktop, and
 # the operations could finish before ffmpeg even started.
 param(
     [Parameter(Mandatory = $true)][string]$ScenarioName,
@@ -29,6 +32,7 @@ param(
     [int]$CaptureStartDelayMs = 500,
 
     [int]$MaxSeconds = 60,
+    [int]$EndHandshakeTimeoutSeconds = 30,
     [int]$CaptureFps = 12,
     [int]$GifFps = 20,
     [double]$Scale = 0.75,
@@ -76,6 +80,9 @@ $handshakeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("easydict-demo-" + 
 if (-not $DryRun) { New-Item -ItemType Directory -Path $handshakeDir -Force | Out-Null }
 $readyPath = Join-Path $handshakeDir 'ready.json'
 $continuePath = Join-Path $handshakeDir 'continue'
+$finishedPath = Join-Path $handshakeDir 'finished'
+$captureStoppedPath = Join-Path $handshakeDir 'capture-stopped'
+if ($EndHandshakeTimeoutSeconds -lt 1) { throw '-EndHandshakeTimeoutSeconds must be at least 1.' }
 
 # --- 1. Start the scenario ---------------------------------------------------------------------
 if ($ScenarioCommand) {
@@ -226,18 +233,37 @@ if (-not $DryRun) {
 $testExit = 0
 $stdout = ''
 $stderr = ''
+$finishHandshakeRequested = $false
 try {
     if ($testProcess) {
-        if (-not $testProcess.WaitForExit([Math]::Max($MaxSeconds, 60) * 1000)) {
-            $testExit = 1
-            Write-Step 'scenario did not finish in time'
-            try { $testProcess.Kill($true) } catch { }
+        $scenarioDeadline = (Get-Date).AddSeconds([Math]::Max($MaxSeconds, 60))
+        while (-not $testProcess.HasExited -and (Get-Date) -lt $scenarioDeadline) {
+            if (Test-Path -LiteralPath $finishedPath) {
+                $finishHandshakeRequested = $true
+                break
+            }
+            Start-Sleep -Milliseconds 100
+        }
+        if (-not $finishHandshakeRequested) {
+            $finishHandshakeRequested = Test-Path -LiteralPath $finishedPath
+        }
+
+        if ($finishHandshakeRequested) {
+            Write-Step 'scenario signaled finished; stopping capture before releasing it'
         }
         else {
-            $testExit = $testProcess.ExitCode
+            if (-not $testProcess.HasExited) {
+                $testExit = 1
+                Write-Step 'scenario did not finish in time'
+                try { $testProcess.Kill($true) } catch { }
+                if (-not $testProcess.WaitForExit(5000)) { throw 'Timed out killing the scenario process.' }
+            }
+            else {
+                $testExit = $testProcess.ExitCode
+            }
+            $stdout = $stdoutTask.Result
+            $stderr = $stderrTask.Result
         }
-        $stdout = $stdoutTask.Result
-        $stderr = $stderrTask.Result
     }
 }
 finally {
@@ -245,6 +271,27 @@ finally {
         try { $capture.StandardInput.WriteLine('q'); $capture.StandardInput.Flush() } catch { }
         if (-not $capture.WaitForExit(20000)) { try { $capture.Kill($true) } catch { } ; $capture.WaitForExit(5000) }
     }
+    if ($stdout -or $stderr) {
+        [System.IO.File]::WriteAllText($testLog, ($stdout + "`n" + $stderr), (New-Object System.Text.UTF8Encoding($false)))
+    }
+}
+
+if ($finishHandshakeRequested) {
+    if ($capture -and -not $capture.HasExited) { throw 'Capture did not stop; refusing to release the scenario.' }
+    [System.IO.File]::WriteAllText($captureStoppedPath, (Get-Date).ToUniversalTime().ToString('o'), (New-Object System.Text.UTF8Encoding($false)))
+    Write-Step 'capture stopped; released the scenario'
+
+    if (-not $testProcess.WaitForExit($EndHandshakeTimeoutSeconds * 1000)) {
+        $testExit = 1
+        Write-Step "scenario did not exit within ${EndHandshakeTimeoutSeconds}s after capture-stopped"
+        try { $testProcess.Kill($true) } catch { }
+        if (-not $testProcess.WaitForExit(5000)) { throw 'Timed out killing the scenario after capture-stopped.' }
+    }
+    else {
+        $testExit = $testProcess.ExitCode
+    }
+    $stdout = $stdoutTask.Result
+    $stderr = $stderrTask.Result
     if ($stdout -or $stderr) {
         [System.IO.File]::WriteAllText($testLog, ($stdout + "`n" + $stderr), (New-Object System.Text.UTF8Encoding($false)))
     }

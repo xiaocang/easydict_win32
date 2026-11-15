@@ -1893,4 +1893,46 @@
   <data name="OnboardingQuickStartMenu" xml:space="preserve"><value>Quick start</value></data>
   <data name="OnboardingOpenServices" xml:space="preserve"><value>Translation services</value></data>
   <data name="OnboardingSupportOpenFailed" xml:space="preserve"><value>Couldn't open your browser. Visit github.com/xiaocang/easydict_win32 to support the project.</value></data>
+  <data name="OnboardingDemoOfflineLabel" xml:space="preserve">
+    <value>Offline example</value>
+  </data>
+  <data name="OnboardingDemoOfflineNotice" xml:space="preserve">
+    <value>The actual Easydict windows show fixed offline examples. No translation service is called.</value>
+  </data>
+  <data name="OnboardingDemoUnavailable" xml:space="preserve">
+    <value>The demo could not open. You can retry or go straight to practice.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep0" xml:space="preserve">
+    <value>Play the example to see what happens when you select text.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep1" xml:space="preserve">
+    <value>Select the text you want to translate.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep2" xml:space="preserve">
+    <value>Click the Easydict icon beside the selection.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep3" xml:space="preserve">
+    <value>The translation appears in a separate Mini window.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep4" xml:space="preserve">
+    <value>Keep reading, or choose Try it yourself for a real translation.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep0" xml:space="preserve">
+    <value>Open screenshot translation from the button at the top of Mini or the shortcut shown in the tray menu. Playback briefly opens the full-screen overlay; no image is saved or sent.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep1" xml:space="preserve">
+    <value>The screenshot tool covers the desktop so you can choose a region.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep2" xml:space="preserve">
+    <value>Drag around the text. Space pauses, Right advances, and Esc stops the preview.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep3" xml:space="preserve">
+    <value>After confirming the region, the recognized text is placed in Mini.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep4" xml:space="preserve">
+    <value>The translation appears in the same Mini window.</value>
+  </data>
+  <data name="OnboardingDemoCaptureTip" xml:space="preserve">
+    <value>Offline preview: automatic example selection. Space pauses/resumes, Right advances, Esc stops.</value>
+  </data>
 </root>

@@ -58,6 +58,57 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Step([string]$Message) { Write-Host "[ui-demo] $Message" }
 
+function Stop-ScenarioAndWriteLogs {
+    if ($testProcess) {
+        if (-not $testProcess.HasExited) {
+            try { $testProcess.Kill($true) } catch { }
+        }
+        if (-not $testProcess.WaitForExit(5000)) {
+            throw "Timed out stopping scenario process $($testProcess.Id) after a recorder failure."
+        }
+    }
+
+    if ($stdoutTask -and $stderrTask) {
+        $scenarioOutput = $stdoutTask.GetAwaiter().GetResult()
+        $scenarioError = $stderrTask.GetAwaiter().GetResult()
+        [System.IO.File]::WriteAllText(
+            $testLog,
+            ($scenarioOutput + "`n" + $scenarioError),
+            (New-Object System.Text.UTF8Encoding($false)))
+    }
+}
+
+function Stop-CaptureForEarlyFailure {
+    param($Process, $PendingProgressRead, [string]$ProgressOutput)
+
+    if (-not $Process) { return }
+
+    if (-not $Process.HasExited) {
+        try { $Process.Kill($true) } catch { }
+        if (-not $Process.WaitForExit(5000)) {
+            throw "Timed out stopping FFmpeg process $($Process.Id) after a recorder failure."
+        }
+    }
+
+    $capturedProgress = $ProgressOutput
+    if ($PendingProgressRead) {
+        if (-not $PendingProgressRead.IsCompleted -and -not $PendingProgressRead.Wait(5000)) {
+            throw 'Timed out closing the FFmpeg progress stream after a recorder failure.'
+        }
+        try {
+            $lastLine = $PendingProgressRead.GetAwaiter().GetResult()
+            if ($null -ne $lastLine) { $capturedProgress += $lastLine + [Environment]::NewLine }
+        }
+        catch { }
+    }
+
+    $remainingOutput = $Process.StandardError.ReadToEnd()
+    [System.IO.File]::WriteAllText(
+        $ffmpegLog,
+        ($capturedProgress + $remainingOutput),
+        (New-Object System.Text.UTF8Encoding($false)))
+}
+
 $ffmpeg = (Get-Command $FFmpegPath -ErrorAction SilentlyContinue).Source
 if (-not $ffmpeg) { throw "ffmpeg not found ('$FFmpegPath'). Install it or pass -FFmpegPath." }
 
@@ -139,29 +190,41 @@ if ($DryRun) {
     Write-Step 'dry run: skipping the scenario and the handshake wait'
 }
 if (-not $ready) {
-    if ($testProcess -and -not $testProcess.HasExited) { try { $testProcess.Kill($true) } catch { } }
-    throw "The scenario did not report readiness within ${WindowWaitSeconds}s (expected $readyPath). Log: $testLog"
+    $readinessError = "The scenario did not report readiness within ${WindowWaitSeconds}s (expected $readyPath). Log: $testLog"
+    try { Stop-ScenarioAndWriteLogs }
+    catch { throw "$readinessError Cleanup failed: $($_.Exception.Message)" }
+    throw $readinessError
 }
 
 # The window must belong to the process the scenario just started.
 $appPid = [int]$ready.pid
 $appHwnd = [int64]$ready.hwnd
 if (-not $DryRun) {
-    $appProcess = Get-Process -Id $appPid -ErrorAction SilentlyContinue
-    if (-not $appProcess) { throw "ready.json points at pid $appPid, which is not running." }
-    if ($appHwnd -ne 0) {
-        $ownerPid = [uint32]0
-        [void][UiDemo.Native]::GetWindowThreadProcessId([System.IntPtr]$appHwnd, [ref]$ownerPid)
-        if ($ownerPid -ne $appPid) {
-            throw "ready.json hwnd $appHwnd belongs to pid $ownerPid, not to the reported pid $appPid."
+    try {
+        $appProcess = Get-Process -Id $appPid -ErrorAction SilentlyContinue
+        if (-not $appProcess) { throw "ready.json points at pid $appPid, which is not running." }
+        if ($appHwnd -ne 0) {
+            $ownerPid = [uint32]0
+            [void][UiDemo.Native]::GetWindowThreadProcessId([System.IntPtr]$appHwnd, [ref]$ownerPid)
+            if ($ownerPid -ne $appPid) {
+                throw "ready.json hwnd $appHwnd belongs to pid $ownerPid, not to the reported pid $appPid."
+            }
+        }
+        if ($ready.exePath -and $AppExePath) {
+            $reported = ([string]$ready.exePath) -replace '/', '\'
+            $expected = ([System.IO.Path]::GetFullPath($AppExePath)) -replace '/', '\'
+            if (-not [string]::Equals($reported, $expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "ready.json reports exe '$reported' but this run launched '$expected'."
+            }
         }
     }
-    if ($ready.exePath -and $AppExePath) {
-        $reported = ([string]$ready.exePath) -replace '/', '\'
-        $expected = ([System.IO.Path]::GetFullPath($AppExePath)) -replace '/', '\'
-        if (-not [string]::Equals($reported, $expected, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "ready.json reports exe '$reported' but this run launched '$expected'."
+    catch {
+        $validationError = $_
+        try { Stop-ScenarioAndWriteLogs }
+        catch {
+            throw "Scenario validation failed: $($validationError.Exception.Message) Cleanup failed: $($_.Exception.Message)"
         }
+        throw $validationError.Exception
     }
 }
 Write-Step "scenario ready: pid $appPid, hwnd $appHwnd, title '$($ready.windowTitle)'"
@@ -169,6 +232,9 @@ Write-Step "scenario ready: pid $appPid, hwnd $appHwnd, title '$($ready.windowTi
 # --- 3. Start the capture, then release the scenario ------------------------------------------
 $grabInput = if ($CaptureTarget -like 'title=*') { $CaptureTarget } else { 'desktop' }
 $capture = $null
+$lineTask = $null
+$gateLog = $null
+try {
 if (-not $DryRun -and -not $SkipCapture) {
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
     $startInfo.FileName = $ffmpeg
@@ -204,23 +270,44 @@ if (-not $DryRun -and -not $SkipCapture) {
     $gateDeadline = (Get-Date).AddSeconds([Math]::Max($CaptureStartDelayMs, 15000) / 1000)
     $sawFrame = $false
     $gateLog = New-Object System.Text.StringBuilder
+    $lineTask = $capture.StandardError.ReadLineAsync()
     while (-not $sawFrame -and (Get-Date) -lt $gateDeadline) {
         if ($capture.HasExited) { break }
-        $lineTask = $capture.StandardError.ReadLineAsync()
-        if (-not $lineTask.Wait(1000)) { continue }
+        $remainingMs = [int][Math]::Ceiling(($gateDeadline - (Get-Date)).TotalMilliseconds)
+        if ($remainingMs -le 0) { break }
+        if (-not $lineTask.Wait([Math]::Min(1000, $remainingMs))) { continue }
         $line = $lineTask.Result
         if ($null -eq $line) { break }
         [void]$gateLog.AppendLine($line)
         if ($line -match '^frame=(\d+)' -and [int]$Matches[1] -ge 1) { $sawFrame = $true }
         elseif ($line -match '^out_time_(us|ms)=(\d+)' -and [long]$Matches[2] -gt 0) { $sawFrame = $true }
+        if (-not $sawFrame) { $lineTask = $capture.StandardError.ReadLineAsync() }
     }
 
     if (-not $sawFrame) {
-        try { $capture.Kill($true) } catch { }
         throw "FFmpeg reported no frame before the gate expired; refusing to release the scenario. Output: $($gateLog.ToString())"
     }
     Write-Step 'capture reported its first frame; releasing the scenario'
     $captureErrTask = $capture.StandardError.ReadToEndAsync()
+}
+}
+catch {
+    $captureFailure = $_
+    $cleanupErrors = @()
+    $progressOutput = if ($gateLog) { $gateLog.ToString() } else { '' }
+    try { Stop-CaptureForEarlyFailure -Process $capture -PendingProgressRead $lineTask -ProgressOutput $progressOutput }
+    catch {
+        $cleanupErrors += $_.Exception.Message
+        if ($progressOutput) {
+            try { [System.IO.File]::WriteAllText($ffmpegLog, $progressOutput, (New-Object System.Text.UTF8Encoding($false))) } catch { }
+        }
+    }
+    try { Stop-ScenarioAndWriteLogs }
+    catch { $cleanupErrors += $_.Exception.Message }
+    if ($cleanupErrors.Count -gt 0) {
+        throw "Recorder failed: $($captureFailure.Exception.Message) Cleanup failed: $($cleanupErrors -join '; ')"
+    }
+    throw $captureFailure.Exception
 }
 
 # Only now may the scenario perform the operations the demo is meant to show.

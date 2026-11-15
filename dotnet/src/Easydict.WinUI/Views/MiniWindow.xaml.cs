@@ -1126,7 +1126,8 @@ public sealed partial class MiniWindow : Window
 
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
-            if (_isOnboardingPreview || _isSelectionCapturePending) return;
+            if (_isOnboardingPreview) return;
+            if (_isSelectionCapturePending) return;
             // Grace period: don't auto-close within 500ms of showing
             // This prevents a race condition where the window is hidden immediately
             // after being shown due to Windows returning focus to the previous app

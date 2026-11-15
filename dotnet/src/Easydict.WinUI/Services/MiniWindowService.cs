@@ -140,6 +140,16 @@ public sealed class MiniWindowService : IDisposable
         _miniWindow?.ShowAndActivate();
     }
 
+    /// <summary>Runs an in-app practice selection and observes only its own real translation result.</summary>
+    internal Task<OnboardingPracticeResult> TranslatePracticeSelectionAsync(string text, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ShowRequests.Invalidate();
+        EnsureWindowCreated();
+        _miniWindow!.ShowAndActivate();
+        return _miniWindow.TranslatePracticeSelectionAsync(text, cancellationToken);
+    }
+
     /// <summary>
     /// Show the mini window with text and query only one specific service (for example a plugin
     /// triggered from the selection pop-up) is queried, even if it is configured as manual-query.

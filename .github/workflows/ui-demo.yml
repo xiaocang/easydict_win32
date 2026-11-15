@@ -166,6 +166,7 @@ jobs:
         shell: pwsh
         env:
           EASYDICT_EXE_PATH: ${{ github.workspace }}/dotnet/publish/x64/Easydict.WinUI.exe
+          EASYDICT_ONBOARDING_DEMO_LANGUAGE: zh-CN
         run: |
           $scenarios = Get-Content 'demo-scenarios-resolved.json' -Raw | ConvertFrom-Json
           $failed = 0
@@ -177,6 +178,7 @@ jobs:
               -AppExePath $env:EASYDICT_EXE_PATH `
               -OutputDir $env:DEMO_OUTPUT_DIR `
               -CaptureTarget desktop `
+              -Scale 0.75 -Speed 1.5 `
               -MaxSeconds ([int]($scenario.maxSeconds ?? 30)) `
               -SourceSha '${{ steps.resolve.outputs.head_sha }}' `
               -KeepVideo

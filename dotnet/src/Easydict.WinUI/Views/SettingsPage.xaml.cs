@@ -532,6 +532,12 @@ public sealed partial class SettingsPage : Page
         base.OnNavigatedTo(e);
         Frame.BackStack.Clear();
         Frame.ForwardStack.Clear();
+
+        if (e.Parameter is string section
+            && string.Equals(section, "services", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = SelectSettingsTabAsync(SettingsTabId.Services, resetScroll: true);
+        }
     }
 
     private void ApplyLingueeAvailability()
@@ -3259,6 +3265,19 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    private void OnQuickStartFromAboutClick(object sender, RoutedEventArgs e)
+    {
+        QuickStartService.Open(QuickStartEntryPoint.About);
+    }
+
+    private async void OnGitHubStarSupportClick(object sender, RoutedEventArgs e)
+    {
+        if (!await GitHubSupportService.OpenAsync())
+        {
+            Debug.WriteLine("[Settings] Could not open GitHub support page.");
+        }
+    }
+
     private async void OnRateAppLinkClick(object sender, RoutedEventArgs e)
     {
         if (!await LaunchStoreRatingAsync(LaunchUriAsync))
@@ -3961,6 +3980,8 @@ public sealed partial class SettingsPage : Page
             AboutHeaderText.Text = loc.GetString("About");
         if (IssueFeedbackLink != null)
             IssueFeedbackLink.Content = loc.GetString("IssueFeedback");
+        if (GitHubRepositoryLink != null)
+            GitHubRepositoryLink.Content = loc.GetStringOrDefault("GitHubStarSupport", "GitHub Star - Support Easydict");
         if (RateAppLink != null)
         {
             RateAppLink.Content = loc.GetString("RateApp");

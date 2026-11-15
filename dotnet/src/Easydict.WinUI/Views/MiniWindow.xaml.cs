@@ -1204,7 +1204,11 @@ public sealed partial class MiniWindow : Window
         TranslateIcon.Visibility = Visibility.Visible;
     }
 
-    private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual, string? focusedServiceId = null)
+    private async Task StartQueryAsync(
+        QuerySourceKind sourceKind = QuerySourceKind.Manual,
+        string? focusedServiceId = null,
+        CancellationToken operationCancellationToken = default,
+        Action<string>? onTranslationCompleted = null)
     {
         if (_isClosing)
         {
@@ -1227,7 +1231,9 @@ public sealed partial class MiniWindow : Window
             return;
         }
 
-        using var currentCts = new CancellationTokenSource();
+        using var currentCts = operationCancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(operationCancellationToken)
+            : new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
 
         if (previousCts != null)
@@ -1442,6 +1448,12 @@ public sealed partial class MiniWindow : Window
                         // Streaming path for LLM services (pass manager to avoid re-acquiring)
                         var streamedResult = await ExecuteStreamingTranslationForServiceAsync(
                             manager, serviceResult, request, request.FromLanguage, request.ToLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
+                        if (!_isClosing && !ct.IsCancellationRequested && OwnsCurrentQuery(currentCts)
+                            && streamedResult.ResultKind == TranslationResultKind.Success
+                            && !string.IsNullOrWhiteSpace(streamedResult.TranslatedText))
+                        {
+                            onTranslationCompleted?.Invoke(streamedResult.TranslatedText);
+                        }
                         outcome = streamedResult.ResultKind == TranslationResultKind.Success
                             ? QueryExecutionOutcome.Success
                             : QueryExecutionOutcome.Neutral;
@@ -1494,6 +1506,12 @@ public sealed partial class MiniWindow : Window
                             RequestResize();
                         });
 
+                        if (!_isClosing && !ct.IsCancellationRequested && OwnsCurrentQuery(currentCts)
+                            && result.ResultKind == TranslationResultKind.Success
+                            && !string.IsNullOrWhiteSpace(result.TranslatedText))
+                        {
+                            onTranslationCompleted?.Invoke(result.TranslatedText);
+                        }
                         outcome = result.ResultKind == TranslationResultKind.Success
                             ? QueryExecutionOutcome.Success
                             : QueryExecutionOutcome.Neutral;
@@ -2543,6 +2561,36 @@ public sealed partial class MiniWindow : Window
     /// <summary>
     /// Set text and start translation (called from external sources).
     /// </summary>
+    /// <summary>
+    /// Runs this practice selection through the normal Mini query. Only a nonempty successful result from this
+    /// request can complete practice; a replacement query, cancellation, demo animation or prior result cannot.
+    /// </summary>
+    internal async Task<OnboardingPracticeResult> TranslatePracticeSelectionAsync(string text, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _targetLanguageSelector.Reset();
+        foreach (var result in _serviceResults) result.Reset();
+        InputTextBox.Text = text;
+
+        var firstTranslation = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = cancellationToken.Register(() => firstTranslation.TrySetCanceled(cancellationToken));
+        var queryTask = StartQueryAsync(QuerySourceKind.Selection,
+            operationCancellationToken: cancellationToken,
+            onTranslationCompleted: translated => firstTranslation.TrySetResult(translated));
+        _currentQueryTask = queryTask;
+        await Task.WhenAny(firstTranslation.Task, queryTask);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (ReferenceEquals(_currentQueryTask, queryTask) && !_isClosing
+            && firstTranslation.Task.IsCompletedSuccessfully)
+        {
+            return new OnboardingPracticeResult(true, await firstTranslation.Task);
+        }
+
+        return new OnboardingPracticeResult(false, ErrorMessage: LocalizationService.Instance.GetStringOrDefault(
+            "OnboardingPracticeFailed", "We couldn't get a translation. Try again or check your translation services."));
+    }
+
     public void SetTextAndTranslate(string text, QuerySourceKind sourceKind)
     {
         _targetLanguageSelector.Reset();

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Easydict.WinUI.Views.QuickStartPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Easydict.WinUI.Views.Controls"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    AutomationProperties.AutomationId="QuickStartPage">
+    <Grid x:Name="LayoutRoot" Padding="24" RowSpacing="16" Width="880" HorizontalAlignment="Center">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="6">
+            <TextBlock x:Name="TitleText" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock x:Name="SubtitleText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+        </StackPanel>
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled" HorizontalContentAlignment="Stretch">
+            <Grid HorizontalAlignment="Stretch">
+                <StackPanel x:Name="DemoPanel" Spacing="16">
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <RadioButton x:Name="SelectionDemoOption" GroupName="QuickStartDemo" Checked="OnSelectionDemoChecked" AutomationProperties.AutomationId="OnboardingSelectionDemo"/>
+                        <RadioButton x:Name="OcrDemoOption" GroupName="QuickStartDemo" Checked="OnOcrDemoChecked" AutomationProperties.AutomationId="OnboardingOcrDemo"/>
+                    </StackPanel>
+                    <controls:FeatureDemoControl x:Name="DemoPlayer" HorizontalAlignment="Stretch"/>
+                    <Button x:Name="TryItButton" Click="OnTryItClick" Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="OnboardingTryIt"/>
+                </StackPanel>
+                <StackPanel x:Name="PracticePanel" Spacing="16" Visibility="Collapsed">
+                    <TextBlock x:Name="PracticeTitleText" FontSize="21" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="PracticeInstructionText" TextWrapping="Wrap"/>
+                    <Border Padding="12" CornerRadius="10" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="12">
+                            <TextBox x:Name="PracticeText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="110"
+                                     SelectionChanged="OnPracticeSelectionChanged" AutomationProperties.AutomationId="OnboardingPracticeText"/>
+                            <Button x:Name="TranslateSelectionButton" Visibility="Collapsed" Click="OnTranslateSelectionClick"
+                                    Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="OnboardingTranslateSelection"/>
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <ProgressRing x:Name="PracticeProgress" Width="24" Height="24" IsActive="False" Visibility="Collapsed"/>
+                        <TextBlock x:Name="PracticeStatusText" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   AutomationProperties.AutomationId="OnboardingPracticeStatus" AutomationProperties.LiveSetting="Polite"/>
+                    </StackPanel>
+                    <StackPanel Spacing="8">
+                        <Button x:Name="RetryButton" Visibility="Collapsed" Click="OnTranslateSelectionClick" AutomationProperties.AutomationId="OnboardingRetry"/>
+                        <Button x:Name="ServicesButton" Click="OnServicesClick" AutomationProperties.AutomationId="OnboardingOpenServices"/>
+                        <Button x:Name="BackButton" Click="OnBackClick"/>
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel x:Name="CompletedPanel" Spacing="16" Visibility="Collapsed" AutomationProperties.AutomationId="OnboardingCompleted">
+                    <TextBlock x:Name="CompleteTitleText" FontSize="24" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="CompleteMessageText" TextWrapping="Wrap"/>
+                    <Border Padding="16" CornerRadius="10" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <TextBlock x:Name="TranslationResultText" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.AutomationId="OnboardingActualTranslation"/>
+                    </Border>
+                    <Border x:Name="SupportInvitation" Visibility="Collapsed" Padding="16" CornerRadius="10" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="12">
+                            <TextBlock x:Name="SupportMessageText" TextWrapping="Wrap"/>
+                            <Button x:Name="SupportButton" Click="OnSupportClick" AutomationProperties.AutomationId="OnboardingGitHubSupport"/>
+                            <Button x:Name="NotNowButton" Click="OnNotNowClick"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+        <Grid Grid.Row="2" ColumnSpacing="12" RowSpacing="8">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <HyperlinkButton x:Name="TutorialSupportLink" Click="OnSupportClick" VerticalAlignment="Center"/>
+            <Button x:Name="StartUsingButton" Grid.Column="1" Click="OnStartUsingClick" AutomationProperties.AutomationId="OnboardingStartUsing"/>
+            <TextBlock x:Name="SupportErrorText" Grid.Row="1" Grid.ColumnSpan="2" Visibility="Collapsed" TextWrapping="Wrap"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" AutomationProperties.LiveSetting="Polite"/>
+        </Grid>
+    </Grid>
+</Page>

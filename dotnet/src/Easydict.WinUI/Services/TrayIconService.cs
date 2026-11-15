@@ -16,6 +16,10 @@ public sealed class TrayIconService : IDisposable
     private readonly AppWindow? _appWindow;
     private TaskbarIcon? _taskbarIcon;
     private bool _isDisposed;
+    private MenuFlyoutItem? _ocrItem;
+    private MenuFlyoutItem? _miniWindowItem;
+    private MenuFlyoutItem? _fixedWindowItem;
+    private MenuFlyoutItem? _quickStartItem;
     private System.Drawing.Icon? _ownedIcon;
     private bool? _iconDark;
     private string? _appliedIconId;
@@ -253,7 +257,41 @@ public sealed class TrayIconService : IDisposable
         return new BitmapImage();
     }
 
-    private static string L(string key) => LocalizationService.Instance.GetString(key);
+    internal void UpdateHotkeyMenuLabels()
+    {
+        if (_ocrItem is null || _miniWindowItem is null || _fixedWindowItem is null)
+        {
+            return;
+        }
+
+        var settings = SettingsService.Instance;
+        _ocrItem.Text = FormatHotkeyLabel(
+            "TrayOcrTranslate", settings.OcrTranslateHotkey, settings.EnableOcrTranslateHotkey);
+        _miniWindowItem.Text = FormatHotkeyLabel(
+            "TrayShowMini", settings.ShowMiniWindowHotkey, settings.EnableShowMiniWindowHotkey);
+        _fixedWindowItem.Text = FormatHotkeyLabel(
+            "TrayShowFixed", settings.ShowFixedWindowHotkey, settings.EnableShowFixedWindowHotkey);
+        SetTip(_ocrItem);
+        SetTip(_miniWindowItem);
+        SetTip(_fixedWindowItem);
+    }
+
+    internal static string FormatHotkeyLabel(string labelKey, string hotkey, bool enabled)
+    {
+        var label = L(labelKey);
+        return enabled
+            ? $"{label} ({hotkey})"
+            : $"{label} ({L("HotkeyDisabled")})";
+    }
+
+    private static string L(string key) => LocalizationService.Instance.GetStringOrDefault(
+        key,
+        key switch
+        {
+            "TrayQuickStart" => "Quick start",
+            "HotkeyDisabled" => "disabled",
+            _ => key
+        });
 
     /// <summary>
     /// Set a tooltip on a MenuFlyoutItem so the full text is visible on hover.
@@ -276,6 +314,7 @@ public sealed class TrayIconService : IDisposable
     private MenuFlyout CreateContextMenu()
     {
         var menu = new MenuFlyout();
+        menu.Opening += (_, _) => UpdateHotkeyMenuLabels();
 
         // Set MinWidth to fit the longest menu item text
         // This ensures proper width on first open (H.NotifyIcon SecondWindow mode quirk)
@@ -293,20 +332,28 @@ public sealed class TrayIconService : IDisposable
         SetTip(translateItem);
         menu.Items.Add(translateItem);
 
-        var ocrItem = new MenuFlyoutItem { Text = $"{L("TrayOcrTranslate")} (Ctrl+Alt+S)" };
-        ocrItem.Click += (_, _) => OnOcrTranslate?.Invoke();
-        SetTip(ocrItem);
-        menu.Items.Add(ocrItem);
+        _ocrItem = new MenuFlyoutItem();
+        _ocrItem.Click += (_, _) => OnOcrTranslate?.Invoke();
+        SetTip(_ocrItem);
+        menu.Items.Add(_ocrItem);
 
-        var miniWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowMini")} (Ctrl+Alt+M)" };
-        miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();
-        SetTip(miniWindowItem);
-        menu.Items.Add(miniWindowItem);
+        _miniWindowItem = new MenuFlyoutItem();
+        _miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();
+        SetTip(_miniWindowItem);
+        menu.Items.Add(_miniWindowItem);
 
-        var fixedWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowFixed")} (Ctrl+Alt+F)" };
-        fixedWindowItem.Click += (_, _) => FixedWindowService.Instance.Toggle();
-        SetTip(fixedWindowItem);
-        menu.Items.Add(fixedWindowItem);
+        _fixedWindowItem = new MenuFlyoutItem();
+        _fixedWindowItem.Click += (_, _) => FixedWindowService.Instance.Toggle();
+        SetTip(_fixedWindowItem);
+        menu.Items.Add(_fixedWindowItem);
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        _quickStartItem = new MenuFlyoutItem { Text = L("TrayQuickStart") };
+        _quickStartItem.Click += (_, _) => QuickStartService.Open(Easydict.WinUI.Models.QuickStartEntryPoint.Tray);
+        SetTip(_quickStartItem);
+        menu.Items.Add(_quickStartItem);
+        UpdateHotkeyMenuLabels();
 
         menu.Items.Add(new MenuFlyoutSeparator());
 

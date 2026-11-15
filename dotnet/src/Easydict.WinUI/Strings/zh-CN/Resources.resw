@@ -1848,4 +1848,49 @@
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>流式输出</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>后处理</value></data>
   <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>音标查询</value></data>
+
+  <data name="GitHubStarSupport" xml:space="preserve"><value>GitHub Star 支持 Easydict</value></data>
+  <data name="TrayQuickStart" xml:space="preserve"><value>快速上手</value></data>
+  <data name="HotkeyDisabled" xml:space="preserve"><value>已禁用</value></data>
+  <data name="OnboardingDemoPlay" xml:space="preserve"><value>播放演示</value></data>
+  <data name="OnboardingDemoPause" xml:space="preserve"><value>暂停演示</value></data>
+  <data name="OnboardingDemoNextStep" xml:space="preserve"><value>下一步</value></data>
+  <data name="OnboardingDemoReplay" xml:space="preserve"><value>重播</value></data>
+  <data name="OnboardingDemoStop" xml:space="preserve"><value>停止演示</value></data>
+  <data name="OnboardingDemoStepCounter" xml:space="preserve"><value>第 {0} 步，共 {1} 步</value></data>
+  <data name="OnboardingDemoSelectionHint" xml:space="preserve"><value>观看如何翻译选中的文字</value></data>
+  <data name="OnboardingDemoSelectionAction" xml:space="preserve"><value>翻译所选内容</value></data>
+  <data name="OnboardingDemoSelectionSampleText" xml:space="preserve"><value>A good idea can change everything.</value></data>
+  <data name="OnboardingDemoSelectionTargetText" xml:space="preserve"><value>A good idea can change everything.</value></data>
+  <data name="OnboardingDemoSelectionTranslation" xml:space="preserve"><value>好主意可以改变一切。</value></data>
+  <data name="OnboardingDemoScreenshotHint" xml:space="preserve"><value>观看如何识别并翻译图片中的文字</value></data>
+  <data name="OnboardingDemoScreenshotAction" xml:space="preserve"><value>识别文字</value></data>
+  <data name="OnboardingDemoScreenshotSampleText" xml:space="preserve"><value>Small steps make a big difference.</value></data>
+  <data name="OnboardingDemoScreenshotOcrLabel" xml:space="preserve"><value>识别结果</value></data>
+  <data name="OnboardingDemoScreenshotTranslationLabel" xml:space="preserve"><value>翻译</value></data>
+  <data name="OnboardingDemoScreenshotTranslation" xml:space="preserve"><value>微小的进步也能带来很大改变。</value></data>
+  <data name="OnboardingTitle" xml:space="preserve"><value>快速上手</value></data>
+  <data name="OnboardingSubtitle" xml:space="preserve"><value>看看 Easydict 如何在你阅读时提供帮助。</value></data>
+  <data name="OnboardingSelectionTab" xml:space="preserve"><value>划词翻译</value></data>
+  <data name="OnboardingOcrTab" xml:space="preserve"><value>翻译截图内容</value></data>
+  <data name="OnboardingTryIt" xml:space="preserve"><value>立即试用</value></data>
+  <data name="OnboardingStartUsing" xml:space="preserve"><value>开始使用 Easydict</value></data>
+  <data name="OnboardingSkip" xml:space="preserve"><value>跳过</value></data>
+  <data name="OnboardingBack" xml:space="preserve"><value>返回</value></data>
+  <data name="OnboardingPracticeTitle" xml:space="preserve"><value>试着进行一次真实翻译</value></data>
+  <data name="OnboardingPracticeInstruction" xml:space="preserve"><value>选中高亮的文字，然后进行翻译。</value></data>
+  <data name="OnboardingPracticeSample" xml:space="preserve"><value>A small change can make a big difference.</value></data>
+  <data name="OnboardingTranslateSelection" xml:space="preserve"><value>翻译所选内容</value></data>
+  <data name="OnboardingTranslating" xml:space="preserve"><value>翻译中…</value></data>
+  <data name="OnboardingPracticeSelectText" xml:space="preserve"><value>请先选择一些文字以继续。</value></data>
+  <data name="OnboardingPracticeFailed" xml:space="preserve"><value>翻译失败。请检查网络连接或服务设置。</value></data>
+  <data name="OnboardingRetry" xml:space="preserve"><value>重试</value></data>
+  <data name="OnboardingCompleteTitle" xml:space="preserve"><value>准备就绪</value></data>
+  <data name="OnboardingCompleteMessage" xml:space="preserve"><value>首次翻译成功。</value></data>
+  <data name="OnboardingGitHubSupport" xml:space="preserve"><value>GitHub Star</value></data>
+  <data name="OnboardingSupportMessage" xml:space="preserve"><value>如果 Easydict 对你有帮助，欢迎在 GitHub 点亮 Star 支持项目。</value></data>
+  <data name="OnboardingNotNow" xml:space="preserve"><value>暂不</value></data>
+  <data name="OnboardingQuickStartMenu" xml:space="preserve"><value>快速上手</value></data>
+  <data name="OnboardingOpenServices" xml:space="preserve"><value>翻译服务</value></data>
+  <data name="OnboardingSupportOpenFailed" xml:space="preserve"><value>无法打开浏览器。请访问 github.com/xiaocang/easydict_win32 支持本项目。</value></data>
 </root>

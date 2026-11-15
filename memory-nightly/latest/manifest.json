@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "branchName": "scratch/memory-nightly",
   "outputRoot": "memory-nightly",
-  "runKey": "20261114T230626Z-4a0234a-run43650836832-attempt1",
-  "runId": "43650836832",
+  "runKey": "20261115T233034Z-7dcce93-run43774489890-attempt1",
+  "runId": "43774489890",
   "runAttempt": "1",
-  "sourceSha": "4a0234aac307fee1939aaa66c6700d7852e3591a",
+  "sourceSha": "7dcce93bca70a79269064bcca0f6986d130c9181",
   "sourceRef": "master",
-  "capturedAtUtc": "2026-11-14T23:06:26.6459728Z",
+  "capturedAtUtc": "2026-11-15T23:30:34.7604272Z",
   "retentionDays": 60,
   "retentionRuns": 60,
   "copiedArtifacts": [
@@ -17,11 +17,11 @@
     },
     {
       "path": "typeperf.csv",
-      "bytes": 12279
+      "bytes": 12397
     },
     {
       "path": "dotnet-counters.json",
-      "bytes": 1147878
+      "bytes": 1159295
     },
     {
       "path": "dotnet-counters.err.log",
@@ -51,11 +51,11 @@
   "skippedHeavyArtifacts": [
     {
       "path": "gc-verbose.nettrace",
-      "bytes": 10546506
+      "bytes": 4981826
     },
     {
       "path": "wpr-reference-set.etl",
-      "bytes": 879755264
+      "bytes": 1046478848
     }
   ]
 }

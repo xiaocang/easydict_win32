@@ -20,8 +20,8 @@ public static class PopButtonFinder
     private const int WS_EX_NOACTIVATE = 0x08000000;
 
     /// <summary>
-    /// Maximum physical pixel size for the PopButton window.
-    /// At 150% DPI, 30 logical pixels = 45 physical pixels; 50 provides margin.
+    /// Maximum logical size for the PopButton window. Convert to physical pixels per window
+    /// so a 30-DIP popup is still discoverable on 200% and higher-DPI desktops.
     /// </summary>
     private const int MaxPopButtonSize = 50;
 
@@ -41,6 +41,9 @@ public static class PopButtonFinder
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -80,8 +83,9 @@ public static class PopButtonFinder
             {
                 if (GetWindowRect(hwnd, out RECT rect))
                 {
+                    var maxPhysicalSize = MaxPopButtonSize * Math.Max(96u, GetDpiForWindow(hwnd)) / 96.0;
                     if (rect.Width > 0 && rect.Height > 0 &&
-                        rect.Width <= MaxPopButtonSize && rect.Height <= MaxPopButtonSize)
+                        rect.Width <= maxPhysicalSize && rect.Height <= maxPhysicalSize)
                     {
                         found = hwnd;
                         return false; // Stop enumeration

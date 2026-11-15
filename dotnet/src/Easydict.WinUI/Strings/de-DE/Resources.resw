@@ -1848,4 +1848,91 @@
   <data name="DiagnosticStageStreaming" xml:space="preserve"><value>Streaming-Ausgabe</value></data>
   <data name="DiagnosticStagePostProcessing" xml:space="preserve"><value>Nachbearbeitung</value></data>
   <data name="DiagnosticStagePhoneticEnrichment" xml:space="preserve"><value>Phonetikabruf</value></data>
+
+  <data name="GitHubStarSupport" xml:space="preserve"><value>GitHub Star - Support Easydict</value></data>
+  <data name="TrayQuickStart" xml:space="preserve"><value>Quick Start</value></data>
+  <data name="HotkeyDisabled" xml:space="preserve"><value>disabled</value></data>
+  <data name="OnboardingDemoPlay" xml:space="preserve"><value>Play demo</value></data>
+  <data name="OnboardingDemoPause" xml:space="preserve"><value>Pause demo</value></data>
+  <data name="OnboardingDemoNextStep" xml:space="preserve"><value>Next step</value></data>
+  <data name="OnboardingDemoReplay" xml:space="preserve"><value>Replay</value></data>
+  <data name="OnboardingDemoStop" xml:space="preserve"><value>Stop demo</value></data>
+  <data name="OnboardingDemoStepCounter" xml:space="preserve"><value>Step {0} of {1}</value></data>
+  <data name="OnboardingDemoSelectionHint" xml:space="preserve"><value>Watch how selected text is translated</value></data>
+  <data name="OnboardingDemoSelectionAction" xml:space="preserve"><value>Translate selection</value></data>
+  <data name="OnboardingDemoSelectionSampleText" xml:space="preserve"><value>A good idea can change everything.</value></data>
+  <data name="OnboardingDemoSelectionTargetText" xml:space="preserve"><value>A good idea can change everything.</value></data>
+  <data name="OnboardingDemoSelectionTranslation" xml:space="preserve"><value>&#x597D;&#x4E3B;&#x610F;&#x53EF;&#x4EE5;&#x6539;&#x53D8;&#x4E00;&#x5207;&#x3002;</value></data>
+  <data name="OnboardingDemoScreenshotHint" xml:space="preserve"><value>Watch how text is recognized and translated from an image</value></data>
+  <data name="OnboardingDemoScreenshotAction" xml:space="preserve"><value>Recognize text</value></data>
+  <data name="OnboardingDemoScreenshotSampleText" xml:space="preserve"><value>Small steps make a big difference.</value></data>
+  <data name="OnboardingDemoScreenshotOcrLabel" xml:space="preserve"><value>Recognized text</value></data>
+  <data name="OnboardingDemoScreenshotTranslationLabel" xml:space="preserve"><value>Translation</value></data>
+  <data name="OnboardingDemoScreenshotTranslation" xml:space="preserve"><value>&#x5FAE;&#x5C0F;&#x7684;&#x8FDB;&#x6B65;&#x4E5F;&#x80FD;&#x5E26;&#x6765;&#x5F88;&#x5927;&#x6539;&#x53D8;&#x3002;</value></data>
+  <data name="OnboardingTitle" xml:space="preserve"><value>Quick start</value></data>
+  <data name="OnboardingSubtitle" xml:space="preserve"><value>See how Easydict helps while you read.</value></data>
+  <data name="OnboardingSelectionTab" xml:space="preserve"><value>Select and translate</value></data>
+  <data name="OnboardingOcrTab" xml:space="preserve"><value>Translate a screenshot</value></data>
+  <data name="OnboardingTryIt" xml:space="preserve"><value>Try it now</value></data>
+  <data name="OnboardingStartUsing" xml:space="preserve"><value>Start using Easydict</value></data>
+  <data name="OnboardingSkip" xml:space="preserve"><value>Skip</value></data>
+  <data name="OnboardingBack" xml:space="preserve"><value>Back</value></data>
+  <data name="OnboardingPracticeTitle" xml:space="preserve"><value>Try a real translation</value></data>
+  <data name="OnboardingPracticeInstruction" xml:space="preserve"><value>Select the highlighted text, then translate it.</value></data>
+  <data name="OnboardingPracticeSample" xml:space="preserve"><value>A small change can make a big difference.</value></data>
+  <data name="OnboardingTranslateSelection" xml:space="preserve"><value>Translate selection</value></data>
+  <data name="OnboardingTranslating" xml:space="preserve"><value>Translating...</value></data>
+  <data name="OnboardingPracticeSelectText" xml:space="preserve"><value>Select some text to continue.</value></data>
+  <data name="OnboardingPracticeFailed" xml:space="preserve"><value>Translation failed. Check your connection or service settings.</value></data>
+  <data name="OnboardingRetry" xml:space="preserve"><value>Retry</value></data>
+  <data name="OnboardingCompleteTitle" xml:space="preserve"><value>Ready to go</value></data>
+  <data name="OnboardingCompleteMessage" xml:space="preserve"><value>Your first translation succeeded.</value></data>
+  <data name="OnboardingGitHubSupport" xml:space="preserve"><value>GitHub Star</value></data>
+  <data name="OnboardingSupportMessage" xml:space="preserve"><value>If Easydict is useful, support the project with a GitHub Star.</value></data>
+  <data name="OnboardingNotNow" xml:space="preserve"><value>Not now</value></data>
+  <data name="OnboardingQuickStartMenu" xml:space="preserve"><value>Quick start</value></data>
+  <data name="OnboardingOpenServices" xml:space="preserve"><value>Translation services</value></data>
+  <data name="OnboardingSupportOpenFailed" xml:space="preserve"><value>Couldn't open your browser. Visit github.com/xiaocang/easydict_win32 to support the project.</value></data>
+  <data name="OnboardingDemoOfflineLabel" xml:space="preserve">
+    <value>Offline example</value>
+  </data>
+  <data name="OnboardingDemoOfflineNotice" xml:space="preserve">
+    <value>The actual Easydict windows show fixed offline examples. No translation service is called.</value>
+  </data>
+  <data name="OnboardingDemoUnavailable" xml:space="preserve">
+    <value>The demo could not open. You can retry or go straight to practice.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep0" xml:space="preserve">
+    <value>Play the example to see what happens when you select text.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep1" xml:space="preserve">
+    <value>Select the text you want to translate.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep2" xml:space="preserve">
+    <value>Click the Easydict icon beside the selection.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep3" xml:space="preserve">
+    <value>The translation appears in a separate Mini window.</value>
+  </data>
+  <data name="OnboardingDemoSelectionStep4" xml:space="preserve">
+    <value>Keep reading, or choose Try it yourself for a real translation.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep0" xml:space="preserve">
+    <value>Open screenshot translation from the button at the top of Mini or the shortcut shown in the tray menu. Playback briefly opens the full-screen overlay; no image is saved or sent.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep1" xml:space="preserve">
+    <value>The screenshot tool covers the desktop so you can choose a region.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep2" xml:space="preserve">
+    <value>Drag around the text. Space pauses, Right advances, and Esc stops the preview.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep3" xml:space="preserve">
+    <value>After confirming the region, the recognized text is placed in Mini.</value>
+  </data>
+  <data name="OnboardingDemoScreenshotStep4" xml:space="preserve">
+    <value>The translation appears in the same Mini window.</value>
+  </data>
+  <data name="OnboardingDemoCaptureTip" xml:space="preserve">
+    <value>Offline preview: automatic example selection. Space pauses/resumes, Right advances, Esc stops.</value>
+  </data>
 </root>

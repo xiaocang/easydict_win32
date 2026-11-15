@@ -309,6 +309,7 @@ namespace Easydict.WinUI
             }
 
             TriggerStartupOcrTranslateIfNeeded();
+            TryShowFirstLaunchQuickStart(e.Arguments);
 
             // Run region detection asynchronously after startup completes.
             // On first launch this detects China region and switches defaults (Google → Bing).

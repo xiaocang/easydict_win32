@@ -88,6 +88,7 @@ public sealed class SettingsService
     public static SettingsService Instance => _instance.Value;
 
     private readonly string _settingsFilePath;
+    private readonly bool _settingsFileExistedAtStartup;
     private Dictionary<string, object?> _settings = new();
     private volatile bool _needsRegionDetection;
     private readonly HashSet<string> _sensitiveSettingsPendingMigration = new(StringComparer.Ordinal);
@@ -116,8 +117,9 @@ public sealed class SettingsService
         }
 
         var easydictPath = Path.GetFullPath(settingsDirectory);
-        Directory.CreateDirectory(easydictPath);
         _settingsFilePath = Path.Combine(easydictPath, "settings.json");
+        _settingsFileExistedAtStartup = File.Exists(_settingsFilePath);
+        Directory.CreateDirectory(easydictPath);
 
         LoadSettings();
     }
@@ -298,6 +300,19 @@ public sealed class SettingsService
 
     /// <summary>True when a valid persisted profile collection explicitly owns the AI registry.</summary>
     public bool AiServiceProfilesAreAuthoritative { get; private set; }
+
+    // Onboarding state. Missing values are interpreted by OnboardingStateService using
+    // _settingsFileExistedAtStartup so existing installs never receive an unsolicited tour.
+    public bool? QuickStartAutoShowPending { get; set; }
+    public bool QuickStartHasBeenShown { get; set; }
+    public bool QuickStartWasSkipped { get; set; }
+    public bool QuickStartPracticeSucceeded { get; set; }
+    public bool SupportInvitationWasShown { get; set; }
+    public bool SupportInvitationWasDismissed { get; set; }
+    public bool GitHubSupportWasOpened { get; set; }
+
+    internal bool SettingsFileExistedAtStartup => _settingsFileExistedAtStartup;
+    internal bool HasPersistedSetting(string key) => _settings.ContainsKey(key);
 
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
@@ -1020,6 +1035,19 @@ public sealed class SettingsService
         CodexReasoningEffort = GetValue(
             nameof(CodexReasoningEffort),
             CodexCliService.DefaultReasoningEffort);
+
+        QuickStartAutoShowPending = GetNullableValue<bool>(nameof(QuickStartAutoShowPending));
+        if (QuickStartAutoShowPending is null && !_settingsFileExistedAtStartup)
+        {
+            QuickStartAutoShowPending = true;
+        }
+
+        QuickStartHasBeenShown = GetValue(nameof(QuickStartHasBeenShown), false);
+        QuickStartWasSkipped = GetValue(nameof(QuickStartWasSkipped), false);
+        QuickStartPracticeSucceeded = GetValue(nameof(QuickStartPracticeSucceeded), false);
+        SupportInvitationWasShown = GetValue(nameof(SupportInvitationWasShown), false);
+        SupportInvitationWasDismissed = GetValue(nameof(SupportInvitationWasDismissed), false);
+        GitHubSupportWasOpened = GetValue(nameof(GitHubSupportWasOpened), false);
 
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         TrayIconId = TrayIconCatalog.Normalize(GetValue(nameof(TrayIconId), TrayIconCatalog.DefaultId));
@@ -1975,6 +2003,14 @@ public sealed class SettingsService
 
         PersistAiServiceProfiles(preserveUnmigratedSensitiveSettings);
 
+        _settings[nameof(QuickStartAutoShowPending)] = QuickStartAutoShowPending;
+        _settings[nameof(QuickStartHasBeenShown)] = QuickStartHasBeenShown;
+        _settings[nameof(QuickStartWasSkipped)] = QuickStartWasSkipped;
+        _settings[nameof(QuickStartPracticeSucceeded)] = QuickStartPracticeSucceeded;
+        _settings[nameof(SupportInvitationWasShown)] = SupportInvitationWasShown;
+        _settings[nameof(SupportInvitationWasDismissed)] = SupportInvitationWasDismissed;
+        _settings[nameof(GitHubSupportWasOpened)] = GitHubSupportWasOpened;
+
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(TrayIconId)] = TrayIconCatalog.Normalize(TrayIconId);
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
@@ -2527,6 +2563,28 @@ public sealed class SettingsService
         existingKey = string.Empty;
         value = false;
         return false;
+    }
+
+    private T? GetNullableValue<T>(string key) where T : struct
+    {
+        if (!_settings.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (value is JsonElement element)
+            {
+                return element.Deserialize<T>();
+            }
+
+            return (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private T GetValue<T>(string key, T defaultValue)

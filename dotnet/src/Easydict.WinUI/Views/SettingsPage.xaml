@@ -3677,9 +3677,14 @@
                                         Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 <TextBlock x:Name="VersionText"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                <HyperlinkButton AutomationProperties.AutomationId="GitHubRepositoryLink"
+                                <HyperlinkButton x:Name="GitHubRepositoryLink"
+                                        AutomationProperties.AutomationId="GitHubRepositoryLink"
                                         Content="GitHub Repository"
-                                        NavigateUri="https://github.com/xiaocang/easydict_win32"
+                                        Click="OnGitHubStarSupportClick"
+                                        Style="{StaticResource SettingsLinkButtonStyle}"/>
+                                <HyperlinkButton AutomationProperties.AutomationId="QuickStartFromAbout"
+                                        Content="Quick Start"
+                                        Click="OnQuickStartFromAboutClick"
                                         Style="{StaticResource SettingsLinkButtonStyle}"/>
                                 <HyperlinkButton x:Name="IssueFeedbackLink"
                                         AutomationProperties.AutomationId="IssueFeedbackLink"

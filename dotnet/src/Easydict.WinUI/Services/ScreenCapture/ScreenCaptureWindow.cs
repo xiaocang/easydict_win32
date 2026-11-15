@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Easydict.WinUI.Models;
+using Windows.Graphics;
 
 namespace Easydict.WinUI.Services.ScreenCapture;
 
@@ -49,9 +50,13 @@ public sealed class ScreenCaptureWindow : IDisposable
     private const int WM_DESTROY = 0x0002;
     private const int WM_SETCURSOR = 0x0020;
     private const int WM_USER_CANCEL = 0x0400 + 100;
+    private const int WM_USER_DEMO_SELECT = 0x0400 + 101;
+    private const int WM_USER_DEMO_CONFIRM = 0x0400 + 102;
 
     // Virtual keys
     private const int VK_ESCAPE = 0x1B;
+    private const int VK_SPACE = 0x20;
+    private const int VK_RIGHT = 0x27;
     private const int VK_TAB = 0x09;
 
     // GDI constants
@@ -111,6 +116,15 @@ public sealed class ScreenCaptureWindow : IDisposable
     private CancellationTokenRegistration _cancellationReg;
     private readonly object _lifecycleLock = new();
     private readonly ScreenCaptureLifecycleProbe? _lifecycleProbe;
+    private readonly bool _demoSession;
+    private TaskCompletionSource? _demoReadyTcs;
+    private TaskCompletionSource<RectInt32?>? _demoResultTcs;
+    private readonly object _demoCommandLock = new();
+    private RectInt32? _pendingDemoSelection;
+    private TaskCompletionSource<bool>? _pendingDemoSelectionTcs;
+    private RectInt32? _demoSelectionResult;
+    private int _demoConfirmRequested;
+    internal event Action<ScreenCaptureDemoNavigationKey>? DemoNavigationRequested;
     private int _cancellationRequested;
     private int _captureStarted;
     private int _cleanupCompleted;
@@ -166,6 +180,11 @@ public sealed class ScreenCaptureWindow : IDisposable
     {
     }
 
+    internal ScreenCaptureWindow(bool demoSession)
+    {
+        _demoSession = demoSession;
+    }
+
     internal ScreenCaptureWindow(ScreenCaptureLifecycleProbe lifecycleProbe)
     {
         _lifecycleProbe = lifecycleProbe;
@@ -178,6 +197,34 @@ public sealed class ScreenCaptureWindow : IDisposable
     /// </summary>
     public Task<ScreenCaptureResult?> CaptureAsync(CancellationToken cancellationToken = default)
     {
+        if (_demoSession)
+            throw new InvalidOperationException("A demo screen capture does not produce image results.");
+
+        StartCaptureLoop(cancellationToken);
+        return _resultTcs!.Task;
+    }
+
+    internal Task<RectInt32?> CaptureDemoAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_demoSession)
+            throw new InvalidOperationException("This screen capture window is not a demo session.");
+
+        StartCaptureLoop(cancellationToken);
+        return _demoResultTcs!.Task;
+    }
+
+    internal Task WaitForDemoReadyAsync()
+    {
+        if (!_demoSession || _demoReadyTcs is null)
+            throw new InvalidOperationException("The demo capture has not been started.");
+
+        return _demoReadyTcs.Task;
+    }
+
+    internal bool IsDemoCancelled => _demoSession && Volatile.Read(ref _cancellationRequested) != 0;
+
+    private void StartCaptureLoop(CancellationToken cancellationToken)
+    {
         lock (_lifecycleLock)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -185,8 +232,17 @@ public sealed class ScreenCaptureWindow : IDisposable
             if (Interlocked.Exchange(ref _captureStarted, 1) != 0)
                 throw new InvalidOperationException("A screen capture can only be started once.");
 
-            _resultTcs = new TaskCompletionSource<ScreenCaptureResult?>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+            if (_demoSession)
+            {
+                _demoReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _demoResultTcs = new TaskCompletionSource<RectInt32?>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            else
+            {
+                _resultTcs = new TaskCompletionSource<ScreenCaptureResult?>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+            }
 
             if (cancellationToken.CanBeCanceled)
                 _cancellationReg = cancellationToken.Register(RequestCancellation);
@@ -199,9 +255,127 @@ public sealed class ScreenCaptureWindow : IDisposable
             };
             thread.SetApartmentState(ApartmentState.STA);
             thread.Start();
-
-            return _resultTcs.Task;
         }
+    }
+
+    internal async Task SelectDemoRegionAsync(RectInt32 screenPhysicalRect, CancellationToken cancellationToken = default)
+    {
+        if (!_demoSession)
+            throw new InvalidOperationException("This screen capture window is not a demo session.");
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateDemoRegion(screenPhysicalRect);
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_demoCommandLock)
+        {
+            if (_demoConfirmRequested != 0)
+                throw new InvalidOperationException("The demo selection has already been confirmed.");
+            if (_pendingDemoSelectionTcs is not null)
+                throw new InvalidOperationException("A demo selection update is already pending.");
+
+            _pendingDemoSelection = screenPhysicalRect;
+            _pendingDemoSelectionTcs = completion;
+        }
+
+        var hwnd = Volatile.Read(ref _hwnd);
+        if (hwnd == IntPtr.Zero || !PostMessage(hwnd, WM_USER_DEMO_SELECT, 0, 0))
+        {
+            lock (_demoCommandLock)
+            {
+                if (ReferenceEquals(_pendingDemoSelectionTcs, completion))
+                {
+                    _pendingDemoSelection = null;
+                    _pendingDemoSelectionTcs = null;
+                }
+            }
+            throw new InvalidOperationException("The screen capture overlay is no longer available.");
+        }
+
+        await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    internal void RequestDemoConfirm()
+    {
+        if (!_demoSession)
+            throw new InvalidOperationException("This screen capture window is not a demo session.");
+
+        if (Volatile.Read(ref _cancellationRequested) != 0 || _demoResultTcs?.Task.IsCompleted == true)
+            return;
+
+        lock (_demoCommandLock)
+        {
+            if (_demoSelectionResult is null)
+                throw new InvalidOperationException("Select a demo region before confirming it.");
+            if (Interlocked.Exchange(ref _demoConfirmRequested, 1) != 0)
+                return;
+        }
+
+        var hwnd = Volatile.Read(ref _hwnd);
+        if (hwnd == IntPtr.Zero || !PostMessage(hwnd, WM_USER_DEMO_CONFIRM, 0, 0))
+        {
+            Interlocked.Exchange(ref _demoConfirmRequested, 0);
+            throw new InvalidOperationException("The screen capture overlay is no longer available.");
+        }
+    }
+
+    private void ValidateDemoRegion(RectInt32 rect)
+    {
+        var right = (long)rect.X + rect.Width;
+        var bottom = (long)rect.Y + rect.Height;
+        if (rect.Width < 3 || rect.Height < 3 ||
+            rect.X < _virtualLeft || rect.Y < _virtualTop ||
+            right > (long)_virtualLeft + _desktopWidth ||
+            bottom > (long)_virtualTop + _desktopHeight)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rect),
+                "The demo selection must be at least 3x3 and fully inside the virtual desktop in physical pixels.");
+        }
+    }
+
+    private void ApplyPendingDemoSelection()
+    {
+        RectInt32? region;
+        TaskCompletionSource<bool>? completion;
+        lock (_demoCommandLock)
+        {
+            region = _pendingDemoSelection;
+            completion = _pendingDemoSelectionTcs;
+            _pendingDemoSelection = null;
+            _pendingDemoSelectionTcs = null;
+        }
+
+        if (region is null || completion is null)
+            return;
+
+        var selected = region.Value;
+        _selection = new RECT
+        {
+            Left = selected.X - _virtualLeft,
+            Top = selected.Y - _virtualTop,
+            Right = (int)((long)selected.X + selected.Width - _virtualLeft),
+            Bottom = (int)((long)selected.Y + selected.Height - _virtualTop)
+        };
+        _phase = SelectionPhase.Selecting;
+        _isDragSelecting = false;
+        _isMouseDown = false;
+        _detectedRegion = null;
+        lock (_demoCommandLock)
+            _demoSelectionResult = selected;
+        InvalidateRect(_hwnd, IntPtr.Zero, false);
+        UpdateWindow(_hwnd);
+        completion.TrySetResult(true);
+    }
+
+    private void CancelPendingDemoSelection()
+    {
+        TaskCompletionSource<bool>? completion;
+        lock (_demoCommandLock)
+        {
+            completion = _pendingDemoSelectionTcs;
+            _pendingDemoSelectionTcs = null;
+            _pendingDemoSelection = null;
+        }
+        completion?.TrySetCanceled();
     }
 
     private void RunCaptureLoop()
@@ -243,6 +417,8 @@ public sealed class ScreenCaptureWindow : IDisposable
             }
 
             _lifecycleProbe?.Ready.TrySetResult();
+            if (_demoSession) UpdateWindow(_hwnd);
+            _demoReadyTcs?.TrySetResult();
 
             // Win32 message loop
             while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
@@ -254,6 +430,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         catch (Exception ex)
         {
             _lifecycleProbe?.Ready.TrySetException(ex);
+            _demoReadyTcs?.TrySetException(ex);
             failed = true;
             Debug.WriteLine($"[ScreenCapture] Error in capture loop: {ex.Message}");
             DestroyCurrentWindow();
@@ -264,7 +441,23 @@ public sealed class ScreenCaptureWindow : IDisposable
             _lifecycleProbe?.BeforeCleanupGate?.Wait();
             Cleanup();
             _lifecycleProbe?.Closed.TrySetResult();
-            if (_captureException is not null)
+            CancelPendingDemoSelection();
+            if (_demoSession)
+            {
+                if (_captureException is not null)
+                {
+                    _demoReadyTcs?.TrySetException(_captureException);
+                    _demoResultTcs?.TrySetException(_captureException);
+                }
+                else
+                {
+                    if (_demoReadyTcs?.Task.IsCompleted == false)
+                        _demoReadyTcs.TrySetCanceled();
+                    _demoResultTcs?.TrySetResult(
+                        Volatile.Read(ref _cancellationRequested) != 0 || failed ? null : _demoSelectionResult);
+                }
+            }
+            else if (_captureException is not null)
             {
                 _resultTcs?.TrySetException(_captureException);
             }
@@ -442,14 +635,15 @@ public sealed class ScreenCaptureWindow : IDisposable
                 return IntPtr.Zero;
 
             case WM_LBUTTONDOWN:
-                OnLeftButtonDown(GetLParamPoint(lParam));
+                if (!_demoSession) OnLeftButtonDown(GetLParamPoint(lParam));
                 return IntPtr.Zero;
 
             case WM_LBUTTONUP:
-                OnLeftButtonUp(GetLParamPoint(lParam));
+                if (!_demoSession) OnLeftButtonUp(GetLParamPoint(lParam));
                 return IntPtr.Zero;
 
             case WM_LBUTTONDBLCLK:
+                if (_demoSession) return IntPtr.Zero;
                 if (_phase == SelectionPhase.Detecting)
                 {
                     if (_detectedRegion.HasValue)
@@ -480,6 +674,7 @@ public sealed class ScreenCaptureWindow : IDisposable
                 return IntPtr.Zero;
 
             case WM_RBUTTONDOWN:
+                if (_demoSession) return IntPtr.Zero;
                 if (_phase == SelectionPhase.Selecting)
                 {
                     // Cancel current drag, back to Detecting
@@ -498,6 +693,7 @@ public sealed class ScreenCaptureWindow : IDisposable
                 return IntPtr.Zero;
 
             case WM_MOUSEWHEEL:
+                if (_demoSession) return IntPtr.Zero;
                 // WM_MOUSEWHEEL lParam contains screen coordinates, not client coordinates.
                 // Convert to client-relative (overlay-relative) by subtracting virtual desktop origin.
                 var wheelScreenPt = GetLParamPoint(lParam);
@@ -518,6 +714,14 @@ public sealed class ScreenCaptureWindow : IDisposable
                     return (nint)1; // We handled the cursor
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
+            case WM_CLOSE:
+                if (_demoSession)
+                {
+                    RequestCancellation();
+                    return IntPtr.Zero;
+                }
+                return DefWindowProc(hwnd, msg, wParam, lParam);
+
             case WM_DESTROY:
                 Volatile.Write(ref _hwnd, IntPtr.Zero);
                 PostQuitMessage(0);
@@ -525,6 +729,14 @@ public sealed class ScreenCaptureWindow : IDisposable
 
             case WM_USER_CANCEL:
                 CancelCapture();
+                return IntPtr.Zero;
+
+            case WM_USER_DEMO_SELECT:
+                if (_demoSession) ApplyPendingDemoSelection();
+                return IntPtr.Zero;
+
+            case WM_USER_DEMO_CONFIRM:
+                if (_demoSession) ConfirmSelection();
                 return IntPtr.Zero;
 
             default:
@@ -734,6 +946,16 @@ public sealed class ScreenCaptureWindow : IDisposable
         var loc = LocalizationService.Instance;
         _tipDetecting = loc.GetString("ScreenCaptureTipDetecting");
         _tipSelecting = loc.GetString("ScreenCaptureTipSelecting");
+        if (_demoSession)
+        {
+            var demoTip = loc.GetString("OnboardingDemoCaptureTip");
+            if (string.IsNullOrWhiteSpace(demoTip) || demoTip == "OnboardingDemoCaptureTip")
+            {
+                demoTip = "Offline preview: automatic example selection. Space pauses/resumes, Right advances, Esc stops.";
+            }
+            _tipDetecting = demoTip;
+            _tipSelecting = demoTip;
+        }
     }
 
     private void DrawTips(nint hdc)
@@ -837,8 +1059,11 @@ public sealed class ScreenCaptureWindow : IDisposable
                 break;
 
             case SelectionPhase.Selecting:
-                _selection.Right = pt.X;
-                _selection.Bottom = pt.Y;
+                if (!_demoSession)
+                {
+                    _selection.Right = pt.X;
+                    _selection.Bottom = pt.Y;
+                }
                 InvalidateRect(_hwnd, IntPtr.Zero, false);
                 break;
         }
@@ -930,6 +1155,21 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private void OnKeyDown(int vk)
     {
+        if (_demoSession)
+        {
+            if (vk == VK_ESCAPE)
+            {
+                RequestCancellation();
+                return;
+            }
+            if (vk == VK_SPACE || vk == VK_RIGHT)
+            {
+                var key = vk == VK_SPACE ? ScreenCaptureDemoNavigationKey.Space : ScreenCaptureDemoNavigationKey.Right;
+                DemoNavigationRequested?.Invoke(key);
+                return;
+            }
+        }
+
         switch (vk)
         {
             case VK_ESCAPE:
@@ -962,8 +1202,24 @@ public sealed class ScreenCaptureWindow : IDisposable
             return;
         }
 
-        // Extract pixels from frozen desktop bitmap.
-        _captureResult = ExtractRegion(sel);
+        if (_demoSession)
+        {
+            lock (_demoCommandLock)
+            {
+                _demoSelectionResult = new RectInt32
+                {
+                    X = sel.Left + _virtualLeft,
+                    Y = sel.Top + _virtualTop,
+                    Width = sel.Width,
+                    Height = sel.Height
+                };
+            }
+        }
+        else
+        {
+            // Extract pixels from frozen desktop bitmap.
+            _captureResult = ExtractRegion(sel);
+        }
         DestroyCurrentWindow();
     }
 
@@ -1249,6 +1505,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     [StructLayout(LayoutKind.Sequential)]
     private struct SIZE { public int cx, cy; }
     [DllImport("user32.dll")] private static extern bool InvalidateRect(nint hwnd, nint lpRect, bool bErase);
+    [DllImport("user32.dll")] private static extern bool UpdateWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern nint BeginPaint(nint hwnd, ref PAINTSTRUCT lpPaint);
     [DllImport("user32.dll")] private static extern bool EndPaint(nint hwnd, ref PAINTSTRUCT lpPaint);
     [DllImport("user32.dll")] private static extern nint SetCapture(nint hwnd);

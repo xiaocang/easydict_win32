@@ -43,8 +43,12 @@ public static class ScreenshotHelper
     /// </summary>
     public static string CaptureScreen(string name)
     {
-        var image = Capture.Screen();
-        return SaveCapture(image, name);
+        using var dpiScope = new PerMonitorDpiScope();
+        var bounds = GetVirtualScreenBounds();
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+            graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
+        return SaveBitmap(bitmap, name);
     }
 
     /// <summary>
@@ -102,6 +106,7 @@ public static class ScreenshotHelper
 
     public static Rectangle GetWindowPhysicalBounds(Window window)
     {
+        using var dpiScope = new PerMonitorDpiScope();
         var hwnd = window.Properties.NativeWindowHandle.Value;
         if (hwnd != IntPtr.Zero)
         {
@@ -455,6 +460,12 @@ public static class ScreenshotHelper
         }
 
         return Rectangle.Intersect(bounds, virtualScreen);
+    }
+
+    public static Rectangle GetVirtualScreenPhysicalBounds()
+    {
+        using var dpiScope = new PerMonitorDpiScope();
+        return GetVirtualScreenBounds();
     }
 
     public static Rectangle GetVirtualScreenBounds()

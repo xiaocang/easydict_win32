@@ -101,6 +101,9 @@ public sealed partial class MiniWindow : Window
 
     private bool _isSelectionCapturePending;
     private int _autoCloseGeneration;
+    private readonly bool _isOnboardingPreview;
+    private string? _onboardingPreviewSourceText;
+    private string? _onboardingPreviewTranslatedText;
     internal event Action? SelectionCaptureInterrupted;
 
     internal void SetSelectionCapturePending(bool pending)
@@ -142,10 +145,24 @@ public sealed partial class MiniWindow : Window
         }
     }
 
-    public MiniWindow()
+    public MiniWindow() : this(isOnboardingPreview: false)
     {
+    }
+
+    internal MiniWindow(bool isOnboardingPreview)
+    {
+        _isOnboardingPreview = isOnboardingPreview;
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
+        if (_isOnboardingPreview)
+        {
+            if (Content is FrameworkElement previewRoot)
+            {
+                AutomationProperties.SetAutomationId(previewRoot, "OnboardingMiniPreview");
+            }
+            AutomationProperties.SetAutomationId(CloseButton, "OnboardingMiniPreviewClose");
+            AutomationProperties.SetAutomationId(SourceTextCollapsed, "OnboardingMiniPreviewSource");
+        }
         SavedItemsMoreButton.Flyout = CreateSavedItemsMenu();
         InitializeCompactWindowControls();
 
@@ -167,16 +184,25 @@ public sealed partial class MiniWindow : Window
         ConfigureWindow();
 
         // Initialize translation services
-        InitializeTranslationServices();
+        if (!_isOnboardingPreview)
+        {
+            InitializeTranslationServices();
+        }
 
         // Handle window events
         this.Activated += OnWindowActivated;
         this.Closed += OnWindowClosed;
 
-        SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
+        if (!_isOnboardingPreview)
+        {
+            SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
+        }
 
         // Initialize service result controls
-        InitializeServiceResults();
+        if (!_isOnboardingPreview)
+        {
+            InitializeServiceResults();
+        }
 
         // Subscribe to text changes for auto-resize
         InputTextBox.TextChanged += OnTextChanged;
@@ -184,8 +210,11 @@ public sealed partial class MiniWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
-            content.AddHandler(UIElement.PointerPressedEvent,
-                new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => InterruptSelectionCapture("PointerPressed")), true);
+            if (!_isOnboardingPreview)
+            {
+                content.AddHandler(UIElement.PointerPressedEvent,
+                    new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => InterruptSelectionCapture("PointerPressed")), true);
+            }
             content.ActualThemeChanged += OnContentActualThemeChanged;
             content.Loaded += (s, e) =>
             {
@@ -193,6 +222,14 @@ public sealed partial class MiniWindow : Window
                 // Apply localization first (populates combos), then settings (selects saved language)
                 ApplyLocalization();
                 ApplySettings();
+                if (_isOnboardingPreview)
+                {
+                    ApplyOnboardingPreviewLanguageDirection();
+                    ApplyOnboardingPreviewResult();
+                    ApplyOnboardingPreviewInteractionPolicy();
+                    ApplyOnboardingPreviewResultReadOnlyPolicy();
+                    RequestResize();
+                }
             };
         }
 
@@ -418,7 +455,7 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private void SaveWindowPosition()
     {
-        if (_appWindow == null) return;
+        if (_isOnboardingPreview || _appWindow == null) return;
 
         var hWnd = WindowNative.GetWindowHandle(this);
         var scale = DpiHelper.GetScaleFactorForWindow(hWnd);
@@ -519,6 +556,183 @@ public sealed partial class MiniWindow : Window
         }
 
         ReorderResultsPanel();
+    }
+
+    internal void ShowOnboardingPreview(string sourceText, string translatedText)
+    {
+        if (!_isOnboardingPreview)
+        {
+            throw new InvalidOperationException("This MiniWindow was not created for onboarding preview.");
+        }
+
+        _onboardingPreviewSourceText = sourceText ?? string.Empty;
+        _onboardingPreviewTranslatedText = translatedText ?? string.Empty;
+        if (_isLoaded)
+        {
+            ApplyOnboardingPreviewLanguageDirection();
+            ApplyOnboardingPreviewResult();
+        }
+
+        InterruptSelectionCapture();
+        _autoCloseGeneration++;
+        _isClosing = false;
+        _lastShowTime = DateTime.UtcNow;
+        _appWindow?.Show(false);
+        SetSourceTextState(expanded: false, focusInput: false);
+        ApplyOnboardingPreviewInteractionPolicy();
+        ApplyOnboardingPreviewResultReadOnlyPolicy();
+        if (_isLoaded)
+        {
+            RequestResize();
+        }
+    }
+
+    private void ApplyOnboardingPreviewResult()
+    {
+        if (!_isOnboardingPreview || _onboardingPreviewSourceText is null || _onboardingPreviewTranslatedText is null)
+        {
+            return;
+        }
+
+        InputTextBox.Text = _onboardingPreviewSourceText;
+        StatusText.Text = string.Empty;
+        ReleaseServiceResultControls();
+
+        var displayName = LocalizationService.Instance.GetStringOrDefault(
+            "OnboardingDemoOfflineLabel",
+            "Offline example");
+        var result = new ServiceQueryResult
+        {
+            ServiceId = "onboarding-preview",
+            ServiceDisplayName = displayName,
+            EnabledQuery = true,
+            IsExpanded = true,
+            CurrentMode = QueryMode.Translation,
+            Result = new TranslationResult
+            {
+                OriginalText = _onboardingPreviewSourceText,
+                TranslatedText = _onboardingPreviewTranslatedText,
+                DetectedLanguage = TranslationLanguage.English,
+                TargetLanguage = TranslationLanguage.SimplifiedChinese,
+                ServiceName = displayName,
+            },
+        };
+
+        _serviceResults.Add(result);
+        ServiceResultViewHost.Add(
+            result,
+            _resultControls,
+            ResultsPanel,
+            OnServiceCollapseToggled,
+            OnServiceQueryRequested,
+            Content as FrameworkElement,
+            OnFoundryLocalStartRequested);
+        ApplyOnboardingPreviewResultReadOnlyPolicy();
+    }
+
+    private void ApplyOnboardingPreviewLanguageDirection()
+    {
+        if (!_isOnboardingPreview || !_isLoaded)
+        {
+            return;
+        }
+
+        EnsureOnboardingPreviewLanguageItem(SourceLangCombo, TranslationLanguage.English);
+        EnsureOnboardingPreviewLanguageItem(TargetLangCombo, TranslationLanguage.SimplifiedChinese);
+
+        var sourceIndex = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, TranslationLanguage.English);
+        var targetIndex = LanguageComboHelper.FindLanguageIndex(TargetLangCombo, TranslationLanguage.SimplifiedChinese);
+        if (sourceIndex < 0 || targetIndex < 0)
+        {
+            return;
+        }
+
+        _suppressSourceLanguageSelectionChanged = true;
+        _suppressTargetLanguageSelectionChanged = true;
+        try
+        {
+            SourceLangCombo.SelectedIndex = sourceIndex;
+            TargetLangCombo.SelectedIndex = targetIndex;
+        }
+        finally
+        {
+            _suppressSourceLanguageSelectionChanged = false;
+            _suppressTargetLanguageSelectionChanged = false;
+        }
+    }
+
+    private static void EnsureOnboardingPreviewLanguageItem(
+        ComboBox combo,
+        TranslationLanguage language)
+    {
+        if (LanguageComboHelper.FindLanguageIndex(combo, language) >= 0)
+        {
+            return;
+        }
+
+        var languageInfo = LanguageComboHelper.AllLanguages.First(entry => entry.Language == language);
+        combo.Items.Add(new ComboBoxItem
+        {
+            Content = LocalizationService.Instance.GetString(languageInfo.LocalizationKey),
+            Tag = languageInfo.Tag,
+        });
+    }
+
+    private void ApplyOnboardingPreviewInteractionPolicy()
+    {
+        if (!_isOnboardingPreview)
+        {
+            return;
+        }
+
+        InputTextBox.IsReadOnly = true;
+        InputTextBox.IsTabStop = false;
+        InputTextBox.IsHitTestVisible = false;
+        SourceTextContainer.IsHitTestVisible = false;
+        SourceLangCombo.IsEnabled = false;
+        TargetLangCombo.IsEnabled = false;
+        SwapButton.IsEnabled = false;
+        TranslateButton.IsEnabled = false;
+        OcrButton.IsEnabled = false;
+        PinButton.IsEnabled = false;
+        TextActionsButton.IsEnabled = false;
+        SavedItemsMoreButton.IsEnabled = false;
+        SourcePlayButton.IsEnabled = false;
+        if (_compactWindowControls is not null)
+        {
+            _compactWindowControls.MoreButton.IsEnabled = false;
+        }
+    }
+
+    private void ApplyOnboardingPreviewResultReadOnlyPolicy()
+    {
+        if (!_isOnboardingPreview)
+        {
+            return;
+        }
+
+        foreach (var resultControl in _resultControls)
+        {
+            resultControl.Element.IsHitTestVisible = false;
+            if (_isLoaded)
+            {
+                DisableTabStops(resultControl.Element);
+            }
+        }
+    }
+
+    private static void DisableTabStops(DependencyObject element)
+    {
+        if (element is Microsoft.UI.Xaml.Controls.Control control)
+        {
+            control.IsTabStop = false;
+        }
+
+        var childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(element);
+        for (var i = 0; i < childCount; i++)
+        {
+            DisableTabStops(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(element, i));
+        }
     }
 
     private bool HasEnabledGrammarCorrectionService(TranslationLanguage sourceLanguage, string? focusedServiceId = null)
@@ -677,6 +891,7 @@ public sealed partial class MiniWindow : Window
             Content as FrameworkElement,
             OnFoundryLocalStartRequested);
 
+        ApplyOnboardingPreviewResultReadOnlyPolicy();
         ReorderResultsPanel();
         RequestResize();
     }
@@ -715,7 +930,7 @@ public sealed partial class MiniWindow : Window
 
     private async Task OnServiceQueryRequestedAsync(object? sender, ServiceQueryResult serviceResult)
     {
-        if (_isClosing || _detectionService is null)
+        if (_isOnboardingPreview || _isClosing || _detectionService is null)
         {
             return;
         }
@@ -902,12 +1117,16 @@ public sealed partial class MiniWindow : Window
         {
             InterruptSelectionCapture();
             Debug.WriteLine($"[MiniWindow] Activated: state={args.WindowActivationState}, loaded={_isLoaded}");
-            QueueInputFocusAndSelectAll();
+            if (!_isOnboardingPreview)
+            {
+                QueueInputFocusAndSelectAll();
+            }
             return;
         }
 
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
+            if (_isOnboardingPreview) return;
             if (_isSelectionCapturePending) return;
             // Grace period: don't auto-close within 500ms of showing
             // This prevents a race condition where the window is hidden immediately
@@ -980,8 +1199,11 @@ public sealed partial class MiniWindow : Window
 
             _isClosing = true;
 
-            // Stop any already-initialized TTS audio immediately.
-            TextToSpeechService.StopIfInitialized();
+            // A preview must not stop audio owned by another window.
+            if (!_isOnboardingPreview)
+            {
+                TextToSpeechService.StopIfInitialized();
+            }
 
             SaveWindowPosition();
             await CleanupResourcesAsync();
@@ -1204,9 +1426,13 @@ public sealed partial class MiniWindow : Window
         TranslateIcon.Visibility = Visibility.Visible;
     }
 
-    private async Task StartQueryAsync(QuerySourceKind sourceKind = QuerySourceKind.Manual, string? focusedServiceId = null)
+    private async Task StartQueryAsync(
+        QuerySourceKind sourceKind = QuerySourceKind.Manual,
+        string? focusedServiceId = null,
+        CancellationToken operationCancellationToken = default,
+        Action<string>? onTranslationCompleted = null)
     {
-        if (_isClosing)
+        if (_isOnboardingPreview || _isClosing)
         {
             return;
         }
@@ -1227,7 +1453,9 @@ public sealed partial class MiniWindow : Window
             return;
         }
 
-        using var currentCts = new CancellationTokenSource();
+        using var currentCts = operationCancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(operationCancellationToken)
+            : new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
 
         if (previousCts != null)
@@ -1442,6 +1670,12 @@ public sealed partial class MiniWindow : Window
                         // Streaming path for LLM services (pass manager to avoid re-acquiring)
                         var streamedResult = await ExecuteStreamingTranslationForServiceAsync(
                             manager, serviceResult, request, request.FromLanguage, request.ToLanguage, ct, snapshotDraft, _serviceResults.IndexOf(serviceResult));
+                        if (!_isClosing && !ct.IsCancellationRequested && OwnsCurrentQuery(currentCts)
+                            && streamedResult.ResultKind == TranslationResultKind.Success
+                            && !string.IsNullOrWhiteSpace(streamedResult.TranslatedText))
+                        {
+                            onTranslationCompleted?.Invoke(streamedResult.TranslatedText);
+                        }
                         outcome = streamedResult.ResultKind == TranslationResultKind.Success
                             ? QueryExecutionOutcome.Success
                             : QueryExecutionOutcome.Neutral;
@@ -1494,6 +1728,12 @@ public sealed partial class MiniWindow : Window
                             RequestResize();
                         });
 
+                        if (!_isClosing && !ct.IsCancellationRequested && OwnsCurrentQuery(currentCts)
+                            && result.ResultKind == TranslationResultKind.Success
+                            && !string.IsNullOrWhiteSpace(result.TranslatedText))
+                        {
+                            onTranslationCompleted?.Invoke(result.TranslatedText);
+                        }
                         outcome = result.ResultKind == TranslationResultKind.Success
                             ? QueryExecutionOutcome.Success
                             : QueryExecutionOutcome.Neutral;
@@ -2256,6 +2496,7 @@ public sealed partial class MiniWindow : Window
 
     private void OnPinClicked(object sender, RoutedEventArgs e)
     {
+        if (_isOnboardingPreview) return;
         _isPinned = !_isPinned;
         UpdatePinState();
     }
@@ -2267,6 +2508,7 @@ public sealed partial class MiniWindow : Window
 
     private void OnOcrClicked(object sender, RoutedEventArgs e)
     {
+        if (_isOnboardingPreview) return;
         _ = App.TriggerOcrTranslateAsync();
     }
 
@@ -2303,6 +2545,7 @@ public sealed partial class MiniWindow : Window
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
     {
+        if (_isOnboardingPreview) return;
         if (_isQuerying)
         {
             CancelCurrentQuery();
@@ -2314,6 +2557,8 @@ public sealed partial class MiniWindow : Window
 
     private async void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_isOnboardingPreview) return;
+
         // PageUp/PageDown/Up/Down scroll the results (issue #137) while the
         // input TextBox keeps keyboard focus so typing continues uninterrupted.
         if (TryScrollResults(e.Key))
@@ -2348,6 +2593,7 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private void OnSourcePlayClicked(object sender, RoutedEventArgs e)
     {
+        if (_isOnboardingPreview) return;
         var tts = TextToSpeechService.Instance;
 
         if (SourcePlayIcon.Glyph == "\uE71A")
@@ -2454,6 +2700,7 @@ public sealed partial class MiniWindow : Window
 
     private void OnSwapClicked(object sender, RoutedEventArgs e)
     {
+        if (_isOnboardingPreview) return;
         var sourceLanguage = GetSourceLanguage();
         var currentTarget = GetTargetLanguage();
 
@@ -2492,7 +2739,7 @@ public sealed partial class MiniWindow : Window
     private void OnSourceLangChanged(object sender, SelectionChangedEventArgs e)
     {
         _detectionWarning?.Reset();
-        if (!_isLoaded || _suppressSourceLanguageSelectionChanged)
+        if (_isOnboardingPreview || !_isLoaded || _suppressSourceLanguageSelectionChanged)
             return;
 
         var currentTarget = GetTargetLanguage();
@@ -2527,7 +2774,7 @@ public sealed partial class MiniWindow : Window
     private void OnTargetLangChanged(object sender, SelectionChangedEventArgs e)
     {
         // User manually changed target language - respect their choice
-        if (_suppressTargetLanguageSelectionChanged)
+        if (_isOnboardingPreview || _suppressTargetLanguageSelectionChanged)
         {
             return;
         }
@@ -2543,6 +2790,36 @@ public sealed partial class MiniWindow : Window
     /// <summary>
     /// Set text and start translation (called from external sources).
     /// </summary>
+    /// <summary>
+    /// Runs this practice selection through the normal Mini query. Only a nonempty successful result from this
+    /// request can complete practice; a replacement query, cancellation, demo animation or prior result cannot.
+    /// </summary>
+    internal async Task<OnboardingPracticeResult> TranslatePracticeSelectionAsync(string text, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _targetLanguageSelector.Reset();
+        foreach (var result in _serviceResults) result.Reset();
+        InputTextBox.Text = text;
+
+        var firstTranslation = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = cancellationToken.Register(() => firstTranslation.TrySetCanceled(cancellationToken));
+        var queryTask = StartQueryAsync(QuerySourceKind.Selection,
+            operationCancellationToken: cancellationToken,
+            onTranslationCompleted: translated => firstTranslation.TrySetResult(translated));
+        _currentQueryTask = queryTask;
+        await Task.WhenAny(firstTranslation.Task, queryTask);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (ReferenceEquals(_currentQueryTask, queryTask) && !_isClosing
+            && firstTranslation.Task.IsCompletedSuccessfully)
+        {
+            return new OnboardingPracticeResult(true, await firstTranslation.Task);
+        }
+
+        return new OnboardingPracticeResult(false, ErrorMessage: LocalizationService.Instance.GetStringOrDefault(
+            "OnboardingPracticeFailed", "We couldn't get a translation. Try again or check your translation services."));
+    }
+
     public void SetTextAndTranslate(string text, QuerySourceKind sourceKind)
     {
         _targetLanguageSelector.Reset();
@@ -2706,8 +2983,11 @@ public sealed partial class MiniWindow : Window
     {
         InterruptSelectionCapture();
         _autoCloseGeneration++;
-        // Stop any already-initialized TTS audio immediately.
-        TextToSpeechService.StopIfInitialized();
+        // A preview must not stop audio owned by another window.
+        if (!_isOnboardingPreview)
+        {
+            TextToSpeechService.StopIfInitialized();
+        }
         
         SaveWindowPosition();
         _appWindow?.Hide();

@@ -1,0 +1,52 @@
+name: Weekly DeepL Live Integration
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  deepl-web-integration:
+    name: DeepL keyless live translation
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+
+      - name: Restore translation tests
+        working-directory: dotnet
+        run: dotnet restore tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj
+
+      - name: Build translation tests
+        working-directory: dotnet
+        run: dotnet build tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-restore
+
+      - name: Run DeepL live integration tests
+        working-directory: dotnet
+        env:
+          DEEPL_API_KEY: ''
+        run: dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-build --verbosity normal --filter "Category=Integration&Service=deepl" --logger "trx;LogFileName=deepl-weekly-integration-results.trx"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepl-weekly-integration-results
+          path: dotnet/**/TestResults/*.trx

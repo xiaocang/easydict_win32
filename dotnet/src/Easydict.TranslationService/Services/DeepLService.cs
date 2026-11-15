@@ -1,15 +1,14 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Easydict.TranslationService.Models;
 
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
-/// DeepL translation service supporting both free web translation and official API.
-/// Web translation uses JSON-RPC (no API key required).
-/// Official API requires API key (free or pro).
+/// DeepL translation service supporting its public one-shot web endpoint and official API.
+/// The web endpoint is unofficial and does not require an API key; the official API supports free or pro keys.
 /// </summary>
 public sealed class DeepLService : BaseTranslationService
 {
@@ -17,9 +16,21 @@ public sealed class DeepLService : BaseTranslationService
     private const string FreeApiHost = "https://api-free.deepl.com";
     private const string ProApiHost = "https://api.deepl.com";
 
-    // Web translation endpoint (JSON-RPC, no API key required)
-    private const string WebEndpoint = "https://www2.deepl.com/jsonrpc";
+    // DeepL's public one-shot endpoint used by its interactive clients.
+    private const string WebEndpoint = "https://oneshot-free.www.deepl.com/v1/translate";
+    private const string DeepLIosOsVersion = "26.0";
+    private const string DeepLIosAppBuild = "5443737";
+    private const string DeepLIosCfNetworkVersion = "3826.600.41";
+    private const string DeepLIosDarwinVersion = "25.0.0";
+    private const int MaxWebTextLength = 1500;
+    private static readonly string InstanceId = Guid.NewGuid().ToString();
+    private static readonly string SessionId = Guid.NewGuid().ToString();
+    private static readonly JsonSerializerOptions WebJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
+    private readonly DeepLAppVersionProvider _appVersionProvider;
     private string? _apiKey;
     private bool _useWebFirst = true; // Default to web translation (no API key needed)
     private bool _useQualityOptimized; // Default: latency-optimized (DeepL API default)
@@ -40,12 +51,11 @@ public sealed class DeepLService : BaseTranslationService
                 .ToArray());
 
     /// <summary>
-    /// Languages supported by DeepL's free web JSON-RPC endpoint (<c>LMT_handle_texts</c>), used when
-    /// no API key is configured. This is DeepL's classic set; next-generation languages (Vietnamese,
-    /// Arabic, Thai, Hebrew, Tamil, Telugu, Hindi, Bengali, Urdu, Malay, Filipino, Persian) are
-    /// API-only and the web endpoint rejects them with HTTP 400, so they must NOT be offered here.
+    /// Languages supported by DeepL's public one-shot endpoint when no API key is configured.
+    /// This list mirrors the target codes supported by the current endpoint; the official API
+    /// supports additional languages when a key is configured.
     /// </summary>
-    private static readonly IReadOnlyList<Language> WebClassicLanguages =
+    private static readonly IReadOnlyList<Language> WebOneShotLanguages =
         Array.AsReadOnly(new[]
         {
             Language.SimplifiedChinese, Language.TraditionalChinese, Language.English, Language.Japanese,
@@ -55,7 +65,8 @@ public sealed class DeepLService : BaseTranslationService
             Language.Estonian, Language.Finnish, Language.Greek, Language.Hungarian,
             Language.Indonesian, Language.Latvian, Language.Lithuanian, Language.Norwegian,
             Language.Romanian, Language.Slovak, Language.Slovenian, Language.Swedish,
-            Language.Turkish, Language.Ukrainian
+            Language.Turkish, Language.Ukrainian, Language.Vietnamese, Language.Arabic,
+            Language.Hebrew
         });
 
     private static readonly TimeSpan LanguageCacheTtl = TimeSpan.FromHours(24);
@@ -67,18 +78,23 @@ public sealed class DeepLService : BaseTranslationService
     private long _lastLanguageFetchTicks; // UTC ticks of the last fetch attempt; 0 = never
     private int _languageFetchInFlight;   // 0/1 guard to avoid concurrent fetches
 
-    public DeepLService(HttpClient httpClient) : base(httpClient)
+    public DeepLService(HttpClient httpClient) : this(httpClient, DeepLAppVersionProvider.Shared)
     {
+    }
+
+    internal DeepLService(HttpClient httpClient, DeepLAppVersionProvider appVersionProvider) : base(httpClient)
+    {
+        _appVersionProvider = appVersionProvider;
     }
 
     public override string ServiceId => "deepl";
     public override string DisplayName => "DeepL";
     public override bool RequiresApiKey => false; // Web mode doesn't require API key
     public override bool IsConfigured => true; // Web mode is always available
-    // Mode-aware: keyless web mode is limited to DeepL's classic set; the official API supports the
-    // full (next-gen) set. Prevents offering API-only languages to keyless users (they would 400).
+    // Mode-aware: keyless web mode is limited to the one-shot endpoint's supported set; the official API
+    // supports the full set. Prevents offering API-only languages to keyless users.
     public override IReadOnlyList<Language> SupportedLanguages =>
-        string.IsNullOrEmpty(_apiKey) ? WebClassicLanguages : (_effectiveLanguages ?? DeepLLanguages);
+        string.IsNullOrEmpty(_apiKey) ? WebOneShotLanguages : (_effectiveLanguages ?? DeepLLanguages);
 
     /// <summary>
     /// Validate a language pair against the local/effective set (fast, offline path). When a
@@ -104,8 +120,8 @@ public sealed class DeepLService : BaseTranslationService
     }
 
     /// <summary>
-    /// Adds a clearer message for the common case where a keyless (free web) user requests a language
-    /// that only DeepL's official API supports (e.g. Vietnamese), guiding them to add an API key.
+    /// Adds a clearer message when a keyless user requests a language that the current one-shot
+    /// endpoint does not support, guiding them to add an API key.
     /// </summary>
     protected override void ValidateRequest(TranslationRequest request)
     {
@@ -133,9 +149,9 @@ public sealed class DeepLService : BaseTranslationService
         base.ValidateRequest(request);
     }
 
-    /// <summary>A language DeepL supports via the official API but not the free web endpoint.</summary>
+    /// <summary>A language DeepL supports via the official API but not the public one-shot endpoint.</summary>
     private static bool IsApiOnlyLanguage(Language language) =>
-        DeepLLanguages.Contains(language) && !WebClassicLanguages.Contains(language);
+        DeepLLanguages.Contains(language) && !WebOneShotLanguages.Contains(language);
 
     /// <summary>
     /// Configure the service with an API key and mode.
@@ -201,7 +217,7 @@ public sealed class DeepLService : BaseTranslationService
     /// <summary>
     /// Fetch DeepL's official target-language list and union it onto the baseline. Additive only:
     /// a partial or empty response never shrinks supported languages below the baseline. Requires an
-    /// API key (the free web JSON-RPC path has no languages endpoint).
+    /// API key (the public one-shot path has no languages endpoint).
     /// <para>
     /// NOTE: This is intentionally dormant future-proofing. The API-mode baseline is already the full
     /// <see cref="Language"/> enum (minus Classical Chinese), so a fetched list (a subset of the enum)
@@ -349,9 +365,8 @@ public sealed class DeepLService : BaseTranslationService
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
-        // Try web translation first if enabled — but only when the languages are web-supported.
-        // Next-gen languages are API-only, so attempting the web JSON-RPC for them is a guaranteed
-        // HTTP 400; route them straight to the official API instead (key is guaranteed present here,
+        // Try web translation first if enabled — but only when the languages are supported by the
+        // one-shot endpoint. Other languages route directly to the official API (a key is guaranteed here,
         // since keyless next-gen requests are rejected by ValidateRequest before reaching this point).
         if (_useWebFirst && WebSupportsRequest(request))
         {
@@ -378,12 +393,11 @@ public sealed class DeepLService : BaseTranslationService
     }
 
     /// <summary>
-    /// Whether the request's languages are translatable via DeepL's free web JSON-RPC endpoint
-    /// (the classic set). Next-gen languages are API-only.
+    /// Whether the request's languages are translatable via DeepL's public one-shot endpoint.
     /// </summary>
     private static bool WebSupportsRequest(TranslationRequest request) =>
-        WebClassicLanguages.Contains(request.ToLanguage) &&
-        (request.FromLanguage == Language.Auto || WebClassicLanguages.Contains(request.FromLanguage));
+        WebOneShotLanguages.Contains(request.ToLanguage) &&
+        (request.FromLanguage == Language.Auto || WebOneShotLanguages.Contains(request.FromLanguage));
 
     /// <summary>
     /// Translate using DeepL's official API (requires API key).
@@ -451,123 +465,89 @@ public sealed class DeepLService : BaseTranslationService
     }
 
     /// <summary>
-    /// Translate using DeepL's free web interface via JSON-RPC (no API key required).
-    /// Implements anti-detection measures similar to the macOS implementation.
+    /// Translate using DeepL's public one-shot endpoint with the current interactive-client request shape.
     /// </summary>
     private async Task<TranslationResult> TranslateWebAsync(
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
-        var targetCode = GetDeepLLanguageCode(request.ToLanguage, isWeb: true);
-        var sourceCode = request.FromLanguage == Language.Auto
-            ? "auto"
-            : GetDeepLLanguageCode(request.FromLanguage, isWeb: true);
+        if (request.Text.Length > MaxWebTextLength)
+        {
+            throw new TranslationException($"DeepL web translation is limited to {MaxWebTextLength} UTF-16 code units per request")
+            {
+                ErrorCode = TranslationErrorCode.TextTooLong,
+                ServiceId = ServiceId
+            };
+        }
 
-        // Generate anti-detection values (matching macOS implementation)
-        var requestId = GetRandomRequestId();
-        var iCount = GetICount(request.Text);
-        var timestamp = GetAlignedTimestamp(iCount);
-
-        // Build JSON-RPC payload
+        var appVersion = await _appVersionProvider.GetCurrentVersionAsync(cancellationToken);
         var payload = new
         {
-            jsonrpc = "2.0",
-            method = "LMT_handle_texts",
-            id = requestId,
-            @params = new
+            text = new[] { request.Text },
+            target_lang = GetDeepLOneShotTargetLanguageCode(request.ToLanguage),
+            source_lang = request.FromLanguage == Language.Auto
+                ? null
+                : GetDeepLOneShotSourceLanguageCode(request.FromLanguage),
+            usage_type = "translate",
+            app_information = new
             {
-                texts = new[] { new { text = request.Text, requestAlternatives = 3 } },
-                splitting = "newlines",
-                lang = new
-                {
-                    source_lang_user_selected = sourceCode.ToUpper(),
-                    target_lang = targetCode.ToUpper()
-                },
-                timestamp = timestamp,
-                commonJobParams = new
-                {
-                    wasSpoken = false,
-                    transcribe_as = ""
-                }
+                os = "iOS",
+                os_version = DeepLIosOsVersion,
+                app_version = appVersion,
+                app_build = DeepLIosAppBuild,
+                instance_id = InstanceId
             }
         };
 
-        // Serialize JSON with dynamic spacing for anti-detection
-        var jsonPayload = JsonSerializer.Serialize(payload);
-        jsonPayload = ApplyDynamicSpacing(jsonPayload, requestId);
-
-        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, WebEndpoint);
-        httpRequest.Content = content;
-
-        // Set headers to mimic browser
-        httpRequest.Headers.Add("Accept", "*/*");
-        httpRequest.Headers.Add("Accept-Language", "en-US,en;q=0.9");
-        httpRequest.Headers.Add("Origin", "https://www.deepl.com");
-        httpRequest.Headers.Add("Referer", "https://www.deepl.com/");
-        httpRequest.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, WebEndpoint)
+        {
+            Content = new ByteArrayContent(JsonSerializer.SerializeToUtf8Bytes(payload, WebJsonOptions)),
+            Version = HttpVersion.Version20,
+            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower
+        };
+        httpRequest.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        httpRequest.Headers.TryAddWithoutValidation("Authorization", "None");
+        httpRequest.Headers.TryAddWithoutValidation("Accept", "*/*");
+        httpRequest.Headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
+        httpRequest.Headers.UserAgent.ParseAdd(
+            $"DeepL/{appVersion} CFNetwork/{DeepLIosCfNetworkVersion} Darwin/{DeepLIosDarwinVersion}");
+        httpRequest.Headers.TryAddWithoutValidation("x-app-os-version", DeepLIosOsVersion);
+        httpRequest.Headers.TryAddWithoutValidation("x-app-instance-id", InstanceId);
+        httpRequest.Headers.TryAddWithoutValidation("x-app-session-id", SessionId);
 
         using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
-
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            throw new TranslationException($"DeepL web translation failed: {response.StatusCode}")
+            var errorDetail = TryGetOneShotErrorMessage(json) ?? response.ReasonPhrase ?? "Unknown error";
+            var isOutdatedClient = response.StatusCode == HttpStatusCode.Forbidden &&
+                (errorDetail.Contains("outdated", StringComparison.OrdinalIgnoreCase) ||
+                 errorDetail.Contains("client version", StringComparison.OrdinalIgnoreCase));
+            throw new TranslationException(isOutdatedClient
+                ? $"DeepL web client version is outdated: {errorDetail}"
+                : $"DeepL web translation failed: {(int)response.StatusCode} ({errorDetail})")
+            {
+                ErrorCode = response.StatusCode == HttpStatusCode.TooManyRequests
+                    ? TranslationErrorCode.RateLimited
+                    : isOutdatedClient || (int)response.StatusCode >= 500
+                        ? TranslationErrorCode.ServiceUnavailable
+                        : TranslationErrorCode.InvalidResponse,
+                ServiceId = ServiceId
+            };
+        }
+
+        var result = ParseApiResponse(json, request);
+        if (IsWebClientVersionRejection(result.TranslatedText))
+        {
+            throw new TranslationException("DeepL web client version is outdated")
             {
                 ErrorCode = TranslationErrorCode.ServiceUnavailable,
                 ServiceId = ServiceId
             };
         }
 
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        return ParseWebResponse(json, request);
+        return result;
     }
-
-    #region Anti-Detection Helpers
-
-    /// <summary>
-    /// Generate random request ID (matching macOS pattern).
-    /// </summary>
-    private static long GetRandomRequestId()
-    {
-        return Random.Shared.Next(100000, 189999) * 1000L;
-    }
-
-    /// <summary>
-    /// Count 'i' characters for timestamp alignment (DeepL's checksum mechanism).
-    /// </summary>
-    private static int GetICount(string text)
-    {
-        return text.Count(c => c == 'i');
-    }
-
-    /// <summary>
-    /// Generate timestamp aligned to i-count (anti-detection measure).
-    /// </summary>
-    private static long GetAlignedTimestamp(int iCount)
-    {
-        var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        if (iCount > 0)
-        {
-            var count = iCount + 1;
-            return ts - (ts % count) + count;
-        }
-        return ts;
-    }
-
-    /// <summary>
-    /// Apply dynamic spacing in JSON "method" field (anti-detection).
-    /// </summary>
-    private static string ApplyDynamicSpacing(string json, long requestId)
-    {
-        // Add variable spacing around "method" based on request ID
-        if ((requestId + 5) % 29 == 0 || (requestId + 3) % 13 == 0)
-        {
-            return json.Replace("\"method\":\"", "\"method\" : \"");
-        }
-        return json.Replace("\"method\":\"", "\"method\": \"");
-    }
-
-    #endregion
 
     private string GetApiHost()
     {
@@ -614,83 +594,52 @@ public sealed class DeepLService : BaseTranslationService
     }
 
     /// <summary>
-    /// Parse JSON-RPC web response.
-    /// Response format: {"jsonrpc":"2.0","id":123,"result":{"texts":[{"text":"..."}],"lang":"EN"}}
+    /// Read the title and message fields returned for a rejected one-shot request.
     /// </summary>
-    private TranslationResult ParseWebResponse(string json, TranslationRequest request)
+    private static string? TryGetOneShotErrorMessage(string json)
     {
         try
         {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            // Check for JSON-RPC error
-            if (root.TryGetProperty("error", out var error))
-            {
-                var errorMsg = error.TryGetProperty("message", out var msg)
-                    ? msg.GetString() ?? "Unknown error"
-                    : "Unknown error";
-                throw new TranslationException($"DeepL web error: {errorMsg}")
-                {
-                    ErrorCode = TranslationErrorCode.ServiceUnavailable,
-                    ServiceId = ServiceId
-                };
-            }
-
-            if (!root.TryGetProperty("result", out var result))
-            {
-                throw new TranslationException("Invalid response from DeepL web")
-                {
-                    ErrorCode = TranslationErrorCode.InvalidResponse,
-                    ServiceId = ServiceId
-                };
-            }
-
-            // Extract translated text from result.texts[0].text
-            if (!result.TryGetProperty("texts", out var texts) || texts.GetArrayLength() == 0)
-            {
-                throw new TranslationException("No translation result from DeepL web")
-                {
-                    ErrorCode = TranslationErrorCode.InvalidResponse,
-                    ServiceId = ServiceId
-                };
-            }
-
-            var firstText = texts[0];
-            var translatedText = firstText.GetProperty("text").GetString() ?? "";
-
-            // Try to get detected language from result.lang
-            var detectedLang = Language.Auto;
-            if (result.TryGetProperty("lang", out var langElement))
-            {
-                var code = langElement.GetString()?.ToLower() ?? "";
-                detectedLang = LanguageCodes.FromIso639(code);
-            }
-
-            return new TranslationResult
-            {
-                TranslatedText = translatedText,
-                OriginalText = request.Text,
-                DetectedLanguage = detectedLang,
-                TargetLanguage = request.ToLanguage,
-                ServiceName = DisplayName
-            };
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            var title = root.TryGetProperty("title", out var titleElement) ? titleElement.GetString() : null;
+            var message = root.TryGetProperty("message", out var messageElement) ? messageElement.GetString() : null;
+            return string.Join(": ", new[] { title, message }.Where(value => !string.IsNullOrWhiteSpace(value)));
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            throw new TranslationException($"Failed to parse DeepL web response: {ex.Message}")
-            {
-                ErrorCode = TranslationErrorCode.InvalidResponse,
-                ServiceId = ServiceId
-            };
+            return null;
         }
     }
 
+    private static bool IsWebClientVersionRejection(string text) =>
+        text.Contains("older version of DeepL", StringComparison.OrdinalIgnoreCase) &&
+        text.Contains("update to the latest version", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetDeepLOneShotTargetLanguageCode(Language language) => language switch
+    {
+        Language.SimplifiedChinese => "zh-Hans",
+        Language.TraditionalChinese => "zh-Hant",
+        Language.English => "en-US",
+        Language.Portuguese => "pt-PT",
+        Language.Norwegian => "nb",
+        _ => GetDeepLLanguageCode(language).ToLowerInvariant()
+    };
+
+    private static string GetDeepLOneShotSourceLanguageCode(Language language) => language switch
+    {
+        Language.SimplifiedChinese or Language.TraditionalChinese => "zh",
+        Language.English => "en",
+        Language.Portuguese => "pt",
+        Language.Norwegian => "nb",
+        _ => GetDeepLLanguageCode(language).ToLowerInvariant()
+    };
+
     /// <summary>
-    /// Get common language code for DeepL API sources or web JSON-RPC.
+    /// Get the common DeepL language code used by the official API.
     /// API target codes use <see cref="GetDeepLApiTargetLanguageCode"/> because some targets require variants.
     /// </summary>
-    private static string GetDeepLLanguageCode(Language language, bool isWeb = false) => language switch
+    private static string GetDeepLLanguageCode(Language language) => language switch
     {
         Language.SimplifiedChinese => "ZH",
         Language.TraditionalChinese => "ZH-HANT",
@@ -699,7 +648,7 @@ public sealed class DeepLService : BaseTranslationService
         Language.Korean => "KO",
         Language.French => "FR",
         Language.Spanish => "ES",
-        Language.Portuguese => isWeb ? "PT-PT" : "PT",
+        Language.Portuguese => "PT",
         Language.Italian => "IT",
         Language.German => "DE",
         Language.Russian => "RU",

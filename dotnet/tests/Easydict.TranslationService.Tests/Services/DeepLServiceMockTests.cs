@@ -20,7 +20,7 @@ public class DeepLServiceMockTests
     {
         _mockHandler = new MockHttpMessageHandler();
         _httpClient = new HttpClient(_mockHandler);
-        _service = new DeepLService(_httpClient);
+        _service = new DeepLService(_httpClient, new DeepLAppVersionProvider("26.58"));
     }
 
     #region Web Translation Mode (default, no API key)
@@ -30,14 +30,7 @@ public class DeepLServiceMockTests
     {
         // Arrange
         var webResponse = """
-            {
-                "jsonrpc": "2.0",
-                "id": 123000,
-                "result": {
-                    "texts": [{"text": "Hello"}],
-                    "lang": "EN"
-                }
-            }
+            {"translations":[{"text":"Hello","detected_source_language":"FR"}]}
             """;
         _mockHandler.EnqueueJsonResponse(webResponse);
 
@@ -61,14 +54,7 @@ public class DeepLServiceMockTests
     {
         // Arrange
         var webResponse = """
-            {
-                "jsonrpc": "2.0",
-                "id": 123000,
-                "result": {
-                    "texts": [{"text": "Hello"}],
-                    "lang": "FR"
-                }
-            }
+            {"translations":[{"text":"Hello","detected_source_language":"FR"}]}
             """;
         _mockHandler.EnqueueJsonResponse(webResponse);
 
@@ -87,11 +73,11 @@ public class DeepLServiceMockTests
     }
 
     [Fact]
-    public async Task TranslateAsync_WebMode_SendsJsonRpcFormat()
+    public async Task TranslateAsync_WebMode_SendsOneShotRequestFormat()
     {
         // Arrange
         var webResponse = """
-            {"jsonrpc":"2.0","id":123000,"result":{"texts":[{"text":"Hi"}],"lang":"EN"}}
+            {"translations":[{"text":"Hi","detected_source_language":"EN"}]}
             """;
         _mockHandler.EnqueueJsonResponse(webResponse);
 
@@ -108,19 +94,21 @@ public class DeepLServiceMockTests
         // Assert
         var sentRequest = _mockHandler.LastRequest;
         sentRequest.Should().NotBeNull();
-        sentRequest!.RequestUri!.ToString().Should().Contain("www2.deepl.com/jsonrpc");
+        sentRequest!.RequestUri!.ToString().Should().Be("https://oneshot-free.www.deepl.com/v1/translate");
 
         var body = _mockHandler.LastRequestBody;
-        body.Should().Contain("LMT_handle_texts");
-        body.Should().Contain("\"jsonrpc\"");
+        body.Should().Contain("\"target_lang\":\"zh-Hans\"");
+        body.Should().Contain("\"source_lang\":\"en\"");
+        body.Should().Contain("\"usage_type\":\"translate\"");
+        body.Should().Contain("\"app_information\"");
     }
 
     [Fact]
-    public async Task TranslateAsync_WebMode_SetsAntiDetectionHeaders()
+    public async Task TranslateAsync_WebMode_SetsOneShotClientHeaders()
     {
         // Arrange
         var webResponse = """
-            {"jsonrpc":"2.0","id":123000,"result":{"texts":[{"text":"Hi"}],"lang":"EN"}}
+            {"translations":[{"text":"Hi","detected_source_language":"EN"}]}
             """;
         _mockHandler.EnqueueJsonResponse(webResponse);
 
@@ -135,8 +123,11 @@ public class DeepLServiceMockTests
 
         // Assert
         var sentRequest = _mockHandler.LastRequest;
-        sentRequest!.Headers.Should().ContainSingle(h => h.Key == "Origin");
-        sentRequest.Headers.GetValues("Origin").First().Should().Be("https://www.deepl.com");
+        sentRequest!.Headers.GetValues("Authorization").Single().Should().Be("None");
+        sentRequest.Headers.UserAgent.ToString().Should().Be("DeepL/26.58 CFNetwork/3826.600.41 Darwin/25.0.0");
+        sentRequest.Headers.GetValues("x-app-os-version").Single().Should().Be("26.0");
+        Guid.TryParse(sentRequest.Headers.GetValues("x-app-instance-id").Single(), out _).Should().BeTrue();
+        Guid.TryParse(sentRequest.Headers.GetValues("x-app-session-id").Single(), out _).Should().BeTrue();
     }
 
     [Fact]
@@ -159,17 +150,13 @@ public class DeepLServiceMockTests
     }
 
     [Fact]
-    public async Task TranslateAsync_WebMode_ThrowsOnJsonRpcError()
+    public async Task TranslateAsync_WebMode_ThrowsOnOutdatedClient()
     {
         // Arrange
         var errorResponse = """
-            {
-                "jsonrpc": "2.0",
-                "id": 123000,
-                "error": {"message": "Too many requests"}
-            }
+            {"title":"OutdatedClient","message":"Update the DeepL client."}
             """;
-        _mockHandler.EnqueueJsonResponse(errorResponse);
+        _mockHandler.EnqueueJsonResponse(errorResponse, HttpStatusCode.Forbidden);
 
         var request = new TranslationRequest
         {
@@ -181,6 +168,7 @@ public class DeepLServiceMockTests
         var exception = await Assert.ThrowsAsync<TranslationException>(
             () => _service.TranslateAsync(request));
 
+        exception.Message.Should().Contain("client version is outdated");
         exception.ErrorCode.Should().Be(TranslationErrorCode.ServiceUnavailable);
     }
 
@@ -527,14 +515,15 @@ public class DeepLServiceMockTests
     #region Language Code Mapping
 
     [Theory]
-    [InlineData(Language.SimplifiedChinese, "ZH")]
-    [InlineData(Language.TraditionalChinese, "ZH-HANT")]
-    [InlineData(Language.Portuguese, "PT-PT")]
+    [InlineData(Language.SimplifiedChinese, "zh-Hans")]
+    [InlineData(Language.TraditionalChinese, "zh-Hant")]
+    [InlineData(Language.Portuguese, "pt-PT")]
+    [InlineData(Language.Vietnamese, "vi")]
     public async Task TranslateAsync_WebMode_UsesCorrectLanguageCodes(Language targetLang, string expectedCode)
     {
         // Arrange
         var webResponse = """
-            {"jsonrpc":"2.0","id":123000,"result":{"texts":[{"text":"result"}],"lang":"EN"}}
+            {"translations":[{"text":"result","detected_source_language":"EN"}]}
             """;
         _mockHandler.EnqueueJsonResponse(webResponse);
 

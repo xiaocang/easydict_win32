@@ -1,3 +1,4 @@
+using System.Net;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using FluentAssertions;
@@ -14,6 +15,27 @@ public class DeepLServiceTests
     {
         _httpClient = new HttpClient();
         _service = new DeepLService(_httpClient);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_WebClientVersionRejection_ThrowsServiceUnavailable()
+    {
+        const string response = """
+            {"jsonrpc":"2.0","id":123,"result":{"texts":[{"text":"You're using an older version of DeepL. To continue using the app, please update to the latest version."}],"lang":"EN"}}
+            """;
+        using var httpClient = new HttpClient(new StaticResponseHandler(response));
+        var service = new DeepLService(httpClient);
+        var request = new TranslationRequest
+        {
+            Text = "你好世界",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        var exception = await Assert.ThrowsAsync<TranslationException>(() => service.TranslateAsync(request));
+
+        exception.ErrorCode.Should().Be(TranslationErrorCode.ServiceUnavailable);
+        exception.ServiceId.Should().Be("deepl");
     }
 
     [Fact]
@@ -61,6 +83,17 @@ public class DeepLServiceTests
         // The official API supports the full next-gen set; an API key selects API mode.
         _service.Configure("test-key:fx", useWebFirst: true);
         _service.SupportedLanguages.Should().Contain(language);
+    }
+
+    private sealed class StaticResponseHandler(string response) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response)
+            });
     }
 
     [Fact]

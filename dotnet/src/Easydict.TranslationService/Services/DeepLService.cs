@@ -659,6 +659,15 @@ public sealed class DeepLService : BaseTranslationService
             var firstText = texts[0];
             var translatedText = firstText.GetProperty("text").GetString() ?? "";
 
+            if (IsWebClientVersionRejection(translatedText))
+            {
+                throw new TranslationException("DeepL web translation was rejected because the client version is outdated")
+                {
+                    ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                    ServiceId = ServiceId
+                };
+            }
+
             // Try to get detected language from result.lang
             var detectedLang = Language.Auto;
             if (result.TryGetProperty("lang", out var langElement))
@@ -685,6 +694,10 @@ public sealed class DeepLService : BaseTranslationService
             };
         }
     }
+
+    private static bool IsWebClientVersionRejection(string text) =>
+        text.Contains("older version of DeepL", StringComparison.OrdinalIgnoreCase) &&
+        text.Contains("update to the latest version", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Get common language code for DeepL API sources or web JSON-RPC.

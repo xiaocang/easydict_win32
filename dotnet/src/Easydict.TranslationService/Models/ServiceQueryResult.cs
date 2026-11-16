@@ -50,12 +50,17 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public string ServiceIconPath => $"ms-appx:///Assets/ServiceIcons/{ServiceId}.png";
 
     /// <summary>
-    /// Optional local-only state for the Labs AI refinement preview. Production query rows leave this null.
+    /// Optional Labs refinement state, backed by provider capabilities for production results.
     /// </summary>
     public AiRefinementDemoState? AiRefinementDemo
     {
         get => _aiRefinementDemo;
-        set => SetField(ref _aiRefinementDemo, value);
+        set
+        {
+            if (ReferenceEquals(_aiRefinementDemo, value)) return;
+            _aiRefinementDemo?.Dispose();
+            SetField(ref _aiRefinementDemo, value);
+        }
     }
 
     /// <summary>
@@ -404,6 +409,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     /// </summary>
     public void Reset()
     {
+        if (AiRefinementDemo?.IsLive == true) AiRefinementDemo = null;
         Diagnostics?.Complete(TranslationDiagnosticStatus.Cancelled);
         Diagnostics = null;
         Result = null;

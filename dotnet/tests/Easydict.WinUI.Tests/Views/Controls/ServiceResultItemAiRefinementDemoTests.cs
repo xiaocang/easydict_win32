@@ -1,4 +1,6 @@
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
+using Easydict.WinUI.Services;
 using Easydict.WinUI.Views.Controls;
 using FluentAssertions;
 using Microsoft.UI.Dispatching;
@@ -13,6 +15,83 @@ namespace Easydict.WinUI.Tests.Views.Controls;
 [Trait("Category", "WinUI")]
 public sealed class ServiceResultItemAiRefinementDemoTests
 {
+    [SkippableFact]
+    public async Task LiveCandidates_RebuildWordRunsWhenTranslationTextIsUnchanged()
+    {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+        var settings = SettingsService.Instance;
+        var previousContext = settings.AiContextLabEnabled;
+        var previousWords = settings.AiWordRefinementLabEnabled;
+        settings.AiContextLabEnabled = true;
+        settings.AiWordRefinementLabEnabled = true;
+        using var client = new HttpClient(new WordResponseHandler());
+        var service = new MagpieService(client);
+        service.Configure("http://127.0.0.1:4545/v1/chat/completions", "", "test-model");
+        var translation = new TranslationResult
+        {
+            OriginalText = "A quiet space.", TranslatedText = "安静的空间。",
+            TargetLanguage = Language.SimplifiedChinese, ServiceName = "Magpie"
+        };
+        using var state = AiRefinementDemoState.CreateLive(service, translation, true, true)!;
+        var row = new ServiceQueryResult { ServiceId = "magpie", Result = translation, AiRefinementDemo = state };
+        var card = new ServiceResultItem();
+        var window = new Window { Content = card };
+        window.Activate();
+        try
+        {
+            card.ServiceResult = row;
+            await FlushDispatcherAsync(card.DispatcherQueue);
+            FindByNameOrNull<StackPanel>(card, "DemoSourcePanel").Should().BeNull();
+            var header = FindByName<Border>(card, "HeaderBar");
+            FindByAutomationId<Button>(header, "AiRefinementDemoContextDisclosure").Should().NotBeNull();
+            var candidates = (Flyout)card.FindName("DemoCandidateFlyout");
+            candidates.IsOpen.Should().BeFalse();
+            var text = FindByAutomationId<RichTextBlock>(card, "AiRefinementDemoInteractiveTranslation");
+            text.Blocks.OfType<Microsoft.UI.Xaml.Documents.Paragraph>().Single().Inlines.Should().HaveCount(1);
+            await state.PrefetchCandidatesAsync();
+            await FlushDispatcherAsync(card.DispatcherQueue);
+            var runs = text.Blocks.OfType<Microsoft.UI.Xaml.Documents.Paragraph>().Single().Inlines.OfType<Microsoft.UI.Xaml.Documents.Run>().ToArray();
+            runs.Should().HaveCount(2);
+            runs[0].TextDecorations.Should().Be(Windows.UI.Text.TextDecorations.None);
+            await state.SelectWordAsync("0");
+            await FlushDispatcherAsync(card.DispatcherQueue);
+            candidates.IsOpen.Should().BeTrue();
+            (await state.ApplyCandidateAsync("0", "宁静的环境")).Should().BeTrue();
+            await FlushDispatcherAsync(card.DispatcherQueue);
+            row.Result!.TranslatedText.Should().Be("宁静的环境。");
+        }
+        finally
+        {
+            card.Cleanup();
+            window.Close();
+            settings.AiContextLabEnabled = previousContext;
+            settings.AiWordRefinementLabEnabled = previousWords;
+        }
+    }
+
+    private sealed class WordResponseHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            using var body = System.Text.Json.JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            var messages = body.RootElement.GetProperty("messages");
+            using var input = System.Text.Json.JsonDocument.Parse(messages[1].GetProperty("content").GetString()!);
+            var translation = input.RootElement.GetProperty("TranslatedText").GetString()!;
+            var json = messages[0].GetProperty("content").GetString()!.Contains("MUST start", StringComparison.Ordinal)
+                ? "宁静的环境。"
+                : System.Text.Json.JsonSerializer.Serialize(new[]
+                {
+                    new { Text = translation[..^1], Alternatives = new[] { "宁静的环境" } },
+                    new { Text = "。", Alternatives = Array.Empty<string>() }
+                });
+            var chunk = System.Text.Json.JsonSerializer.Serialize(new { choices = new[] { new { delta = new { content = json } } } });
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("data: " + chunk + "\n\ndata: [DONE]\n\n", System.Text.Encoding.UTF8, "text/event-stream")
+            };
+        }
+    }
+
     [SkippableFact]
     public async Task WordLayerWaitsForStreamingAndRequiresExplicitAiCapability()
     {
@@ -42,7 +121,7 @@ public sealed class ServiceResultItemAiRefinementDemoTests
             card.ServiceResult = result;
             var interactiveText = FindByAutomationId<RichTextBlock>(card, "AiRefinementDemoInteractiveTranslation");
             var contextDisclosure = FindByAutomationId<Button>(card, "AiRefinementDemoContextDisclosure");
-            var candidateStatus = FindByAutomationId<TextBlock>(card, "AiRefinementDemoCandidateStatus");
+            var candidateStatus = FindByName<TextBlock>(card, "DemoCandidateStatusText");
 
             interactiveText.Visibility.Should().Be(Visibility.Collapsed);
             contextDisclosure.Visibility.Should().Be(Visibility.Collapsed);
@@ -63,7 +142,7 @@ public sealed class ServiceResultItemAiRefinementDemoTests
 
             interactiveText.Visibility.Should().Be(Visibility.Visible);
             contextDisclosure.Visibility.Should().Be(Visibility.Visible);
-            candidateStatus.Visibility.Should().Be(Visibility.Visible);
+            candidateStatus.Visibility.Should().Be(Visibility.Collapsed);
 
             await state.PrefetchCandidatesAsync();
             await state.SelectWordAsync("growth");
@@ -71,8 +150,8 @@ public sealed class ServiceResultItemAiRefinementDemoTests
             state.ApplyContext("Use a formal tone.");
             await FlushDispatcherAsync(card.DispatcherQueue);
 
-            var contextConflictPanel = FindByAutomationId<Border>(card, "AiRefinementDemoContextConflictPanel");
-            var contextConflictText = FindByAutomationId<TextBlock>(card, "AiRefinementDemoContextConflictText");
+            var contextConflictPanel = FindByName<Border>(card, "DemoContextConflictPanel");
+            var contextConflictText = FindByName<TextBlock>(card, "DemoContextConflictText");
             contextConflictPanel.Visibility.Should().Be(Visibility.Visible);
             contextConflictText.Text.Should().Contain("蓬勃发展").And.Contain("稳步发展");
             state.ResolveContextConflict(useSuggestedWording: true).Should().BeTrue();
@@ -139,7 +218,7 @@ public sealed class ServiceResultItemAiRefinementDemoTests
             var plainText = FindByName<TextBlock>(card, "ResultText");
             var interactiveText = FindByAutomationId<RichTextBlock>(card, "AiRefinementDemoInteractiveTranslation");
             var contextDisclosure = FindByAutomationId<Button>(card, "AiRefinementDemoContextDisclosure");
-            var candidateStatus = FindByAutomationId<TextBlock>(card, "AiRefinementDemoCandidateStatus");
+            var candidateStatus = FindByName<TextBlock>(card, "DemoCandidateStatusText");
 
             plainText.Text.Should().Be("安静的空间，让想法自由生长。");
             contextDisclosure.Visibility.Should().Be(Visibility.Visible);
@@ -171,6 +250,7 @@ public sealed class ServiceResultItemAiRefinementDemoTests
     private static T? FindByNameOrNull<T>(DependencyObject root, string name)
         where T : FrameworkElement
     {
+        if (root is FrameworkElement namedRoot && namedRoot.FindName(name) is T namedElement) return namedElement;
         if (root is FrameworkElement element
             && element is T typed
             && element.Name == name)

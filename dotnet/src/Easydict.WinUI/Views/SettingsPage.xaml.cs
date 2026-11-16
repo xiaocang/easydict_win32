@@ -4125,12 +4125,12 @@ public sealed partial class SettingsPage : Page
         AutomationProperties.SetName(AiContextLabToggle, AiContextLabToggle.Header?.ToString() ?? string.Empty);
         AiContextLabDescriptionText.Text = loc.GetStringOrDefault(
             "AiContextLabDescription",
-            "Add a short, card-specific instruction in the offline refinement preview.");
+            "Add instructions to revise a translation using the same AI service.");
         AiWordRefinementLabToggle.Header = loc.GetStringOrDefault("AiWordRefinementLabHeader", "Word-level alternatives");
         AutomationProperties.SetName(AiWordRefinementLabToggle, AiWordRefinementLabToggle.Header?.ToString() ?? string.Empty);
         AiWordRefinementLabDescriptionText.Text = loc.GetStringOrDefault(
             "AiWordRefinementLabDescription",
-            "Prepare local alternatives after the sample translation completes.");
+            "Ask the AI service for word alternatives after translation completes. This makes an additional model request.");
         AiRefinementDemoHeaderText.Text = loc.GetStringOrDefault("AiRefinementDemoHeader", "Interactive AI refinement preview");
         AiRefinementDemoDescriptionText.Text = loc.GetStringOrDefault(
             "AiRefinementDemoDescription",

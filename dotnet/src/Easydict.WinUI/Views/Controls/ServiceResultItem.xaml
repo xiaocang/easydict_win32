@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:controls="using:Easydict.WinUI.Views.Controls"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     AutomationProperties.AccessibilityView="Control"
     mc:Ignorable="d">
@@ -56,6 +57,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -147,10 +149,71 @@
                         Visibility="Collapsed"
                         Margin="0,0,4,0"/>
 
-                    <!-- Retry Button (visible on error) -->
+                    <!-- Refinement tools stay in the header; the body contains only the result. -->
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                        <ProgressRing x:Name="DemoRefinementProgress" Width="14" Height="14" Visibility="Collapsed"/>
+                        <Button x:Name="DemoRefinementRetryButton" Width="24" Height="24" MinWidth="0" MinHeight="0" Padding="0"
+                                Background="Transparent" BorderThickness="0" Visibility="Collapsed" Click="OnRetryRefinementClicked">
+                            <FontIcon Glyph="&#xE783;" FontSize="12" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                        </Button>
+                        <Button x:Name="DemoContextDisclosureButton" Width="24" Height="24" MinWidth="0" MinHeight="0" Padding="0"
+                                Style="{StaticResource EasydictAccentButtonStyle}" Visibility="Collapsed"
+                                AutomationProperties.AutomationId="AiRefinementDemoContextDisclosure" Click="OnDemoContextDisclosureClicked">
+                            <FontIcon x:Name="DemoContextIcon" Glyph="&#xE8F2;" FontSize="12"
+                                      Foreground="{Binding Foreground, ElementName=DemoContextDisclosureButton}"/>
+                            <primitives:FlyoutBase.AttachedFlyout>
+                                <Flyout x:Name="DemoContextFlyout" Placement="BottomEdgeAlignedRight" Closed="OnContextFlyoutClosed">
+                                    <StackPanel Width="280" Spacing="8">
+                                        <TextBlock x:Name="DemoContextSummaryText" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                        <TextBlock x:Name="DemoRefinementErrorText" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                        <Border x:Name="DemoContextConflictPanel"
+                                                AutomationProperties.AutomationId="AiRefinementDemoContextConflictPanel"
+                                                Padding="8"
+                                                CornerRadius="6"
+                                                BorderThickness="1"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                Visibility="Collapsed">
+                                            <StackPanel Spacing="6">
+                                                <TextBlock x:Name="DemoContextConflictText"
+                                                           AutomationProperties.AutomationId="AiRefinementDemoContextConflictText"
+                                                           FontSize="12"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <controls:WrapPanel HorizontalSpacing="6" VerticalSpacing="6">
+                                                    <Button x:Name="DemoContextConflictKeepButton"
+                                                            AutomationProperties.AutomationId="AiRefinementDemoContextConflictKeep"
+                                                            Click="OnDemoContextConflictKeepClicked"/>
+                                                    <Button x:Name="DemoContextConflictSuggestionButton"
+                                                            AutomationProperties.AutomationId="AiRefinementDemoContextConflictSuggestion"
+                                                            Click="OnDemoContextConflictSuggestionClicked"/>
+                                                </controls:WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                        <StackPanel x:Name="DemoContextEditorPanel" Spacing="8" Visibility="Collapsed">
+                                            <TextBox x:Name="DemoContextEditor"
+                                                     AcceptsReturn="True"
+                                                     MinHeight="68"
+                                                     TextWrapping="Wrap"
+                                                     AutomationProperties.AutomationId="AiRefinementDemoContextEditor"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                                                <Button x:Name="DemoContextCancelButton"
+                                                        AutomationProperties.AutomationId="AiRefinementDemoCancelContext"
+                                                        Click="OnDemoContextCancelClicked"/>
+                                                <Button x:Name="DemoContextApplyButton"
+                                                        AutomationProperties.AutomationId="AiRefinementDemoApplyContext"
+                                                        Click="OnDemoContextApplyClicked"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Flyout>
+                            </primitives:FlyoutBase.AttachedFlyout>
+                        </Button>
+                    </StackPanel>
+
                     <Button
                         x:Name="HeaderCopyButton"
-                        Grid.Column="4"
+                        Grid.Column="5"
                         Click="OnCopyClicked"
                         ToolTipService.ToolTip="Copy"
                         Background="Transparent"
@@ -166,7 +229,7 @@
 
                     <Button
                         x:Name="RetryButton"
-                        Grid.Column="5"
+                        Grid.Column="6"
                         Click="OnRetryClicked"
                         Background="Transparent"
                         BorderThickness="0"
@@ -183,7 +246,7 @@
                     <!-- Expand/Collapse Arrow -->
                     <FontIcon
                         x:Name="ArrowIcon"
-                        Grid.Column="6"
+                        Grid.Column="7"
                         Glyph="&#xE70D;"
                         FontSize="10"
                         Foreground="{ThemeResource ServiceResultHeaderSecondaryForegroundBrush}"
@@ -252,23 +315,6 @@
                                 Visibility="Collapsed">
                             </StackPanel>
 
-                            <!-- Offline refinement demo source; hidden for ordinary results. -->
-                            <StackPanel
-                                x:Name="DemoSourcePanel"
-                                Grid.Row="3"
-                                Spacing="3"
-                                Margin="0,0,0,6"
-                                Visibility="Collapsed">
-                                <TextBlock x:Name="DemoSourceLabel"
-                                           FontSize="11"
-                                           FontWeight="SemiBold"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                <TextBlock x:Name="DemoSourceText"
-                                           TextWrapping="Wrap"
-                                           IsTextSelectionEnabled="True"
-                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                            </StackPanel>
-
                             <!-- Translation Result -->
                             <TextBlock
                                 x:Name="ResultText"
@@ -286,99 +332,41 @@
                                 IsTabStop="True"
                                 Foreground="{ThemeResource QueryTextBrush}"
                                 FontSize="13"
-                                Visibility="Collapsed"/>
+                                Visibility="Collapsed">
+                                <primitives:FlyoutBase.AttachedFlyout>
+                                    <Flyout x:Name="DemoCandidateFlyout" Placement="BottomEdgeAlignedLeft" Closed="OnCandidateFlyoutClosed">
+                                        <Flyout.FlyoutPresenterStyle>
+                                            <Style TargetType="FlyoutPresenter">
+                                                <Setter Property="Padding" Value="4"/>
+                                                <Setter Property="MinWidth" Value="100"/>
+                                                <Setter Property="MinHeight" Value="0"/>
+                                                <Setter Property="MaxWidth" Value="280"/>
+                                                <Setter Property="MaxHeight" Value="200"/>
+                                            </Style>
+                                        </Flyout.FlyoutPresenterStyle>
+                                        <StackPanel x:Name="DemoCandidatePanel" Spacing="2">
+                                            <TextBlock x:Name="DemoCandidateStatusText" FontSize="11" Margin="8,4"
+                                                       AutomationProperties.AutomationId="AiRefinementDemoCandidateStatus" Visibility="Collapsed"/>
+                                            <ListView x:Name="DemoCandidateOptionsList" MaxWidth="260" MaxHeight="176" FontSize="13"
+                                                      SelectionMode="Single" IsItemClickEnabled="True" ItemClick="OnCandidateItemClicked"
+                                                      AutomationProperties.AutomationId="AiRefinementAlternatives">
+                                                <ListView.ItemContainerStyle>
+                                                    <Style TargetType="ListViewItem">
+                                                        <Setter Property="MinHeight" Value="26"/>
+                                                        <Setter Property="Padding" Value="8,3"/>
+                                                    </Style>
+                                                </ListView.ItemContainerStyle>
+                                            </ListView>
+                                        </StackPanel>
+                                    </Flyout>
+                                </primitives:FlyoutBase.AttachedFlyout>
+                            </RichTextBlock>
 
                             <!-- Dictionary HTML Rendering host (WebView2 is created lazily for MDX with MDD resources) -->
                             <Grid
                                 x:Name="DictWebViewHost"
                                 Grid.Row="4"
                                 Visibility="Collapsed"/>
-
-                            <!-- Offline-only context and word candidate interactions. -->
-                            <StackPanel x:Name="DemoRefinementPanel"
-                                        AutomationProperties.AutomationId="AiRefinementDemoActions"
-                                        Grid.Row="5"
-                                        Spacing="8"
-                                        Visibility="Collapsed">
-                                <Button x:Name="DemoContextDisclosureButton"
-                                        HorizontalAlignment="Left"
-                                        Padding="0"
-                                        AutomationProperties.AutomationId="AiRefinementDemoContextDisclosure"
-                                        Click="OnDemoContextDisclosureClicked"/>
-                                <TextBlock x:Name="DemoContextSummaryText"
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           Visibility="Collapsed"/>
-                                <Border x:Name="DemoContextConflictPanel"
-                                        AutomationProperties.AutomationId="AiRefinementDemoContextConflictPanel"
-                                        Padding="8"
-                                        CornerRadius="6"
-                                        BorderThickness="1"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        Visibility="Collapsed">
-                                    <StackPanel Spacing="6">
-                                        <TextBlock x:Name="DemoContextConflictText"
-                                                   AutomationProperties.AutomationId="AiRefinementDemoContextConflictText"
-                                                   FontSize="12"
-                                                   TextWrapping="Wrap"
-                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                        <controls:WrapPanel HorizontalSpacing="6" VerticalSpacing="6">
-                                            <Button x:Name="DemoContextConflictKeepButton"
-                                                    AutomationProperties.AutomationId="AiRefinementDemoContextConflictKeep"
-                                                    Click="OnDemoContextConflictKeepClicked"/>
-                                            <Button x:Name="DemoContextConflictSuggestionButton"
-                                                    AutomationProperties.AutomationId="AiRefinementDemoContextConflictSuggestion"
-                                                    Click="OnDemoContextConflictSuggestionClicked"/>
-                                        </controls:WrapPanel>
-                                    </StackPanel>
-                                </Border>
-                                <StackPanel x:Name="DemoContextEditorPanel" Spacing="8" Visibility="Collapsed">
-                                    <TextBox x:Name="DemoContextEditor"
-                                             AcceptsReturn="True"
-                                             MinHeight="68"
-                                             TextWrapping="Wrap"
-                                             AutomationProperties.AutomationId="AiRefinementDemoContextEditor"/>
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                                        <Button x:Name="DemoContextCancelButton"
-                                                AutomationProperties.AutomationId="AiRefinementDemoCancelContext"
-                                                Click="OnDemoContextCancelClicked"/>
-                                        <Button x:Name="DemoContextApplyButton"
-                                                AutomationProperties.AutomationId="AiRefinementDemoApplyContext"
-                                                Click="OnDemoContextApplyClicked"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                <TextBlock x:Name="DemoCandidateStatusText"
-                                           AutomationProperties.AutomationId="AiRefinementDemoCandidateStatus"
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           Visibility="Collapsed"/>
-                                <Border x:Name="DemoCandidatePanel"
-                                        Padding="10"
-                                        CornerRadius="6"
-                                        BorderThickness="1"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        Visibility="Collapsed">
-                                    <StackPanel Spacing="8">
-                                        <TextBlock x:Name="DemoCandidateHeaderText"
-                                                   FontWeight="SemiBold"
-                                                   TextWrapping="Wrap"
-                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                        <TextBlock x:Name="DemoCandidateLoadingText"
-                                                   TextWrapping="Wrap"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                   Visibility="Collapsed"/>
-                                        <StackPanel x:Name="DemoCandidateOptionsPanel" Spacing="6"/>
-                                        <Button x:Name="DemoKeepOriginalButton"
-                                                AutomationProperties.AutomationId="AiRefinementDemoKeepOriginal"
-                                                HorizontalAlignment="Left"
-                                                Click="OnDemoKeepOriginalClicked"/>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
 
                             <!-- Error Message and Recovery Actions -->
                             <StackPanel

@@ -5,16 +5,17 @@ using System.Text.RegularExpressions;
 namespace Easydict.TranslationService.Models;
 
 /// <summary>
-/// Offline-only state for the Labs refinement preview. Candidate data is preset locally;
-/// this model never calls a translation provider or an LLM.
+/// Shared Labs refinement interaction state. The preview constructor uses local preset data;
+/// CreateLive binds a finished translation to the provider's refinement capabilities.
 /// </summary>
-public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
+public sealed partial class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
 {
     private readonly object _candidateGate = new();
     private readonly Dictionary<string, string> _confirmedChoices = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IReadOnlyList<string>> _candidateCache = new(StringComparer.Ordinal);
+    private Dictionary<string, IReadOnlyList<string>> _candidateCache = new(StringComparer.Ordinal);
     private CancellationTokenSource? _candidateLoadCancellation;
     private IReadOnlyList<AiRefinementDemoWord> _words = Array.Empty<AiRefinementDemoWord>();
+    private string _translationText = string.Empty;
     private bool _supportsAiExtensions;
     private bool _contextFeatureEnabled;
     private bool _wordRefinementEnabled;
@@ -39,7 +40,7 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
         _supportsAiExtensions = supportsAiExtensions;
         _contextFeatureEnabled = contextFeatureEnabled;
         _wordRefinementEnabled = wordRefinementEnabled;
-        _words = CreateWords(_appliedContext);
+        Words = CreateWords(_appliedContext);
     }
 
     public string SourceText { get; }
@@ -105,8 +106,8 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public bool CanShowContext => SupportsAiExtensions && ContextFeatureEnabled;
-    public bool CanShowWordRefinement => SupportsAiExtensions && WordRefinementEnabled;
+    public bool CanShowContext => SupportsAiExtensions && ContextFeatureEnabled && (!IsLive || _contextService is not null);
+    public bool CanShowWordRefinement => SupportsAiExtensions && WordRefinementEnabled && (!IsLive || _wordService is not null);
 
     public string DraftContext
     {
@@ -161,16 +162,20 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<AiRefinementDemoWord> Words
     {
         get => _words;
-        private set
-        {
-            if (ReferenceEquals(_words, value)) return;
-            _words = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(TranslationText));
-        }
+        private set => SetWords(value, string.Concat(value.Select(word => word.Text)));
     }
 
-    public string TranslationText => string.Concat(Words.Select(word => word.Text));
+    public string TranslationText => _translationText;
+
+    private void SetWords(IReadOnlyList<AiRefinementDemoWord> words, string translationText)
+    {
+        if (ReferenceEquals(_words, words)) return;
+        var textChanged = !string.Equals(_translationText, translationText, StringComparison.Ordinal);
+        _words = words;
+        _translationText = translationText;
+        OnPropertyChanged(nameof(Words));
+        if (textChanged) OnPropertyChanged(nameof(TranslationText));
+    }
 
     public bool IsCandidatePrefetching
     {
@@ -225,6 +230,7 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
     public int ApplyContext(string? context)
     {
         ThrowIfDisposed();
+        if (IsLive) throw new InvalidOperationException("Use ApplyContextAsync for live translation.");
         AppliedContext = (context ?? string.Empty).Trim();
         DraftContext = AppliedContext;
         IsContextEditorExpanded = false;
@@ -243,6 +249,11 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
     {
         ThrowIfDisposed();
         if (!CanShowWordRefinement) return;
+        if (IsLive)
+        {
+            await LoadLiveCandidatesAsync();
+            return;
+        }
 
         CancelCandidateLoad();
         var cancellation = new CancellationTokenSource();
@@ -319,6 +330,11 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
             IsSelectedWordLoading = true;
             SelectedCandidates = Array.Empty<string>();
         }
+        if (IsLive)
+        {
+            IsSelectedWordLoading = false;
+            return;
+        }
         using var cancellation = new CancellationTokenSource();
         try
         {
@@ -333,6 +349,7 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
     public bool ApplyCandidate(string? wordId, string? candidate)
     {
         ThrowIfDisposed();
+        if (IsLive) throw new InvalidOperationException("Use ApplyCandidateAsync for live translation.");
         if (string.IsNullOrWhiteSpace(wordId) || string.IsNullOrWhiteSpace(candidate)) return false;
 
         lock (_candidateGate)
@@ -362,7 +379,9 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
             if (wordId is null) return;
 
             _confirmedChoices.Remove(wordId);
-            Words = CreateWords(AppliedContext);
+            Words = IsLive
+                ? Words.Select(w => w.Id == wordId && _originalWords.TryGetValue(wordId, out var original) ? w with { Text = original } : w).ToArray()
+                : CreateWords(AppliedContext);
             SelectedWordId = wordId;
             SelectedCandidates = _candidateCache.TryGetValue(wordId, out var candidates)
                 ? candidates
@@ -426,6 +445,7 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
 
     private void RefreshContextConflict()
     {
+        if (IsLive) { ContextConflict = null; return; }
         var conflict = GetContextConflict(AppliedContext, _confirmedChoices);
         ContextConflict = conflict;
     }
@@ -496,12 +516,25 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
             _candidateLoadCancellation = null;
         }
         if (cancellation is null) return;
+        _ = CancelWithoutBlockingAsync(cancellation);
+    }
+
+    private static async Task CancelWithoutBlockingAsync(CancellationTokenSource cancellation, bool dispose = false)
+    {
         try
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync().ConfigureAwait(false);
         }
         catch (ObjectDisposedException)
         {
+        }
+        catch (AggregateException)
+        {
+            System.Diagnostics.Debug.WriteLine("A refinement cancellation callback failed.");
+        }
+        finally
+        {
+            if (dispose) cancellation.Dispose();
         }
     }
 
@@ -552,6 +585,7 @@ public sealed class AiRefinementDemoState : INotifyPropertyChanged, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _ = CancelWithoutBlockingAsync(_liveLifetime, dispose: true);
         CancelCandidateLoad();
         PropertyChanged = null;
     }

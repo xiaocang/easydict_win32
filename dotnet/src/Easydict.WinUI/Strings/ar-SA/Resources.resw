@@ -1939,13 +1939,13 @@
     <value>Add translation context</value>
   </data>
   <data name="AiContextLabDescription" xml:space="preserve">
-    <value>Add a short, card-specific instruction in the offline refinement preview.</value>
+    <value>Add instructions to revise a translation using the same AI service.</value>
   </data>
   <data name="AiWordRefinementLabHeader" xml:space="preserve">
     <value>Word-level alternatives</value>
   </data>
   <data name="AiWordRefinementLabDescription" xml:space="preserve">
-    <value>Prepare local alternatives after the sample translation completes.</value>
+    <value>Ask the AI service for word alternatives after translation completes. This makes an additional model request.</value>
   </data>
   <data name="AiRefinementDemoHeader" xml:space="preserve">
     <value>Interactive AI refinement preview</value>
@@ -2012,5 +2012,11 @@
   </data>
   <data name="AiRefinementDemoConflictUseSuggestion" xml:space="preserve">
     <value>Use suggestion</value>
+  </data>
+  <data name="AiContextLabButtonTooltip" xml:space="preserve">
+    <value>أضف سياقًا أو تعليمات لتحسين هذه الترجمة.</value>
+  </data>
+  <data name="AiContextLabButtonAppliedTooltip" xml:space="preserve">
+    <value>عدّل سياق الترجمة. السياق الحالي: {0}</value>
   </data>
 </root>

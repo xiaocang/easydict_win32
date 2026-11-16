@@ -1939,13 +1939,13 @@
     <value>補充翻譯上下文</value>
   </data>
   <data name="AiContextLabDescription" xml:space="preserve">
-    <value>為 AI 結果卡加入簡短說明；預覽僅使用離線範例。</value>
+    <value>為譯文加入說明，由目前的 AI 服務依說明重新翻譯。</value>
   </data>
   <data name="AiWordRefinementLabHeader" xml:space="preserve">
     <value>逐詞調整與替代表達</value>
   </data>
   <data name="AiWordRefinementLabDescription" xml:space="preserve">
-    <value>範例譯文完成後準備本機候選，不呼叫模型。</value>
+    <value>翻譯完成後，由目前的 AI 服務產生詞語候選，會額外呼叫一次模型。</value>
   </data>
   <data name="AiRefinementDemoHeader" xml:space="preserve">
     <value>AI 翻譯互動預覽</value>
@@ -2012,5 +2012,11 @@
   </data>
   <data name="AiRefinementDemoConflictUseSuggestion" xml:space="preserve">
     <value>採用建議</value>
+  </data>
+  <data name="AiContextLabButtonTooltip" xml:space="preserve">
+    <value>補充背景或要求，讓 AI 依上下文調整這則譯文。</value>
+  </data>
+  <data name="AiContextLabButtonAppliedTooltip" xml:space="preserve">
+    <value>編輯這則譯文的上下文。目前內容：{0}</value>
   </data>
 </root>

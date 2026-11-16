@@ -39,6 +39,32 @@ public class ProfiledTranslationService : ITranslationService, ICacheKeyDiscrimi
     public bool IsConfigured => _isEnabled && InnerService.IsConfigured;
     public IReadOnlyList<Language> SupportedLanguages => InnerService.SupportedLanguages;
     public string? CacheKeyDiscriminator { get; }
+    public IContextTranslationService? ContextTranslation => InnerService.ContextTranslation is null ? null : new RefinementProxy(this);
+    public IWordRefinementService? WordRefinement => InnerService.WordRefinement is null ? null : new RefinementProxy(this);
+
+    private sealed class RefinementProxy(ProfiledTranslationService owner) : IContextTranslationService, IWordRefinementService
+    {
+        public async Task<string> ApplyWordAlternativeAsync(WordReplacementRequest request, CancellationToken cancellationToken = default)
+        {
+            owner.EnsureEnabled();
+            try { return await owner.InnerService.WordRefinement!.ApplyWordAlternativeAsync(request, cancellationToken).ConfigureAwait(false); }
+            catch (TranslationException ex) { throw owner.Reidentify(ex); }
+        }
+
+        public async Task<string> TranslateWithContextAsync(TranslationRefinementRequest request, CancellationToken cancellationToken = default)
+        {
+            owner.EnsureEnabled();
+            try { return await owner.InnerService.ContextTranslation!.TranslateWithContextAsync(request, cancellationToken).ConfigureAwait(false); }
+            catch (TranslationException ex) { throw owner.Reidentify(ex); }
+        }
+
+        public async Task<IReadOnlyList<WordAlternatives>> GetWordAlternativesAsync(TranslationRefinementRequest request, CancellationToken cancellationToken = default)
+        {
+            owner.EnsureEnabled();
+            try { return await owner.InnerService.WordRefinement!.GetWordAlternativesAsync(request, cancellationToken).ConfigureAwait(false); }
+            catch (TranslationException ex) { throw owner.Reidentify(ex); }
+        }
+    }
 
     protected void EnsureEnabled()
     {

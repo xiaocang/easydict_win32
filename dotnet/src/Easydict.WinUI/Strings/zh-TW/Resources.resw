@@ -1935,4 +1935,82 @@
   <data name="OnboardingDemoCaptureTip" xml:space="preserve">
     <value>離線示範：自動框選範例。空白鍵暫停或繼續，→ 下一步，Esc 離開。</value>
   </data>
+  <data name="AiContextLabHeader" xml:space="preserve">
+    <value>補充翻譯上下文</value>
+  </data>
+  <data name="AiContextLabDescription" xml:space="preserve">
+    <value>為 AI 結果卡加入簡短說明；預覽僅使用離線範例。</value>
+  </data>
+  <data name="AiWordRefinementLabHeader" xml:space="preserve">
+    <value>逐詞調整與替代表達</value>
+  </data>
+  <data name="AiWordRefinementLabDescription" xml:space="preserve">
+    <value>範例譯文完成後準備本機候選，不呼叫模型。</value>
+  </data>
+  <data name="AiRefinementDemoHeader" xml:space="preserve">
+    <value>AI 翻譯互動預覽</value>
+  </data>
+  <data name="AiRefinementDemoDescription" xml:space="preserve">
+    <value>預覽使用固定本機資料，不會呼叫模型或翻譯服務。</value>
+  </data>
+  <data name="AiRefinementDemoOpen" xml:space="preserve">
+    <value>開啟互動預覽</value>
+  </data>
+  <data name="AiRefinementDemoServiceLabel" xml:space="preserve">
+    <value>預覽服務</value>
+  </data>
+  <data name="AiRefinementDemoAiService" xml:space="preserve">
+    <value>AI 範例（離線）</value>
+  </data>
+  <data name="AiRefinementDemoStandardService" xml:space="preserve">
+    <value>Google 翻譯（離線）</value>
+  </data>
+  <data name="AiRefinementDemoRun" xml:space="preserve">
+    <value>執行示範翻譯</value>
+  </data>
+  <data name="AiRefinementDemoClose" xml:space="preserve">
+    <value>關閉預覽</value>
+  </data>
+  <data name="AiRefinementDemoSourceLabel" xml:space="preserve">
+    <value>原文</value>
+  </data>
+  <data name="AiRefinementDemoContextDisclosure" xml:space="preserve">
+    <value>追加上下文</value>
+  </data>
+  <data name="AiRefinementDemoContextSummary" xml:space="preserve">
+    <value>已套用：{0}</value>
+  </data>
+  <data name="AiRefinementDemoContextPlaceholder" xml:space="preserve">
+    <value>為這次翻譯加入一條簡短說明。</value>
+  </data>
+  <data name="AiRefinementDemoApplyContext" xml:space="preserve">
+    <value>套用</value>
+  </data>
+  <data name="AiRefinementDemoCancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesPreparing" xml:space="preserve">
+    <value>正在準備詞語候選…</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesReady" xml:space="preserve">
+    <value>選擇詞語以查看替代表達。</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesHeader" xml:space="preserve">
+    <value>「{0}」的替代表達</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesLoading" xml:space="preserve">
+    <value>正在載入本機候選…</value>
+  </data>
+  <data name="AiRefinementDemoKeepOriginal" xml:space="preserve">
+    <value>保留原詞</value>
+  </data>
+  <data name="AiRefinementDemoConflictMessage" xml:space="preserve">
+    <value>你確認的用詞「{0}」可能不符合正式語氣。可以保留原詞，也可以改用「{1}」。</value>
+  </data>
+  <data name="AiRefinementDemoConflictKeep" xml:space="preserve">
+    <value>保留我的用詞</value>
+  </data>
+  <data name="AiRefinementDemoConflictUseSuggestion" xml:space="preserve">
+    <value>採用建議</value>
+  </data>
 </root>

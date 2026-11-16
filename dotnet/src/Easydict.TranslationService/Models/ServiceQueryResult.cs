@@ -21,6 +21,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     private QueryMode _currentMode = QueryMode.Translation;
     private GrammarCorrectionResult? _grammarResult;
     private TranslationDiagnostics? _diagnostics;
+    private AiRefinementDemoState? _aiRefinementDemo;
 
     public TranslationDiagnostics? Diagnostics
     {
@@ -47,6 +48,15 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     /// Path to the service icon asset.
     /// </summary>
     public string ServiceIconPath => $"ms-appx:///Assets/ServiceIcons/{ServiceId}.png";
+
+    /// <summary>
+    /// Optional local-only state for the Labs AI refinement preview. Production query rows leave this null.
+    /// </summary>
+    public AiRefinementDemoState? AiRefinementDemo
+    {
+        get => _aiRefinementDemo;
+        set => SetField(ref _aiRefinementDemo, value);
+    }
 
     /// <summary>
     /// Where the service comes from (built-in, imported dictionary, third-party plugin).

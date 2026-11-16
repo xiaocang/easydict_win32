@@ -262,6 +262,9 @@ public sealed partial class SettingsPage : Page
     private bool _aiProfileEditorInitialized;
     private CancellationTokenSource? _aiProfileActionCts;
     private CancellationTokenSource? _magpieDiscoveryCts;
+    private CancellationTokenSource? _aiRefinementPreviewCts;
+    private ServiceQueryResult? _aiRefinementPreviewResult;
+    private bool _isAiRefinementPreviewInitializing = true;
 
     /// <summary>Inline "remote gateway needs a key" message created with the scope selector, if any.</summary>
     private TextBlock? _magpieRemoteKeyErrorText;
@@ -511,6 +514,7 @@ public sealed partial class SettingsPage : Page
         RequestedTheme = MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme);
             this.InitializeComponent();
             InitializeFluentSettingsLayout();
+        InitializeAiRefinementDemoPreview();
         ApplyThemeChrome();
         ApplyLingueeAvailability();
         InitializeServiceConfigurationHeaderIcons();
@@ -3949,6 +3953,8 @@ public sealed partial class SettingsPage : Page
         ClipboardMonitorToggle.OffContent = toggleOff;
         MouseSelectionTranslateToggle.OnContent = toggleOn;
         MouseSelectionTranslateToggle.OffContent = toggleOff;
+        AiContextLabToggle.OnContent = AiWordRefinementLabToggle.OnContent = toggleOn;
+        AiContextLabToggle.OffContent = AiWordRefinementLabToggle.OffContent = toggleOff;
         AnkiEnabledToggle.OnContent = AnkiQuickAddToggle.OnContent = toggleOn;
         AnkiEnabledToggle.OffContent = AnkiQuickAddToggle.OffContent = toggleOff;
         HoverWordLookupToggle.OnContent = toggleOn;
@@ -4115,6 +4121,27 @@ public sealed partial class SettingsPage : Page
         AnkiUseLastItem.Content = loc.GetStringOrDefault("AnkiUseLast", "Remember last used");
         LabsHeaderText.Text = loc.GetString("SettingsTab_Labs");
         LabsDescriptionText.Text = loc.GetString("SettingsTab_Labs_Tooltip");
+        AiContextLabToggle.Header = loc.GetStringOrDefault("AiContextLabHeader", "Add translation context");
+        AutomationProperties.SetName(AiContextLabToggle, AiContextLabToggle.Header?.ToString() ?? string.Empty);
+        AiContextLabDescriptionText.Text = loc.GetStringOrDefault(
+            "AiContextLabDescription",
+            "Add a short, card-specific instruction in the offline refinement preview.");
+        AiWordRefinementLabToggle.Header = loc.GetStringOrDefault("AiWordRefinementLabHeader", "Word-level alternatives");
+        AutomationProperties.SetName(AiWordRefinementLabToggle, AiWordRefinementLabToggle.Header?.ToString() ?? string.Empty);
+        AiWordRefinementLabDescriptionText.Text = loc.GetStringOrDefault(
+            "AiWordRefinementLabDescription",
+            "Prepare local alternatives after the sample translation completes.");
+        AiRefinementDemoHeaderText.Text = loc.GetStringOrDefault("AiRefinementDemoHeader", "Interactive AI refinement preview");
+        AiRefinementDemoDescriptionText.Text = loc.GetStringOrDefault(
+            "AiRefinementDemoDescription",
+            "This preview uses fixed local data. It does not call a model or translation service.");
+        AiRefinementDemoOpenButton.Content = loc.GetStringOrDefault("AiRefinementDemoOpen", "Open interactive preview");
+        AiRefinementDemoServiceLabelText.Text = loc.GetStringOrDefault("AiRefinementDemoServiceLabel", "Preview service");
+        AiRefinementDemoAiServiceItem.Content = loc.GetStringOrDefault("AiRefinementDemoAiService", "AI demo (offline)");
+        AiRefinementDemoStandardServiceItem.Content = loc.GetStringOrDefault("AiRefinementDemoStandardService", "Google Translate (offline)");
+        AiRefinementDemoRunButton.Content = loc.GetStringOrDefault("AiRefinementDemoRun", "Run demo translation");
+        AiRefinementDemoCloseButton.Content = loc.GetStringOrDefault("AiRefinementDemoClose", "Close preview");
+        AiRefinementDemoResultCard.RefreshAiRefinementDemoLocalization();
         var trayIconLabel = loc.GetString("TrayIcon");
         TrayIconLabelText.Text = trayIconLabel;
         AutomationProperties.SetName(TrayIconOptions, trayIconLabel);
@@ -4614,6 +4641,7 @@ public sealed partial class SettingsPage : Page
         {
             // Ignore if already disposed by shutdown path.
         }
+        CancelAiRefinementPreviewSession();
 
         // Stop new UI callbacks immediately; release the heavy visual tree after
         // MainPage has had a chance to present its first frame.
@@ -4757,6 +4785,10 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
         MouseSelectionGameExcludedAppsBox.TextChanged += OnSettingChanged;
         MouseSelectionCopyAllowedAppsBox.TextChanged += OnSettingChanged;
+        AiContextLabToggle.Toggled += OnSettingChanged;
+        AiContextLabToggle.Toggled += OnAiRefinementLabFeatureToggled;
+        AiWordRefinementLabToggle.Toggled += OnSettingChanged;
+        AiWordRefinementLabToggle.Toggled += OnAiRefinementLabFeatureToggled;
         AnkiEnabledToggle.Toggled += OnSettingChanged;
         AnkiEnabledToggle.Toggled += OnAnkiEnabledToggled;
         AnkiQuickAddToggle.Toggled += OnSettingChanged;
@@ -4899,6 +4931,10 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.TextChanged -= OnSettingChanged;
         MouseSelectionGameExcludedAppsBox.TextChanged -= OnSettingChanged;
         MouseSelectionCopyAllowedAppsBox.TextChanged -= OnSettingChanged;
+        AiContextLabToggle.Toggled -= OnSettingChanged;
+        AiContextLabToggle.Toggled -= OnAiRefinementLabFeatureToggled;
+        AiWordRefinementLabToggle.Toggled -= OnSettingChanged;
+        AiWordRefinementLabToggle.Toggled -= OnAiRefinementLabFeatureToggled;
         AnkiEnabledToggle.Toggled -= OnSettingChanged;
         AnkiEnabledToggle.Toggled -= OnAnkiEnabledToggled;
         AnkiQuickAddToggle.Toggled -= OnSettingChanged;
@@ -5396,7 +5432,9 @@ public sealed partial class SettingsPage : Page
 
     private bool LabsTabSettingsDifferFromSettings()
     {
-        return AnkiEnabledToggle.IsOn != _settings.AnkiEnabled
+        return AiContextLabToggle.IsOn != _settings.AiContextLabEnabled
+            || AiWordRefinementLabToggle.IsOn != _settings.AiWordRefinementLabEnabled
+            || AnkiEnabledToggle.IsOn != _settings.AnkiEnabled
             || AnkiQuickAddToggle.IsOn != _settings.AnkiQuickAdd
             || !SameSetting(GetSelectedTag(AnkiPreferredActionCombo) ?? SettingsService.AnkiPreferredFavorite, _settings.AnkiPreferredAction)
             || (GetSelectedTag(AnkiTargetPolicyCombo) == "Last") != _settings.AnkiRememberLast
@@ -5744,6 +5782,9 @@ public sealed partial class SettingsPage : Page
 
         if (ShouldLoadSettingsTab(SettingsTabId.Labs, deferLazyTabData))
         {
+            AiContextLabToggle.IsOn = _settings.AiContextLabEnabled;
+            AiWordRefinementLabToggle.IsOn = _settings.AiWordRefinementLabEnabled;
+            ApplyAiRefinementPreviewFeatureFlags();
             AnkiEnabledToggle.IsOn = _settings.AnkiEnabled;
             AnkiQuickAddToggle.IsOn = _settings.AnkiQuickAdd;
             SelectComboByTag(AnkiPreferredActionCombo, _settings.AnkiPreferredAction);
@@ -7305,6 +7346,8 @@ public sealed partial class SettingsPage : Page
         _settings.MouseSelectionGameExcludedApps = GetCommaSeparatedValues(MouseSelectionGameExcludedAppsBox.Text).ToList();
         _settings.MouseSelectionCopyAllowedApps = GetCommaSeparatedValues(MouseSelectionCopyAllowedAppsBox.Text).ToList();
         _settings.TrayIconId = SelectedTrayIconId;
+        _settings.AiContextLabEnabled = AiContextLabToggle.IsOn;
+        _settings.AiWordRefinementLabEnabled = AiWordRefinementLabToggle.IsOn;
         _settings.AnkiEnabled = AnkiEnabledToggle.IsOn;
         _settings.AnkiQuickAdd = AnkiQuickAddToggle.IsOn;
         _settings.AnkiPreferredAction = SettingsService.NormalizeAnkiPreferredAction(GetSelectedTag(AnkiPreferredActionCombo));
@@ -7593,6 +7636,174 @@ public sealed partial class SettingsPage : Page
     {
         HoverWordLookupDelayValueText.Text = $"{(int)Math.Round(e.NewValue)} ms";
         OnSettingChanged(sender, e);
+    }
+
+    private void InitializeAiRefinementDemoPreview()
+    {
+        _isAiRefinementPreviewInitializing = true;
+        AiRefinementDemoServiceCombo.SelectedItem = AiRefinementDemoAiServiceItem;
+        AiRefinementDemoPanel.Visibility = Visibility.Collapsed;
+        AiRefinementDemoOpenButton.Visibility = Visibility.Visible;
+        AiRefinementDemoResultCard.Visibility = Visibility.Collapsed;
+        _isAiRefinementPreviewInitializing = false;
+    }
+
+    private void OnAiRefinementLabFeatureToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading) return;
+        ApplyAiRefinementPreviewFeatureFlags();
+    }
+
+    private void ApplyAiRefinementPreviewFeatureFlags()
+    {
+        var state = _aiRefinementPreviewResult?.AiRefinementDemo;
+        if (state is null) return;
+
+        state.ContextFeatureEnabled = AiContextLabToggle.IsOn;
+        state.WordRefinementEnabled = AiWordRefinementLabToggle.IsOn;
+        if (state.CanShowWordRefinement
+            && _aiRefinementPreviewResult?.HasSuccessfulResult == true
+            && _aiRefinementPreviewResult.IsStreaming == false)
+        {
+            _ = state.PrefetchCandidatesAsync();
+        }
+    }
+
+    private void OnOpenAiRefinementDemoClicked(object sender, RoutedEventArgs e)
+    {
+        AiRefinementDemoOpenButton.Visibility = Visibility.Collapsed;
+        AiRefinementDemoPanel.Visibility = Visibility.Visible;
+        if (_aiRefinementPreviewResult is null)
+        {
+            _ = RunAiRefinementDemoAsync();
+        }
+    }
+
+    private async void OnRunAiRefinementDemoClicked(object sender, RoutedEventArgs e) =>
+        await RunAiRefinementDemoAsync();
+
+    private void OnCloseAiRefinementDemoClicked(object sender, RoutedEventArgs e)
+    {
+        AiRefinementDemoPanel.Visibility = Visibility.Collapsed;
+        AiRefinementDemoOpenButton.Visibility = Visibility.Visible;
+        CancelAiRefinementPreviewSession();
+    }
+
+    private void OnAiRefinementDemoServiceChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isAiRefinementPreviewInitializing || AiRefinementDemoPanel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        _ = RunAiRefinementDemoAsync();
+    }
+
+    private async Task RunAiRefinementDemoAsync()
+    {
+        var selected = AiRefinementDemoServiceCombo.SelectedItem as ComboBoxItem
+            ?? AiRefinementDemoAiServiceItem;
+        var supportsAiExtensions = string.Equals(
+            selected.Tag as string,
+            "ai-refinement-capable",
+            StringComparison.Ordinal);
+        var displayName = selected.Content?.ToString()
+            ?? (supportsAiExtensions ? "AI demo (offline)" : "Google Translate (offline)");
+        const string sourceText = "A quiet workspace helps ideas grow.";
+        var state = new AiRefinementDemoState(
+            sourceText,
+            supportsAiExtensions,
+            AiContextLabToggle.IsOn,
+            AiWordRefinementLabToggle.IsOn);
+        var serviceId = supportsAiExtensions ? "openai" : "google";
+        var result = new ServiceQueryResult
+        {
+            ServiceId = serviceId,
+            ServiceDisplayName = displayName,
+            AiRefinementDemo = state,
+            IsExpanded = true,
+            EnabledQuery = true,
+            IsLoading = true,
+            IsStreaming = true
+        };
+
+        var cancellation = new CancellationTokenSource();
+        var previousCancellation = _aiRefinementPreviewCts;
+        _aiRefinementPreviewCts = cancellation;
+        try
+        {
+            previousCancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The previous local preview completed concurrently with this rerun.
+        }
+        _aiRefinementPreviewResult?.AiRefinementDemo?.Dispose();
+        _aiRefinementPreviewResult = result;
+        AiRefinementDemoResultCard.ServiceResult = result;
+        AiRefinementDemoResultCard.Visibility = Visibility.Visible;
+
+        var chunks = supportsAiExtensions
+            ? new[] { "安静的空间，", "让想法自由生长。" }
+            : new[] { "一个安静的工作空间，", "能让灵感持续生长。" };
+        var streamingText = string.Empty;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            foreach (var chunk in chunks)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                if (!ReferenceEquals(_aiRefinementPreviewResult, result)) return;
+                streamingText += chunk;
+                result.StreamingText = streamingText;
+                // Keep each offline sample chunk visible long enough to inspect its selectable text.
+                await Task.Delay(TimeSpan.FromMilliseconds(700), cancellation.Token);
+            }
+
+            if (!ReferenceEquals(_aiRefinementPreviewResult, result)) return;
+            result.Result = new TranslationResult
+            {
+                OriginalText = sourceText,
+                TranslatedText = supportsAiExtensions ? state.TranslationText : streamingText,
+                TargetLanguage = TranslationLanguage.SimplifiedChinese,
+                ServiceName = displayName,
+                TimingMs = stopwatch.ElapsedMilliseconds
+            };
+            result.IsStreaming = false;
+            result.IsLoading = false;
+            result.StreamingText = string.Empty;
+
+            if (state.CanShowWordRefinement)
+            {
+                _ = state.PrefetchCandidatesAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A new preview, close, or page teardown replaced this local-only run.
+        }
+        finally
+        {
+            if (ReferenceEquals(_aiRefinementPreviewCts, cancellation))
+            {
+                _aiRefinementPreviewCts = null;
+            }
+            cancellation.Dispose();
+        }
+    }
+
+    private void CancelAiRefinementPreviewSession()
+    {
+        var cancellation = _aiRefinementPreviewCts;
+        _aiRefinementPreviewCts = null;
+        cancellation?.Cancel();
+        _aiRefinementPreviewResult?.AiRefinementDemo?.Dispose();
+        _aiRefinementPreviewResult = null;
+        if (AiRefinementDemoResultCard is not null)
+        {
+            AiRefinementDemoResultCard.ServiceResult = null;
+            AiRefinementDemoResultCard.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void OnAnkiEnabledToggled(object sender, RoutedEventArgs e)

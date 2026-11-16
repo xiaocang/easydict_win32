@@ -60,6 +60,29 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void AiRefinementLabFlags_DefaultOffAndPersistIndependently()
+    {
+        using var directory = new TemporaryDirectory();
+        var settings = CreateIsolatedSettingsService(directory.Path);
+
+        settings.AiContextLabEnabled.Should().BeFalse();
+        settings.AiWordRefinementLabEnabled.Should().BeFalse();
+
+        settings.AiContextLabEnabled = true;
+        settings.Save();
+
+        var reloaded = CreateIsolatedSettingsService(directory.Path);
+        reloaded.AiContextLabEnabled.Should().BeTrue();
+        reloaded.AiWordRefinementLabEnabled.Should().BeFalse();
+
+        reloaded.AiWordRefinementLabEnabled = true;
+        reloaded.Save();
+        var reloadedAgain = CreateIsolatedSettingsService(directory.Path);
+        reloadedAgain.AiContextLabEnabled.Should().BeTrue();
+        reloadedAgain.AiWordRefinementLabEnabled.Should().BeTrue();
+    }
+
+    [Fact]
     public void AnkiSettings_RoundTripInIsolatedStorage()
     {
         using var directory = new TemporaryDirectory();

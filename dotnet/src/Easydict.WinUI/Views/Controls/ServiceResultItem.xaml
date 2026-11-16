@@ -216,6 +216,8 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <!-- Pending Query Hint (for manual-query services not yet queried) -->
@@ -250,25 +252,138 @@
                                 Visibility="Collapsed">
                             </StackPanel>
 
+                            <!-- Offline refinement demo source; hidden for ordinary results. -->
+                            <StackPanel
+                                x:Name="DemoSourcePanel"
+                                Grid.Row="3"
+                                Spacing="3"
+                                Margin="0,0,0,6"
+                                Visibility="Collapsed">
+                                <TextBlock x:Name="DemoSourceLabel"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <TextBlock x:Name="DemoSourceText"
+                                           TextWrapping="Wrap"
+                                           IsTextSelectionEnabled="True"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                            </StackPanel>
+
                             <!-- Translation Result -->
                             <TextBlock
                                 x:Name="ResultText"
-                                Grid.Row="3"
+                                Grid.Row="4"
                                 TextWrapping="Wrap"
                                 IsTextSelectionEnabled="True"
                                 Foreground="{ThemeResource QueryTextBrush}"
                                 FontSize="13"/>
+                            <RichTextBlock
+                                x:Name="DemoInteractiveTranslationText"
+                                AutomationProperties.AutomationId="AiRefinementDemoInteractiveTranslation"
+                                Grid.Row="4"
+                                TextWrapping="Wrap"
+                                IsTextSelectionEnabled="True"
+                                IsTabStop="True"
+                                Foreground="{ThemeResource QueryTextBrush}"
+                                FontSize="13"
+                                Visibility="Collapsed"/>
 
                             <!-- Dictionary HTML Rendering host (WebView2 is created lazily for MDX with MDD resources) -->
                             <Grid
                                 x:Name="DictWebViewHost"
-                                Grid.Row="3"
+                                Grid.Row="4"
                                 Visibility="Collapsed"/>
+
+                            <!-- Offline-only context and word candidate interactions. -->
+                            <StackPanel x:Name="DemoRefinementPanel"
+                                        AutomationProperties.AutomationId="AiRefinementDemoActions"
+                                        Grid.Row="5"
+                                        Spacing="8"
+                                        Visibility="Collapsed">
+                                <Button x:Name="DemoContextDisclosureButton"
+                                        HorizontalAlignment="Left"
+                                        Padding="0"
+                                        AutomationProperties.AutomationId="AiRefinementDemoContextDisclosure"
+                                        Click="OnDemoContextDisclosureClicked"/>
+                                <TextBlock x:Name="DemoContextSummaryText"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Visibility="Collapsed"/>
+                                <Border x:Name="DemoContextConflictPanel"
+                                        AutomationProperties.AutomationId="AiRefinementDemoContextConflictPanel"
+                                        Padding="8"
+                                        CornerRadius="6"
+                                        BorderThickness="1"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        Visibility="Collapsed">
+                                    <StackPanel Spacing="6">
+                                        <TextBlock x:Name="DemoContextConflictText"
+                                                   AutomationProperties.AutomationId="AiRefinementDemoContextConflictText"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        <controls:WrapPanel HorizontalSpacing="6" VerticalSpacing="6">
+                                            <Button x:Name="DemoContextConflictKeepButton"
+                                                    AutomationProperties.AutomationId="AiRefinementDemoContextConflictKeep"
+                                                    Click="OnDemoContextConflictKeepClicked"/>
+                                            <Button x:Name="DemoContextConflictSuggestionButton"
+                                                    AutomationProperties.AutomationId="AiRefinementDemoContextConflictSuggestion"
+                                                    Click="OnDemoContextConflictSuggestionClicked"/>
+                                        </controls:WrapPanel>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel x:Name="DemoContextEditorPanel" Spacing="8" Visibility="Collapsed">
+                                    <TextBox x:Name="DemoContextEditor"
+                                             AcceptsReturn="True"
+                                             MinHeight="68"
+                                             TextWrapping="Wrap"
+                                             AutomationProperties.AutomationId="AiRefinementDemoContextEditor"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                                        <Button x:Name="DemoContextCancelButton"
+                                                AutomationProperties.AutomationId="AiRefinementDemoCancelContext"
+                                                Click="OnDemoContextCancelClicked"/>
+                                        <Button x:Name="DemoContextApplyButton"
+                                                AutomationProperties.AutomationId="AiRefinementDemoApplyContext"
+                                                Click="OnDemoContextApplyClicked"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock x:Name="DemoCandidateStatusText"
+                                           AutomationProperties.AutomationId="AiRefinementDemoCandidateStatus"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Visibility="Collapsed"/>
+                                <Border x:Name="DemoCandidatePanel"
+                                        Padding="10"
+                                        CornerRadius="6"
+                                        BorderThickness="1"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        Visibility="Collapsed">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock x:Name="DemoCandidateHeaderText"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        <TextBlock x:Name="DemoCandidateLoadingText"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   Visibility="Collapsed"/>
+                                        <StackPanel x:Name="DemoCandidateOptionsPanel" Spacing="6"/>
+                                        <Button x:Name="DemoKeepOriginalButton"
+                                                AutomationProperties.AutomationId="AiRefinementDemoKeepOriginal"
+                                                HorizontalAlignment="Left"
+                                                Click="OnDemoKeepOriginalClicked"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
 
                             <!-- Error Message and Recovery Actions -->
                             <StackPanel
                                 x:Name="ErrorPanel"
-                                Grid.Row="4"
+                                Grid.Row="6"
                                 Spacing="8"
                                 Visibility="Collapsed">
                                 <TextBlock
@@ -304,7 +419,7 @@
                             <!-- Grammar Correction Result (visible only in grammar mode) -->
                             <StackPanel
                                 x:Name="GrammarResultPanel"
-                                Grid.Row="4"
+                                Grid.Row="6"
                                 Spacing="8"
                                 Visibility="Collapsed">
 

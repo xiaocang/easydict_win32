@@ -9,6 +9,7 @@ using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -43,6 +44,20 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private bool _favoriteVisible;
     private bool _isFavorited;
     private bool _isSavedItemView;
+    private AiRefinementDemoState? _observedAiRefinementDemo;
+    private AiRefinementDemoState? _renderedDemoState;
+    private string? _renderedDemoText;
+    private string? _renderedDemoCandidateKey;
+    private TextPointer? _demoSelectionAnchor;
+    private List<(string WordId, int StartOffset, int EndOffset, int TextStartIndex, int TextLength, TextPointer Start, TextPointer End)> _demoWordSelectionRanges = new();
+    private TextHighlighter? _demoWordHighlighter;
+    private string? _demoSelectionWordId;
+    private string? _demoActiveWordId;
+    private int _demoKeyboardWordIndex = -1;
+    private uint? _demoSelectionPointerId;
+    private Windows.Foundation.Point _demoSelectionStartPoint;
+    private bool _demoSelectionDragActive;
+    private bool _demoSuppressHoverUntilPointerExit;
 
     /// <summary>
     /// Exposes the control instance for parent item hosting.
@@ -113,6 +128,27 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     public ServiceResultItem()
     {
         this.InitializeComponent();
+        DemoInteractiveTranslationText.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler(OnDemoTranslationPointerPressed),
+            handledEventsToo: true);
+        DemoInteractiveTranslationText.AddHandler(
+            UIElement.PointerMovedEvent,
+            new PointerEventHandler(OnDemoTranslationPointerMoved),
+            handledEventsToo: true);
+        DemoInteractiveTranslationText.AddHandler(
+            UIElement.PointerReleasedEvent,
+            new PointerEventHandler(OnDemoTranslationPointerReleased),
+            handledEventsToo: true);
+        DemoInteractiveTranslationText.AddHandler(
+            UIElement.PointerEnteredEvent,
+            new PointerEventHandler(OnDemoTranslationPointerEntered),
+            handledEventsToo: true);
+        DemoInteractiveTranslationText.AddHandler(
+            UIElement.PointerExitedEvent,
+            new PointerEventHandler(OnDemoTranslationPointerExited),
+            handledEventsToo: true);
+        DemoInteractiveTranslationText.KeyDown += OnDemoTranslationKeyDown;
         Loaded += OnLoaded;
         ActualThemeChanged += OnActualThemeChanged;
         var loc = LocalizationService.Instance;
@@ -146,6 +182,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         ServiceNameText.FontSize = settings.ServiceNameFontSize;
         StatusText.FontSize = settings.StatusFontSize;
         ResultText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
+        DemoInteractiveTranslationText.FontSize = ResultText.FontSize;
         CorrectedText.FontSize = _isSavedItemView ? 14 * AppearanceService.FontScale : settings.ResultFontSize;
         ApplyPhoneticAppearance(settings.PhoneticFontSize);
         if (_dictWebView is not null && _dictWebViewRenderedFontScale != AppearanceService.FontScale) QueueUpdateUI();
@@ -193,6 +230,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             _serviceResult.PropertyChanged -= OnServiceResultPropertyChanged;
         }
+        AttachAiRefinementDemoState(null);
 
         CancelDictionaryWebViewRelease();
         ReleaseDictionaryWebView();
@@ -227,6 +265,21 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         RetryButton.Visibility = Visibility.Collapsed;
         ReplaceButton.Visibility = Visibility.Collapsed;
         ResultText.Text = string.Empty;
+        DemoInteractiveTranslationText.Blocks.Clear();
+        _demoWordHighlighter?.Ranges.Clear();
+        _demoWordSelectionRanges.Clear();
+        _demoSelectionAnchor = null;
+        _demoSelectionWordId = null;
+        _demoActiveWordId = null;
+        _demoKeyboardWordIndex = -1;
+        _demoSelectionPointerId = null;
+        _demoSelectionDragActive = false;
+        _demoSuppressHoverUntilPointerExit = false;
+        DemoInteractiveTranslationText.Visibility = Visibility.Collapsed;
+        DemoSourcePanel.Visibility = Visibility.Collapsed;
+        DemoRefinementPanel.Visibility = Visibility.Collapsed;
+        DemoCandidateOptionsPanel.Children.Clear();
+        DemoCandidatePanel.Visibility = Visibility.Collapsed;
         ErrorPanel.Visibility = Visibility.Collapsed;
         ErrorText.Text = string.Empty;
         StatusText.Text = string.Empty;
@@ -256,6 +309,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             {
                 _serviceResult.PropertyChanged -= OnServiceResultPropertyChanged;
             }
+            AttachAiRefinementDemoState(null);
 
             _serviceResult = value;
             InvalidateRenderedResultCaches();
@@ -263,6 +317,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             if (_serviceResult != null)
             {
                 _serviceResult.PropertyChanged += OnServiceResultPropertyChanged;
+                AttachAiRefinementDemoState(_serviceResult.AiRefinementDemo);
             }
 
             UpdateUI();
@@ -318,6 +373,13 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void OnServiceResultPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(ServiceQueryResult.AiRefinementDemo))
+        {
+            AttachAiRefinementDemoState(_serviceResult?.AiRefinementDemo);
+            QueueUpdateUI();
+            return;
+        }
+
         // Streaming hot path: while IsStreaming, only StreamingText/DisplayText change
         // per chunk. Skip the heavy full UpdateUI (icon load, theme, error/grammar
         // branches, ~30 property writes) and just refresh the text TextBlock — the
@@ -338,6 +400,45 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 });
             }
             return;
+        }
+
+        QueueUpdateUI();
+    }
+
+    private void AttachAiRefinementDemoState(AiRefinementDemoState? state)
+    {
+        if (ReferenceEquals(_observedAiRefinementDemo, state)) return;
+        if (_observedAiRefinementDemo is not null)
+        {
+            _observedAiRefinementDemo.PropertyChanged -= OnAiRefinementDemoStatePropertyChanged;
+        }
+
+        _observedAiRefinementDemo = state;
+        _renderedDemoState = null;
+        _renderedDemoText = null;
+        _renderedDemoCandidateKey = null;
+        if (state is not null)
+        {
+            state.PropertyChanged += OnAiRefinementDemoStatePropertyChanged;
+        }
+    }
+
+    private void OnAiRefinementDemoStatePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => OnAiRefinementDemoStatePropertyChanged(sender, e));
+            return;
+        }
+
+        var state = _observedAiRefinementDemo;
+        if (state is null || !ReferenceEquals(sender, state) || _serviceResult is null) return;
+        if (e.PropertyName == nameof(AiRefinementDemoState.TranslationText)
+            && _serviceResult.Result is { } result
+            && result.ResultKind == TranslationResultKind.Success
+            && !string.Equals(result.TranslatedText, state.TranslationText, StringComparison.Ordinal))
+        {
+            _serviceResult.Result = result with { TranslatedText = state.TranslationText };
         }
 
         QueueUpdateUI();
@@ -404,6 +505,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         _dictWebViewRenderedRawHtml = null;
         _dictWebViewRenderedServiceId = null;
         _dictWebViewRenderedHtmlReady = false;
+        _renderedDemoState = null;
+        _renderedDemoText = null;
+        _renderedDemoCandidateKey = null;
         _serviceChromeApplied = false;
     }
 
@@ -446,14 +550,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             ? ServiceResultStatusTextProvider.GetWaitingForResponseText()
             : _serviceResult.StreamingText;
 
-        if (_serviceResult.IsGrammarMode)
-        {
-            CorrectedText.Text = text;
-        }
-        else
-        {
-            ResultText.Text = text;
-        }
+        var target = _serviceResult.IsGrammarMode ? CorrectedText : ResultText;
+        target.Text = text;
     }
 
     private void UpdateUI()
@@ -535,6 +633,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             UpdateTranslationUI();
         }
 
+        UpdateAiRefinementDemoUi();
         ApplyMinimalChrome();
         if (!minimal && !_isHovering)
         {
@@ -847,6 +946,509 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             HideDictionaryWebView(scheduleRelease: true);
             ActionButtons.Visibility = Visibility.Collapsed;
         }
+    }
+
+    public void RefreshAiRefinementDemoLocalization() => QueueUpdateUI();
+
+    private void UpdateAiRefinementDemoUi()
+    {
+        var state = _serviceResult?.AiRefinementDemo;
+        if (state is null || _serviceResult is null)
+        {
+            ClearDemoWordHighlight();
+            DemoSourcePanel.Visibility = Visibility.Collapsed;
+            DemoRefinementPanel.Visibility = Visibility.Collapsed;
+            DemoInteractiveTranslationText.Visibility = Visibility.Collapsed;
+            DemoCandidatePanel.Visibility = Visibility.Collapsed;
+            _renderedDemoState = null;
+            _renderedDemoText = null;
+            _renderedDemoCandidateKey = null;
+            return;
+        }
+
+        var loc = LocalizationService.Instance;
+        var result = _serviceResult.Result;
+        var hasSourceContext = !_serviceResult.IsGrammarMode
+            && (_serviceResult.IsStreaming || result?.ResultKind == TranslationResultKind.Success);
+        if (hasSourceContext && !string.IsNullOrWhiteSpace(state.SourceText))
+        {
+            DemoSourceText.Text = state.SourceText;
+            DemoSourceLabel.Text = loc.GetStringOrDefault("AiRefinementDemoSourceLabel", "Source");
+            DemoSourcePanel.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            DemoSourcePanel.Visibility = Visibility.Collapsed;
+        }
+
+        var hasFinalPlainTranslation = !_serviceResult.IsGrammarMode
+            && !_serviceResult.IsStreaming
+            && result is { ResultKind: TranslationResultKind.Success, RawHtml: null };
+        var showContext = hasFinalPlainTranslation && state.CanShowContext;
+        var showWordRefinement = hasFinalPlainTranslation && state.CanShowWordRefinement;
+        DemoRefinementPanel.Visibility = showContext || showWordRefinement
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        var contextDisclosure = loc.GetStringOrDefault("AiRefinementDemoContextDisclosure", "Add context");
+        var contextChevron = state.IsContextEditorExpanded ? "⌃" : "⌄";
+        DemoContextDisclosureButton.Content = $"✧ {contextDisclosure} {contextChevron}";
+        DemoContextDisclosureButton.Visibility = showContext ? Visibility.Visible : Visibility.Collapsed;
+        DemoContextSummaryText.Visibility = showContext && state.HasAppliedContext
+            ? Visibility.Visible : Visibility.Collapsed;
+        DemoContextSummaryText.Text = state.HasAppliedContext
+            ? string.Format(
+                loc.GetStringOrDefault("AiRefinementDemoContextSummary", "Applied: {0}"),
+                state.ContextSummary)
+            : string.Empty;
+        var contextConflict = state.ContextConflict;
+        DemoContextConflictPanel.Visibility = showContext && contextConflict is not null
+            ? Visibility.Visible : Visibility.Collapsed;
+        DemoContextConflictText.Text = contextConflict is null
+            ? string.Empty
+            : string.Format(
+                loc.GetStringOrDefault(
+                    "AiRefinementDemoConflictMessage",
+                    "The manual wording ‘{0}’ may not fit a formal tone. Keep it or use ‘{1}’ instead."),
+                contextConflict.ConfirmedWording,
+                contextConflict.SuggestedWording);
+        DemoContextConflictKeepButton.Content = loc.GetStringOrDefault(
+            "AiRefinementDemoConflictKeep",
+            "Keep my wording");
+        DemoContextConflictSuggestionButton.Content = loc.GetStringOrDefault(
+            "AiRefinementDemoConflictUseSuggestion",
+            "Use suggestion");
+        DemoContextEditorPanel.Visibility = showContext && state.IsContextEditorExpanded
+            ? Visibility.Visible : Visibility.Collapsed;
+        DemoContextEditor.PlaceholderText = loc.GetStringOrDefault(
+            "AiRefinementDemoContextPlaceholder",
+            "Add a short instruction for this translation.");
+        DemoContextApplyButton.Content = loc.GetStringOrDefault("AiRefinementDemoApplyContext", "Apply");
+        DemoContextCancelButton.Content = loc.GetStringOrDefault("AiRefinementDemoCancel", "Cancel");
+
+        DemoCandidateStatusText.Visibility = showWordRefinement ? Visibility.Visible : Visibility.Collapsed;
+        DemoCandidateStatusText.Text = state.IsCandidatePrefetching
+            ? loc.GetStringOrDefault("AiRefinementDemoCandidatesPreparing", "Preparing word alternatives…")
+            : loc.GetStringOrDefault("AiRefinementDemoCandidatesReady", "Select a word to compare alternatives.");
+        if (!showWordRefinement)
+        {
+            ClearDemoWordHighlight();
+            _demoActiveWordId = null;
+            _demoKeyboardWordIndex = -1;
+            DemoInteractiveTranslationText.Visibility = Visibility.Collapsed;
+            DemoCandidatePanel.Visibility = Visibility.Collapsed;
+            _renderedDemoCandidateKey = null;
+            return;
+        }
+
+        RenderAiRefinementDemoTranslation(state);
+        ResultText.Visibility = Visibility.Collapsed;
+        DemoInteractiveTranslationText.Visibility = Visibility.Visible;
+
+        DemoCandidatePanel.Visibility = state.HasSelectedWord ? Visibility.Visible : Visibility.Collapsed;
+        if (!state.HasSelectedWord)
+        {
+            _renderedDemoCandidateKey = null;
+            return;
+        }
+
+        DemoCandidateHeaderText.Text = string.Format(
+            loc.GetStringOrDefault("AiRefinementDemoCandidatesHeader", "Alternatives for {0}"),
+            state.SelectedWordText);
+        DemoCandidateLoadingText.Text = loc.GetStringOrDefault(
+            "AiRefinementDemoCandidatesLoading",
+            "Loading local alternatives…");
+        DemoCandidateLoadingText.Visibility = state.IsSelectedWordLoading
+            ? Visibility.Visible : Visibility.Collapsed;
+        DemoKeepOriginalButton.Content = loc.GetStringOrDefault(
+            "AiRefinementDemoKeepOriginal",
+            "Keep original wording");
+
+        var candidateKey = string.Concat(
+            state.SelectedWordId,
+            "\u001F",
+            state.IsSelectedWordLoading ? "loading" : string.Join("\u001E", state.SelectedCandidates));
+        if (!string.Equals(candidateKey, _renderedDemoCandidateKey, StringComparison.Ordinal))
+        {
+            DemoCandidateOptionsPanel.Children.Clear();
+            if (!state.IsSelectedWordLoading && state.SelectedWordId is { } wordId)
+            {
+                foreach (var candidate in state.SelectedCandidates)
+                {
+                    var button = new Button
+                    {
+                        Content = candidate,
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        MinWidth = 120
+                    };
+                    AutomationProperties.SetName(button, candidate);
+                    button.Click += (_, _) =>
+                    {
+                        state.ApplyCandidate(wordId, candidate);
+                    };
+                    DemoCandidateOptionsPanel.Children.Add(button);
+                }
+            }
+
+            _renderedDemoCandidateKey = candidateKey;
+        }
+    }
+
+    private void RenderAiRefinementDemoTranslation(AiRefinementDemoState state)
+    {
+        var text = state.TranslationText;
+        if (ReferenceEquals(_renderedDemoState, state)
+            && string.Equals(_renderedDemoText, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var paragraph = new Paragraph { Margin = new Thickness(0) };
+        var interactiveRuns = new List<(string WordId, Run Run, int TextStartIndex, int TextLength)>();
+        var textIndex = 0;
+        foreach (var word in state.Words)
+        {
+            var run = new Run { Text = word.Text };
+            if (word.IsInteractive)
+            {
+                run.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
+                interactiveRuns.Add((word.Id, run, textIndex, word.Text.Length));
+            }
+
+            paragraph.Inlines.Add(run);
+            textIndex += word.Text.Length;
+        }
+
+        DemoInteractiveTranslationText.Blocks.Clear();
+        DemoInteractiveTranslationText.Blocks.Add(paragraph);
+        _demoWordSelectionRanges = interactiveRuns
+            .Select(item => (
+                item.WordId,
+                item.Run.ContentStart.Offset,
+                item.Run.ContentEnd.Offset,
+                item.TextStartIndex,
+                item.TextLength,
+                item.Run.ContentStart,
+                item.Run.ContentEnd))
+            .ToList();
+        _demoActiveWordId = state.SelectedWordId;
+        _demoKeyboardWordIndex = _demoWordSelectionRanges.FindIndex(range => range.WordId == _demoActiveWordId);
+        if (_demoKeyboardWordIndex >= 0)
+        {
+            var selectedRange = _demoWordSelectionRanges[_demoKeyboardWordIndex];
+            DemoInteractiveTranslationText.Select(selectedRange.Start, selectedRange.End);
+            SetDemoWordHighlight(selectedRange);
+        }
+        else
+        {
+            ClearDemoWordHighlight();
+        }
+
+        _renderedDemoState = state;
+        _renderedDemoText = text;
+    }
+
+    private void SetDemoWordHighlight(
+        (string WordId, int StartOffset, int EndOffset, int TextStartIndex, int TextLength, TextPointer Start, TextPointer End) wordRange)
+    {
+        EnsureDemoWordHighlighter();
+        _demoWordHighlighter!.Ranges.Clear();
+        _demoWordHighlighter.Ranges.Add(new TextRange
+        {
+            StartIndex = wordRange.TextStartIndex,
+            Length = wordRange.TextLength
+        });
+    }
+
+    private void ClearDemoWordHighlight() => _demoWordHighlighter?.Ranges.Clear();
+
+    private void EnsureDemoWordHighlighter()
+    {
+        if (_demoWordHighlighter is not null) return;
+
+        _demoWordHighlighter = new TextHighlighter
+        {
+            Background = ThemeResourceService.GetBrush("AccentFillColorDefaultBrush", this),
+            Foreground = ThemeResourceService.GetBrush("TextOnAccentFillColorPrimaryBrush", this)
+        };
+        DemoInteractiveTranslationText.TextHighlighters.Add(_demoWordHighlighter);
+    }
+
+    private void OnDemoTranslationPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(DemoInteractiveTranslationText).Properties.IsLeftButtonPressed) return;
+
+        var point = e.GetCurrentPoint(DemoInteractiveTranslationText).Position;
+        var anchor = DemoInteractiveTranslationText.GetPositionFromPoint(point);
+        if (anchor is null) return;
+
+        _demoSuppressHoverUntilPointerExit = false;
+        _demoSelectionAnchor = anchor;
+        _demoSelectionWordId = FindDemoWordRange(anchor.Offset)?.WordId;
+        _demoSelectionPointerId = e.Pointer.PointerId;
+        _demoSelectionStartPoint = point;
+        _demoSelectionDragActive = false;
+        DemoInteractiveTranslationText.Focus(FocusState.Pointer);
+        DemoInteractiveTranslationText.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnDemoTranslationPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        var currentPoint = e.GetCurrentPoint(DemoInteractiveTranslationText);
+        var point = currentPoint.Position;
+        if (_demoSelectionAnchor is null)
+        {
+            if (!_demoSuppressHoverUntilPointerExit && !currentPoint.Properties.IsLeftButtonPressed)
+            {
+                SelectDemoWordAtPoint(point);
+            }
+            return;
+        }
+
+        if (_demoSelectionPointerId != e.Pointer.PointerId) return;
+
+        var deltaX = point.X - _demoSelectionStartPoint.X;
+        var deltaY = point.Y - _demoSelectionStartPoint.Y;
+        if (!_demoSelectionDragActive && deltaX * deltaX + deltaY * deltaY < 16) return;
+
+        if (!_demoSelectionDragActive)
+        {
+            _demoActiveWordId = null;
+            _demoKeyboardWordIndex = -1;
+            ClearDemoWordHighlight();
+        }
+        _demoSelectionDragActive = true;
+        if (DemoInteractiveTranslationText.GetPositionFromPoint(point) is null) return;
+        UpdateDemoTranslationSelection(point);
+        e.Handled = true;
+    }
+
+    private void OnDemoTranslationPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_demoSelectionPointerId != e.Pointer.PointerId) return;
+
+        (TextPointer Start, TextPointer End)? selection = null;
+        if (_demoSelectionDragActive)
+        {
+            selection = GetDemoTranslationSelectionRange(
+                e.GetCurrentPoint(DemoInteractiveTranslationText).Position);
+            if (selection is { } selectedRange)
+            {
+                DemoInteractiveTranslationText.Select(selectedRange.Start, selectedRange.End);
+            }
+            _demoSuppressHoverUntilPointerExit = true;
+            _demoActiveWordId = null;
+            _demoKeyboardWordIndex = -1;
+            ClearDemoWordHighlight();
+        }
+        else if (_demoSelectionWordId is { } wordId
+            && FindDemoWordRange(wordId) is { } wordRange)
+        {
+            SelectDemoWord(wordRange);
+        }
+
+        e.Handled = true;
+        if (selection is { } range)
+        {
+            var selectedState = _renderedDemoState;
+            var selectedText = _renderedDemoText;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (ReferenceEquals(_renderedDemoState, selectedState)
+                    && string.Equals(_renderedDemoText, selectedText, StringComparison.Ordinal))
+                {
+                    DemoInteractiveTranslationText.Select(range.Start, range.End);
+                }
+            });
+        }
+
+        _demoSelectionAnchor = null;
+        _demoSelectionWordId = null;
+        _demoSelectionPointerId = null;
+        _demoSelectionDragActive = false;
+    }
+
+    private void OnDemoTranslationPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (_demoSelectionAnchor is null)
+        {
+            _demoSuppressHoverUntilPointerExit = false;
+            var currentPoint = e.GetCurrentPoint(DemoInteractiveTranslationText);
+            if (!currentPoint.Properties.IsLeftButtonPressed)
+            {
+                SelectDemoWordAtPoint(currentPoint.Position);
+            }
+        }
+    }
+
+    private void OnDemoTranslationPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (_demoSelectionAnchor is null)
+        {
+            _demoSuppressHoverUntilPointerExit = false;
+        }
+    }
+
+    private void SelectDemoWordAtPoint(Windows.Foundation.Point point)
+    {
+        var position = DemoInteractiveTranslationText.GetPositionFromPoint(point);
+        if (position is null) return;
+        if (FindDemoWordRange(position.Offset) is { } wordRange)
+        {
+            SelectDemoWord(wordRange);
+            return;
+        }
+
+        _demoActiveWordId = null;
+        _demoKeyboardWordIndex = -1;
+        ClearDemoWordHighlight();
+    }
+
+    private (string WordId, int StartOffset, int EndOffset, int TextStartIndex, int TextLength, TextPointer Start, TextPointer End)? FindDemoWordRange(int offset)
+    {
+        foreach (var range in _demoWordSelectionRanges)
+        {
+            if (offset >= range.StartOffset && offset < range.EndOffset)
+            {
+                return range;
+            }
+        }
+
+        return null;
+    }
+
+    private (string WordId, int StartOffset, int EndOffset, int TextStartIndex, int TextLength, TextPointer Start, TextPointer End)? FindDemoWordRange(string wordId)
+    {
+        foreach (var range in _demoWordSelectionRanges)
+        {
+            if (string.Equals(range.WordId, wordId, StringComparison.Ordinal))
+            {
+                return range;
+            }
+        }
+
+        return null;
+    }
+
+    private void SelectDemoWord(
+        (string WordId, int StartOffset, int EndOffset, int TextStartIndex, int TextLength, TextPointer Start, TextPointer End) wordRange,
+        bool showCandidates = true)
+    {
+        var state = _serviceResult?.AiRefinementDemo;
+        if (state is null || !state.CanShowWordRefinement) return;
+
+        var activeWordChanged = !string.Equals(_demoActiveWordId, wordRange.WordId, StringComparison.Ordinal);
+        var selectedStateChanged = !string.Equals(state.SelectedWordId, wordRange.WordId, StringComparison.Ordinal);
+        if (!activeWordChanged && (!showCandidates || !selectedStateChanged)) return;
+
+        _demoActiveWordId = wordRange.WordId;
+        _demoKeyboardWordIndex = _demoWordSelectionRanges.FindIndex(range => range.WordId == wordRange.WordId);
+        DemoInteractiveTranslationText.Select(wordRange.Start, wordRange.End);
+        SetDemoWordHighlight(wordRange);
+        if (showCandidates)
+        {
+            if (selectedStateChanged)
+            {
+                _ = state.SelectWordAsync(wordRange.WordId);
+            }
+        }
+        else if (state.SelectedWordId is not null)
+        {
+            state.DismissSelectedWord();
+        }
+    }
+
+    private void OnDemoTranslationKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (_demoWordSelectionRanges.Count == 0
+            || _serviceResult?.AiRefinementDemo is not { CanShowWordRefinement: true })
+        {
+            return;
+        }
+
+        if (e.Key is Windows.System.VirtualKey.Left or Windows.System.VirtualKey.Right)
+        {
+            var direction = e.Key == Windows.System.VirtualKey.Right ? 1 : -1;
+            var currentIndex = _demoKeyboardWordIndex;
+            var nextIndex = currentIndex < 0
+                ? (direction > 0 ? 0 : _demoWordSelectionRanges.Count - 1)
+                : Math.Clamp(currentIndex + direction, 0, _demoWordSelectionRanges.Count - 1);
+            SelectDemoWord(_demoWordSelectionRanges[nextIndex], showCandidates: false);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key is Windows.System.VirtualKey.Enter or Windows.System.VirtualKey.Space)
+        {
+            var selectedIndex = _demoKeyboardWordIndex < 0 ? 0 : _demoKeyboardWordIndex;
+            SelectDemoWord(_demoWordSelectionRanges[selectedIndex], showCandidates: true);
+            e.Handled = true;
+        }
+    }
+
+    private (TextPointer Start, TextPointer End)? GetDemoTranslationSelectionRange(
+        Windows.Foundation.Point point)
+    {
+        var anchor = _demoSelectionAnchor;
+        var end = DemoInteractiveTranslationText.GetPositionFromPoint(point);
+        if (anchor is null || end is null) return null;
+
+        return anchor.Offset <= end.Offset ? (anchor, end) : (end, anchor);
+    }
+
+    private void UpdateDemoTranslationSelection(Windows.Foundation.Point point)
+    {
+        if (GetDemoTranslationSelectionRange(point) is { } range)
+        {
+            DemoInteractiveTranslationText.Select(range.Start, range.End);
+        }
+    }
+
+    private void OnDemoContextDisclosureClicked(object sender, RoutedEventArgs e)
+    {
+        var state = _serviceResult?.AiRefinementDemo;
+        if (state is null || !state.CanShowContext) return;
+
+        if (state.IsContextEditorExpanded)
+        {
+            state.CloseContextEditor();
+        }
+        else
+        {
+            state.OpenContextEditor();
+            DemoContextEditor.Text = state.DraftContext;
+            DispatcherQueue.TryEnqueue(() => DemoContextEditor.Focus(FocusState.Programmatic));
+        }
+    }
+
+    private void OnDemoContextCancelClicked(object sender, RoutedEventArgs e) =>
+        _serviceResult?.AiRefinementDemo?.CloseContextEditor();
+
+    private void OnDemoContextApplyClicked(object sender, RoutedEventArgs e)
+    {
+        var state = _serviceResult?.AiRefinementDemo;
+        if (state is null || !state.CanShowContext) return;
+
+        state.ApplyContext(DemoContextEditor.Text);
+        if (state.CanShowWordRefinement && _serviceResult?.HasSuccessfulResult == true)
+        {
+            _ = state.PrefetchCandidatesAsync();
+        }
+    }
+
+    private void OnDemoContextConflictKeepClicked(object sender, RoutedEventArgs e) =>
+        _serviceResult?.AiRefinementDemo?.ResolveContextConflict(useSuggestedWording: false);
+
+    private void OnDemoContextConflictSuggestionClicked(object sender, RoutedEventArgs e) =>
+        _serviceResult?.AiRefinementDemo?.ResolveContextConflict(useSuggestedWording: true);
+
+    private void OnDemoKeepOriginalClicked(object sender, RoutedEventArgs e)
+    {
+        var state = _serviceResult?.AiRefinementDemo;
+        if (state is null) return;
+        state.KeepOriginalWord();
+        state.DismissSelectedWord();
     }
 
     private void ShowRawHtmlPlainTextFallback(

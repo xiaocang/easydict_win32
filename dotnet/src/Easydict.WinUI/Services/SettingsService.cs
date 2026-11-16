@@ -139,6 +139,10 @@ public sealed class SettingsService
     public const string AnkiPreferredFavorite = "Favorite";
     public const string AnkiPreferredAnki = "Anki";
 
+    // AI refinement Labs flags; both are opt-in and default off for existing and new installs.
+    public bool AiContextLabEnabled { get; set; }
+    public bool AiWordRefinementLabEnabled { get; set; }
+
     // AnkiConnect settings (field templates are stored per note type).
     public bool AnkiEnabled { get; set; }
     public bool AnkiQuickAdd { get; set; }
@@ -905,6 +909,8 @@ public sealed class SettingsService
             _settings = new();
         }
 
+        AiContextLabEnabled = GetValue(nameof(AiContextLabEnabled), false);
+        AiWordRefinementLabEnabled = GetValue(nameof(AiWordRefinementLabEnabled), false);
         AnkiEnabled = GetValue(nameof(AnkiEnabled), false);
         AnkiQuickAdd = GetValue(nameof(AnkiQuickAdd), false);
         AnkiRememberLast = GetValue(nameof(AnkiRememberLast), false);
@@ -1891,6 +1897,8 @@ public sealed class SettingsService
         RemoveRuntimeOnlyWorkerIsolationSettings();
         SyncLegacyAiProfilesFromSettings();
 
+        _settings[nameof(AiContextLabEnabled)] = AiContextLabEnabled;
+        _settings[nameof(AiWordRefinementLabEnabled)] = AiWordRefinementLabEnabled;
         _settings[nameof(AnkiEnabled)] = AnkiEnabled;
         _settings[nameof(AnkiQuickAdd)] = AnkiQuickAdd;
         _settings[nameof(AnkiRememberLast)] = AnkiRememberLast;

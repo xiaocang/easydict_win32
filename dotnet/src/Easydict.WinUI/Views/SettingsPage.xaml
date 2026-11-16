@@ -2936,6 +2936,80 @@
                                    FontSize="12" TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="10">
+                                <controls:FluentSettingRow>
+                                    <TextBlock Text="{Binding Header, ElementName=AiContextLabToggle}"
+                                               TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center"/>
+                                    <ToggleSwitch x:Name="AiContextLabToggle"
+                                                  AutomationProperties.AutomationId="AiContextLabToggle"
+                                                  Header="Add translation context">
+                                        <ToggleSwitch.HeaderTemplate><DataTemplate><Grid Height="0"/></DataTemplate></ToggleSwitch.HeaderTemplate>
+                                    </ToggleSwitch>
+                                </controls:FluentSettingRow>
+                                <TextBlock x:Name="AiContextLabDescriptionText"
+                                           Margin="44,-8,0,0" FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <controls:FluentSettingRow>
+                                    <TextBlock Text="{Binding Header, ElementName=AiWordRefinementLabToggle}"
+                                               TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center"/>
+                                    <ToggleSwitch x:Name="AiWordRefinementLabToggle"
+                                                  AutomationProperties.AutomationId="AiWordRefinementLabToggle"
+                                                  Header="Word-level alternatives">
+                                        <ToggleSwitch.HeaderTemplate><DataTemplate><Grid Height="0"/></DataTemplate></ToggleSwitch.HeaderTemplate>
+                                    </ToggleSwitch>
+                                </controls:FluentSettingRow>
+                                <TextBlock x:Name="AiWordRefinementLabDescriptionText"
+                                           Margin="44,-8,0,0" FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Spacing="10">
+                                <TextBlock x:Name="AiRefinementDemoHeaderText"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock x:Name="AiRefinementDemoDescriptionText"
+                                           FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <Button x:Name="AiRefinementDemoOpenButton"
+                                        AutomationProperties.AutomationId="AiRefinementDemoOpenButton"
+                                        HorizontalAlignment="Left"
+                                        Click="OnOpenAiRefinementDemoClicked"/>
+                                <StackPanel x:Name="AiRefinementDemoPanel" Spacing="10" Visibility="Collapsed">
+                                    <Grid RowSpacing="8">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid Grid.Row="0" ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="AiRefinementDemoServiceLabelText"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                            <ComboBox x:Name="AiRefinementDemoServiceCombo"
+                                                      Grid.Column="1"
+                                                      MinWidth="160"
+                                                      SelectionChanged="OnAiRefinementDemoServiceChanged">
+                                                <ComboBoxItem x:Name="AiRefinementDemoAiServiceItem" Tag="ai-refinement-capable" Content="AI demo (offline)"/>
+                                                <ComboBoxItem x:Name="AiRefinementDemoStandardServiceItem" Tag="standard-service" Content="Google Translate (offline)"/>
+                                            </ComboBox>
+                                        </Grid>
+                                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                                            <Button x:Name="AiRefinementDemoRunButton"
+                                                    Click="OnRunAiRefinementDemoClicked"/>
+                                            <Button x:Name="AiRefinementDemoCloseButton"
+                                                    Click="OnCloseAiRefinementDemoClicked"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <controls:ServiceResultItem x:Name="AiRefinementDemoResultCard"
+                                                                AutomationProperties.AutomationId="AiRefinementDemoResultCard"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="12">
                                 <controls:FluentSettingRow>
                                     <TextBlock Text="{Binding Header, ElementName=AnkiEnabledToggle}" TextWrapping="Wrap" FontSize="14" VerticalAlignment="Center"/>

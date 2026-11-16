@@ -18,7 +18,7 @@ namespace Easydict.TranslationService.Services;
 /// URL inspection — the caller is responsible for ensuring the endpoint
 /// accepts the pinned format.
 /// </summary>
-public abstract class BaseOpenAIService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
+public abstract partial class BaseOpenAIService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService, IContextTranslationService, IWordRefinementService
 {
     public override bool SupportsAutomaticLanguageDirection => true;
     /// <summary>

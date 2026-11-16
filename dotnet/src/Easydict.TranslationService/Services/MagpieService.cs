@@ -76,6 +76,7 @@ public sealed class MagpieService : BaseOpenAIService, IModelCatalogProvider
 
     private void ValidateMagpieConfiguration()
     {
+        ValidateGatewayAccess();
         if (!IsHttpEndpoint(_endpoint))
         {
             throw new TranslationException("Magpie gateway endpoint must use HTTP or HTTPS.")

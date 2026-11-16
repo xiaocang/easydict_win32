@@ -1935,4 +1935,88 @@
   <data name="OnboardingDemoCaptureTip" xml:space="preserve">
     <value>Offline preview: automatic example selection. Space pauses/resumes, Right advances, Esc stops.</value>
   </data>
+  <data name="AiContextLabHeader" xml:space="preserve">
+    <value>Add translation context</value>
+  </data>
+  <data name="AiContextLabDescription" xml:space="preserve">
+    <value>Add instructions to revise a translation using the same AI service.</value>
+  </data>
+  <data name="AiWordRefinementLabHeader" xml:space="preserve">
+    <value>Word-level alternatives</value>
+  </data>
+  <data name="AiWordRefinementLabDescription" xml:space="preserve">
+    <value>Ask the AI service for word alternatives after translation completes. This makes an additional model request.</value>
+  </data>
+  <data name="AiRefinementDemoHeader" xml:space="preserve">
+    <value>Interactive AI refinement preview</value>
+  </data>
+  <data name="AiRefinementDemoDescription" xml:space="preserve">
+    <value>This preview uses fixed local data. It does not call a model or translation service.</value>
+  </data>
+  <data name="AiRefinementDemoOpen" xml:space="preserve">
+    <value>Open interactive preview</value>
+  </data>
+  <data name="AiRefinementDemoServiceLabel" xml:space="preserve">
+    <value>Preview service</value>
+  </data>
+  <data name="AiRefinementDemoAiService" xml:space="preserve">
+    <value>AI demo (offline)</value>
+  </data>
+  <data name="AiRefinementDemoStandardService" xml:space="preserve">
+    <value>Google Translate (offline)</value>
+  </data>
+  <data name="AiRefinementDemoRun" xml:space="preserve">
+    <value>Run demo translation</value>
+  </data>
+  <data name="AiRefinementDemoClose" xml:space="preserve">
+    <value>Close preview</value>
+  </data>
+  <data name="AiRefinementDemoSourceLabel" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="AiRefinementDemoContextDisclosure" xml:space="preserve">
+    <value>Add context</value>
+  </data>
+  <data name="AiRefinementDemoContextSummary" xml:space="preserve">
+    <value>Applied: {0}</value>
+  </data>
+  <data name="AiRefinementDemoContextPlaceholder" xml:space="preserve">
+    <value>Add a short instruction for this translation.</value>
+  </data>
+  <data name="AiRefinementDemoApplyContext" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="AiRefinementDemoCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesPreparing" xml:space="preserve">
+    <value>Preparing word alternatives…</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesReady" xml:space="preserve">
+    <value>Select a word to compare alternatives.</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesHeader" xml:space="preserve">
+    <value>Alternatives for “{0}”</value>
+  </data>
+  <data name="AiRefinementDemoCandidatesLoading" xml:space="preserve">
+    <value>Loading local alternatives…</value>
+  </data>
+  <data name="AiRefinementDemoKeepOriginal" xml:space="preserve">
+    <value>Keep original wording</value>
+  </data>
+  <data name="AiRefinementDemoConflictMessage" xml:space="preserve">
+    <value>The manual wording “{0}” may not fit a formal tone. Keep it or use “{1}” instead.</value>
+  </data>
+  <data name="AiRefinementDemoConflictKeep" xml:space="preserve">
+    <value>Keep my wording</value>
+  </data>
+  <data name="AiRefinementDemoConflictUseSuggestion" xml:space="preserve">
+    <value>Use suggestion</value>
+  </data>
+  <data name="AiContextLabButtonTooltip" xml:space="preserve">
+    <value>Kontext oder Anweisungen hinzufügen, um diese Übersetzung anzupassen.</value>
+  </data>
+  <data name="AiContextLabButtonAppliedTooltip" xml:space="preserve">
+    <value>Übersetzungskontext bearbeiten. Aktueller Kontext: {0}</value>
+  </data>
 </root>

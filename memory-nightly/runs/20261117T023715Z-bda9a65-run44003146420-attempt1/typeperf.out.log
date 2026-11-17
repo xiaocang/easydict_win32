@@ -1,0 +1,2 @@
+COMMAND: typeperf.exe "\Process(easydict.winui)\Private Bytes" "\Process(easydict.winui)\Working Set - Private" "\Process(easydict.winui)\Handle Count" "\Process(easydict.winui)\Thread Count" -si 1 -f CSV -y -o "D:\a\easydict_win32\easydict_win32\artifacts\memory-gate\nightly\typeperf.csv"
+

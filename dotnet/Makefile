@@ -133,7 +133,7 @@ publish: restore
 # the publish-msix-* targets below. Workers are auto-published by the host
 # PublishWorkerOutputs target; no explicit worker publish is needed for portable.
 #
-# x86 omits the workers because MuPDF.NET 3.2.12 doesn't ship a stable x86 runtime
+# x86 omits the workers because ONNX Runtime doesn't ship a stable x86 runtime
 # and the worker csproj RuntimeIdentifiers exclude win-x86. Worker settings default
 # on, but missing-worker startup is guarded and falls back to the in-proc path.
 publish-x64: restore

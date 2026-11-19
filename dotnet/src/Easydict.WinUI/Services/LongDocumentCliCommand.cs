@@ -809,9 +809,9 @@ internal static class LongDocumentCliCommand
     {
         return NormalizeToken(rawValue) switch
         {
-            "" or "mupdf" or "contentstreamreplacement" or "contentstream" => PdfExportMode.ContentStreamReplacement,
+            "" or "mupdf" or "contentstreamreplacement" or "contentstream" or "reconstruct" => PdfExportMode.Overlay,
             "overlay" => PdfExportMode.Overlay,
-            _ => throw new ArgumentException($"Unsupported PDF export mode '{rawValue}'. Use ContentStreamReplacement or Overlay.")
+            _ => throw new ArgumentException($"Unsupported PDF export mode '{rawValue}'. Use Overlay.")
         };
     }
 
@@ -870,7 +870,7 @@ internal static class LongDocumentCliCommand
         Console.WriteLine("  -s, --service            Translation service id. Default: first configured streaming service.");
         Console.WriteLine("      --output-mode        Monolingual, Bilingual, or Both.");
         Console.WriteLine("      --layout             Auto, Heuristic, OnnxLocal, or VisionLLM.");
-        Console.WriteLine("      --pdf-export-mode    ContentStreamReplacement or Overlay.");
+        Console.WriteLine("      --pdf-export-mode    Overlay (legacy mode values are accepted and mapped to Overlay).");
         Console.WriteLine("      --page              Single PDF page, e.g. 2.");
         Console.WriteLine("      --page-range        Page range for PDF input, e.g. 1-3,5.");
         Console.WriteLine("      --max-concurrency    1-16.");

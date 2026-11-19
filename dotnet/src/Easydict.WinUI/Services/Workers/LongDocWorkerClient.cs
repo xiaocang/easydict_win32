@@ -19,7 +19,7 @@ namespace Easydict.WinUI.Services.Workers;
 /// translate_document, streams status/progress/block_translated events back
 /// to the caller's IProgress/onProgress callbacks, and disposes the worker
 /// after completion. The worker exits via its own Environment.Exit(0) call,
-/// reclaiming MuPDF/ONNX native heap.
+/// reclaiming ONNX native heap.
 /// </summary>
 internal sealed class LongDocWorkerClient : IDisposable
 {
@@ -51,7 +51,7 @@ internal sealed class LongDocWorkerClient : IDisposable
         CancellationToken cancellationToken = default,
         LayoutDetectionMode layoutDetection = LayoutDetectionMode.Heuristic,
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement,
+        PdfExportMode pdfExportMode = PdfExportMode.Overlay,
         string? visionEndpoint = null,
         string? visionApiKey = null,
         string? visionModel = null,

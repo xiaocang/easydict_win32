@@ -209,13 +209,21 @@ public static class LongDocumentSourceExtraction
             .OrderByDescending(l => l.Top)
             .ToList();
 
+        var pageWidthPoints = (double)page.Width;
+        var preliminaryLayoutProfile = BuildLayoutProfile(lines, pageWidthPoints, (double)page.Height);
+
         // Split lines at large intra-line gaps to preserve column structure
-        // (e.g., author grids where names sit at the same Y separated by large gaps)
+        // (e.g., author grids where names sit at the same Y separated by large gaps).
         lines = SplitLinesAtColumnGaps(lines, medianWordHeight, pageWidth);
 
         var orderedLines = OrderLinesByLayout(lines, Convert.ToDecimal(page.Width));
-        var paragraphs = BuildParagraphsWithGridCellMerging(orderedLines, paragraphGapThreshold, sameLineThreshold);
-        var layoutProfile = BuildLayoutProfile(orderedLines, (double)page.Width, (double)page.Height);
+        // Grid-cell merging is useful for actual tables, but on a two-column page it
+        // mistakes aligned left/right body lines for cells of the same table. Keep
+        // paragraph grouping within each line and let region classification handle layout.
+        var paragraphs = preliminaryLayoutProfile.IsTwoColumn
+            ? BuildParagraphs(orderedLines, paragraphGapThreshold, sameLineThreshold)
+            : BuildParagraphsWithGridCellMerging(orderedLines, paragraphGapThreshold, sameLineThreshold);
+        var layoutProfile = BuildLayoutProfile(orderedLines, pageWidthPoints, (double)page.Height);
 
         var blockIndex = 0;
         for (var i = 0; i < paragraphs.Count; i++)
@@ -958,7 +966,7 @@ public static class LongDocumentSourceExtraction
         }
 
         var looksLikeTable = blockText.Contains('\t') || blockText.Contains("  ") ||
-                             blockText.Contains('|') || Regex.IsMatch(blockText, @"\b\d+(\.\d+)?\b\s+\b\d+(\.\d+)?\b");
+                             blockText.Contains('|') || ContainsDenseNumericTableRow(blockText);
         if (looksLikeTable || (blockWidth > profile.PageWidth * 0.8 && blockHeight < profile.PageHeight * 0.1))
         {
             return LayoutRegionType.TableLike;
@@ -1000,6 +1008,34 @@ public static class LongDocumentSourceExtraction
         double RightColumnBoundary,
         double HeaderTopThreshold,
         double FooterBottomThreshold);
+
+    private static bool ContainsDenseNumericTableRow(string blockText)
+    {
+        var numericPattern = new Regex(@"(?<![\p{L}\p{N}])[+-]?\d+(?:[.,]\d+)?%?(?![\p{L}\p{N}])", RegexOptions.Compiled);
+        foreach (var line in blockText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var withoutCitations = Regex.Replace(line, @"\[\s*\d+(?:[\s,;–—-]+\d+)*\s*\]", " ");
+            if (Regex.IsMatch(withoutCitations, @"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b", RegexOptions.IgnoreCase))
+            {
+                continue;
+            }
+
+            var tokenCount = Regex.Matches(withoutCitations, @"\S+").Count;
+            var wordCount = Regex.Matches(withoutCitations, @"[\p{L}]{2,}").Count;
+            if (tokenCount is < 2 or > 14 || wordCount > 6)
+            {
+                continue;
+            }
+
+            var numericCount = numericPattern.Matches(withoutCitations).Count;
+            if (numericCount >= 2 && numericCount / (double)tokenCount >= 0.25)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static LayoutProfile BuildLayoutProfile(IReadOnlyList<PdfTextLine> lines, double pageWidth, double pageHeight)
     {

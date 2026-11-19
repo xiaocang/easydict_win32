@@ -5,7 +5,7 @@ namespace Easydict.TranslationService.FormulaProtection;
 
 /// <summary>
 /// Converts LaTeX math markup to a Unicode approximation suitable for PDF rendering.
-/// Replaces SimplifyLatexMarkup + SimplifyMathContent in MuPdfExportService.
+/// Normalizes LaTeX and math content before translation and export.
 /// </summary>
 public static class LatexFormulaSimplifier
 {

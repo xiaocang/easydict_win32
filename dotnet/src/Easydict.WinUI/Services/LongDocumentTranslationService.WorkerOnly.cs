@@ -44,7 +44,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         CancellationToken cancellationToken = default,
         LayoutDetectionMode layoutDetection = LayoutDetectionMode.Heuristic,
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement,
+        PdfExportMode pdfExportMode = PdfExportMode.Overlay,
         string? visionEndpoint = null,
         string? visionApiKey = null,
         string? visionModel = null,

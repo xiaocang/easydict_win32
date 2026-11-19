@@ -29,6 +29,12 @@ the result into a GIF. That keeps the recorded operations identical to what the 
 
 Keep this list small and specific to the PR: it is a demo, not a recording of the whole suite.
 
+The `overlay-real-paper-export` scenario runs the real Worker export against the bundled two-column
+paper using a deterministic in-process translator. It checks the generated PDF's text and bounding
+box report, then opens that PDF in an isolated Edge Guest window while recording. CI retains the
+source, translated and bilingual PDFs plus the quality report as artifacts. This demonstrates the
+export path and recording handshake; it does not establish general translation layout quality.
+
 ## Local use
 
 ```powershell
@@ -42,6 +48,16 @@ dotnet/scripts/demo/Invoke-UiDemoRecording.ps1 `
   -TestFilter "FullyQualifiedName~AiProfileModelRefreshTests.RefreshOllama" `
   -AppExePath dotnet/publish/x64/Easydict.WinUI.exe `
   -OutputDir artifacts/ui-demos
+
+# Record the real Overlay PDF export (requires a blank desktop)
+$env:DEMO_OUTPUT_DIR = (Join-Path (Get-Location) 'artifacts/ui-demos')
+$env:EASYDICT_TEST_ALLOW_CJK_SYSTEM_FONT_FALLBACK = '1'
+dotnet/scripts/demo/Invoke-UiDemoRecording.ps1 `
+  -ScenarioName overlay-real-paper-export `
+  -TestFilter "FullyQualifiedName~PdfOverlayExportDemo_ExportsAndDisplaysOfflineFixedInput" `
+  -AppExePath dotnet/publish/x64/Easydict.WinUI.exe `
+  -OutputDir artifacts/ui-demos `
+  -CaptureTarget desktop -Scale 0.75 -Speed 1.5 -MaxSeconds 120 -KeepVideo
 ```
 
 Record on a **blank desktop**, with the app maximised or at a fixed size, and make sure no other agent

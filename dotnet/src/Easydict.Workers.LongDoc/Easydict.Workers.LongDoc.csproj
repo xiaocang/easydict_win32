@@ -11,7 +11,7 @@
     <DefineConstants>$(DefineConstants);EASYDICT_LONGDOC_WORKER</DefineConstants>
     <RootNamespace>Easydict.Workers.LongDoc</RootNamespace>
     <AssemblyName>Easydict.Workers.LongDoc</AssemblyName>
-    <!-- MuPDF.NET does not ship a stable x86 runtime; drop x86 from the worker RIDs. -->
+    <!-- ONNX Runtime does not ship a stable x86 runtime; drop x86 from the worker RIDs. -->
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <!-- Platform is set by the calling build/publish (CI passes -p:Platform=x64|arm64).
          Don't hardcode here — that would force cross-arch publish to fail with a
@@ -63,6 +63,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
+    <InternalsVisibleTo Include="Easydict.UIAutomation.Tests" />
   </ItemGroup>
 
   <ItemGroup>

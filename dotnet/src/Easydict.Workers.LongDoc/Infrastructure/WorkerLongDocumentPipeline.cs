@@ -266,9 +266,7 @@ internal sealed class WorkerLongDocumentPipeline
     {
         return mode switch
         {
-            LongDocumentInputMode.Pdf => pdfExportMode == PdfExportMode.ContentStreamReplacement
-                ? new MuPdfExportService()
-                : new PdfExportService(),
+            LongDocumentInputMode.Pdf => new PdfExportService(),
             LongDocumentInputMode.Markdown => new MarkdownExportService(),
             LongDocumentInputMode.PlainText => new PlainTextExportService(),
             _ => throw new WorkerHandlerException(WorkerErrorCodes.InvalidParams, $"Unsupported inputMode: {mode}"),
@@ -312,19 +310,16 @@ internal sealed class WorkerLongDocumentPipeline
 
     private static PdfExportMode ParsePdfExportMode(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Equals("Reconstruct", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("ContentStreamReplacement", StringComparison.OrdinalIgnoreCase))
         {
-            return PdfExportMode.ContentStreamReplacement;
-        }
-
-        if (value.Equals("Reconstruct", StringComparison.OrdinalIgnoreCase))
-        {
-            return PdfExportMode.ContentStreamReplacement;
+            return PdfExportMode.Overlay;
         }
 
         return Enum.TryParse<PdfExportMode>(value, ignoreCase: true, out var mode)
-            ? mode
-            : PdfExportMode.ContentStreamReplacement;
+            ? mode == PdfExportMode.ContentStreamReplacement ? PdfExportMode.Overlay : mode
+            : PdfExportMode.Overlay;
     }
 
     private static LayoutDetectionMode ParseLayoutDetectionMode(string? value)

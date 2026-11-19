@@ -167,6 +167,7 @@ jobs:
         env:
           EASYDICT_EXE_PATH: ${{ github.workspace }}/dotnet/publish/x64/Easydict.WinUI.exe
           EASYDICT_ONBOARDING_DEMO_LANGUAGE: zh-CN
+          EASYDICT_TEST_ALLOW_CJK_SYSTEM_FONT_FALLBACK: '1'
         run: |
           $scenarios = Get-Content 'demo-scenarios-resolved.json' -Raw | ConvertFrom-Json
           $failed = 0
@@ -196,6 +197,8 @@ jobs:
             artifacts/ui-demos/*.meta.json
             artifacts/ui-demos/*.log
             artifacts/ui-demos/*.mp4
+            artifacts/ui-demos/pdf-export-demo/*.pdf
+            artifacts/ui-demos/pdf-export-demo/*.json
           retention-days: 14
           if-no-files-found: warn
 

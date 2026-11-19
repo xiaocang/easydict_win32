@@ -129,6 +129,57 @@ public class LongDocumentTwoPassTests
     }
 
     [Fact]
+    public async Task TranslateAsync_PreservesDoiCitationVerbatim()
+    {
+        var translatedBlockCount = 0;
+        const string doiCitation = "Publisher notice with htt s://doi.or /10. 1 145/3459637.";
+        var source = new SourceDocument
+        {
+            DocumentId = "doi-metadata",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        BuildBlock("footer-head", "Copyright footer.", 115),
+                        BuildBlock("doi-line", doiCitation, 100),
+                        BuildBlock("ordinary", "Ordinary paragraph.", 60),
+                    ]
+                }
+            ]
+        };
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            Interlocked.Increment(ref translatedBlockCount);
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = $"T:{request.Text}",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage,
+            });
+        });
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "fake",
+            EnableFormulaProtection = false,
+            EnableDocumentContextPass = false,
+        });
+
+        translatedBlockCount.Should().Be(1, "only the ordinary paragraph should reach the translator");
+        result.Pages[0].Blocks[0].TranslationSkipped.Should().BeTrue();
+        result.Pages[0].Blocks[0].PreserveOriginalTextInPdfExport.Should().BeTrue();
+        result.Pages[0].Blocks[0].TranslatedText.Should().Be("Copyright footer.");
+        result.Pages[0].Blocks[1].TranslatedText.Should().Be(doiCitation);
+        result.Pages[0].Blocks[1].PreserveOriginalTextInPdfExport.Should().BeTrue();
+        result.Pages[0].Blocks[2].TranslatedText.Should().Be("T:Ordinary paragraph.");
+    }
+
+    [Fact]
     public async Task TranslateAsync_DocumentContextDisabled_NoExtraction()
     {
         var seenPrompts = new ConcurrentBag<string?>();
@@ -462,6 +513,18 @@ public class LongDocumentTwoPassTests
     }
 
     // ---- helpers ----
+
+    private static SourceDocumentBlock BuildBlock(string id, string text, double baselineY) => new()
+    {
+        BlockId = id,
+        BlockType = SourceBlockType.Paragraph,
+        Text = text,
+        BoundingBox = new BlockRect(50, baselineY - 3, 240, 6),
+        TextStyle = new BlockTextStyle
+        {
+            LinePositions = [new BlockLinePosition(baselineY, 50, 290)]
+        }
+    };
 
     private static SourceDocument BuildSourceWith(params string[] paragraphs)
     {

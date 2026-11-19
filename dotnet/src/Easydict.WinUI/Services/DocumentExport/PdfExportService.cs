@@ -350,8 +350,19 @@ public sealed class PdfExportService : IDocumentExportService
         var lineHeight = GetLineHeight(targetLanguage);
         var isCjkTarget = targetLanguage is Language.SimplifiedChinese or Language.TraditionalChinese
             or Language.Japanese or Language.Korean;
+        // Per-page glyph groups, read once from the untouched source before PdfSharpCore takes its
+        // write handle. They let the overlay remove source text by position instead of by decoded text.
+        var sourceLetterGroupsByPage = new Dictionary<int, IReadOnlyList<SourceTextLetterGroup>>();
+        foreach (var pageNumber in checkpoint.ChunkMetadata.Select(metadata => metadata.PageNumber).Distinct())
+        {
+            sourceLetterGroupsByPage[pageNumber] = ReadSourceLetterGroups(sourcePdfPath, pageNumber);
+        }
+
         using var doc = PdfReader.Open(sourcePdfPath, PdfDocumentOpenMode.Modify);
         var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
+
+        IReadOnlyList<SourceTextLetterGroup> LetterGroupsFor(int pageNumber) =>
+            sourceLetterGroupsByPage.TryGetValue(pageNumber, out var groups) ? groups : [];
 
         var candidateBlocks = 0;
         var renderedBlocks = 0;
@@ -437,6 +448,20 @@ public sealed class PdfExportService : IDocumentExportService
             }
 
             var page = doc.Pages[pageIndex];
+            if (string.Equals(sourceText.Trim(), translated.Trim(), StringComparison.Ordinal))
+            {
+                renderedBlocks++;
+                perPage.RenderedBlocks++;
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "source-preserved"
+                });
+                continue;
+            }
+
             if (TryReplacePdfTextObject(page, sourceText, translated))
             {
                 renderedBlocks++;
@@ -551,10 +576,54 @@ public sealed class PdfExportService : IDocumentExportService
                 overlayBlocksByPage[pageIndex] = pageBlocks;
             }
 
-            // Prefer hiding the source text via "3 Tr" (invisible rendering mode) in the content
-            // stream rather than drawing a white rectangle over it. This preserves table borders,
-            // column dividers, and other adjacent graphics that a white box would erase.
-            var sourceHidden = TryHideSourceTextInStream(page, sourceText);
+            // Remove the source text from the content stream where its glyphs can be matched by
+            // position, keeping the advance so following text does not shift. Lines that cannot be
+            // matched reliably keep the white-box covering and stay extractable.
+            var removal = TryRemoveSourceLinesInStream(page, lineRects, LetterGroupsFor(metadata.PageNumber));
+            var sourceHidden = false;
+            var coveringRects = backgroundLineRects;
+            if (removal.RemovedLines > 0)
+            {
+                if (removal.RetainedLineIndexes.Count == 0)
+                {
+                    sourceHidden = true;
+                }
+                else
+                {
+                    // Only the lines we could not remove still need covering; the removed ones draw
+                    // nothing, and a full white box would also wipe neighbouring graphics.
+                    coveringRects = backgroundLineRects is { Count: > 0 } existingCovering &&
+                                    existingCovering.Count == removal.TotalLines
+                        ? removal.RetainedLineIndexes.Select(index => existingCovering[index]).ToList()
+                        : removal.RetainedLineRects;
+                }
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "source-text-removed",
+                    Detail = $"Removed {removal.RemovedLines}/{removal.TotalLines} source lines from the text layer"
+                        + (removal.RetainedLineIndexes.Count > 0
+                            ? $"; lines [{string.Join(',', removal.RetainedLineIndexes)}] still extractable"
+                            : string.Empty)
+                });
+            }
+            else
+            {
+                sourceHidden = TryHideSourceTextInStream(page, sourceText);
+                if (!sourceHidden)
+                {
+                    blockIssues.Add(new BackfillBlockIssue
+                    {
+                        ChunkIndex = chunkIndex,
+                        SourceBlockId = metadata.SourceBlockId,
+                        PageNumber = metadata.PageNumber,
+                        Kind = "source-text-retained",
+                        Detail = "No glyph run could be matched; the block keeps its covering and its English stays extractable"
+                    });
+                }
+            }
 
             pageBlocks.Add(new OverlayBlockInfo
             {
@@ -564,7 +633,7 @@ public sealed class PdfExportService : IDocumentExportService
                 UsesSourceFallback = usesSourceFallback,
                 Rect = rect,
                 Padding = pad,
-                BackgroundLineRects = backgroundLineRects,
+                BackgroundLineRects = coveringRects,
                 RenderLineRects = renderLineRects,
                 ProtectedInlineRects = protectedInlineRects,
                 SourceHidden = sourceHidden
@@ -602,7 +671,9 @@ public sealed class PdfExportService : IDocumentExportService
                         // math-font character data). Per-letter erasure targets only the ink area of
                         // each glyph, leaving the gaps between characters — where table rules and
                         // column dividers typically run — untouched.
-                        var letterRects = BuildPerLetterEraseRects(block.Metadata, page.Height.Point);
+                        var letterRects = ShouldUsePerLetterEraseRects(block.Metadata)
+                            ? BuildPerLetterEraseRects(block.Metadata, page.Height.Point)
+                            : null;
                         var backgroundLineRects = block.BackgroundLineRects ?? block.RenderLineRects;
                         if (letterRects is { Count: > 0 })
                         {
@@ -673,6 +744,32 @@ public sealed class PdfExportService : IDocumentExportService
                     var font = block.RenderLineRects is { Count: > 0 }
                         ? FitFontToLineRects(gfx, block.TranslatedText, baseFont, block.RenderLineRects)
                         : FitFontToRect(gfx, block.TranslatedText, baseFont, rect.Width, rect.Height, effectiveLineHeight);
+                    var renderLineRects = block.RenderLineRects;
+                    var floorApplied = false;
+                    if (isCjkTarget &&
+                        font.Size < CjkReadableMinFontSize &&
+                        baseFont.Size > CjkReadableMinFontSize &&
+                        (block.SourceHidden || HasClearSpaceBelow(blocks, block, CjkReadableMinFontSize * 1.4 * 2)))
+                    {
+                        // CJK text below this size is not readable in print. Prefer a readable size and
+                        // let the translation take extra lines instead of shrinking to ~6pt: when the
+                        // source is hidden there is nothing underneath, and when it is not, the following
+                        // lines land on verified clear space below the block.
+                        var floorSize = Math.Min(baseFont.Size, CjkReadableMinFontSize);
+                        blockIssues.Add(new BackfillBlockIssue
+                        {
+                            ChunkIndex = block.ChunkIndex,
+                            SourceBlockId = metadata.SourceBlockId,
+                            PageNumber = metadata.PageNumber,
+                            Kind = "readability-floor",
+                            Detail = $"Raised {font.Size:F1}pt to {floorSize:F1}pt; block rewrapped at block width"
+                        });
+                        font = new XFont(baseFont.Name, floorSize, baseFont.Style);
+                        effectiveLineHeight = Math.Max(effectiveLineHeight, floorSize * 1.4);
+                        renderLineRects = null;
+                        floorApplied = true;
+                    }
+
                     if (font.Size < baseFont.Size)
                     {
                         shrinkFontBlocks++;
@@ -687,15 +784,15 @@ public sealed class PdfExportService : IDocumentExportService
                         });
                     }
 
-                    var wrappedLines = block.RenderLineRects is { Count: > 0 }
-                        ? WrapTextByWidths(gfx, block.TranslatedText, font, block.RenderLineRects.Select(r => r.Width).ToList()).ToList()
+                    var wrappedLines = renderLineRects is { Count: > 0 }
+                        ? WrapTextByWidths(gfx, block.TranslatedText, font, renderLineRects.Select(r => r.Width).ToList()).ToList()
                         : WrapTextByWidth(gfx, block.TranslatedText, font, rect.Width).ToList();
 
                     // Dynamic line height reduction — aligned with pdf2zh converter.py:512-515:
                     //   while (lidx+1)*size*lh > height and lh >= 1: lh -= 0.05
                     // When wrapped lines exceed available height, progressively shrink line spacing
                     // before falling back to truncation.
-                    if (block.RenderLineRects is not { Count: > 0 })
+                    if (renderLineRects is not { Count: > 0 })
                     {
                         var totalTextHeight = wrappedLines.Count * effectiveLineHeight;
                         while (totalTextHeight > rect.Height && effectiveLineHeight > font.Size)
@@ -708,13 +805,13 @@ public sealed class PdfExportService : IDocumentExportService
                         effectiveLineHeight = Math.Max(effectiveLineHeight, font.Size);
                     }
 
-                    var maxVisibleLines = block.RenderLineRects is { Count: > 0 }
-                        ? block.RenderLineRects.Count
+                    var maxVisibleLines = renderLineRects is { Count: > 0 }
+                        ? renderLineRects.Count
                         : Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
                     // When the source was hidden via "3 Tr" there is no white box clipping the
                     // bbox below, so allow a couple of extra lines to flow into natural whitespace
                     // rather than hard-truncating — mirroring pdf2zh's natural overflow behaviour.
-                    if (block.SourceHidden)
+                    if (block.SourceHidden || floorApplied)
                         maxVisibleLines += 2;
                     var originalLineCount = wrappedLines.Count;
                     if (wrappedLines.Count > maxVisibleLines)
@@ -739,14 +836,27 @@ public sealed class PdfExportService : IDocumentExportService
                     {
                         IntersectClipWithProtectionHoles(gfx, clipRect, block.Padding, page, block.ProtectedInlineRects, formulaRects, block.Rect);
                         var brush = CreateBrush(style);
-                        var stringFormat = GetStringFormat(style);
+                        var overlayStyle = ResolveOverlayStyle(style);
+                        var stringFormat = GetStringFormat(overlayStyle);
                         var formulaContext = IsFormulaContext(metadata, block.TranslatedText);
 
-                        if (block.RenderLineRects is { Count: > 0 })
+                        if (renderLineRects is { Count: > 0 })
                         {
-                            for (var i = 0; i < wrappedLines.Count && i < block.RenderLineRects.Count; i++)
+                            // Left-aligned blocks draw from one shared left edge. Source line rects keep
+                            // the original indents (paragraph starts, wrapped tail lines), and the wrapped
+                            // translation has different line breaks, so reusing each rect as-is would
+                            // indent arbitrary translation lines.
+                            if (overlayStyle?.Alignment == Easydict.TranslationService.LongDocument.TextAlignment.Left)
                             {
-                                DrawStringMultiFont(gfx, wrappedLines[i], font, brush, block.RenderLineRects[i], stringFormat, formulaContext);
+                                var leftEdge = renderLineRects.Min(lineRect => lineRect.X);
+                                renderLineRects = renderLineRects
+                                    .Select(lineRect => new XRect(leftEdge, lineRect.Y, lineRect.Right - leftEdge, lineRect.Height))
+                                    .ToList();
+                            }
+
+                            for (var i = 0; i < wrappedLines.Count && i < renderLineRects.Count; i++)
+                            {
+                                DrawStringMultiFont(gfx, wrappedLines[i], font, brush, renderLineRects[i], stringFormat, formulaContext);
                             }
                         }
                         else
@@ -2004,9 +2114,582 @@ public sealed class PdfExportService : IDocumentExportService
     }
 
     /// <summary>
-    /// Finds the Tj/TJ operator for <paramref name="sourceText"/> in the page content stream and
-    /// wraps it with "3 Tr … 0 Tr" to make the source text invisible without erasing any adjacent
-    /// graphics (table borders, column dividers, images, etc.).
+    /// Fallback match for multi-line blocks. A block's extracted text joins its lines with
+    /// newlines, and no single text-show operator carries that string, so the whole-block match
+    /// fails and the block would fall back to white-box erasure — which forces the translation to
+    /// shrink until it fits the old box height. Match each source line on its own instead.
+    /// <para>
+    /// Every line must match: hiding only some of them would leave visible source text underneath
+    /// the overlay, so a partial match reports no ranges and the caller keeps the white-box path.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<(int Start, int End)> FindLineOperatorRanges(string content, string sourceText)
+    {
+        var lines = sourceText
+            .Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 1)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (lines.Length < 2)
+            return [];
+
+        var ranges = new List<(int Start, int End)>();
+        foreach (var line in lines)
+        {
+            var lineRanges = FindTextOperatorRanges(content, line);
+            if (lineRanges.Count == 0)
+                return [];
+
+            ranges.AddRange(lineRanges);
+        }
+
+        return ranges.Distinct().OrderBy(range => range.Start).ToArray();
+    }
+
+    /// <summary>
+    /// Glyph advance and bounds of the text produced by one text-showing operator, in PDF user space.
+    /// </summary>
+    internal readonly record struct SourceTextLetterGroup(
+        int TextSequence,
+        double Advance,
+        double PointSize,
+        double Left,
+        double Bottom,
+        double Right,
+        double Top);
+
+    /// <summary>Per-line outcome of removing source text from the page content stream.</summary>
+    internal sealed record SourceLineRemovalResult(
+        int TotalLines,
+        int RemovedLines,
+        IReadOnlyList<int> RetainedLineIndexes,
+        IReadOnlyList<XRect> RetainedLineRects);
+
+    /// <summary>
+    /// Reads the glyph group of every text-showing operator on <paramref name="pageNumber"/> from the
+    /// source PDF. Groups come back in stream order, so group i belongs to the i-th text-showing
+    /// operator of that page's content stream. Reading the file before PdfSharpCore opens it for
+    /// writing keeps the two readers from fighting over the handle.
+    /// </summary>
+    internal static IReadOnlyList<SourceTextLetterGroup> ReadSourceLetterGroups(string sourcePdfPath, int pageNumber)
+    {
+        try
+        {
+            using var pdf = UglyToad.PdfPig.PdfDocument.Open(sourcePdfPath);
+            if (pageNumber < 1 || pageNumber > pdf.NumberOfPages)
+                return [];
+
+            var page = pdf.GetPage(pageNumber);
+            var groups = page.Letters
+                .GroupBy(letter => letter.TextSequence)
+                .OrderBy(group => group.Key)
+                .Select(group =>
+                {
+                    var letters = group.ToArray();
+                    var sizes = letters.Select(letter => letter.PointSize).OrderBy(size => size).ToArray();
+                    return new SourceTextLetterGroup(
+                        group.Key,
+                        letters.Sum(letter => letter.EndBaseLine.X - letter.StartBaseLine.X),
+                        sizes[sizes.Length / 2],
+                        letters.Min(letter => letter.BoundingBox.Left),
+                        letters.Min(letter => letter.BoundingBox.Bottom),
+                        letters.Max(letter => letter.BoundingBox.Right),
+                        letters.Max(letter => letter.BoundingBox.Top));
+                })
+                .ToArray();
+
+            WriteSourceRemovalDiagnostic(
+                $"[diag] page={pageNumber} letters={page.Letters.Count} groups={groups.Length}"
+                + $" maxSequence={groups.LastOrDefault().TextSequence}"
+                + $" sequences=[{string.Join(",", groups.Take(12).Select(group => group.TextSequence))}]"
+                + $" advances=[{string.Join(",", groups.Take(12).Select(group => group.Advance.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)))}]");
+            return groups;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PdfExport] Reading source letter groups failed: {ex.Message}");
+            return [];
+        }
+    }
+
+    private static bool TryGetPageContent(PdfPage page, out string content)
+    {
+        content = string.Empty;
+        var createSingleContent = page.Contents.GetType().GetMethod("CreateSingleContent");
+        var contentStream = createSingleContent?.Invoke(page.Contents, null);
+        var streamValue = contentStream?.GetType().GetProperty("Stream")?.GetValue(contentStream);
+        var raw = streamValue?.GetType().GetProperty("Value")?.GetValue(streamValue) as byte[];
+        if (raw is null || raw.Length == 0)
+            return false;
+
+        // Decode as Latin-1 (ISO 8859-1). Every byte value 0x00-0xFF maps to the same Unicode code
+        // point, so binary content round-trips without corruption and ASCII is unchanged.
+        content = Encoding.Latin1.GetString(raw);
+        return true;
+    }
+
+    private static bool TrySetPageContent(PdfPage page, string content)
+    {
+        var replaceContent = page.Contents.GetType()
+            .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            .FirstOrDefault(method =>
+                method.Name == "ReplaceContent" &&
+                method.GetParameters().Length == 1 &&
+                method.GetParameters()[0].ParameterType == typeof(byte[]));
+        if (replaceContent is null)
+            return false;
+
+        replaceContent.Invoke(page.Contents, [Encoding.Latin1.GetBytes(content)]);
+        return true;
+    }
+
+    /// <summary>One text-showing operator found in the decoded content stream.</summary>
+    /// <param name="Start">Inclusive offset of the operator's operand.</param>
+    /// <param name="End">Exclusive offset just past the operator name.</param>
+    /// <param name="Segments">How many text-showing runs (TJ array strings, or 1 for Tj) it draws.</param>
+    internal readonly record struct TextShowOperatorRange(int Start, int End, int Segments);
+
+    /// <summary>
+    /// Lists every text-showing operator ("Tj", "TJ", "'", "\"") in the decoded content stream, in
+    /// stream order. Each range covers only that operator's own operand and operator name —
+    /// positioning operators in between are left alone. PDF producers split a line into several
+    /// operators at kerns and word boundaries, which is why this works operator by operator instead
+    /// of line by line.
+    /// </summary>
+    internal static IReadOnlyList<TextShowOperatorRange> EnumerateTextShowOperatorRanges(string content)
+    {
+        var ranges = new List<TextShowOperatorRange>();
+        var operandStart = -1;
+        var arrayDepth = 0;
+        var arrayStrings = 0;
+        var i = 0;
+        while (i < content.Length)
+        {
+            var c = content[i];
+            if (c == '%')
+            {
+                while (i < content.Length && content[i] is not ('\r' or '\n'))
+                    i++;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                var start = i;
+                i++;
+                var depth = 1;
+                while (i < content.Length && depth > 0)
+                {
+                    if (content[i] == '\\')
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    if (content[i] == '(')
+                        depth++;
+                    else if (content[i] == ')')
+                        depth--;
+                    i++;
+                }
+
+                if (arrayDepth == 0)
+                    operandStart = start;
+                else if (arrayDepth == 1)
+                    arrayStrings++;
+                continue;
+            }
+
+            if (c == '<')
+            {
+                if (i + 1 < content.Length && content[i + 1] == '<')
+                {
+                    var start = i;
+                    var depth = 0;
+                    while (i < content.Length)
+                    {
+                        if (content[i] == '<' && i + 1 < content.Length && content[i + 1] == '<')
+                        {
+                            depth++;
+                            i += 2;
+                            continue;
+                        }
+
+                        if (content[i] == '>' && i + 1 < content.Length && content[i + 1] == '>')
+                        {
+                            depth--;
+                            i += 2;
+                            if (depth == 0)
+                                break;
+                            continue;
+                        }
+
+                        i++;
+                    }
+
+                    if (arrayDepth == 0)
+                        operandStart = start;
+                    continue;
+                }
+
+                var hexStart = i;
+                i++;
+                while (i < content.Length && content[i] != '>')
+                    i++;
+                i++;
+                if (arrayDepth == 0)
+                    operandStart = hexStart;
+                else if (arrayDepth == 1)
+                    arrayStrings++;
+                continue;
+            }
+
+            if (c == '[')
+            {
+                if (arrayDepth == 0)
+                {
+                    operandStart = i;
+                    arrayStrings = 0;
+                }
+
+                arrayDepth++;
+                i++;
+                continue;
+            }
+
+            if (c == ']')
+            {
+                if (arrayDepth > 0)
+                    arrayDepth--;
+                i++;
+                continue;
+            }
+
+            if (char.IsLetter(c) || c is '"' or '\'')
+            {
+                var start = i;
+                while (i < content.Length && (char.IsLetterOrDigit(content[i]) || content[i] is '"' or '\''))
+                    i++;
+
+                var token = content[start..i];
+                if (token is "Tj" or "TJ" or "'" or "\"")
+                {
+                    if (operandStart >= 0 && operandStart < start)
+                    {
+                        var segments = token == "TJ" ? Math.Max(1, arrayStrings) : 1;
+                        ranges.Add(new TextShowOperatorRange(operandStart, i, segments));
+                    }
+
+                    operandStart = -1;
+                    arrayStrings = 0;
+                }
+
+                continue;
+            }
+
+            i++;
+        }
+
+        return ranges;
+    }
+
+    private static void WriteSourceRemovalDiagnostic(string message)
+    {
+        var path = Environment.GetEnvironmentVariable("EASYDICT_SOURCE_REMOVAL_DIAG");
+        if (string.IsNullOrEmpty(path))
+            return;
+
+        try
+        {
+            File.AppendAllText(path, message + Environment.NewLine);
+        }
+        catch
+        {
+            // Diagnostics must never break an export.
+        }
+    }
+
+    /// <summary>
+    /// Removes the source glyph runs that sit inside <paramref name="lineRects"/> from the content
+    /// stream while keeping the text advance unchanged. Matched by position and stream order, never
+    /// by decoded text, because the extractor's text for some fonts of this paper does not
+    /// round-trip.
+    /// <para>
+    /// Each matched operator keeps its own structure: the strings inside a TJ array are emptied but
+    /// the kerning numbers between them stay, and one compensating number is appended so the pen
+    /// still ends the line where it used to. Following text, citations and formulas therefore keep
+    /// their positions.
+    /// </para>
+    /// <para>Lines with a run that cannot be matched keep their covering and stay extractable.</para>
+    /// </summary>
+    internal static SourceLineRemovalResult TryRemoveSourceLinesInStream(
+        PdfPage page,
+        IReadOnlyList<XRect>? lineRects,
+        IReadOnlyList<SourceTextLetterGroup> sequenceGroups)
+    {
+        var totalLines = lineRects?.Count ?? 0;
+        if (lineRects is null || totalLines == 0)
+            return new SourceLineRemovalResult(0, 0, [], []);
+
+        IReadOnlyList<int> allRetained = Enumerable.Range(0, totalLines).ToArray();
+        if (sequenceGroups.Count == 0)
+            return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+
+        try
+        {
+            if (!TryGetPageContent(page, out var content))
+                return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+
+            var operatorRanges = EnumerateTextShowOperatorRanges(content);
+
+            // The PDF splits one line into several show operators at kerns and word boundaries, and
+            // the extractor reports one sequence per drawn run. Fold the sequences back into their
+            // operator so each removable unit is one whole operator.
+            var operators = new List<SourceTextLetterGroup>(operatorRanges.Count);
+            var sequenceIndex = 0;
+            foreach (var range in operatorRanges)
+            {
+                if (sequenceIndex + range.Segments > sequenceGroups.Count)
+                    return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+
+                double advance = 0;
+                double pointSize = 0;
+                double left = double.MaxValue;
+                double bottom = double.MaxValue;
+                double right = double.MinValue;
+                double top = double.MinValue;
+                for (var segment = 0; segment < range.Segments; segment++)
+                {
+                    var group = sequenceGroups[sequenceIndex++];
+                    advance += group.Advance;
+                    pointSize = Math.Max(pointSize, group.PointSize);
+                    left = Math.Min(left, group.Left);
+                    bottom = Math.Min(bottom, group.Bottom);
+                    right = Math.Max(right, group.Right);
+                    top = Math.Max(top, group.Top);
+                }
+
+                operators.Add(new SourceTextLetterGroup(range.Segments, advance, pointSize, left, bottom, right, top));
+            }
+
+            if (sequenceIndex != sequenceGroups.Count)
+            {
+                WriteSourceRemovalDiagnostic(
+                    $"[diag] op/segment alignment failed: consumed {sequenceIndex} of {sequenceGroups.Count} runs");
+                return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+            }
+
+            var pageHeight = page.Height.Point;
+            var operatorLines = new int[operators.Count];
+            Array.Fill(operatorLines, -1);
+
+            for (var index = 0; index < operators.Count; index++)
+            {
+                var unit = operators[index];
+                var centreX = (unit.Left + unit.Right) / 2;
+                var centreY = pageHeight - (unit.Bottom + unit.Top) / 2;
+                for (var line = 0; line < totalLines; line++)
+                {
+                    var rect = lineRects[line];
+                    if (centreX >= rect.X - 2 && centreX <= rect.Right + 2 &&
+                        centreY >= rect.Y && centreY <= rect.Y + rect.Height)
+                    {
+                        operatorLines[index] = line;
+                        break;
+                    }
+                }
+            }
+
+            // Trailing punctuation and descenders of a wrapped line sit a few points outside that
+            // line's own rect. Attach such runs to the nearest line on their baseline rather than
+            // leaving specks of English behind.
+            for (var index = 0; index < operators.Count; index++)
+            {
+                if (operatorLines[index] >= 0)
+                    continue;
+
+                var unit = operators[index];
+                var centreY = pageHeight - (unit.Bottom + unit.Top) / 2;
+                var bestLine = -1;
+                var bestVerticalGap = double.MaxValue;
+                var bestHorizontalGap = double.MaxValue;
+                for (var line = 0; line < totalLines; line++)
+                {
+                    var rect = lineRects[line];
+                    var verticalGap = centreY < rect.Y
+                        ? rect.Y - centreY
+                        : centreY > rect.Y + rect.Height
+                            ? centreY - (rect.Y + rect.Height)
+                            : 0;
+                    var horizontalGap = unit.Left > rect.Right
+                        ? unit.Left - rect.Right
+                        : unit.Right < rect.X
+                            ? rect.X - unit.Right
+                            : 0;
+                    if (verticalGap > bestVerticalGap + 0.001 ||
+                        (Math.Abs(verticalGap - bestVerticalGap) <= 0.001 && horizontalGap >= bestHorizontalGap))
+                        continue;
+
+                    bestVerticalGap = verticalGap;
+                    bestHorizontalGap = horizontalGap;
+                    bestLine = line;
+                }
+
+                if (bestLine >= 0 && bestVerticalGap <= 4 && bestHorizontalGap <= 10)
+                    operatorLines[index] = bestLine;
+            }
+
+            var perLineAdvance = new double[totalLines];
+            for (var index = 0; index < operators.Count; index++)
+            {
+                if (operatorLines[index] >= 0)
+                    perLineAdvance[operatorLines[index]] += operators[index].Advance;
+            }
+
+            var removedLines = new HashSet<int>();
+            for (var line = 0; line < totalLines; line++)
+            {
+                // A line only counts as removable when its glyphs cover its own width; a partial
+                // claim would delete half a line and leave the rest extractable.
+                if (perLineAdvance[line] >= lineRects[line].Width * 0.8)
+                    removedLines.Add(line);
+            }
+
+            if (removedLines.Count == 0)
+            {
+                WriteSourceRemovalDiagnostic(
+                    "[diag] no removable line: advance=["
+                    + string.Join(",", perLineAdvance.Select(v => v.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)))
+                    + "] width=["
+                    + string.Join(",", lineRects.Select(r => r.Width.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)))
+                    + "]");
+                return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+            }
+
+            var replacements = new List<(int Start, int End, string Text)>();
+            for (var index = 0; index < operators.Count; index++)
+            {
+                var line = operatorLines[index];
+                if (line < 0 || !removedLines.Contains(line))
+                    continue;
+
+                var unit = operators[index];
+                if (unit.PointSize <= 0)
+                    continue;
+
+                var range = operatorRanges[index];
+                var operatorText = content[range.Start..range.End];
+                var replacement = BuildAdvancePreservingRemoval(operatorText, unit.Advance, unit.PointSize);
+                if (replacement is null)
+                {
+                    // Give the whole line back rather than leave a fragment of it extractable.
+                    removedLines.Remove(line);
+                    continue;
+                }
+
+                replacements.Add((range.Start, range.End, replacement));
+            }
+
+            if (replacements.Count == 0 || removedLines.Count == 0)
+                return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+
+            var modified = content;
+            foreach (var (start, end, text) in replacements.OrderByDescending(replacement => replacement.Start))
+                modified = modified[..start] + text + modified[end..];
+
+            if (!TrySetPageContent(page, modified))
+                return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+
+            WriteSourceRemovalDiagnostic(
+                $"[diag] removed {removedLines.Count}/{totalLines} lines with {replacements.Count} operators");
+
+            var retained = Enumerable.Range(0, totalLines).Where(line => !removedLines.Contains(line)).ToArray();
+            var retainedRects = retained.Select(line => lineRects[line]).ToArray();
+            return new SourceLineRemovalResult(totalLines, removedLines.Count, retained, retainedRects);
+        }
+        catch (Exception ex)
+        {
+            WriteSourceRemovalDiagnostic($"[diag] exception: {ex.Message}");
+            return new SourceLineRemovalResult(totalLines, 0, allRetained, lineRects);
+        }
+    }
+
+    /// <summary>
+    /// Rewrites one text-showing operator so it draws nothing but still advances the pen by
+    /// <paramref name="advance"/> points. Existing kerning numbers are kept, the drawn strings are
+    /// emptied, and a single trailing adjustment restores the width the glyphs used to occupy.
+    /// Returns null for operators this cannot do safely (line-moving quote operators).
+    /// </summary>
+    internal static string? BuildAdvancePreservingRemoval(string operatorText, double advance, double pointSize)
+    {
+        if (pointSize <= 0)
+            return null;
+
+        var compensation = (-1000 * advance / pointSize)
+            .ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (operatorText.EndsWith("Tj", StringComparison.Ordinal))
+            return $"[() {compensation}] TJ";
+
+        if (!operatorText.EndsWith("TJ", StringComparison.Ordinal))
+            return null;
+
+        var operand = operatorText[..^2].TrimEnd();
+        var closeBracket = operand.LastIndexOf(']');
+        if (closeBracket < 0)
+            return null;
+
+        var builder = new StringBuilder(operand.Length + 16);
+        var index = 0;
+        while (index < closeBracket)
+        {
+            var c = operand[index];
+            if (c == '(')
+            {
+                builder.Append("()");
+                index++;
+                var depth = 1;
+                while (index < operand.Length && depth > 0)
+                {
+                    if (operand[index] == '\\')
+                    {
+                        index += 2;
+                        continue;
+                    }
+
+                    if (operand[index] == '(')
+                        depth++;
+                    else if (operand[index] == ')')
+                        depth--;
+                    index++;
+                }
+
+                continue;
+            }
+
+            if (c == '<' && index + 1 < operand.Length && operand[index + 1] != '<')
+            {
+                builder.Append("<>");
+                index++;
+                while (index < operand.Length && operand[index] != '>')
+                    index++;
+                index++;
+                continue;
+            }
+
+            builder.Append(c);
+            index++;
+        }
+
+        builder.Append(' ').Append(compensation).Append("] TJ");
+        return builder.ToString();
+    }
+
+    /// <summary>    /// Finds the Tj/TJ operator for <paramref name="sourceText"/> in the page content stream and
+    /// wraps it in an empty ActualText marked-content sequence while using rendering mode 3. This
+    /// keeps text positioning unchanged, hides the source glyphs, and excludes source text from
+    /// extraction/copy without erasing adjacent graphics (table borders, column dividers, images, etc.).
     /// <para>
     /// Unlike <see cref="TryReplacePdfTextObject"/>, this method works for any source text whose
     /// bytes are representable in Latin-1 (ISO 8859-1), including all ASCII text. The translated
@@ -2044,14 +2727,31 @@ public sealed class PdfExportService : IDocumentExportService
             // code point, so binary content round-trips without corruption, and ASCII text is
             // identical to Latin-1 in the 0x00-0x7F range.
             var content = Encoding.Latin1.GetString(raw);
-            var (start, end) = FindTextOperatorRange(content, sourceText);
-            if (start < 0)
+            var operatorRanges = FindTextOperatorRanges(content, sourceText);
+            if (operatorRanges.Count == 0)
+                operatorRanges = FindLineOperatorRanges(content, sourceText);
+            if (operatorRanges.Count == 0)
                 return false;
 
-            // Inject "3 Tr" before the text-show operator and restore "0 Tr" immediately after.
-            // PDF text rendering mode 3 = neither fill nor stroke (invisible), 0 = fill (normal).
-            var modified = content[..start] + "3 Tr " + content[start..end] + " 0 Tr" + content[end..];
-            valueProperty?.SetValue(streamValue, Encoding.Latin1.GetBytes(modified));
+            // PDFs can draw the same extracted text more than once (for example, separate
+            // text runs for an accessibility layer and its visible glyph run). Hide every
+            // exact matching text-show operator so a first-match hit cannot leave a duplicate.
+            var modified = content;
+            foreach (var (start, end) in operatorRanges.OrderByDescending(range => range.Start))
+            {
+                modified = modified[..start] + "/Span << /ActualText () >> BDC 3 Tr " + modified[start..end] + " 0 Tr EMC" + modified[end..];
+            }
+
+            var replaceContent = page.Contents.GetType()
+                .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .FirstOrDefault(method =>
+                    method.Name == "ReplaceContent" &&
+                    method.GetParameters().Length == 1 &&
+                    method.GetParameters()[0].ParameterType == typeof(byte[]));
+            if (replaceContent is null)
+                return false;
+
+            replaceContent.Invoke(page.Contents, [Encoding.Latin1.GetBytes(modified)]);
             return true;
         }
         catch (Exception ex)
@@ -2072,54 +2772,71 @@ public sealed class PdfExportService : IDocumentExportService
     /// </returns>
     internal static (int Start, int End) FindTextOperatorRange(string content, string sourceText)
     {
+        var ranges = FindTextOperatorRanges(content, sourceText);
+        return ranges.Count > 0 ? ranges[0] : (-1, -1);
+    }
+
+    internal static IReadOnlyList<(int Start, int End)> FindTextOperatorRanges(string content, string sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(content) || string.IsNullOrWhiteSpace(sourceText))
+            return [];
+
+        var ranges = new List<(int Start, int End)>();
+
         // --- Literal Tj form: (escapedSource) Tj ---
         var escapedSource = EscapePdfLiteralString(sourceText);
         var sourceToken = $"({escapedSource})";
-        var idx = content.IndexOf(sourceToken, StringComparison.Ordinal);
-        if (idx >= 0)
+        var searchStart = 0;
+        while (searchStart < content.Length)
         {
-            // Scan past optional whitespace to confirm "Tj" follows.
+            var idx = content.IndexOf(sourceToken, searchStart, StringComparison.Ordinal);
+            if (idx < 0)
+                break;
+
             var pos = idx + sourceToken.Length;
             while (pos < content.Length && content[pos] is ' ' or '\t' or '\r' or '\n')
                 pos++;
             if (pos + 2 <= content.Length && content[pos] == 'T' && content[pos + 1] == 'j')
             {
                 var afterOp = pos + 2;
-                // Guard: Tj must be a complete token (not "Tj0" or similar).
                 if (afterOp >= content.Length || !char.IsLetterOrDigit(content[afterOp]))
-                    return (idx, afterOp);
+                    ranges.Add((idx, afterOp));
             }
-            // If Tj doesn't follow, fall through to the TJ-array search below.
+
+            searchStart = idx + sourceToken.Length;
         }
 
         // --- TJ array form: [(body)] TJ ---
         var normalizedSource = NormalizePdfTextForMatch(sourceText);
-        if (string.IsNullOrWhiteSpace(normalizedSource))
-            return (-1, -1);
-
-        foreach (Match match in Regex.Matches(content, @"\[(?<body>.*?)\]\s*TJ", RegexOptions.Singleline))
+        if (!string.IsNullOrWhiteSpace(normalizedSource))
         {
-            var bodyGroup = match.Groups["body"];
-            if (!bodyGroup.Success)
-                continue;
+            foreach (Match match in Regex.Matches(content, @"\[(?<body>.*?)\]\s*TJ", RegexOptions.Singleline))
+            {
+                var bodyGroup = match.Groups["body"];
+                if (!bodyGroup.Success)
+                    continue;
 
-            var extracted = ExtractPdfLiteralStrings(bodyGroup.Value);
-            if (extracted.Count == 0)
-                continue;
+                var extracted = ExtractPdfLiteralStrings(bodyGroup.Value);
+                if (extracted.Count == 0)
+                    continue;
 
-            var combined = string.Concat(extracted.Select(item => item.Value));
-            if (string.Equals(NormalizePdfTextForMatch(combined), normalizedSource, StringComparison.Ordinal))
-                return (match.Index, match.Index + match.Length);
+                var combined = string.Concat(extracted.Select(item => item.Value));
+                if (string.Equals(NormalizePdfTextForMatch(combined), normalizedSource, StringComparison.Ordinal))
+                    ranges.Add((match.Index, match.Index + match.Length));
+            }
         }
 
-        return (-1, -1);
+        return ranges.Distinct().OrderBy(range => range.Start).ToArray();
     }
+
+    internal static bool ShouldUsePerLetterEraseRects(LongDocumentChunkMetadata metadata) =>
+        metadata.SourceBlockType == SourceBlockType.Formula || metadata.IsFormulaLike;
 
     /// <summary>
     /// Builds a list of per-letter glyph rectangles in XGraphics coordinates (Y-down) from
     /// <see cref="LongDocumentChunkMetadata.FormulaCharacters"/>, which stores PDF-coordinate
-    /// (Y-up) glyph positions extracted at analysis time.
-    /// Returns <c>null</c> when no character data is available (most non-formula blocks).
+    /// (Y-up) glyph positions extracted at analysis time. Call only for formula blocks; prose can
+    /// contain an occasional math-font glyph while still needing full line backgrounds.
     /// </summary>
     internal static IReadOnlyList<XRect>? BuildPerLetterEraseRects(LongDocumentChunkMetadata metadata, double pageHeight)
     {
@@ -2373,10 +3090,51 @@ public sealed class PdfExportService : IDocumentExportService
     }
 
     /// <summary>
+    /// Justified or left-aligned source lines share one left edge, which puts their midpoints on the
+    /// block centre — DetectAlignment then reports Center. Centring every wrapped line inside its own
+    /// full-width rect turns that into visibly ragged centred prose, so a shared left edge wins over
+    /// the detected centre alignment. Indented first lines are ignored when counting the edge.
+    /// </summary>
+    internal static BlockTextStyle? ResolveOverlayStyle(BlockTextStyle? style)
+    {
+        if (style is null ||
+            style.Alignment != Easydict.TranslationService.LongDocument.TextAlignment.Center ||
+            style.LinePositions is not { Count: > 1 } positions)
+        {
+            return style;
+        }
+
+        var leftEdge = positions.Min(position => position.Left);
+        var alignedLines = positions.Count(position => Math.Abs(position.Left - leftEdge) <= 1.0);
+        return alignedLines >= Math.Max(2, (int)Math.Ceiling(positions.Count * 0.75))
+            ? style with { Alignment = Easydict.TranslationService.LongDocument.TextAlignment.Left }
+            : style;
+    }
+
+    /// <summary>
+    /// True when no other overlay block on the page occupies the strip directly below
+    /// <paramref name="block"/>. The readability floor uses this before letting CJK text that could
+    /// not be hidden in the content stream grow past its original box height.
+    /// </summary>
+    private static bool HasClearSpaceBelow(IReadOnlyList<OverlayBlockInfo> blocks, OverlayBlockInfo block, double neededHeight)
+    {
+        var below = new XRect(block.Rect.X, block.Rect.Y + block.Rect.Height, block.Rect.Width, neededHeight);
+        foreach (var other in blocks)
+        {
+            if (ReferenceEquals(other, block))
+                continue;
+
+            if (other.Rect.IntersectsWith(below))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Returns the XStringFormat matching the extracted text alignment, falling back to TopLeft.
     /// </summary>
-    internal static XStringFormat GetStringFormat(BlockTextStyle? style)
-    {
+    internal static XStringFormat GetStringFormat(BlockTextStyle? style)    {
         if (style == null)
             return XStringFormats.TopLeft;
 
@@ -2394,7 +3152,7 @@ public sealed class PdfExportService : IDocumentExportService
 
     /// <summary>
     /// Resolves the best font family name for the given target language.
-    /// Uses CJK-specific Noto Sans fonts when available, falls back to Arial.
+    /// Uses cached Noto Sans fonts when available, then compatible system CJK fonts, and finally Arial.
     /// </summary>
     internal static string ResolveFontFamily(Language? targetLanguage)
     {
@@ -2415,6 +3173,28 @@ public sealed class PdfExportService : IDocumentExportService
         if (cjkFamily != null && CjkFontResolver.IsFontRegistered(cjkFamily))
         {
             return cjkFamily;
+        }
+
+        // PdfSharpCore cannot read the TrueType collections used by Microsoft YaHei and
+        // Microsoft JhengHei. Prefer standalone Windows CJK TTFs for Chinese fallback.
+        if (targetLanguage is Language.SimplifiedChinese or Language.TraditionalChinese)
+        {
+            var fontsDir = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            foreach (var (family, fileName) in new[]
+                     {
+                         (CjkFontResolver.DengXian, "Deng.ttf"),
+                         (CjkFontResolver.SimHei, "simhei.ttf")
+                     })
+            {
+                if (File.Exists(Path.Combine(fontsDir, fileName)))
+                {
+                    Debug.WriteLine($"[PdfExportService] Using compatible system CJK font: {family}");
+                    return family;
+                }
+            }
+
+            // Avoid returning a TTC path that PdfSharpCore cannot parse.
+            return "Arial";
         }
 
         // Fall back to Windows system CJK fonts before Arial
@@ -2499,7 +3279,7 @@ public sealed class PdfExportService : IDocumentExportService
         }
         else
         {
-            Debug.WriteLine($"[PdfExportService] CJK font not downloaded for {targetLanguage}. Using Arial fallback.");
+            Debug.WriteLine($"[PdfExportService] CJK font not downloaded for {targetLanguage}; using compatible system font family {ResolveFontFamily(targetLanguage)}.");
         }
     }
 
@@ -2556,6 +3336,12 @@ public sealed class PdfExportService : IDocumentExportService
 
     /// <summary>Minimum font size for font shrinking — lowered from 8 to 6 to give more room before truncation.</summary>
     private const double MinFontSize = 6;
+
+    /// <summary>
+    /// Readable floor for CJK overlay text. Below this the glyphs are too small to read in print, so
+    /// the exporter prefers extra lines over a further shrink when the source text is already hidden.
+    /// </summary>
+    private const double CjkReadableMinFontSize = 7.5;
 
     internal static XFont FitFontToRect(XGraphics gfx, string text, XFont baseFont, double width, double height, double lineHeight = 14d)
     {

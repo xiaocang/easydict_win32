@@ -315,7 +315,6 @@ jobs:
           $msix = Resolve-Path "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
           $forbiddenRootFiles = @(
             "Easydict.DocumentExport.dll",
-            "MuPDF.NET.dll",
             "PdfSharpCore.dll",
             "UglyToad.PdfPig.dll",
             "libSkiaSharp.dll",

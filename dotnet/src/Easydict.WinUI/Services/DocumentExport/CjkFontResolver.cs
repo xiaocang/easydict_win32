@@ -45,6 +45,8 @@ internal sealed class CjkFontResolver : IFontResolver
     };
 
     // System CJK font family names (Windows built-in)
+    public const string DengXian = "DengXian";
+    public const string SimHei = "SimHei";
     public const string MicrosoftYaHei = "Microsoft YaHei";
     public const string MicrosoftJhengHei = "Microsoft JhengHei";
     public const string YuGothic = "Yu Gothic";
@@ -74,6 +76,11 @@ internal sealed class CjkFontResolver : IFontResolver
         ["Times New Roman#B"] = "timesbd.ttf",
         ["Times New Roman#I"] = "timesi.ttf",
         ["Times New Roman#BI"] = "timesbi.ttf",
+        // Standalone TrueType CJK fonts supported by PdfSharpCore's font parser.
+        ["DengXian#R"] = "Deng.ttf",
+        ["DengXian#B"] = "Dengb.ttf",
+        ["SimHei#R"] = "simhei.ttf",
+        ["SimHei#B"] = "simhei.ttf",
         // System CJK fonts (Windows built-in)
         ["Microsoft YaHei#R"] = "msyh.ttc",
         ["Microsoft YaHei#B"] = "msyhbd.ttc",

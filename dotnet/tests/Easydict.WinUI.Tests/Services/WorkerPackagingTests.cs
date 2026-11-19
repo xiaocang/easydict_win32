@@ -159,7 +159,7 @@ public sealed class WorkerPackagingTests
     }
 
     [Fact]
-    public void WorkerOnlyLongDocBuild_DoesNotReferenceHostMuPdfPipeline()
+    public void LongDocBuild_UsesOverlayPipelineWithoutMuPdfPackage()
     {
         var csprojPath = Path.Combine(
             ProjectRoot,
@@ -169,7 +169,14 @@ public sealed class WorkerPackagingTests
         var csproj = File.ReadAllText(csprojPath);
 
         csproj.Should().Contain("<ProjectReference Include=\"..\\Easydict.DocumentExport\\Easydict.DocumentExport.csproj\"");
-        csproj.Should().Contain("<PackageReference Include=\"MuPDF.NET\" Version=\"3.2.12\"");
+        csproj.Should().NotContain("MuPDF.NET");
+
+        var exportProject = File.ReadAllText(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.DocumentExport",
+            "Easydict.DocumentExport.csproj"));
+        exportProject.Should().NotContain("MuPDF.NET");
         csproj.Should().Contain("<ProjectReference Include=\"..\\..\\..\\lib\\PdfPig\\src\\UglyToad.PdfPig\\UglyToad.PdfPig.csproj\"");
         csproj.Should().Contain("<PackageReference Include=\"Microsoft.ML.OnnxRuntime.Managed\" Version=\"1.21.0\"");
         csproj.Should().Contain("Condition=\"'$(EnableInProcLongDocFallback)' == 'true'\"");

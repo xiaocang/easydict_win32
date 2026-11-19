@@ -192,7 +192,7 @@
         <PublishWorkerOutputs Condition="'$(PublishWorkerOutputs)' == ''">true</PublishWorkerOutputs>
         <WorkerPublishSelfContained Condition="'$(WorkerPublishSelfContained)' == ''">$(SelfContained)</WorkerPublishSelfContained>
         <!-- Release artifacts always ship the long-document worker, so do not also
-             carry the in-process PDF/MuPDF/PdfPig implementation in the host. Debug
+             carry the in-process PDF/PdfPig implementation in the host. Debug
              keeps it for local diagnostics and unit-test coverage. Override with
              -p:EnableInProcLongDocFallback=true for one-off local Release debugging. -->
         <EnableInProcLongDocFallback Condition="'$(EnableInProcLongDocFallback)' == '' and '$(Configuration)' == 'Release'">false</EnableInProcLongDocFallback>
@@ -469,7 +469,7 @@
             Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj') and '$(_WorkerRid)' != 'win-x86'" />
       <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj&quot; --configuration $(Configuration) --runtime $(_WorkerRid) $(_WorkerPublishArgs) --output &quot;$(PublishDir)workers\ocr&quot; -p:Platform=$(_WorkerPublishPlatform) -p:PublishReadyToRun=false"
             Condition="Exists('$(MSBuildThisFileDirectory)..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj') and '$(_WorkerRid)' != 'win-x86'" />
-      <Warning Condition="'$(_WorkerRid)' == 'win-x86'" Text="[Workers] win-x86 has no workers (MuPDF.NET/ORT lack stable x86 runtimes). Host will fall back to in-proc paths." />
+      <Warning Condition="'$(_WorkerRid)' == 'win-x86'" Text="[Workers] win-x86 has no workers (ONNX Runtime lacks a stable x86 runtime). Host will fall back to in-proc paths." />
     </Target>
 
     <Target Name="ValidateWorkerPublish"
@@ -502,10 +502,6 @@
       <ProjectReference Include="..\..\lib\LexIndex\src\LexIndex\LexIndex.csproj" />
       <!-- MDict.CSharp: forked from Jack251970/MDict.CSharp with type-2 encryption support (Salsa20/8) -->
       <ProjectReference Include="..\..\lib\MDict.CSharp\MDict.Csharp\MDict.Csharp.csproj" />
-      <!-- MuPDF.NET: Official C# bindings for MuPDF — content stream replacement, font embedding,
-           XRef manipulation, dual PDF output. Used by MuPdfExportService for pdf2zh-aligned pipeline. -->
-      <PackageReference Include="MuPDF.NET" Version="3.2.12"
-                        Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
     </ItemGroup>
 
     <!-- 

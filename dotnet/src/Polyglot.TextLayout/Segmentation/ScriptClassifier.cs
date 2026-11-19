@@ -58,7 +58,7 @@ public static class ScriptClassifier
 
     /// <summary>
     /// Returns true for CJK ideographs, kana, hangul, and fullwidth forms.
-    /// Matches the ranges used by both MuPdfExportService.IsCjkCharacter and
+    /// Matches the ranges used by the PDF export language helpers and
     /// PdfExportService.IsCjkCharacter/TokenizeForWrapping.
     /// </summary>
     public static bool IsCjk(char ch)

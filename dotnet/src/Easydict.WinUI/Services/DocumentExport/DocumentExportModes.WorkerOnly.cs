@@ -11,8 +11,7 @@ public enum PdfExportMode
     Overlay,
 
     /// <summary>
-    /// Content stream replacement mode. In Release artifacts this is performed by
-    /// the long-document worker so MuPDF native assets stay out of the host process.
+    /// Legacy wire/API value retained for compatibility. Requests now use Overlay mode.
     /// </summary>
     ContentStreamReplacement,
 }

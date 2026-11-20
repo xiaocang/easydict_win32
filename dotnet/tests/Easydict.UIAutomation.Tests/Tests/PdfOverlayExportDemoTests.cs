@@ -85,6 +85,12 @@ public sealed class PdfOverlayExportDemoTests
                 Environment.SetEnvironmentVariable("EASYDICT_TEST_ALLOW_CJK_SYSTEM_FONT_FALLBACK", allowFallbackOriginal);
             }
 
+            // The Worker writes the full result to ResultJsonPath and returns a pointer envelope,
+            // so chunk counters and the quality report only exist in that file.
+            result.ResultJsonPath.Should().NotBeNullOrWhiteSpace("the Worker must hand back its result file path");
+            File.Exists(result.ResultJsonPath!).Should().BeTrue($"the Worker must write its result file to {result.ResultJsonPath}");
+            result = await LongDocResultFileStore.ReadAsync(result.ResultJsonPath!);
+
             (result.State is "Completed" or "PartiallyCompleted")
                 .Should().BeTrue($"the offline Worker export must finish; quality report: {result.QualityReport}");
             result.SucceededChunks.Should().BeGreaterThan(0);

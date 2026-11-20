@@ -355,7 +355,7 @@
          aligns shared test-dependency builds and avoids concurrent writes to obj outputs. -->
     <ItemDefinitionGroup>
       <ProjectReference>
-        <GlobalPropertiesToRemove>EnableGitHubUpdateCheck;EasydictUiTestBuild</GlobalPropertiesToRemove>
+        <GlobalPropertiesToRemove>EnableGitHubUpdateCheck;EasydictUiTestBuild;EnableLocalDebugLongDocCli</GlobalPropertiesToRemove>
       </ProjectReference>
     </ItemDefinitionGroup>
 

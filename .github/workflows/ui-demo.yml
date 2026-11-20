@@ -161,6 +161,26 @@ jobs:
           dotnet build tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
             --configuration Release -p:Platform=x64 -p:BuildWorkerOutputs=false
 
+      # The overlay exporter reads CJK fonts from %LOCALAPPDATA%\Easydict\Fonts and falls back to
+      # Arial when none is present. windows-latest ships no CJK font, so the exported PDF ended up
+      # with glyph 0 for every Chinese character and no extractable Chinese text.
+      - name: Install the pinned CJK font for PDF export
+        if: steps.scenarios.outputs.present == 'true'
+        shell: pwsh
+        run: |
+          $expected = '990C807E79C25662A5A9ECF7F971BAEB2BF2EAB9A559E5ECF15CDFDB8561D21F'
+          $url = 'https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/Variable/TTF/NotoSansCJKsc-VF.ttf'
+          $dir = Join-Path $env:LOCALAPPDATA 'Easydict\Fonts'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $fontPath = Join-Path $dir 'NotoSansSC-Regular.ttf'
+          Invoke-WebRequest -Uri $url -OutFile $fontPath -UseBasicParsing
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $fontPath).Hash
+          if ($actual -ne $expected) {
+            Remove-Item $fontPath -Force
+            throw "Noto Sans SC hash mismatch: expected $expected, got $actual"
+          }
+          Write-Host "Noto Sans SC ready: $fontPath ($((Get-Item $fontPath).Length) bytes)"
+
       - name: Record every scenario
         if: steps.scenarios.outputs.present == 'true'
         shell: pwsh

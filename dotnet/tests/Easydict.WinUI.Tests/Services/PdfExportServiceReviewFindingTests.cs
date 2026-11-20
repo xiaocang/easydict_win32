@@ -240,6 +240,10 @@ public class PdfExportServiceReviewFindingTests
         string sourcePath,
         string outputPath)
     {
+        CjkFontResolver.IsInstalled.Should().BeTrue(
+            "PdfSharpCore locks its font resolver on first use, so the CJK resolver has to be installed " +
+            "before any font is created; otherwise Chinese exports lose their glyphs");
+
         var result = new PdfExportService().Export(checkpoint, sourcePath, outputPath);
         result.OutputPath.Should().Be(outputPath);
         var metrics = result.BackfillMetrics;

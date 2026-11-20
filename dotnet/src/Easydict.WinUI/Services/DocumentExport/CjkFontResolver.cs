@@ -115,8 +115,15 @@ internal sealed class CjkFontResolver : IFontResolver
     }
 
     /// <summary>
+    /// True when PdfSharpCore is actually resolving fonts through this class. PdfSharpCore locks
+    /// its global resolver on first use, so this can be false even after EnsureInitialized ran,
+    /// when something created a font before the resolver was installed.
+    /// </summary>
+    public static bool IsInstalled => GlobalFontSettings.FontResolver is CjkFontResolver;
+
+    /// <summary>
     /// Ensures this resolver is registered as the global font resolver.
-    /// Safe to call multiple times; only registers once.
+    /// Safe to call multiple times.
     /// </summary>
     public static void EnsureInitialized()
     {
@@ -132,9 +139,11 @@ internal sealed class CjkFontResolver : IFontResolver
             }
             catch (InvalidOperationException ex)
             {
-                // Font resolver was already set (possibly by a previous call)
-                Debug.WriteLine($"[CjkFontResolver] Could not set font resolver: {ex.Message}");
-                _initialized = true;
+                // A resolver was already set and PdfSharpCore does not allow replacing it. Report
+                // the real state instead of claiming success: callers check IsInstalled, and would
+                // otherwise believe CJK glyphs are wired up when they are not.
+                Debug.WriteLine($"[CjkFontResolver] Could not set font resolver: {ex.Message}; installed={IsInstalled}");
+                _initialized = IsInstalled;
             }
         }
     }

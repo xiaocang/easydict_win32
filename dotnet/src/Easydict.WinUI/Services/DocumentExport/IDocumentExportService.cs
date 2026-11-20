@@ -14,9 +14,8 @@ public enum PdfExportMode
     Overlay,
 
     /// <summary>
-    /// Content stream replacement mode (MuPDF.NET): replaces the page's content stream,
-    /// preserving graphics and embedding fonts. Higher quality, matches pdf2zh output.
-    /// Requires MuPDF.NET native binaries.
+    /// Legacy wire/API value retained for compatibility. Requests now use Overlay mode;
+    /// content-stream replacement is no longer supported.
     /// </summary>
     ContentStreamReplacement,
 }

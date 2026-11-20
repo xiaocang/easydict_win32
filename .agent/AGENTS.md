@@ -37,7 +37,7 @@ dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
 ## Local Debug Tools
 
 ### PDF -> pics
-- Purpose: render a PDF into per-page images for local inspection/debugging, using the repo's MuPDF-based helper.
+- Purpose: render a PDF into per-page images for local inspection/debugging with the Windows PDF API.
 - Tool: `dotnet/tools/PdfToImages/`
 - Typical usage:
 ```bash

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
@@ -7,7 +8,7 @@ using Easydict.WinUI.Services.DocumentExport;
 using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 using CoreLongDocumentTranslationResult = Easydict.TranslationService.LongDocument.LongDocumentTranslationResult;
 using FluentAssertions;
-using MuPDF.NET;
+using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using Xunit;
@@ -733,6 +734,46 @@ public class LongDocumentTranslationServiceReviewFixTests
         end.Should().Be(37);
     }
 
+    [Fact]
+    public void FindTextOperatorRanges_ShouldFindEveryMatchingLiteralAndArrayOperator()
+    {
+        const string content = "BT (Hello) Tj ET BT [(Hello)] TJ ET BT (Hello) Tj ET";
+
+        var ranges = PdfExportService.FindTextOperatorRanges(content, "Hello");
+
+        ranges.Should().HaveCount(3);
+        ranges.Should().BeInAscendingOrder(range => range.Start);
+        ranges.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void TryHideSourceTextInStream_PersistsInvisibleRenderingModeOnPageContent()
+    {
+        using var document = new PdfDocument();
+        var page = document.AddPage();
+        var replaceContent = page.Contents.GetType()
+            .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .First(method =>
+                method.Name == "ReplaceContent" &&
+                method.GetParameters().Length == 1 &&
+                method.GetParameters()[0].ParameterType == typeof(byte[]));
+        replaceContent.Invoke(page.Contents, [Encoding.Latin1.GetBytes("BT /F1 12 Tf (Hide me) Tj ET")]);
+
+        PdfExportService.TryHideSourceTextInStream(page, "Hide me").Should().BeTrue();
+
+        var createSingleContent = page.Contents.GetType().GetMethod("CreateSingleContent", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        createSingleContent.Should().NotBeNull();
+        var content = createSingleContent!.Invoke(page.Contents, null);
+        content.Should().NotBeNull();
+        var stream = content!.GetType().GetProperty("Stream")?.GetValue(content);
+        var bytes = stream?.GetType().GetProperty("Value")?.GetValue(stream) as byte[];
+        bytes.Should().NotBeNullOrEmpty();
+        var contentText = Encoding.Latin1.GetString(bytes!);
+        contentText.Should().Contain("/Span << /ActualText () >> BDC");
+        contentText.Should().Contain("3 Tr");
+        contentText.Should().Contain("0 Tr EMC");
+    }
+
     [Theory]
     [InlineData("BT /F1 11 Tf (Other text) Tj ET", "Hello World")]   // different text
     [InlineData("BT ET", "Hello")]                                      // no text operators
@@ -742,6 +783,32 @@ public class LongDocumentTranslationServiceReviewFixTests
         var (start, end) = PdfExportService.FindTextOperatorRange(content, source);
         start.Should().Be(-1);
         end.Should().Be(-1);
+    }
+
+    [Theory]
+    [InlineData(SourceBlockType.Paragraph, false)]
+    [InlineData(SourceBlockType.Formula, true)]
+    public void ShouldUsePerLetterEraseRects_OnlyForFormulaBlocks(SourceBlockType blockType, bool expected)
+    {
+        var metadata = new LongDocumentChunkMetadata
+        {
+            ChunkIndex = 0,
+            PageNumber = 1,
+            SourceBlockId = "p1-body-b1",
+            SourceBlockType = blockType,
+            OrderInPage = 0,
+            RegionType = LayoutRegionType.Body,
+            FormulaCharacters = new BlockFormulaCharacters
+            {
+                Characters =
+                [
+                    new FormulaCharacterInfo("2", "txsys", 9, 100, 100, 5, 8, true, false, false)
+                ],
+                HasMathFontCharacters = true
+            }
+        };
+
+        PdfExportService.ShouldUsePerLetterEraseRects(metadata).Should().Be(expected);
     }
 
     [Fact]
@@ -1305,121 +1372,6 @@ public class LongDocumentTranslationServiceReviewFixTests
         }
         bodyText.Should().NotContain("sequence_1");
         bodyText.Should().NotContain("z =_1 z z");
-    }
-
-    [SkippableFact]
-    public async Task MuPdfExportService_ExportFixturePdf_ShouldPreservePage2WordSpacesInExtractedText()
-    {
-        var pdfPath = GetPdfFixturePath("1706.03762v7.pdf");
-        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
-
-        var outputPath = Path.Combine(Path.GetTempPath(), $"spacing-preservation-{Guid.NewGuid()}.pdf");
-
-        try
-        {
-            var source = await BuildSourceDocumentFromFixtureAsync(pdfPath);
-            var checkpoint = BuildIdentityCheckpoint(source, pdfPath);
-
-            try
-            {
-                var exportService = new MuPdfExportService();
-                exportService.Export(checkpoint, pdfPath, outputPath, DocumentOutputMode.Monolingual);
-            }
-            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
-            {
-                Skip.If(true, $"MuPDF unavailable in test environment: {ex.Message}");
-            }
-
-            File.Exists(outputPath).Should().BeTrue();
-
-            using var outputDoc = PdfPigDocument.Open(outputPath);
-            var page2Text = outputDoc.GetPages().Single(page => page.Number == 2).Text;
-            var normalizedPage2Text = NormalizeWhitespaceForAssertion(page2Text);
-
-            // Verify text was actually rendered to the output PDF
-            normalizedPage2Text.Should().NotBeNullOrWhiteSpace("page 2 should have text content");
-            // Check key terms are present (exact phrase match may fail due to PdfPig text merging)
-            normalizedPage2Text.Should().Contain("encoder",
-                "key term 'encoder' should be present in exported PDF");
-            normalizedPage2Text.Should().Contain("decoder",
-                "key term 'decoder' should be present in exported PDF");
-        }
-        finally
-        {
-            if (File.Exists(outputPath))
-            {
-                File.Delete(outputPath);
-            }
-        }
-    }
-
-    [SkippableFact]
-    public async Task MuPdfExportService_ExportFixturePdf_ShouldPreservePage4FormulasAndOptionallyEmitReviewPng()
-    {
-        var pdfPath = GetPdfFixturePath("1706.03762v7.pdf");
-        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
-
-        var outputPdfPath = Path.Combine(Path.GetTempPath(), "page4-formula-review.pdf");
-        var outputPngPath = Path.Combine(Path.GetTempPath(), "page4-formula-review.png");
-
-        TryDelete(outputPdfPath);
-        TryDelete(outputPngPath);
-
-        try
-        {
-            var source = await BuildSourceDocumentFromFixtureAsync(pdfPath);
-            var checkpoint = BuildIdentityCheckpoint(source, pdfPath);
-
-            try
-            {
-                var exportService = new MuPdfExportService();
-                exportService.Export(checkpoint, pdfPath, outputPdfPath, DocumentOutputMode.Monolingual);
-            }
-            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
-            {
-                Skip.If(true, $"MuPDF unavailable in test environment: {ex.Message}");
-            }
-
-            File.Exists(outputPdfPath).Should().BeTrue();
-
-            using var outputDoc = PdfPigDocument.Open(outputPdfPath);
-            var page4Text = outputDoc.GetPages().Single(page => page.Number == 4).Text;
-            var compactPage4Text = CompactWhitespaceForAssertion(page4Text);
-
-            compactPage4Text.Should().Contain("Attention(Q,K,V)=softmax",
-                "the page 4 display equation should remain in the exported PDF");
-            compactPage4Text.Should().Contain("√dk",
-                "the page 4 display equation should preserve its square-root denominator");
-
-            Console.WriteLine($"Page 4 formula review PDF: {outputPdfPath}");
-
-            if (!VisualReviewArtifacts.ShouldEmitPngs())
-            {
-                Console.WriteLine(VisualReviewArtifacts.OptInMessage);
-                return;
-            }
-
-            var muDoc = new Document(outputPdfPath);
-            try
-            {
-                muDoc.PageCount.Should().BeGreaterOrEqualTo(4);
-
-                var page4 = muDoc[3];
-                using var pix = page4.GetPixmap(new Matrix(1.5f, 1.5f));
-                pix.Save(outputPngPath, "png");
-
-                File.Exists(outputPngPath).Should().BeTrue();
-                Console.WriteLine($"Page 4 formula review PNG: {outputPngPath}");
-            }
-            finally
-            {
-                muDoc.Close();
-            }
-        }
-        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
-        {
-            Skip.If(true, $"MuPDF unavailable in test environment: {ex.Message}");
-        }
     }
 
     [Theory]

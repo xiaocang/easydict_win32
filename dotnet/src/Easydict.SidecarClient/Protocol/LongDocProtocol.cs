@@ -65,7 +65,7 @@ public sealed class TranslateDocumentParams
     public required string OutputMode { get; init; }
 
     /// <summary>
-    /// One of: "ContentStreamReplacement", "Reconstruct".
+    /// One of: "Overlay" or a legacy value such as "ContentStreamReplacement"/"Reconstruct"; legacy values map to Overlay.
     /// </summary>
     [JsonPropertyName("pdfExportMode")]
     public string? PdfExportMode { get; init; }

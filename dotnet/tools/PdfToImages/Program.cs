@@ -2,7 +2,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Easydict.TranslationService.LongDocument;
-using MuPDF.NET;
+using Windows.Data.Pdf;
+using Windows.Graphics.Imaging;
+using Windows.Storage;
+using Windows.Storage.Streams;
 
 if (args.Length == 0 || args.Any(static arg => arg is "-h" or "--help"))
 {
@@ -26,36 +29,28 @@ try
     if (scale <= 0)
         throw new ArgumentOutOfRangeException(nameof(options.Scale), "Scale must be greater than 0.");
 
-    var document = new Document(options.InputPdf);
-    try
+    var file = await StorageFile.GetFileFromPathAsync(options.InputPdf);
+    var document = await PdfDocument.LoadFromFileAsync(file);
+    var pageCount = checked((int)document.PageCount);
+    var selectedPages = ResolveSelectedPages(options.PageSelection, pageCount);
+    var pagesToRender = selectedPages ?? Enumerable.Range(1, pageCount).ToArray();
+
+    var effectiveDpi = scale * 72.0;
+    Console.WriteLine($"Input PDF : {options.InputPdf}");
+    Console.WriteLine($"Output dir: {outputDir}");
+    Console.WriteLine($"Pages     : {FormatPageSummary(selectedPages, pageCount)}");
+    Console.WriteLine($"Format    : {options.Format}");
+    Console.WriteLine($"Scale     : {scale:F2} ({effectiveDpi:F0} DPI)");
+    Console.WriteLine();
+
+    for (var i = 0; i < pagesToRender.Count; i++)
     {
-        var selectedPages = ResolveSelectedPages(options.PageSelection, document.PageCount);
-        var pagesToRender = selectedPages ?? Enumerable.Range(1, document.PageCount).ToArray();
-
-        var effectiveDpi = scale * 72.0;
-        Console.WriteLine($"Input PDF : {options.InputPdf}");
-        Console.WriteLine($"Output dir: {outputDir}");
-        Console.WriteLine($"Pages     : {FormatPageSummary(selectedPages, document.PageCount)}");
-        Console.WriteLine($"Format    : {options.Format}");
-        Console.WriteLine($"Scale     : {scale:F2} ({effectiveDpi:F0} DPI)");
-        Console.WriteLine();
-
-        for (var i = 0; i < pagesToRender.Count; i++)
-        {
-            var pageNumber = pagesToRender[i];
-            var pageIndex = pageNumber - 1;
-            var outputPath = Path.Combine(outputDir, $"{baseName}_p{pageNumber:D4}.{options.Format}");
-
-            var page = document[pageIndex];
-            var pixmap = page.GetPixmap(new Matrix((float)scale, (float)scale));
-            pixmap.Save(outputPath, options.Format);
-
-            Console.WriteLine($"[{i + 1}/{pagesToRender.Count}] {outputPath}");
-        }
-    }
-    finally
-    {
-        document.Close();
+        var pageNumber = pagesToRender[i];
+        var pageIndex = pageNumber - 1;
+        var outputPath = Path.Combine(outputDir, $"{baseName}_p{pageNumber:D4}.{options.Format}");
+        using var page = document.GetPage((uint)pageIndex);
+        await RenderPageAsync(page, outputPath, options.Format, scale);
+        Console.WriteLine($"[{i + 1}/{pagesToRender.Count}] {outputPath}");
     }
 
     Console.WriteLine();
@@ -66,6 +61,46 @@ catch (Exception ex)
 {
     Console.Error.WriteLine(ex.Message);
     return 1;
+}
+
+static async Task RenderPageAsync(PdfPage page, string outputPath, string format, double scale)
+{
+    using var renderedStream = new InMemoryRandomAccessStream();
+    var renderOptions = new PdfPageRenderOptions
+    {
+        DestinationWidth = checked((uint)Math.Ceiling(page.Size.Width * scale)),
+    };
+    await page.RenderToStreamAsync(renderedStream, renderOptions);
+    renderedStream.Seek(0);
+
+    var decoder = await BitmapDecoder.CreateAsync(renderedStream);
+    using var encodedStream = new InMemoryRandomAccessStream();
+    var encoderId = format == "jpg" ? BitmapEncoder.JpegEncoderId : BitmapEncoder.PngEncoderId;
+    var encoder = await BitmapEncoder.CreateAsync(encoderId, encodedStream);
+    var pixelData = await decoder.GetPixelDataAsync(
+        BitmapPixelFormat.Rgba8,
+        BitmapAlphaMode.Ignore,
+        new BitmapTransform(),
+        ExifOrientationMode.IgnoreExifOrientation,
+        ColorManagementMode.DoNotColorManage);
+    var pixels = pixelData.DetachPixelData();
+
+    encoder.SetPixelData(
+        BitmapPixelFormat.Rgba8,
+        BitmapAlphaMode.Ignore,
+        decoder.PixelWidth,
+        decoder.PixelHeight,
+        96,
+        96,
+        pixels);
+    await encoder.FlushAsync();
+
+    encodedStream.Seek(0);
+    using var reader = new DataReader(encodedStream);
+    await reader.LoadAsync(checked((uint)encodedStream.Size));
+    var output = new byte[checked((int)encodedStream.Size)];
+    reader.ReadBytes(output);
+    await File.WriteAllBytesAsync(outputPath, output);
 }
 
 static Options ParseArgs(IReadOnlyList<string> args)

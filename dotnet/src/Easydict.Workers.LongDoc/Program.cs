@@ -18,8 +18,8 @@ namespace Easydict.Workers.LongDoc;
 ///   4. Host sends "translate_document". Worker streams status/progress/block_translated events
 ///      and returns the final response.
 ///   5. Worker calls Environment.Exit(0) after the response is written (per the
-///      "exit on completion" lifecycle the user selected). MuPDF / ONNX native heap
-///      is fully reclaimed because the process exits.
+///      "exit on completion" lifecycle the user selected). ONNX native heap is fully
+///      reclaimed because the process exits.
 /// </summary>
 internal static class Program
 {

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Easydict.TranslationService.ContentPreservation;
 using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;
@@ -20,6 +21,10 @@ public sealed class LongDocumentTranslationService
         "NumericData",
         "LlmHint",
     };
+
+    private static readonly Regex DoiIdentifierRegex = new(
+        @"doi\.or(?:g)?/10\.\d{4,9}/\d{3,}",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;
     private readonly Func<SourceDocumentPage, CancellationToken, Task<string?>> _ocrExtractor;
@@ -308,6 +313,7 @@ public sealed class LongDocumentTranslationService
             foreach (var page in source.Pages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var doiMetadataBlockIds = FindDoiMetadataBlockIds(page);
 
                 foreach (var block in page.Blocks)
                 {
@@ -330,8 +336,10 @@ public sealed class LongDocumentTranslationService
                         DebugPageNumber = page.PageNumber
                     };
                     var plan = _preservation.Analyze(blockContext);
-                    var translationSkipped = plan.SkipTranslation;
-                    var preserveOriginalTextInPdfExport = ShouldPreserveOriginalTextInPdfExport(block.BlockType, plan.Reason);
+                    var preserveDoiMetadata = doiMetadataBlockIds.Contains(block.BlockId);
+                    var translationSkipped = plan.SkipTranslation || preserveDoiMetadata;
+                    var preserveOriginalTextInPdfExport = preserveDoiMetadata ||
+                        ShouldPreserveOriginalTextInPdfExport(block.BlockType, plan.Reason);
 
                     irBlocks.Add(new DocumentBlockIr
                     {
@@ -997,6 +1005,58 @@ public sealed class LongDocumentTranslationService
         blockType == SourceBlockType.Formula ||
         (!string.IsNullOrWhiteSpace(preservationReason) &&
          PreserveOriginalFormulaReasons.Contains(preservationReason));
+
+    private static HashSet<string> FindDoiMetadataBlockIds(SourceDocumentPage page)
+    {
+        var doiBlocks = page.Blocks
+            .Where(block => ContainsDoiIdentifier(block.Text))
+            .ToArray();
+        if (doiBlocks.Length == 0) return new HashSet<string>(StringComparer.Ordinal);
+
+        const double adjacentLineTolerance = 16;
+        const double sameColumnPadding = 18;
+        var preservedIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var doiBlock in doiBlocks)
+        {
+            if (doiBlock.BoundingBox is not { } doiBounds) continue;
+            var doiBaselines = GetBlockBaselines(doiBlock);
+            foreach (var candidate in page.Blocks)
+            {
+                if (candidate.BoundingBox is not { } candidateBounds) continue;
+                if (candidateBounds.X > doiBounds.X + doiBounds.Width + sameColumnPadding ||
+                    candidateBounds.X + candidateBounds.Width < doiBounds.X - sameColumnPadding)
+                {
+                    continue;
+                }
+
+                var candidateBaselines = GetBlockBaselines(candidate);
+                if (doiBaselines.Any(doiY => candidateBaselines.Any(candidateY =>
+                        Math.Abs(doiY - candidateY) <= adjacentLineTolerance)))
+                {
+                    preservedIds.Add(candidate.BlockId);
+                }
+            }
+        }
+
+        return preservedIds;
+    }
+
+    private static IReadOnlyList<double> GetBlockBaselines(SourceDocumentBlock block)
+    {
+        var linePositions = block.TextStyle?.LinePositions;
+        if (linePositions is { Count: > 0 })
+            return linePositions.Select(line => line.BaselineY).ToArray();
+
+        if (block.BoundingBox is not { } bounds) return Array.Empty<double>();
+        return [bounds.Y, bounds.Y + bounds.Height];
+    }
+
+    private static bool ContainsDoiIdentifier(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var compactText = Regex.Replace(text, @"\s+", string.Empty);
+        return DoiIdentifierRegex.IsMatch(compactText);
+    }
 
     private static IReadOnlyList<TranslatedDocumentPage> BuildStructuredOutput(
         DocumentIr ir,

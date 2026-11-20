@@ -335,8 +335,8 @@ public sealed class SettingsService
     public int HistoryRetentionDays { get; set; } = 30;
     /// <summary>
     /// When true, long-document translation runs in a child worker process
-    /// (Easydict.Workers.LongDoc.exe). Native MuPDF / ONNX heap is reclaimed
-    /// on each job by exiting the worker after completion. On by default
+    /// (Easydict.Workers.LongDoc.exe). ONNX heap is reclaimed on each job by
+    /// exiting the worker after completion. On by default
     /// with in-process fallback on startup/internal worker failures.
     /// Runtime-only: not persisted to settings.json. Use
     /// EASYDICT_DISABLE_LONGDOC_WORKER=1 for development diagnostics.

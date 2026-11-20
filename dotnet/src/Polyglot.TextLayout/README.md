@@ -17,7 +17,7 @@ paragraph layout. Targets `net8.0` and has no external dependencies.
 - **Incremental layout**: Re-layout only affected lines when content
   changes (`LayoutCursor` / `LayoutLineRange`).
 - **Pluggable measurer**: `ITextMeasurer` lets you back the engine with
-  any glyph-advance source (GDI+, DirectWrite, PdfSharp, MuPDF, etc.).
+  any glyph-advance source (GDI+, DirectWrite, PdfSharp, or another renderer).
 
 ## Usage
 

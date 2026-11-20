@@ -378,7 +378,7 @@
                 "-p:WindowsAppSdkAutoInitialize=false",
                 "--no-restore",
                 "--filter",
-                "FullyQualifiedName~LongDocWorkerPipelineTests|FullyQualifiedName~LongDocumentTranslationServiceReviewFixTests|FullyQualifiedName~DocumentExportServiceTests|FullyQualifiedName~MuPdfExportServiceSpacingTests"
+                "FullyQualifiedName~LongDocWorkerPipelineTests|FullyQualifiedName~LongDocumentTranslationServiceReviewFixTests|FullyQualifiedName~DocumentExportServiceTests|FullyQualifiedName~PdfExportModeCompatibilityTests"
             ],
             "problemMatcher": "$msCompile",
             "group": "test",
@@ -573,7 +573,7 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "Write-Error 'publish-x86 is unsupported after the LongDoc worker/MuPDF export refactor. Worker projects only target win-x64 and win-arm64.'; exit 1"
+                "Write-Error 'publish-x86 is unsupported because LongDoc worker projects only target win-x64 and win-arm64.'; exit 1"
             ],
             "problemMatcher": [],
             "presentation": {

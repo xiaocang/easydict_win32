@@ -100,14 +100,14 @@ public sealed class LongDocumentTranslationService : IDisposable
         CancellationToken cancellationToken = default,
         LayoutDetectionMode layoutDetection = LayoutDetectionMode.Heuristic,
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement,
+        PdfExportMode pdfExportMode = PdfExportMode.Overlay,
         string? visionEndpoint = null,
         string? visionApiKey = null,
         string? visionModel = null,
         System.IProgress<LongDocumentTranslationProgress>? progress = null)
     {
         // Worker mode: when SettingsService.UseLongDocWorker is on, run translation in
-        // a child process so MuPDF + ONNX native heap is reclaimed by process exit.
+        // a child process so ONNX native heap is reclaimed by process exit.
         // The worker exits after each translate per the "exit on completion" lifecycle.
         if (SettingsService.Instance.UseLongDocWorker)
         {
@@ -583,16 +583,12 @@ public sealed class LongDocumentTranslationService : IDisposable
 
     private static IDocumentExportService ResolveExportService(
         string? sourceFilePath,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement)
+        PdfExportMode pdfExportMode = PdfExportMode.Overlay)
     {
         var ext = Path.GetExtension(sourceFilePath)?.ToLowerInvariant();
         return ext switch
         {
-            ".pdf" => pdfExportMode switch
-            {
-                PdfExportMode.ContentStreamReplacement => new MuPdfExportService(),
-                _ => new PdfExportService(),
-            },
+            ".pdf" => new PdfExportService(),
             ".md" => new MarkdownExportService(),
             ".txt" => new PlainTextExportService(),
             _ => throw new NotSupportedException($"Unsupported file format: {ext}")
@@ -605,7 +601,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         Action<string>? onProgress,
         LongDocumentQualityReport qualityReport,
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement)
+        PdfExportMode pdfExportMode = PdfExportMode.Overlay)
     {
         ValidateCheckpointOrThrow(checkpoint);
 

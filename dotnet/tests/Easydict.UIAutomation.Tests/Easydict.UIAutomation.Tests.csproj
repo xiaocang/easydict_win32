@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <None Include="Baselines\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="..\..\src\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj" />
   </ItemGroup>
 
 </Project>

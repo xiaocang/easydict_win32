@@ -1,5 +1,5 @@
-// Integration test: translates a PDF with DeepSeek and renders the output to PNG
-// for visual verification of coordinate placement and text replacement quality.
+// Integration test: translates a PDF with DeepSeek and verifies the exported PDF
+// contains readable page text. Visual rendering is handled by PdfToImages.
 //
 // Prerequisites:
 //   EASYDICT_TEST_PDF  — absolute path to the input PDF
@@ -19,7 +19,7 @@ using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using FluentAssertions;
-using MuPDF.NET;
+using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using Xunit;
 using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 
@@ -29,7 +29,7 @@ namespace Easydict.WinUI.Tests.Services;
 public class PdfTranslationVisualTest
 {
     [SkippableFact]
-    public async Task ExportTranslatedPdf_RendersTextAtCorrectPositions()
+    public async Task ExportTranslatedPdf_ContainsReadableText()
     {
         // ── Read configuration from environment variables ──────────────────────
         var pdfPath = Environment.GetEnvironmentVariable("EASYDICT_TEST_PDF") ?? "";
@@ -76,23 +76,9 @@ public class PdfTranslationVisualTest
         result.SucceededChunks.Should().BeGreaterThan(0, "at least some chunks should translate successfully");
         File.Exists(outputPath).Should().BeTrue();
 
-        // ── Render pages 1-2 to PNG for visual inspection ─────────────────────
-        var muDoc = new Document(outputPath);
-        try
-        {
-            foreach (var pageNumber in new[] { 1, 2, 4 }.Where(pageNumber => pageNumber <= muDoc.PageCount))
-            {
-                var muPage = muDoc[pageNumber - 1];
-                var mat = new Matrix(1.5f, 1.5f); // 108 DPI
-                using var pix = muPage.GetPixmap(mat);
-                var pngPath = Path.Combine(outputDir, $"translated_p{pageNumber}.png");
-                pix.Save(pngPath, "png");
-                System.Diagnostics.Debug.WriteLine($"[VisualTest] Saved PNG: {pngPath}");
-            }
-        }
-        finally
-        {
-            muDoc.Close();
-        }
+        using var outputDoc = PdfPigDocument.Open(outputPath);
+        outputDoc.NumberOfPages.Should().BeGreaterThan(0);
+        outputDoc.GetPages().Select(page => page.Text)
+            .Should().Contain(text => !string.IsNullOrWhiteSpace(text), "the exported document should retain searchable page text");
     }
 }

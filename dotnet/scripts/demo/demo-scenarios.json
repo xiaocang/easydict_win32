@@ -16,5 +16,11 @@
     "description": "Refreshing an Ollama profile fills the model dropdown without a picker dialog",
     "testFilter": "FullyQualifiedName~OllamaProfileRefresh_ConfirmAndCancel",
     "maxSeconds": 40
+  },
+  {
+    "name": "overlay-real-paper-export",
+    "description": "Exports the bundled paper with an offline fixed translator, verifies the PDF, and displays the result in Edge",
+    "testFilter": "FullyQualifiedName~PdfOverlayExportDemo_ExportsAndDisplaysOfflineFixedInput",
+    "maxSeconds": 120
   }
 ]

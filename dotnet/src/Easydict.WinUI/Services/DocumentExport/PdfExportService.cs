@@ -579,7 +579,11 @@ public sealed class PdfExportService : IDocumentExportService
             // Remove the source text from the content stream where its glyphs can be matched by
             // position, keeping the advance so following text does not shift. Lines that cannot be
             // matched reliably keep the white-box covering and stay extractable.
-            var removal = TryRemoveSourceLinesInStream(page, lineRects, LetterGroupsFor(metadata.PageNumber));
+            var removal = TryRemoveSourceLinesInStream(
+                page,
+                lineRects,
+                LetterGroupsFor(metadata.PageNumber),
+                protectedInlineRects);
             var sourceHidden = false;
             var coveringRects = backgroundLineRects;
             if (removal.RemovedLines > 0)
@@ -611,7 +615,10 @@ public sealed class PdfExportService : IDocumentExportService
             }
             else
             {
-                sourceHidden = TryHideSourceTextInStream(page, sourceText);
+                // A protected script line is drawn from the source file, so this block must not be
+                // hidden wholesale: the "3 Tr" fallback marks every glyph run invisible, including
+                // the citation or subscript we just decided to keep.
+                sourceHidden = TryHideSourceTextWithProtectedLines(page, sourceText, protectedInlineRects);
                 if (!sourceHidden)
                 {
                     blockIssues.Add(new BackfillBlockIssue
@@ -620,7 +627,9 @@ public sealed class PdfExportService : IDocumentExportService
                         SourceBlockId = metadata.SourceBlockId,
                         PageNumber = metadata.PageNumber,
                         Kind = "source-text-retained",
-                        Detail = "No glyph run could be matched; the block keeps its covering and its English stays extractable"
+                        Detail = protectedInlineRects.Count > 0
+                            ? $"Kept {protectedInlineRects.Count} protected inline script line(s) extractable"
+                            : "No glyph run could be matched; the block keeps its covering and its English stays extractable"
                     });
                 }
             }
@@ -644,6 +653,10 @@ public sealed class PdfExportService : IDocumentExportService
         foreach (var (pageIndex, blocks) in overlayBlocksByPage)
         {
             var page = doc.Pages[pageIndex];
+
+            // Ink of the source page that no overlay block covers (footers, references, tables) stays
+            // where it is, so an overflowing translation must not be clipped onto it.
+            var preservedLineRects = BuildPreservedLineRects(blocks, sourceLetterGroupsByPage, pageIndex, page.Height.Point);
 
             try
             {
@@ -811,11 +824,67 @@ public sealed class PdfExportService : IDocumentExportService
                     // When the source was hidden via "3 Tr" there is no white box clipping the
                     // bbox below, so allow a couple of extra lines to flow into natural whitespace
                     // rather than hard-truncating — mirroring pdf2zh's natural overflow behaviour.
-                    if (block.SourceHidden || floorApplied)
+                    if (renderLineRects is not { Count: > 0 } && (block.SourceHidden || floorApplied))
                         maxVisibleLines += 2;
-                    var originalLineCount = wrappedLines.Count;
+
+                    if (renderLineRects is not { Count: > 0 })
+                    {
+                        // Those extra lines only reach the paper when the clip covers them.
+                        // ExpandOverlayClipRect stops 8 pt below the original box, so they used to be
+                        // clipped away while the line counter still reported them as drawn. Grow the
+                        // clip into the space the block actually needs, bounded by neighbouring blocks
+                        // and by source content that stays on the page.
+                        var neededBottom = rect.Y + Math.Min(wrappedLines.Count, maxVisibleLines) * effectiveLineHeight;
+                        if (neededBottom > rect.Bottom)
+                        {
+                            // The boundary is computed as soon as the text passes the block edge, not
+                            // only when it passes the old clip: the default 8 pt expansion can already
+                            // reach preserved ink, and overflow that fits inside that slack would cover
+                            // it just the same.
+                            var allowedBottom = ResolveOverflowDrawBottom(
+                                blocks, block, clipRect, neededBottom, preservedLineRects, page);
+                            if (allowedBottom > clipRect.Bottom)
+                            {
+                                clipRect = new XRect(clipRect.X, clipRect.Y, clipRect.Width, allowedBottom - clipRect.Y);
+                                blockIssues.Add(new BackfillBlockIssue
+                                {
+                                    ChunkIndex = block.ChunkIndex,
+                                    SourceBlockId = metadata.SourceBlockId,
+                                    PageNumber = metadata.PageNumber,
+                                    Kind = "clip-extended",
+                                    Detail = $"Extended the drawing clip {allowedBottom - rect.Bottom:F1}pt below the block for {Math.Min(wrappedLines.Count, maxVisibleLines)} lines"
+                                });
+                            }
+                            else if (allowedBottom < clipRect.Bottom - 0.01)
+                            {
+                                // Something below the block owns that space, so the clip must stop short
+                                // of it even though the default expansion would have reached further.
+                                clipRect = new XRect(
+                                    clipRect.X,
+                                    clipRect.Y,
+                                    clipRect.Width,
+                                    Math.Max(rect.Bottom, allowedBottom) - clipRect.Y);
+                                blockIssues.Add(new BackfillBlockIssue
+                                {
+                                    ChunkIndex = block.ChunkIndex,
+                                    SourceBlockId = metadata.SourceBlockId,
+                                    PageNumber = metadata.PageNumber,
+                                    Kind = "clip-limited",
+                                    Detail = $"Limited the drawing clip to {allowedBottom - rect.Bottom:F1}pt below the block; preserved content owns the space underneath"
+                                });
+                            }
+                        }
+
+                        // One decision about how many lines the clip can actually show. Whatever it
+                        // cannot reach is not drawn, so it must not be counted as visible either.
+                        var capacityLines = Math.Max(1, (int)Math.Floor((clipRect.Bottom - rect.Y) / effectiveLineHeight));
+                        if (capacityLines < maxVisibleLines)
+                            maxVisibleLines = capacityLines;
+                    }
+
                     if (wrappedLines.Count > maxVisibleLines)
                     {
+                        var droppedLines = wrappedLines.Count;
                         wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
                         var last = wrappedLines[^1];
                         wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}..." : "...";
@@ -827,7 +896,7 @@ public sealed class PdfExportService : IDocumentExportService
                             SourceBlockId = metadata.SourceBlockId,
                             PageNumber = metadata.PageNumber,
                             Kind = "truncated",
-                            Detail = $"Truncated from {originalLineCount} to {maxVisibleLines} lines"
+                            Detail = $"Truncated from {droppedLines} to {maxVisibleLines} lines"
                         });
                     }
 
@@ -1908,6 +1977,32 @@ public sealed class PdfExportService : IDocumentExportService
                left.Bottom > right.Y;
     }
 
+    /// <summary>
+    /// True when the centre of a run of drawn glyphs falls inside one of the rectangles the caller
+    /// keeps verbatim (a citation or subscript that the translation does not reproduce).
+    /// </summary>
+    private static bool IsInsideProtectedRect(
+        SourceTextLetterGroup unit,
+        IReadOnlyList<XRect>? protectedRects,
+        double pageHeight)
+    {
+        if (protectedRects is not { Count: > 0 })
+            return false;
+
+        var centreX = (unit.Left + unit.Right) / 2;
+        var centreY = pageHeight - (unit.Bottom + unit.Top) / 2;
+        foreach (var rect in protectedRects)
+        {
+            if (centreX >= rect.X - 2 && centreX <= rect.Right + 2 &&
+                centreY >= rect.Y && centreY <= rect.Y + rect.Height)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static XRect ExpandOverlayClipRect(XRect rect, double padding, PdfPage page)
     {
         // Tight bounding boxes from PDF extraction can clip ascenders/descenders.
@@ -2426,7 +2521,8 @@ public sealed class PdfExportService : IDocumentExportService
     internal static SourceLineRemovalResult TryRemoveSourceLinesInStream(
         PdfPage page,
         IReadOnlyList<XRect>? lineRects,
-        IReadOnlyList<SourceTextLetterGroup> sequenceGroups)
+        IReadOnlyList<SourceTextLetterGroup> sequenceGroups,
+        IReadOnlyList<XRect>? protectedRects = null)
     {
         var totalLines = lineRects?.Count ?? 0;
         if (lineRects is null || totalLines == 0)
@@ -2484,11 +2580,36 @@ public sealed class PdfExportService : IDocumentExportService
             var operatorLines = new int[operators.Count];
             Array.Fill(operatorLines, -1);
 
+            // Lines the caller keeps for a citation or subscript that the translation does not
+            // reproduce are drawn from the source file, so their glyphs must survive here as well as
+            // in the white-box pass. Treat a whole line as protected when it touches a protected rect.
+            var protectedLines = new HashSet<int>();
+            if (protectedRects is { Count: > 0 })
+            {
+                for (var line = 0; line < totalLines; line++)
+                {
+                    if (protectedRects.Any(protectedRect => RectsIntersect(protectedRect, lineRects[line])))
+                        protectedLines.Add(line);
+                }
+            }
+
+            var protectedOperators = new bool[operators.Count];
+
             for (var index = 0; index < operators.Count; index++)
             {
                 var unit = operators[index];
                 var centreX = (unit.Left + unit.Right) / 2;
                 var centreY = pageHeight - (unit.Bottom + unit.Top) / 2;
+
+                // A protected rect can overlap a neighbouring line's rect. Runs inside it belong to
+                // the citation either way, so they are marked here and skipped by every later pass
+                // (exact match, tolerance match and the rewrite) instead of using a line index.
+                if (protectedLines.Count > 0 && IsInsideProtectedRect(unit, protectedRects, pageHeight))
+                {
+                    protectedOperators[index] = true;
+                    continue;
+                }
+
                 for (var line = 0; line < totalLines; line++)
                 {
                     var rect = lineRects[line];
@@ -2506,7 +2627,7 @@ public sealed class PdfExportService : IDocumentExportService
             // leaving specks of English behind.
             for (var index = 0; index < operators.Count; index++)
             {
-                if (operatorLines[index] >= 0)
+                if (operatorLines[index] >= 0 || protectedOperators[index])
                     continue;
 
                 var unit = operators[index];
@@ -2543,6 +2664,9 @@ public sealed class PdfExportService : IDocumentExportService
             var perLineAdvance = new double[totalLines];
             for (var index = 0; index < operators.Count; index++)
             {
+                if (protectedOperators[index])
+                    continue;
+
                 if (operatorLines[index] >= 0)
                     perLineAdvance[operatorLines[index]] += operators[index].Advance;
             }
@@ -2550,6 +2674,9 @@ public sealed class PdfExportService : IDocumentExportService
             var removedLines = new HashSet<int>();
             for (var line = 0; line < totalLines; line++)
             {
+                if (protectedLines.Contains(line))
+                    continue;
+
                 // A line only counts as removable when its glyphs cover its own width; a partial
                 // claim would delete half a line and leave the rest extractable.
                 if (perLineAdvance[line] >= lineRects[line].Width * 0.8)
@@ -2570,6 +2697,9 @@ public sealed class PdfExportService : IDocumentExportService
             var replacements = new List<(int Start, int End, string Text)>();
             for (var index = 0; index < operators.Count; index++)
             {
+                if (protectedOperators[index])
+                    continue;
+
                 var line = operatorLines[index];
                 if (line < 0 || !removedLines.Contains(line))
                     continue;
@@ -2698,6 +2828,33 @@ public sealed class PdfExportService : IDocumentExportService
     /// Returns <c>true</c> if the operator was found and hidden; <c>false</c> if it could not be
     /// located (caller should fall back to the white-rectangle overlay path).
     /// </summary>
+    /// <summary>
+    /// Hides a block's glyphs only when nothing inside it is kept verbatim. "3 Tr" applies to the
+    /// whole text object, so hiding a block that still shows a protected citation or subscript would
+    /// also make the ink we promised to keep invisible.
+    /// </summary>
+    internal static bool TryHideSourceTextWithProtectedLines(
+        PdfPage page,
+        string sourceText,
+        IReadOnlyList<XRect>? protectedInlineRects)
+    {
+        if (!ShouldHideSourceText(protectedInlineRects))
+        {
+            WriteSourceRemovalDiagnostic(
+                $"[diag] skipped stream hiding: {protectedInlineRects!.Count} protected line(s) must stay visible");
+            return false;
+        }
+
+        return TryHideSourceTextInStream(page, sourceText);
+    }
+
+    /// <summary>
+    /// Hiding the source with "3 Tr" covers the whole text object, so a block that keeps an inline
+    /// citation or subscript verbatim must not be hidden at all.
+    /// </summary>
+    internal static bool ShouldHideSourceText(IReadOnlyList<XRect>? protectedInlineRects) =>
+        protectedInlineRects is not { Count: > 0 };
+
     internal static bool TryHideSourceTextInStream(PdfPage page, string sourceText)
     {
         if (string.IsNullOrWhiteSpace(sourceText))
@@ -3116,6 +3273,87 @@ public sealed class PdfExportService : IDocumentExportService
     /// <paramref name="block"/>. The readability floor uses this before letting CJK text that could
     /// not be hidden in the content stream grow past its original box height.
     /// </summary>
+    /// <summary>
+    /// Returns the lowest y coordinate a block may draw to when its translation needs more lines than
+    /// the original box: the end of the text, the page edge, the top of the next block in the same
+    /// horizontal band, or the next source line nobody translated, whichever comes first.
+    /// </summary>
+    private static double ResolveOverflowDrawBottom(
+        IReadOnlyList<OverlayBlockInfo> blocks,
+        OverlayBlockInfo block,
+        XRect clipRect,
+        double drawnBottom,
+        IReadOnlyList<XRect> preservedLineRects,
+        PdfPage page)
+    {
+        var blockBottom = block.Rect.Y + block.Rect.Height;
+        var bottom = Math.Min(drawnBottom, page.Height.Point);
+        foreach (var other in blocks)
+        {
+            if (ReferenceEquals(other, block))
+                continue;
+
+            // Only a block that starts below this one and shares its horizontal band can be covered.
+            if (other.Rect.Y < blockBottom - 0.5)
+                continue;
+
+            if (!(other.Rect.X < clipRect.Right && other.Rect.Right > clipRect.X))
+                continue;
+
+            bottom = Math.Min(bottom, other.Rect.Y - 1);
+        }
+
+        // Preserved source lines are not ours to draw over. Only the ones sharing the drawing band
+        // matter: a footer under the left column says nothing about the right column.
+        foreach (var preserved in preservedLineRects)
+        {
+            if (preserved.Y <= blockBottom - 0.5)
+                continue;
+
+            if (!(preserved.X < clipRect.Right && preserved.Right > clipRect.X))
+                continue;
+
+            bottom = Math.Min(bottom, Math.Max(blockBottom, preserved.Y - 1));
+        }
+
+        return bottom;
+    }
+
+    /// <summary>
+    /// Bounds of the source glyph runs that no overlay block claims, measured from the page top.
+    /// They belong to content the translation leaves untouched: footers, references, rules, tables.
+    /// </summary>
+    private static IReadOnlyList<XRect> BuildPreservedLineRects(
+        IReadOnlyList<OverlayBlockInfo> blocks,
+        IReadOnlyDictionary<int, IReadOnlyList<SourceTextLetterGroup>> groupsByPage,
+        int pageIndex,
+        double pageHeight)
+    {
+        var pageNumber = blocks.Count > 0 ? blocks[0].Metadata.PageNumber : pageIndex + 1;
+        if (!groupsByPage.TryGetValue(pageNumber, out var groups) || groups.Count == 0)
+            return [];
+
+        var preserved = new List<XRect>();
+        foreach (var group in groups)
+        {
+            var centreX = (group.Left + group.Right) / 2;
+            var centreY = pageHeight - (group.Bottom + group.Top) / 2;
+            var claimedByBlock = blocks.Any(block =>
+                centreX >= block.Rect.X - 2 && centreX <= block.Rect.Right + 2 &&
+                centreY >= block.Rect.Y && centreY <= block.Rect.Y + block.Rect.Height);
+            if (claimedByBlock)
+                continue;
+
+            preserved.Add(new XRect(
+                group.Left,
+                pageHeight - group.Top,
+                Math.Max(1, group.Right - group.Left),
+                Math.Max(1, group.Top - group.Bottom)));
+        }
+
+        return preserved;
+    }
+
     private static bool HasClearSpaceBelow(IReadOnlyList<OverlayBlockInfo> blocks, OverlayBlockInfo block, double neededHeight)
     {
         var below = new XRect(block.Rect.X, block.Rect.Y + block.Rect.Height, block.Rect.Width, neededHeight);

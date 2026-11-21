@@ -1,11 +1,72 @@
 {
   "schemaVersion": 1,
   "outputRoot": "memory-nightly",
-  "latestRunKey": "20261117T023715Z-bda9a65-run44003146420-attempt1",
-  "updatedAtUtc": "2026-11-17T02:37:15.2451508Z",
+  "latestRunKey": "20261121T005632Z-b63be69-run44846180460-attempt1",
+  "updatedAtUtc": "2026-11-21T00:56:32.3379995Z",
   "retentionDays": 60,
   "retentionRuns": 60,
   "runs": [
+    {
+      "schemaVersion": 1,
+      "branchName": "scratch/memory-nightly",
+      "outputRoot": "memory-nightly",
+      "runKey": "20261121T005632Z-b63be69-run44846180460-attempt1",
+      "runId": "44846180460",
+      "runAttempt": "1",
+      "sourceSha": "b63be69e082d06868db9f527e861fe9492f0456b",
+      "sourceRef": "master",
+      "capturedAtUtc": "2026-11-21T00:56:32.2278304Z",
+      "retentionDays": 60,
+      "retentionRuns": 60,
+      "copiedArtifacts": [
+        {
+          "path": "summary.json",
+          "bytes": 639
+        },
+        {
+          "path": "typeperf.csv",
+          "bytes": 12398
+        },
+        {
+          "path": "dotnet-counters.json",
+          "bytes": 1159355
+        },
+        {
+          "path": "dotnet-counters.err.log",
+          "bytes": 0
+        },
+        {
+          "path": "dotnet-counters.out.log",
+          "bytes": 46
+        },
+        {
+          "path": "dotnet-trace.err.log",
+          "bytes": 0
+        },
+        {
+          "path": "dotnet-trace.out.log",
+          "bytes": 529
+        },
+        {
+          "path": "typeperf.err.log",
+          "bytes": 0
+        },
+        {
+          "path": "typeperf.out.log",
+          "bytes": 294
+        }
+      ],
+      "skippedHeavyArtifacts": [
+        {
+          "path": "gc-verbose.nettrace",
+          "bytes": 4916322
+        },
+        {
+          "path": "wpr-reference-set.etl",
+          "bytes": 855638016
+        }
+      ]
+    },
     {
       "schemaVersion": 1,
       "branchName": "scratch/memory-nightly",

@@ -284,12 +284,12 @@ jobs:
             filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PopButtonTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PopButtonSelectionTests.)"
             suffix: "pop-button"
           - name: "Advanced"
-            # MiniWindowFocusTests excluded pending investigation of re-open hotkey regression
-            # surfaced once these test classes started running on CI.
+            # Legacy MiniWindowFocusTests remain excluded pending investigation of
+            # their re-open hotkey regression. Core runs the isolated #258 regression.
             filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MiniWindowLongTextTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PhoneticTranscriptionTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DictionaryWebViewRenderingTests.)"
             suffix: "mini-phonetic-dictionary"
           - name: "Core & Settings"
-            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowShowLatencyTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.HoverLookupSettingsTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.HoverLookupLayoutTests.)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowShowLatencyTests. | FullyQualifiedName=Easydict.UIAutomation.Tests.Tests.MiniWindowFocusTests.MiniWindow_EmptySelection_AcceptsTypingWithoutFocusAssistanceOnOpenAndReopen | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.HoverLookupSettingsTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.HoverLookupLayoutTests.)"
             suffix: "core-settings-darkmode"
           - name: "Theme Contrast"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.ThemeContrastTests."

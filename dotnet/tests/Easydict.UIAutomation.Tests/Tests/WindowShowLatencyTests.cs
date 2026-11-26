@@ -101,12 +101,14 @@ public sealed class WindowShowLatencyTests : IDisposable
         {
             source.BringToForeground();
             var timer = Stopwatch.StartNew();
-            SendShowHotkey(fixedWindow);
+            // Foreground activation requires the input authorization supplied by
+            // a real registered hotkey; posting WM_HOTKEY alone does not supply it.
+            SendRegisteredShowHotkey(fixedWindow);
             var hwnd = WaitForSecondaryWindow();
             var visibleMs = timer.ElapsedMilliseconds;
             WaitUntil(() => GetForegroundWindow() == hwnd, TimeSpan.FromSeconds(8)).Should().BeTrue();
             _output.WriteLine($"{(fixedWindow ? "Fixed" : "Mini")} attempt={attempt}: visible={visibleMs}ms, activated={timer.ElapsedMilliseconds}ms");
-            SendShowHotkey(fixedWindow);
+            SendRegisteredShowHotkey(fixedWindow);
             WaitUntil(() => !IsWindowVisible(hwnd), TimeSpan.FromSeconds(3)).Should().BeTrue();
         }
     }

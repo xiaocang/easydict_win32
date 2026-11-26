@@ -681,7 +681,10 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
                                 view.BoundingRectangle is { Width: > 20, Height: > 20 }),
                         TimeSpan.FromSeconds(15)).Result;
                     if (renderedWebView is null)
+                    {
                         output.WriteLine(ScreenshotHelper.CaptureWindow(window, $"fluent2_failed_webview_cycle_{cycle}"));
+                        WriteDictionaryRenderingDiagnostics(launcher, window);
+                    }
                     renderedWebView.Should().NotBeNull("exercise rendered WebView content before releasing its result card");
                 }
                 Invoke(Wait(window, "CompareResultsButton"));
@@ -713,6 +716,70 @@ public sealed class SavedItemsVisualTests(ITestOutputHelper output)
             output.WriteLine(File.ReadAllText(path));
         }
         finally { Environment.SetEnvironmentVariable("EASYDICT_SAVED_ITEMS_DIAGNOSTICS", previous); }
+    }
+
+    private void WriteDictionaryRenderingDiagnostics(AppLauncher launcher, Window window)
+    {
+        // Keep the original failure authoritative. UIA providers and processes may
+        // disappear while diagnostics run; inspect only the relevant controls.
+        try
+        {
+            output.WriteLine($"Dictionary render diagnostics: app pid={launcher.Application.ProcessId}, exited={launcher.Application.HasExited}");
+        }
+        catch (Exception ex) { output.WriteLine($"App state unavailable: {ex.GetType().Name} (0x{ex.HResult:X8})"); }
+
+        try
+        {
+            var card = Find(window, "ServiceResultItem_deepl");
+            if (card is null) output.WriteLine("Dictionary result card is absent from the current UIA tree.");
+            else
+            {
+                var controls = card.FindAllDescendants(cf => cf.ByAutomationId("DictWebView")
+                    .Or(cf.ByAutomationId("ResultText")).Or(cf.ByAutomationId("ResultFeedback")));
+                output.WriteLine($"Dictionary card target controls: {controls.Length}");
+                foreach (var control in controls.Take(10)) WriteControl("card", control);
+            }
+        }
+        catch (Exception ex) { output.WriteLine($"Card UIA inspection failed: {ex.GetType().Name} (0x{ex.HResult:X8})"); }
+
+        try
+        {
+            var handle = WindowHandles.GetValue(window, current => new WindowHandle(current)).Value;
+            var freshRoot = window.Automation.FromHandle(handle);
+            var browsers = freshRoot.FindAllDescendants(cf => cf.ByAutomationId("DictWebView"));
+            output.WriteLine($"Fresh HWND root DictWebView controls: {browsers.Length}");
+            foreach (var browser in browsers.Take(10)) WriteControl("fresh-root", browser);
+        }
+        catch (Exception ex) { output.WriteLine($"Fresh-root UIA inspection failed: {ex.GetType().Name} (0x{ex.HResult:X8})"); }
+
+        try
+        {
+            var browsers = System.Diagnostics.Process.GetProcessesByName("msedgewebview2");
+            output.WriteLine($"WebView2 processes on the test desktop: {browsers.Length}");
+            var reported = 0;
+            foreach (var browser in browsers)
+            {
+                using (browser)
+                {
+                    if (reported++ >= 8) continue;
+                    try { output.WriteLine($"WebView2 pid={browser.Id}, version={browser.MainModule?.FileVersionInfo.FileVersion ?? "unknown"}"); }
+                    catch (Exception ex) { output.WriteLine($"WebView2 process inspection failed: {ex.GetType().Name} (0x{ex.HResult:X8})"); }
+                }
+            }
+        }
+        catch (Exception ex) { output.WriteLine($"WebView2 process enumeration failed: {ex.GetType().Name} (0x{ex.HResult:X8})"); }
+
+        void WriteControl(string scope, AutomationElement control)
+        {
+            try
+            {
+                var name = control.Properties.Name.ValueOrDefault ?? "";
+                name = name.Replace("\r", "\\r").Replace("\n", "\\n");
+                if (name.Length > 160) name = name[..160] + "...";
+                output.WriteLine($"{scope}: Id={control.Properties.AutomationId.ValueOrDefault}, Name={name}, IsOffscreen={control.IsOffscreen}, Bounds={control.BoundingRectangle}");
+            }
+            catch (Exception ex) { output.WriteLine($"{scope}: control state unavailable: {ex.GetType().Name} (0x{ex.HResult:X8})"); }
+        }
     }
 
     private sealed class WindowHandle(Window window)

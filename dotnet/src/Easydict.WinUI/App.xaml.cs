@@ -607,7 +607,9 @@ namespace Easydict.WinUI
                     service.ShowWithoutActivation,
                     async cancellationToken =>
                     {
-                        await Task.Delay(150, cancellationToken);
+                        // Reading UIA does not inject input. The clipboard fallback
+                        // already waits before sending Ctrl+C when it is needed.
+                        CrashDiagnostics.Log($"[WindowShow] Mini: capture started={stopwatch.ElapsedMilliseconds}ms");
                         var text = await TextSelectionService.GetSelectedTextAsync(sourceWindow, cancellationToken);
                         CrashDiagnostics.Log($"[WindowShow] Mini: capture complete={stopwatch.ElapsedMilliseconds}ms, hasText={!string.IsNullOrWhiteSpace(text)}");
                         return text;

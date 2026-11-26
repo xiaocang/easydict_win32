@@ -31,6 +31,20 @@ internal sealed class SelectionCaptureSession(
             throw new OperationCanceledException("Selection source is no longer foreground.", cancellationToken);
     }
 
+    // Keep fallback orchestration independent of native UIA/clipboard APIs so the
+    // source lifetime and pending-window behavior can be tested deterministically.
+    internal async Task<string?> ResolveAsync(
+        UiaSelectionResult selection, Func<Task<string?>> captureClipboard)
+    {
+        ThrowIfInvalid();
+        if (!string.IsNullOrWhiteSpace(selection.Text)) return selection.Text;
+        if (selection.IsConfirmedEmpty) return null;
+
+        var text = await captureClipboard();
+        ThrowIfInvalid();
+        return text;
+    }
+
     internal static async Task<T> WithCleanupAsync<T>(Func<Task<T>> capture, Func<Task> cleanup)
     {
         try { return await capture(); }

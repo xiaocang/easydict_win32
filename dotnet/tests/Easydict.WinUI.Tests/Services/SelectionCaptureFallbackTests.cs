@@ -125,4 +125,167 @@ public class SelectionCaptureFallbackTests
         UiaSelectionResult.FromText(null).Should().Be(UiaSelectionResult.Unavailable);
         UiaSelectionResult.Unavailable.IsConfirmedEmpty.Should().BeFalse();
     }
+
+    [Fact]
+    public void EmptyRangeArray_IsConfirmedEmpty()
+    {
+        UiaSelectionResult.FromRanges(Array.Empty<string>()).Should().Be(UiaSelectionResult.Empty);
+    }
+
+    [Fact]
+    public void NullRangeArray_RemainsUnavailable()
+    {
+        UiaSelectionResult.FromRanges(null).Should().Be(UiaSelectionResult.Unavailable);
+    }
+
+    [Fact]
+    public void MultipleEmptyRanges_AreConfirmedEmpty()
+    {
+        UiaSelectionResult.FromRanges(new[] { "", " ", "\n" }).IsConfirmedEmpty.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("later selection")]
+    [InlineData(null)]
+    public async Task EmptyFirstRange_WithSelectedOrUnreadableLaterRange_KeepsClipboardFallback(string? later)
+    {
+        var selection = UiaSelectionResult.FromRanges(new[] { "", later });
+        var session = new SelectionCaptureSession(123, () => 123, CancellationToken.None);
+        var clipboardCalls = 0;
+
+        var result = await session.ResolveAsync(selection, () =>
+        {
+            clipboardCalls++;
+            return Task.FromResult<string?>("full selection");
+        });
+
+        clipboardCalls.Should().Be(1);
+        result.Should().Be("full selection");
+    }
+
+    [Fact]
+    public void SelectedFirstRange_PreservesExistingExtractionWithoutReadingLaterRanges()
+    {
+        static IEnumerable<string?> Ranges()
+        {
+            yield return "first selection";
+            throw new InvalidOperationException("Later ranges should not be read.");
+        }
+
+        UiaSelectionResult.FromRanges(Ranges()).Text.Should().Be("first selection");
+    }
+
+    [Fact]
+    public void RangeReadFailure_IsNotReportedAsConfirmedEmpty()
+    {
+        static IEnumerable<string?> Ranges()
+        {
+            yield return "";
+            throw new InvalidOperationException("Provider failed.");
+        }
+
+        Action read = () => UiaSelectionResult.FromRanges(Ranges());
+        read.Should().Throw<InvalidOperationException>();
+    }
+
+    [Theory]
+    [InlineData("null", false)]
+    [InlineData("null", true)]
+    [InlineData("ambiguous", false)]
+    [InlineData("ambiguous", true)]
+    [InlineData("error", false)]
+    [InlineData("error", true)]
+    public async Task EmptyAndUncertainProvider_KeepClipboardFallback(string uncertain, bool emptyFirst)
+    {
+        Func<UiaSelectionResult?> unknown = () => ReadProvider(uncertain);
+        Func<UiaSelectionResult?> empty = () => UiaSelectionResult.Empty;
+        var selection = UiaSelectionResult.ReadProviders(
+            emptyFirst ? new[] { empty, unknown } : new[] { unknown, empty });
+        var session = new SelectionCaptureSession(123, () => 123, CancellationToken.None);
+        var clipboardCalls = 0;
+
+        var result = await session.ResolveAsync(selection, () =>
+        {
+            clipboardCalls++;
+            return Task.FromResult<string?>("recovered selection");
+        });
+
+        clipboardCalls.Should().Be(1);
+        result.Should().Be("recovered selection");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EmptyAndUnsupportedProvider_ConfirmEmpty(bool emptyFirst)
+    {
+        Func<UiaSelectionResult?> unsupported = () => null;
+        Func<UiaSelectionResult?> empty = () => UiaSelectionResult.Empty;
+
+        var result = UiaSelectionResult.ReadProviders(
+            emptyFirst ? new[] { empty, unsupported } : new[] { unsupported, empty });
+
+        result.Should().Be(UiaSelectionResult.Empty);
+    }
+
+    [Fact]
+    public void BothUnsupportedProviders_RemainUnavailable()
+    {
+        UiaSelectionResult.ReadProviders(new Func<UiaSelectionResult?>[] { () => null, () => null })
+            .Should().Be(UiaSelectionResult.Unavailable);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("ambiguous")]
+    [InlineData("error")]
+    [InlineData("unsupported")]
+    [InlineData("empty")]
+    public void LaterProviderSelection_RemainsAvailable(string first)
+    {
+        var result = UiaSelectionResult.ReadProviders(new Func<UiaSelectionResult?>[]
+        {
+            () => ReadProvider(first),
+            () => UiaSelectionResult.FromText("selected text")
+        });
+
+        result.Text.Should().Be("selected text");
+    }
+
+    [Fact]
+    public void FirstProviderSelection_DoesNotReadAnotherProvider()
+    {
+        var readAgain = false;
+        var result = UiaSelectionResult.ReadProviders(new Func<UiaSelectionResult?>[]
+        {
+            () => UiaSelectionResult.FromText("selected text"),
+            () => { readAgain = true; return UiaSelectionResult.Unavailable; }
+        });
+
+        result.Text.Should().Be("selected text");
+        readAgain.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ProviderCancellation_IsNeverConvertedToEmptyOrUnavailable()
+    {
+        Action read = () => UiaSelectionResult.ReadProviders(new Func<UiaSelectionResult?>[]
+        {
+            () => UiaSelectionResult.Empty,
+            () => throw new OperationCanceledException()
+        });
+
+        read.Should().Throw<OperationCanceledException>();
+    }
+
+    private static UiaSelectionResult? ReadProvider(string outcome)
+        => outcome switch
+        {
+            "unsupported" => null,
+            "empty" => UiaSelectionResult.Empty,
+            "null" => UiaSelectionResult.FromRanges(null),
+            "ambiguous" => UiaSelectionResult.FromRanges(new[] { "", "later range" }),
+            "error" => throw new InvalidOperationException("Provider failed."),
+            _ => throw new ArgumentOutOfRangeException(nameof(outcome)),
+        };
 }

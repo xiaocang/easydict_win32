@@ -80,6 +80,11 @@ public sealed partial class MiniWindow : Window
     private bool _resizeThrottling;   // inside cooldown window
     private bool _isSourceTextExpanded = false;
     private int _inputFocusGeneration;
+    private bool _inputFocusPending;
+    private bool _inputFocusRetryQueued;
+    private Stopwatch? _showStopwatch;
+    private bool _awaitingShowActivation;
+    private bool _hasLoggedInputFocus;
     private bool _isSavedItemsMenuOpen;
 
     // Frame-rate-coalesced streaming text applicator. See StreamingTextCoalescer for
@@ -205,7 +210,11 @@ public sealed partial class MiniWindow : Window
         }
 
         // Subscribe to text changes for auto-resize
+        // TextChanging is synchronous. A delayed TextChanged from programmatic
+        // selection text must not cancel the next ShowAndActivate request.
+        InputTextBox.TextChanging += (_, _) => CancelPendingInputFocus();
         InputTextBox.TextChanged += OnTextChanged;
+        InputTextBox.GotFocus += (_, _) => LogInputFocusConfirmed();
 
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
@@ -213,7 +222,11 @@ public sealed partial class MiniWindow : Window
             if (!_isOnboardingPreview)
             {
                 content.AddHandler(UIElement.PointerPressedEvent,
-                    new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => InterruptSelectionCapture("PointerPressed")), true);
+                    new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) =>
+                    {
+                        CancelPendingInputFocus();
+                        InterruptSelectionCapture("PointerPressed");
+                    }), true);
             }
             content.ActualThemeChanged += OnContentActualThemeChanged;
             content.Loaded += (s, e) =>
@@ -1116,6 +1129,9 @@ public sealed partial class MiniWindow : Window
         if (args.WindowActivationState != WindowActivationState.Deactivated)
         {
             InterruptSelectionCapture();
+            _awaitingShowActivation = false;
+            if (_showStopwatch is not null)
+                CrashDiagnostics.Log($"[WindowShow] Mini: activation event={_showStopwatch.ElapsedMilliseconds}ms, state={args.WindowActivationState}");
             Debug.WriteLine($"[MiniWindow] Activated: state={args.WindowActivationState}, loaded={_isLoaded}");
             if (!_isOnboardingPreview)
             {
@@ -1139,6 +1155,7 @@ public sealed partial class MiniWindow : Window
                 return;
             }
 
+            CancelPendingInputFocus();
             // Window lost focus
             if (!_isPinned && _settings.MiniWindowAutoClose && !_isClosing)
             {
@@ -1188,6 +1205,7 @@ public sealed partial class MiniWindow : Window
 
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        CancelPendingInputFocus();
         InterruptSelectionCapture();
         try
         {
@@ -2534,7 +2552,7 @@ public sealed partial class MiniWindow : Window
         {
             // The button owns the flyout's lifetime and activation. Cancel pending
             // input focus and keep activation callbacks from stealing menu focus.
-            ++_inputFocusGeneration;
+            CancelPendingInputFocus();
             _isSavedItemsMenuOpen = true;
             history.Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsHistory", "History");
             favorites.Text = LocalizationService.Instance.GetStringOrDefault("SavedItemsFavorites", "Favorites");
@@ -2558,6 +2576,7 @@ public sealed partial class MiniWindow : Window
     private async void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_isOnboardingPreview) return;
+        CancelPendingInputFocus();
 
         // PageUp/PageDown/Up/Down scroll the results (issue #137) while the
         // input TextBox keeps keyboard focus so typing continues uninterrupted.
@@ -2839,18 +2858,34 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     internal void ShowWithoutActivation()
     {
+        _showStopwatch = Stopwatch.StartNew();
+        _hasLoggedInputFocus = false;
+        _awaitingShowActivation = true;
+        BeginInputFocusRequest();
         _isClosing = false;
-        _appWindow?.Show(false);
         SetSourceTextState(true, focusInput: false);
+        _appWindow?.Show(false);
+        CrashDiagnostics.Log($"[WindowShow] Mini: visible without activation={_showStopwatch.ElapsedMilliseconds}ms");
         RequestResize();
     }
 
     public void ShowAndActivate()
     {
+        if (!_awaitingShowActivation || _showStopwatch is null)
+        {
+            _showStopwatch = Stopwatch.StartNew();
+            _hasLoggedInputFocus = false;
+        }
+        _awaitingShowActivation = false;
         InterruptSelectionCapture();
         _autoCloseGeneration++;
         _isClosing = false;
         _lastShowTime = DateTime.UtcNow;
+        // Make the input focusable before activation. Activation and the explicit
+        // show share one request, so a later Activated event cannot select new text.
+        SetSourceTextState(true, focusInput: false);
+        BeginInputFocusRequest();
+        CrashDiagnostics.Log($"[WindowShow] Mini: view activation requested={_showStopwatch.ElapsedMilliseconds}ms");
         _appWindow?.Show();
 
         // Try to bring window to front using multiple methods
@@ -2863,15 +2898,15 @@ public sealed partial class MiniWindow : Window
             System.Diagnostics.Debug.WriteLine($"MiniWindow: MoveInZOrderAtTop failed: {ex.Message}");
         }
 
-        // Use Win32 SetForegroundWindow to forcefully bring window to front
+        // Ask Windows to bring the window to the foreground.
         var foregroundSet = ForegroundWindowHelper.TryBringToFront(this, "MiniWindow");
+        CrashDiagnostics.Log($"[WindowShow] Mini: foreground result={foregroundSet}, foreground={IsForeground}, elapsed={_showStopwatch.ElapsedMilliseconds}ms");
         if (!foregroundSet)
         {
             System.Diagnostics.Debug.WriteLine("MiniWindow: SetForegroundWindow failed; relying on Activate()");
         }
 
         this.Activate();
-        SetSourceTextState(true);
         QueueInputFocusAndSelectAll();
 
         // Resize window to fit existing content (delayed to allow layout to complete)
@@ -2910,70 +2945,98 @@ public sealed partial class MiniWindow : Window
         return true;
     }
 
+    private void BeginInputFocusRequest()
+    {
+        CancelPendingInputFocus();
+        _inputFocusPending = true;
+    }
+
+    private void CancelPendingInputFocus()
+    {
+        ++_inputFocusGeneration;
+        _inputFocusPending = false;
+        _inputFocusRetryQueued = false;
+    }
+
+    private void LogInputFocusConfirmed()
+    {
+        if (_showStopwatch is null || _hasLoggedInputFocus || !IsForeground
+            || InputTextBox.XamlRoot is null
+            || !ReferenceEquals(FocusManager.GetFocusedElement(InputTextBox.XamlRoot), InputTextBox))
+            return;
+
+        _hasLoggedInputFocus = true;
+        CrashDiagnostics.Log($"[WindowShow] Mini: input focus confirmed={_showStopwatch.ElapsedMilliseconds}ms");
+    }
+
     private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts, int? generation = null)
     {
-        if (InputTextBox == null || _isSavedItemsMenuOpen) return;
-        var focusGeneration = generation ?? ++_inputFocusGeneration;
-        DispatcherQueue.TryEnqueue(async () =>
+        var focusGeneration = generation ?? _inputFocusGeneration;
+        if (!_inputFocusPending || focusGeneration != _inputFocusGeneration)
+            return;
+
+        if (InputTextBox == null || _isSavedItemsMenuOpen || _isClosing || !IsVisible)
         {
-            if (focusGeneration != _inputFocusGeneration) return;
-            var attempt = InputFocusMaxAttempts - attemptsRemaining + 1;
+            CancelPendingInputFocus();
+            return;
+        }
 
-            if (_isClosing)
-            {
-                Debug.WriteLine($"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: aborted because window is closing");
-                return;
-            }
-
-            if (!_isLoaded || InputTextBox.XamlRoot is null || !InputTextBox.IsEnabled)
-            {
-                Debug.WriteLine(
-                    $"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
-                    $"loaded={_isLoaded}, xamlRootReady={InputTextBox.XamlRoot is not null}, enabled={InputTextBox.IsEnabled}");
-                if (attemptsRemaining > 1)
-                {
-                    await Task.Delay(InputFocusRetryDelayMs);
-                    QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
-                }
-                return;
-            }
-
-            if (!IsForeground)
-            {
-                Debug.WriteLine(
-                    $"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
-                    "window is not foreground yet");
-                if (attemptsRemaining > 1)
-                {
-                    await Task.Delay(InputFocusRetryDelayMs);
-                    QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
-                }
-                return;
-            }
-
+        var attempt = InputFocusMaxAttempts - attemptsRemaining + 1;
+        // The first attempt runs inline on the UI thread. Only incomplete load or
+        // activation needs a retry; successful shows do not wait for a dispatcher turn.
+        if (_isLoaded && InputTextBox.XamlRoot is not null && InputTextBox.IsEnabled
+            && InputTextBox.Visibility == Visibility.Visible && IsForeground)
+        {
             var focusResult = InputTextBox.Focus(FocusState.Programmatic);
-            if (focusResult)
-            {
-                InputTextBox.SelectAll();
-            }
-
             var focusedElement = FocusManager.GetFocusedElement(InputTextBox.XamlRoot);
             var hasInputFocus = ReferenceEquals(focusedElement, InputTextBox);
             Debug.WriteLine(
                 $"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
                 $"focusResult={focusResult}, hasInputFocus={hasInputFocus}, focusedElement={focusedElement?.GetType().Name ?? "<null>"}");
 
-            if (hasInputFocus)
+            // Focus callbacks may have invalidated the request through user input.
+            if (focusGeneration != _inputFocusGeneration || !_inputFocusPending) return;
+            if (hasInputFocus && IsForeground)
             {
+                CancelPendingInputFocus();
+                InputTextBox.SelectAll();
+                LogInputFocusConfirmed();
                 return;
             }
+        }
+        else
+        {
+            Debug.WriteLine(
+                $"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
+                $"loaded={_isLoaded}, xamlRootReady={InputTextBox.XamlRoot is not null}, enabled={InputTextBox.IsEnabled}, foreground={IsForeground}");
+        }
 
-            if (attemptsRemaining > 1)
+        // An activation event can make the inline attempt ready before the
+        // queued retry runs. Keep just one delayed retry if it is still needed.
+        if (_inputFocusRetryQueued) return;
+
+        if (attemptsRemaining <= 1)
+        {
+            CancelPendingInputFocus();
+            CrashDiagnostics.Log($"[WindowShow] Mini: input focus attempts exhausted={_showStopwatch?.ElapsedMilliseconds}ms");
+            return;
+        }
+
+        _inputFocusRetryQueued = true;
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            await Task.Delay(InputFocusRetryDelayMs);
+            if (focusGeneration != _inputFocusGeneration || !_inputFocusPending) return;
+            _inputFocusRetryQueued = false;
+            QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
+        }))
+        {
+            if (focusGeneration == _inputFocusGeneration)
             {
-                await Task.Delay(InputFocusRetryDelayMs);
-                QueueInputFocusAndSelectAll(attemptsRemaining - 1, focusGeneration);
+                CancelPendingInputFocus();
+                CrashDiagnostics.Log("[WindowShow] Mini: input focus dispatcher unavailable");
             }
-        });
+        }
     }
 
     /// <summary>
@@ -2981,6 +3044,8 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void HideWindow()
     {
+        CancelPendingInputFocus();
+        _awaitingShowActivation = false;
         InterruptSelectionCapture();
         _autoCloseGeneration++;
         // A preview must not stop audio owned by another window.

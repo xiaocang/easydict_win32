@@ -353,12 +353,15 @@ public static class TextSelectionService
         // Use UIA for non-Electron apps (or as fallback if clipboard failed for Electron)
         // Use SemaphoreSlim + timeout to prevent UIA from hanging indefinitely on Chromium apps
         var uiaSelection = UiaSelectionResult.Unavailable;
+        var uiaStarted = Stopwatch.GetTimestamp();
+        var uiaOutcome = "unavailable";
         bool semaphoreAcquired = false;
         try
         {
             semaphoreAcquired = await _automationSemaphore.WaitAsync(UiaSemaphoreTimeoutMs, cancellationToken);
             if (!semaphoreAcquired)
             {
+                uiaOutcome = "busy";
                 Debug.WriteLine("[TextSelectionService] UIA busy, skipping to clipboard fallback");
             }
             else
@@ -376,17 +379,25 @@ public static class TextSelectionService
                     if (await Task.WhenAny(uiaTask, Task.Delay(UiaExecutionTimeoutMs, cancellationToken)) == uiaTask)
                     {
                         uiaSelection = await uiaTask;
+                        uiaOutcome = uiaSelection.IsConfirmedEmpty ? "empty"
+                            : uiaSelection.Text != null ? "selected" : "unavailable";
                         if (!string.IsNullOrWhiteSpace(uiaSelection.Text))
                             Debug.WriteLine($"[TextSelectionService] Got {uiaSelection.Text.Length} chars via UIA");
                     }
                     else
                     {
+                        uiaOutcome = cancellationToken.IsCancellationRequested ? "cancelled" : "timeout";
                         Debug.WriteLine("[TextSelectionService] UIA timed out, skipping to clipboard fallback");
                     }
                 }
-                catch (OperationCanceledException) { throw; }
+                catch (OperationCanceledException)
+                {
+                    uiaOutcome = "cancelled";
+                    throw;
+                }
                 catch (Exception ex)
                 {
+                    uiaOutcome = "failed";
                     Debug.WriteLine($"[TextSelectionService] UIA failed: {ex.Message}");
                 }
             }
@@ -394,6 +405,8 @@ public static class TextSelectionService
         finally
         {
             if (semaphoreAcquired) _automationSemaphore.Release();
+            if (!automaticMouse)
+                CrashDiagnostics.Log($"[TextSelectionService] stage=UIA elapsedMs={Stopwatch.GetElapsedTime(uiaStarted).TotalMilliseconds:F1} outcome={uiaOutcome}");
         }
 
         // UIA may finish after cancellation or return no text for a stale source.
@@ -407,8 +420,8 @@ public static class TextSelectionService
             return uiaSelection.Text;
         }
 
-        // UIA failed or no selection - fallback to clipboard method (Ctrl+C)
-        // This is required for modern UI apps (UWP, WinUI, etc.) that don't support TextPattern
+        // Unavailable UIA providers still need clipboard fallback (Ctrl+C).
+        // A confirmed empty selection is resolved without clipboard work below.
         // BUT: Do NOT use clipboard method for terminal apps (Ctrl+C = SIGINT)
         // AND: Skip if we already tried clipboard for Electron (avoid double Ctrl+C in one call)
         if (isTerminal)
@@ -471,51 +484,21 @@ public static class TextSelectionService
 
     private static UiaSelectionResult GetSelectionFromElement(AutomationElement element)
     {
-        var result = UiaSelectionResult.Unavailable;
-        try
+        return UiaSelectionResult.ReadProviders(new Func<UiaSelectionResult?>[]
         {
-            // Try TextPattern first
-            if (element.Patterns.Text.IsSupported)
+            () =>
             {
-                var textPattern = element.Patterns.Text.Pattern;
-                var selection = textPattern.GetSelection();
-                if (selection != null)
-                {
-                    result = selection.Length == 0
-                        ? UiaSelectionResult.Empty
-                        : UiaSelectionResult.FromText(selection[0].GetText(-1));
-                    if (result.Text != null) return result;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[TextSelectionService] TextPattern failed: {ex.Message}");
-        }
-
-        try
-        {
-            // Try TextPattern2 if TextPattern didn't work
-            if (element.Patterns.Text2.IsSupported)
+                if (!element.Patterns.Text.IsSupported) return null;
+                var ranges = element.Patterns.Text.Pattern.GetSelection();
+                return UiaSelectionResult.FromRanges(ranges?.Select(range => range.GetText(-1)));
+            },
+            () =>
             {
-                var textPattern2 = element.Patterns.Text2.Pattern;
-                var selection = textPattern2.GetSelection();
-                if (selection != null)
-                {
-                    var text2Result = selection.Length == 0
-                        ? UiaSelectionResult.Empty
-                        : UiaSelectionResult.FromText(selection[0].GetText(-1));
-                    if (text2Result.Text != null) return text2Result;
-                    if (text2Result.IsConfirmedEmpty) result = text2Result;
-                }
+                if (!element.Patterns.Text2.IsSupported) return null;
+                var ranges = element.Patterns.Text2.Pattern.GetSelection();
+                return UiaSelectionResult.FromRanges(ranges?.Select(range => range.GetText(-1)));
             }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[TextSelectionService] TextPattern2 failed: {ex.Message}");
-        }
-
-        return result;
+        }, ex => Debug.WriteLine($"[TextSelectionService] UIA text pattern failed: {ex.GetType().Name}"));
     }
 
     /// <summary>
@@ -578,6 +561,8 @@ public static class TextSelectionService
         var timeoutMs = isElectronApp ? 1200 : 450;
         var cancellationToken = session.CancellationToken;
         session.ThrowIfInvalid();
+        var clipboardStarted = Stopwatch.GetTimestamp();
+        var clipboardOutcome = "unavailable";
 
         try
         {
@@ -653,16 +638,27 @@ public static class TextSelectionService
                 }
             });
 
+            clipboardOutcome = outcome.ToString();
             session.ThrowIfInvalid();
             return outcome == ClipWaitResult.Success && !string.IsNullOrWhiteSpace(selectedText)
                 ? (selectedText, ClipWaitResult.Success)
                 : (null, outcome);
         }
-        catch (OperationCanceledException) { throw; }
+        catch (OperationCanceledException)
+        {
+            clipboardOutcome = "cancelled";
+            throw;
+        }
         catch (Exception ex)
         {
+            clipboardOutcome = "failed";
             Debug.WriteLine($"[TextSelectionService] Clipboard capture failed: {ex.GetType().Name}");
             return (null, ClipWaitResult.Timeout);
+        }
+        finally
+        {
+            if (mouseProcessName == null)
+                CrashDiagnostics.Log($"[TextSelectionService] stage=clipboard elapsedMs={Stopwatch.GetElapsedTime(clipboardStarted).TotalMilliseconds:F1} outcome={clipboardOutcome}");
         }
     }
 

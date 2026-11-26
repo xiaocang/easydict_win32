@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.AutomationElements;
@@ -130,6 +132,91 @@ public class MiniWindowFocusTests : IDisposable
         _output.WriteLine($"Screenshot: {path}");
     }
 
+    /// <summary>
+    /// Exercise the empty-selection hotkey path with real keyboard input. This test
+    /// never activates the mini window or focuses its input on the app's behalf.
+    /// Timing is diagnostic: UIA discovery/polling and shortcut delivery contribute
+    /// to these observations, so they are not precise product latency measurements.
+    /// </summary>
+    [Fact]
+    public void MiniWindow_EmptySelection_AcceptsTypingWithoutFocusAssistanceOnOpenAndReopen()
+    {
+        _ = _launcher.GetMainWindow();
+        using var source = new NotepadTestTarget(
+            "Source text with no selection",
+            Environment.GetEnvironmentVariable("EASYDICT_UIA_TEXT_TARGET_EXE"));
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            source.BringToForeground();
+            var sourceWindow = source.GetWindow();
+            var editor = sourceWindow.FindFirstDescendant(cf =>
+                cf.ByControlType(FlaUI.Core.Definitions.ControlType.Edit)
+                    .Or(cf.ByControlType(FlaUI.Core.Definitions.ControlType.Document)));
+            editor.Should().NotBeNull("the source must expose a text editor");
+            editor!.Focus();
+            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.END);
+
+            TestRetry.Until(
+                    () => editor.Properties.HasKeyboardFocus.ValueOrDefault &&
+                          GetForegroundWindow() == sourceWindow.Properties.NativeWindowHandle.Value,
+                    TimeSpan.FromSeconds(5), pollIntervalMs: 20)
+                .Should().BeTrue("the shortcut must originate from the source editor");
+            editor.Patterns.Text.IsSupported.Should().BeTrue(
+                "this regression requires a source with a confirmed empty UIA selection");
+            editor.Patterns.Text.Pattern.GetSelection()
+                .All(range => string.IsNullOrEmpty(range.GetText(-1))).Should().BeTrue(
+                    "Ctrl+End must collapse the source selection before opening the mini window");
+
+            var timer = Stopwatch.StartNew();
+            UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
+            Window? miniWindow = null;
+            TestRetry.Until(() =>
+                {
+                    miniWindow = FindMiniWindowCandidate();
+                    return miniWindow != null &&
+                           IsWindowVisible(miniWindow.Properties.NativeWindowHandle.Value);
+                }, TimeSpan.FromSeconds(5), pollIntervalMs: 20)
+                .Should().BeTrue("the registered hotkey must show the mini window");
+            var visibleObservedMs = timer.ElapsedMilliseconds;
+            var miniHwnd = miniWindow!.Properties.NativeWindowHandle.Value;
+
+            TextBox? input = null;
+            TestRetry.Until(() =>
+                {
+                    input ??= miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox();
+                    return GetForegroundWindow() == miniHwnd && input != null &&
+                           !input.IsOffscreen && input.Properties.HasKeyboardFocus.ValueOrDefault;
+                }, TimeSpan.FromSeconds(5), pollIntervalMs: 20)
+                .Should().BeTrue("Easydict must activate and focus the input without test assistance");
+            var inputReadyObservedMs = timer.ElapsedMilliseconds;
+
+            var prefix = $"first{attempt}";
+            const string suffix = "continued";
+            Keyboard.Type(prefix);
+            TestRetry.Until(() => input!.Text == prefix, TimeSpan.FromSeconds(2), pollIntervalMs: 20)
+                .Should().BeTrue("the first keystrokes must reach the input as soon as focus is observed");
+
+            // Cross the former 9 x 50 ms retry interval before continuing to type.
+            // A late SelectAll would replace the prefix with this suffix.
+            Thread.Sleep(600);
+            GetForegroundWindow().Should().Be(miniHwnd);
+            input!.Properties.HasKeyboardFocus.ValueOrDefault.Should().BeTrue();
+            Keyboard.Type(suffix);
+            TestRetry.Until(() => input.Text == prefix + suffix, TimeSpan.FromSeconds(2), pollIntervalMs: 20)
+                .Should().BeTrue("late focus retries must not reselect or replace text already typed");
+            _output.WriteLine(
+                $"Empty selection {(attempt == 0 ? "first open" : "warm reopen")}: " +
+                $"visible observed={visibleObservedMs}ms, keyboard focus observed={inputReadyObservedMs}ms, " +
+                $"observed visible-to-focus={inputReadyObservedMs - visibleObservedMs}ms. " +
+                "Includes UIA polling and hotkey delivery overhead; no sub-second timing assertion.");
+
+            UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
+            TestRetry.Until(() => !IsWindowVisible(miniHwnd), TimeSpan.FromSeconds(5), pollIntervalMs: 20)
+                .Should().BeTrue("the next iteration must reopen a hidden mini window");
+        }
+    }
+
     private void CloseMiniWindow(Window miniWindow)
     {
         var closeButton = miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("MiniWindowCloseButton"))
@@ -188,4 +275,10 @@ public class MiniWindowFocusTests : IDisposable
     {
         _launcher.Dispose();
     }
+
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(nint hwnd);
 }

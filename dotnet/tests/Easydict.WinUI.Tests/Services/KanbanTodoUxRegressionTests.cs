@@ -383,20 +383,20 @@ public class KanbanTodoUxRegressionTests
         miniWindowCode.Should().Contain("public bool IsForeground",
             "the concrete mini window should expose the foreground check");
         miniWindowCode.Should().Contain("private void QueueInputFocusAndSelectAll(",
-            "the mini window should delay focus through a reusable helper");
+            "the mini window should request input focus through a reusable helper");
         miniWindowCode.Should().Contain("ForegroundWindowHelper.TryBringToFront(this, \"MiniWindow\")",
             "the mini window should use the shared foreground helper before trying to raise itself");
         miniWindowCode.Should().Contain("DispatcherQueue.TryEnqueue(async () =>",
-            "the mini window should request focus on the next UI tick after activation");
+            "the mini window should queue a retry when loading or activation is incomplete");
         miniWindowCode.Should().Contain("InputTextBox.SelectAll();",
             "the mini window should select existing text after focus for direct overwrite typing");
-        miniWindowCode.Should().Contain("InputTextBox.XamlRoot is null || !InputTextBox.IsEnabled",
+        miniWindowCode.Should().Contain("_isLoaded && InputTextBox.XamlRoot is not null && InputTextBox.IsEnabled",
             "the mini window should retry focus until the first layout pass has completed and the input is ready");
         miniWindowCode.Should().Contain("await Task.Delay(InputFocusRetryDelayMs);",
             "the mini window should retry focus after a short delay when the first attempt is too early");
-        miniWindowCode.Should().Contain("if (!IsForeground)",
+        miniWindowCode.Should().Contain("hasInputFocus && IsForeground",
             "the mini window should wait until it actually becomes the foreground window before focusing its input");
-        miniWindowCode.Should().Contain("Debug.WriteLine($\"[MiniWindow] QueueInputFocusAndSelectAll attempt",
+        miniWindowCode.Should().Contain("[MiniWindow] QueueInputFocusAndSelectAll attempt",
             "the mini-window helper should emit debug logs to diagnose focus timing failures");
         miniWindowCode.Should().Contain("Debug.WriteLine($\"[MiniWindow] Activated:",
             "the mini window should log activation transitions that trigger focus retries");
@@ -455,7 +455,7 @@ public class KanbanTodoUxRegressionTests
             AssertContainsInOrder(snippet,
                 "service.ShowWithoutActivation", "TextSelectionService.GetSelectedTextAsync(sourceWindow, cancellationToken)",
                 "selection capture must not gate window visibility");
-            AssertContainsInOrder(snippet, "service.Hide();", "await Task.Delay(150, cancellationToken);",
+            AssertContainsInOrder(snippet, "service.Hide();", "await service.ShowRequests.RunAsync(",
                 "hiding a foreground or pending window must be immediate");
             snippet.Should().Contain("service.ShowRequests.IsPending || (service.IsVisible && service.IsForeground)");
             snippet.Should().Contain("service.ShowWithText(text, QuerySourceKind.Selection)");

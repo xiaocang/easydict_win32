@@ -38,6 +38,7 @@ internal sealed class SelectionCaptureSession(
     {
         ThrowIfInvalid();
         if (!string.IsNullOrWhiteSpace(selection.Text)) return selection.Text;
+        if (selection.IsConfirmedEmpty) return null;
 
         var text = await captureClipboard();
         ThrowIfInvalid();

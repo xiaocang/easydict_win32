@@ -352,7 +352,7 @@ public static class TextSelectionService
 
         // Use UIA for non-Electron apps (or as fallback if clipboard failed for Electron)
         // Use SemaphoreSlim + timeout to prevent UIA from hanging indefinitely on Chromium apps
-        string? uiaText = null;
+        var uiaSelection = UiaSelectionResult.Unavailable;
         bool semaphoreAcquired = false;
         try
         {
@@ -375,9 +375,9 @@ public static class TextSelectionService
                     semaphoreAcquired = false;
                     if (await Task.WhenAny(uiaTask, Task.Delay(UiaExecutionTimeoutMs, cancellationToken)) == uiaTask)
                     {
-                        uiaText = await uiaTask;
-                        if (!string.IsNullOrWhiteSpace(uiaText))
-                            Debug.WriteLine($"[TextSelectionService] Got {uiaText.Length} chars via UIA");
+                        uiaSelection = await uiaTask;
+                        if (!string.IsNullOrWhiteSpace(uiaSelection.Text))
+                            Debug.WriteLine($"[TextSelectionService] Got {uiaSelection.Text.Length} chars via UIA");
                     }
                     else
                     {
@@ -400,11 +400,11 @@ public static class TextSelectionService
         // Observe cancellation here before accepting its result or sending Ctrl+C.
         session.ThrowIfInvalid();
 
-        if (!string.IsNullOrWhiteSpace(uiaText))
+        if (!string.IsNullOrWhiteSpace(uiaSelection.Text))
         {
-            // UIA recovered the selection — rehabilitate any prior suppression.
+            // UIA recovered the selection; rehabilitate any prior suppression.
             RecordOutcome(normalizedProcessName, ClipWaitResult.Success);
-            return uiaText;
+            return uiaSelection.Text;
         }
 
         // UIA failed or no selection - fallback to clipboard method (Ctrl+C)
@@ -430,20 +430,23 @@ public static class TextSelectionService
             return null;
         }
 
-        Debug.WriteLine("[TextSelectionService] UIA returned no text, falling back to clipboard method");
-        var (fallbackText, fallbackOutcome) = await GetSelectedTextViaClipboardAsync(session, automaticMouse && isElectron, automaticMouse ? processName : null, processId);
-        if (!string.IsNullOrWhiteSpace(fallbackText))
+        return await session.ResolveAsync(uiaSelection, async () =>
         {
-            Debug.WriteLine($"[TextSelectionService] Got {fallbackText.Length} chars via clipboard fallback");
-            RecordOutcome(normalizedProcessName, ClipWaitResult.Success);
-            return fallbackText;
-        }
+            Debug.WriteLine("[TextSelectionService] UIA returned no text, falling back to clipboard method");
+            var (fallbackText, fallbackOutcome) = await GetSelectedTextViaClipboardAsync(session, automaticMouse && isElectron, automaticMouse ? processName : null, processId);
+            if (!string.IsNullOrWhiteSpace(fallbackText))
+            {
+                Debug.WriteLine($"[TextSelectionService] Got {fallbackText.Length} chars via clipboard fallback");
+                RecordOutcome(normalizedProcessName, ClipWaitResult.Success);
+                return fallbackText;
+            }
 
-        RecordOutcome(normalizedProcessName, fallbackOutcome);
-        return null;
+            RecordOutcome(normalizedProcessName, fallbackOutcome);
+            return null;
+        });
     }
 
-    private static string? GetSelectedTextViaUIA(SelectionCaptureSession session)
+    private static UiaSelectionResult GetSelectedTextViaUIA(SelectionCaptureSession session)
     {
         try
         {
@@ -451,29 +454,24 @@ public static class TextSelectionService
             if (focused == null)
             {
                 Debug.WriteLine("[TextSelectionService] No focused element");
-                return null;
+                return UiaSelectionResult.Unavailable;
             }
 
             // Try to get text pattern from focused element
-            var text = session.ReadIfValid(() => GetSelectionFromElement(focused));
-            if (!string.IsNullOrEmpty(text))
-            {
-                return text;
-            }
-
-            Debug.WriteLine("[TextSelectionService] No text pattern available or no selection");
-            return null;
+            return session.ReadIfValid(() => GetSelectionFromElement(focused))
+                ?? UiaSelectionResult.Unavailable;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"[TextSelectionService] GetFocusedElement failed: {ex.Message}");
-            return null;
+            return UiaSelectionResult.Unavailable;
         }
     }
 
-    private static string? GetSelectionFromElement(AutomationElement element)
+    private static UiaSelectionResult GetSelectionFromElement(AutomationElement element)
     {
+        var result = UiaSelectionResult.Unavailable;
         try
         {
             // Try TextPattern first
@@ -481,13 +479,12 @@ public static class TextSelectionService
             {
                 var textPattern = element.Patterns.Text.Pattern;
                 var selection = textPattern.GetSelection();
-                if (selection != null && selection.Length > 0)
+                if (selection != null)
                 {
-                    var selectedText = selection[0].GetText(-1);
-                    if (!string.IsNullOrEmpty(selectedText))
-                    {
-                        return selectedText;
-                    }
+                    result = selection.Length == 0
+                        ? UiaSelectionResult.Empty
+                        : UiaSelectionResult.FromText(selection[0].GetText(-1));
+                    if (result.Text != null) return result;
                 }
             }
         }
@@ -503,13 +500,13 @@ public static class TextSelectionService
             {
                 var textPattern2 = element.Patterns.Text2.Pattern;
                 var selection = textPattern2.GetSelection();
-                if (selection != null && selection.Length > 0)
+                if (selection != null)
                 {
-                    var selectedText = selection[0].GetText(-1);
-                    if (!string.IsNullOrEmpty(selectedText))
-                    {
-                        return selectedText;
-                    }
+                    var text2Result = selection.Length == 0
+                        ? UiaSelectionResult.Empty
+                        : UiaSelectionResult.FromText(selection[0].GetText(-1));
+                    if (text2Result.Text != null) return text2Result;
+                    if (text2Result.IsConfirmedEmpty) result = text2Result;
                 }
             }
         }
@@ -518,7 +515,7 @@ public static class TextSelectionService
             Debug.WriteLine($"[TextSelectionService] TextPattern2 failed: {ex.Message}");
         }
 
-        return null;
+        return result;
     }
 
     /// <summary>
